@@ -41,6 +41,7 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/lrucache_module.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -103,6 +104,10 @@
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
+#endif
+
+#ifdef WITH_STARCACHE
+#include "cache/object_cache/starcache_module.h"
 #endif
 
 namespace starrocks {
@@ -362,22 +367,19 @@ void CacheEnv::destroy() {
 Status CacheEnv::_init_starcache_based_object_cache() {
 #ifdef WITH_STARCACHE
     if (_block_cache != nullptr && _block_cache->is_initialized()) {
-        _starcache_based_object_cache = std::make_shared<ObjectCache>();
-        RETURN_IF_ERROR(_starcache_based_object_cache->init(_block_cache->starcache_instance()));
+        _starcache_based_object_cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
     }
 #endif
     return Status::OK();
 }
 
 Status CacheEnv::_init_lru_base_object_cache() {
-    _lru_based_object_cache = std::make_shared<ObjectCache>();
-
     ObjectCacheOptions options;
     int64_t storage_cache_limit = _global_env->get_storage_page_cache_size();
     storage_cache_limit = _global_env->check_storage_page_cache_size(storage_cache_limit);
     options.capacity = storage_cache_limit;
-    RETURN_IF_ERROR(_lru_based_object_cache->init(options));
 
+    _lru_based_object_cache = std::make_shared<LRUCacheModule>(options);
     LOG(INFO) << "object cache init successfully";
     return Status::OK();
 }

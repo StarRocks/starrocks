@@ -18,89 +18,76 @@
 
 #include <atomic>
 
-#include "cache/object_cache/cache_module.h"
+#include "cache/object_cache/cache_types.h"
 #include "common/status.h"
 #include "util/lru_cache.h"
-
-#ifdef WITH_STARCACHE
-#include "starcache/star_cache.h"
-#endif
 
 namespace starrocks {
 
 class ObjectCache {
 public:
-    ObjectCache() = default;
-    ~ObjectCache();
-
-    // Init the object cache instance with options.
-    Status init(const ObjectCacheOptions& options);
-
-#ifdef WITH_STARCACHE
-    // Init the object cache instance with an exist block cache module.
-    Status init(const std::shared_ptr<starcache::StarCache>& star_cache);
-#endif
+    virtual ~ObjectCache() = default;
 
     // Insert object to cache, the `ptr` is the object pointer.
     // size: the size of the value.
     // charge: the actual memory size allocated for this value.
-    Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
-                  ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options = nullptr);
+    virtual Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
+                          ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options = nullptr) = 0;
 
     // Lookup object from cache, the `handle` wraps the object pointer.
     // As long as the handle object is not destroyed and the user does not manully call the `handle->release()`
     // function, the corresponding pointer will never be freed by the cache system.
-    Status lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options = nullptr);
+    virtual Status lookup(const std::string& key, ObjectCacheHandlePtr* handle,
+                          ObjectCacheReadOptions* options = nullptr) = 0;
 
     // Remove object from cache. If the object not exist, return Status::Not_Found.
-    Status remove(const std::string& key);
+    virtual Status remove(const std::string& key) = 0;
 
     // Release a handle returned by a previous insert() or lookup().
     // The handle must have not been released yet.
-    void release(ObjectCacheHandlePtr handle);
+    virtual void release(ObjectCacheHandlePtr handle) = 0;
 
     // Return the value in the given handle returned by a previous insert() or lookup().
     // The handle must have not been released yet.
-    const void* value(ObjectCacheHandlePtr handle);
+    virtual const void* value(ObjectCacheHandlePtr handle) = 0;
 
     // Return the value in Slice format encapsulated in the given handle returned by a previous insert() or lookup().
     // The handle must have not been released yet.
-    Slice value_slice(ObjectCacheHandlePtr handle);
+    virtual Slice value_slice(ObjectCacheHandlePtr handle) = 0;
 
     // Adjust the cache quota by delta bytes.
     // If the new capacity is less than `min_capacity`, skip adjusting it.
-    Status adjust_capacity(int64_t delta, size_t min_capacity);
+    virtual Status adjust_capacity(int64_t delta, size_t min_capacity) = 0;
 
     // Set the cache capacity to a target value.
-    Status set_capacity(size_t capacity);
+    virtual Status set_capacity(size_t capacity) = 0;
 
     // Get the cache capacity.
-    size_t capacity() const;
+    virtual size_t capacity() const = 0;
 
     // Get the memory usage.
-    size_t usage() const;
+    virtual size_t usage() const = 0;
 
     // Get the lookup count, including cache hit count and cache miss count.
-    size_t lookup_count() const;
+    virtual size_t lookup_count() const = 0;
 
     // Get the cache hit count.
-    size_t hit_count() const;
+    virtual size_t hit_count() const = 0;
 
     // Get all cache metrics together.
-    const ObjectCacheMetrics metrics() const;
+    virtual const ObjectCacheMetrics metrics() const = 0;
 
     // Remove all cache entries that are not actively in use.
-    Status prune();
+    virtual Status prune() = 0;
 
     // Shutdown the cache instance to save some state meta.
-    Status shutdown();
+    virtual Status shutdown() = 0;
 
     bool initialized() const { return _initialized.load(std::memory_order_relaxed); }
 
     bool available() const { return initialized() && capacity() > 0; }
 
-private:
-    std::shared_ptr<ObjectCacheModule> _cache_module;
+protected:
     std::atomic<bool> _initialized = false;
 };
 

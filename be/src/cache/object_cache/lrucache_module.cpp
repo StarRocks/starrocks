@@ -16,12 +16,14 @@
 
 #include <butil/fast_rand.h>
 
+#include "cache/object_cache/cache_types.h"
 #include "common/logging.h"
 
 namespace starrocks {
 
 LRUCacheModule::LRUCacheModule(const ObjectCacheOptions& options) : _options(options) {
     _cache.reset(new_lru_cache(_options.capacity));
+    _initialized.store(true, std::memory_order_release);
 }
 
 LRUCacheModule::~LRUCacheModule() {
