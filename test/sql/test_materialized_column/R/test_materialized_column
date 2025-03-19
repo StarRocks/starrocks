@@ -49,7 +49,7 @@ SHOW CREATE TABLE t;
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `array_data` array<int(11)> NOT NULL COMMENT "",
-  `mc` double NULL AS array_avg(`array_data`) COMMENT ""
+  `mc` double NULL AS array_avg(array_data) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -438,7 +438,7 @@ t	CREATE TABLE `t` (
   `name` bigint(20) NOT NULL COMMENT "",
   `job` int(11) NOT NULL COMMENT "",
   `newcol` int(11) NULL DEFAULT "0" COMMENT "",
-  `mc` int(11) NULL AS `job` COMMENT ""
+  `mc` int(11) NULL AS job COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -1143,5 +1143,38 @@ select * from t_fix_adding_and_col_partial_update_conflict;
 2	3	400	40000
 -- !result
 drop table t_fix_adding_and_col_partial_update_conflict;
+-- result:
+-- !result
+-- name: test_create_like_error
+CREATE TABLE `t1_create_like_error` (
+                `k1` date,
+                `k5` boolean,
+                `k6` tinyint,
+                `k7` smallint,
+                `col_array` array<smallint> as [k5,k6,k7]
+                )
+                PRIMARY KEY(`k1`)
+                COMMENT "OLAP"
+                DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+                PROPERTIES (
+                "replication_num" = "1",
+                "storage_format" = "v2"
+                );
+-- result:
+-- !result
+create table t2_create_like_error like t1_create_like_error;
+-- result:
+-- !result
+INSERT INTO t2_create_like_error values(now(), 1, 2, 3);
+-- result:
+-- !result
+SELECT k5, k6, k7, col_array from t2_create_like_error;
+-- result:
+1	2	3	[1,2,3]
+-- !result
+DROP TABLE t1_create_like_error;
+-- result:
+-- !result
+DROP TABLE t2_create_like_error;
 -- result:
 -- !result
