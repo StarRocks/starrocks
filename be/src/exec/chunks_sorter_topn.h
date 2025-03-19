@@ -195,7 +195,7 @@ private:
 
     size_t _buffered_chunks_capacity;
 
-    std::vector<RuntimeFilter*> _runtime_filter;
+    std::vector<JoinRuntimeFilter*> _runtime_filter;
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_timer = nullptr;
