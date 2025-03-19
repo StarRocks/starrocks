@@ -241,11 +241,14 @@ public abstract class BulkLoadJob extends LoadJob {
     /**
      * Not retryable cases
      * 1. already retry too many times
-     * 2. BE parses data error, such as invalid json
+     * 2. Cancel type is USER_CANCEL
+     * 3. BE parses data error, such as invalid json
      */
-    protected boolean isRetryable(String failMsg) {
-        TxnStatusChangeReason reason = TxnStatusChangeReason.fromString(failMsg);
-        return retryTime > 0 && reason != TxnStatusChangeReason.PARSE_ERROR;
+    protected boolean isRetryable(FailMsg failMsg) {
+        TxnStatusChangeReason reason = TxnStatusChangeReason.fromString(failMsg.getMsg());
+        return retryTime > 0
+                && failMsg.getCancelType() != FailMsg.CancelType.USER_CANCEL
+                && reason != TxnStatusChangeReason.PARSE_ERROR;
     }
 
     @Override
@@ -262,7 +265,7 @@ public abstract class BulkLoadJob extends LoadJob {
                 return;
             }
 
-            needRetry = isRetryable(failMsg.getMsg());
+            needRetry = isRetryable(failMsg);
             if (!needRetry) {
                 unprotectedExecuteCancel(failMsg, true);
                 logFinalOperation();
