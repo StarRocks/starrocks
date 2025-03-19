@@ -552,22 +552,40 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             Context childContext = new Context();
             ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
             List<ColumnRefOperator> newOuterColRefs = Lists.newArrayList();
-            ColumnRefSet allUsedColumns = ColumnRefSet.of();
+            // some complex-type columns must be retained in new TableFunction's outerColRefs if
+            // it must be output in the final result or subfield exprs using it must be evaluated
+            // above table function.
+            // notNeededOuterColumns keeps the columns must be erased from the old TableFunction's outerColRefs,
+            // and the remaining outerColRefs must be moved from old tableFunction to the new one.
+            ColumnRefSet notNeededOuterColumns = ColumnRefSet.of();
+            ColumnRefSet neededOuterColumns = ColumnRefSet.of();
+
+            context.pushDownExprUseColumns.keySet().stream()
+                    .filter(ScalarOperator::isColumnRef)
+                    .map(columnRefSet -> (ColumnRefOperator) columnRefSet)
+                    .forEach(e -> neededOuterColumns.union(e.getId()));
+            // if a integral nested object is used by operators above the TableFunction, we do not need
+            // to prune subfield expression referencing to this nested object.
+            boolean shouldPushDown = neededOuterColumns.isEmpty();
+
             for (Map.Entry<ScalarOperator, ColumnRefSet> entry : context.pushDownExprUseColumns.entrySet()) {
                 ScalarOperator expr = entry.getKey();
                 ColumnRefSet useColumns = entry.getValue();
-                allUsedColumns.union(useColumns);
-                if (outerColRefSet.containsAll(useColumns)) {
+                if (shouldPushDown && outerColRefSet.containsAll(useColumns)) {
                     ColumnRefOperator columnRef = context.pushDownExprRefsIndex.get(expr);
                     childContext.put(columnRef, expr);
                     childSubfieldOutputs.union(columnRef);
                     newOuterColRefs.add(columnRef);
+                    notNeededOuterColumns.union(useColumns);
                 } else {
+                    neededOuterColumns.union(useColumns);
                     localContext.put(context.pushDownExprRefsIndex.get(expr), expr);
                 }
             }
-            newOuterColRefs.addAll(outerColRefs.stream().filter(colRef -> !allUsedColumns.contains(colRef)).collect(
-                    Collectors.toList()));
+            notNeededOuterColumns.except(neededOuterColumns);
+            notNeededOuterColumns.union(newOuterColRefs);
+            newOuterColRefs.addAll(outerColRefs.stream().filter(colRef -> !notNeededOuterColumns.contains(colRef))
+                    .collect(Collectors.toList()));
             Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
             OptExpression result = visitChildren(optExpression, childContext);
             if (!newOuterColRefs.isEmpty()) {

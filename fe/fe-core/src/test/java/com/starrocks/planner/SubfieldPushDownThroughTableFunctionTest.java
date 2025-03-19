@@ -14,10 +14,19 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase {
     @BeforeClass
@@ -161,5 +170,83 @@ public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase
                 "  |  <slot 37> : 4: col_project.col_batches[false]\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        Map<Integer, Set<Integer>> expectOuterCols = Maps.newHashMap();
+        expectOuterCols.put(7, ImmutableSet.of(32));
+        expectOuterCols.put(9, ImmutableSet.of(32, 33, 34));
+        expectOuterCols.put(12, ImmutableSet.of(32, 33));
+        checkTableFunctionOuterCols(sql, expectOuterCols);
+    }
+
+    @Test
+    public void test3() throws Exception {
+        String sql = "WITH ranked_data AS (\n" +
+                "    SELECT\n" +
+                "      *,\n" +
+                "      ROW_NUMBER() OVER (\n" +
+                "        PARTITION BY CONCAT(col_project.col_id, RAND())\n" +
+                "        ORDER BY (col_header.col_timestamp + RAND() * 10000) DESC\n" +
+                "      ) AS rank\n" +
+                "    FROM\n" +
+                "      t1\n" +
+                "),\n" +
+                "deduped_data AS (\n" +
+                "    SELECT\n" +
+                "      *\n" +
+                "    FROM\n" +
+                "      ranked_data\n" +
+                "    WHERE\n" +
+                "      rank = 1\n" +
+                "),\n" +
+                "processed_data AS (\n" +
+                "    SELECT\n" +
+                "      col_project.col_id AS project_id,\n" +
+                "      col_project, \n" +
+                "      col_project.col_title AS project_title,\n" +
+                "      col_batches.col_batch_name AS batch_name,\n" +
+                "      col_batches.col_batch_id AS batch_id,\n" +
+                "      col_items.col_item_id AS item_id,\n" +
+                "      col_items.col_title AS item_title,\n" +
+                "      col_items.col_type AS item_type,\n" +
+                "      col_criteria.col_value AS criteria_value\n" +
+                "    FROM\n" +
+                "      deduped_data\n" +
+                "    CROSS JOIN UNNEST(col_project.col_batches) AS batch_table (col_batches)\n" +
+                "    CROSS JOIN UNNEST(col_batches.col_criteria) AS criteria_table (col_criteria)\n" +
+                "    CROSS JOIN UNNEST(col_batches.col_items) AS items_table (col_items)\n" +
+                "    WHERE col_criteria.col_operator = 'LTE'\n" +
+                ")\n" +
+                "SELECT\n" +
+                "  processed_data.col_project,\n" +
+                "  processed_data.project_title,\n" +
+                "  processed_data.batch_name\n" +
+                "FROM\n" +
+                "  processed_data;\n";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        System.out.println(plan);
+        assertCContains(plan, "  13:Project\n" +
+                "  |  <slot 9> : 9: col_project\n" +
+                "  |  <slot 21> : 9: col_project.col_title[true]\n" +
+                "  |  <slot 22> : 14: col_batches.col_batch_name[false]");
+
+        Map<Integer, Set<Integer>> expectOuterCols = Maps.newHashMap();
+        expectOuterCols.put(7, ImmutableSet.of(9));
+        expectOuterCols.put(9, ImmutableSet.of(9, 14));
+        expectOuterCols.put(12, ImmutableSet.of(9, 14));
+        checkTableFunctionOuterCols(sql, expectOuterCols);
+    }
+
+    private void checkTableFunctionOuterCols(String sql, Map<Integer, Set<Integer>> expectOuterCols)
+            throws Exception {
+        ExecPlan plan = getExecPlan(sql);
+        Map<Integer, TableFunctionNode> tableFunctionNodes = plan.getFragments().stream()
+                .flatMap(fragment -> fragment.collectNodes().stream())
+                .filter(planNode -> planNode instanceof TableFunctionNode)
+                .map(planNode -> (TableFunctionNode) planNode)
+                .collect(Collectors.toMap(node -> node.getId().asInt(), node -> node));
+        for (Map.Entry<Integer, Set<Integer>> e : expectOuterCols.entrySet()) {
+            Assert.assertTrue(tableFunctionNodes.containsKey(e.getKey()));
+            Set<Integer> actual = new HashSet<>(tableFunctionNodes.get(e.getKey()).getOuterSlots());
+            Assert.assertEquals(actual, e.getValue());
+        }
     }
 }
