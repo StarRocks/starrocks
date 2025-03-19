@@ -777,8 +777,8 @@ PROPERTIES (
 
 > **NOTE**
 >
-> - 仅 StarRocks 存算一体集群支持该参数，支持自 v3.2.0 版本起。
-> - 如果您需要为存算分离表开启 fast schema evolution，则必须在集群范围内设置启用。需要通过 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution) 设置。
+> - 存算一体集群自 v3.2.0 起支持 fast schema evolution。
+> - 存算分离集群自 v3.3.0 起支持 fast schema evolution，默认启用。在存算分离集群中创建云原生表时无需指定此属性，由 FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
 
 #### 禁止 Base Compaction
 
