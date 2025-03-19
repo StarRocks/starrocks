@@ -405,7 +405,7 @@ multi_level_expr_par_tbl_1	CREATE TABLE `multi_level_expr_par_tbl_1` (
   `c1` bigint(20) NOT NULL COMMENT "",
   `c2` varchar(65533) NULL COMMENT "",
   `c3` date NULL COMMENT "",
-  `__generated_partition_column_0` varchar(1048576) NULL AS from_unixtime(`c1`) COMMENT ""
+  `__generated_partition_column_0` varchar(1048576) NULL AS from_unixtime(c1) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`c1`)
 PARTITION BY (`__generated_partition_column_0`)
@@ -460,8 +460,8 @@ multi_level_expr_par_tbl_2	CREATE TABLE `multi_level_expr_par_tbl_2` (
   `k11` decimal(38, 9) NULL COMMENT "",
   `k12` decimal(38, 9) NULL COMMENT "",
   `k13` decimal(27, 9) NULL COMMENT "",
-  `__generated_partition_column_0` varchar(1048576) NULL AS substring(`k4`, 1, 5) COMMENT "",
-  `__generated_partition_column_1` date NULL AS date_trunc('month', `k1`) COMMENT ""
+  `__generated_partition_column_0` varchar(1048576) NULL AS substring(k4, 1, 5) COMMENT "",
+  `__generated_partition_column_1` date NULL AS date_trunc('month', k1) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
 COMMENT "OLAP"

@@ -458,3 +458,24 @@ alter table t_fix_adding_and_col_partial_update_conflict add column newcol bigin
 function: wait_alter_table_finish()
 select * from t_fix_adding_and_col_partial_update_conflict;
 drop table t_fix_adding_and_col_partial_update_conflict;
+
+-- name: test_create_like_error
+CREATE TABLE `t1_create_like_error` (
+                `k1` date,
+                `k5` boolean,
+                `k6` tinyint,
+                `k7` smallint,
+                `col_array` array<smallint> as [k5,k6,k7]
+                )
+                PRIMARY KEY(`k1`)
+                COMMENT "OLAP"
+                DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+                PROPERTIES (
+                "replication_num" = "1",
+                "storage_format" = "v2"
+                );
+create table t2_create_like_error like t1_create_like_error;
+INSERT INTO t2_create_like_error values(now(), 1, 2, 3);
+SELECT k5, k6, k7, col_array from t2_create_like_error;
+DROP TABLE t1_create_like_error;
+DROP TABLE t2_create_like_error;
