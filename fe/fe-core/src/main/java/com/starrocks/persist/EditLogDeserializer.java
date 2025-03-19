@@ -66,6 +66,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
+import com.starrocks.sql.automv.qe.RecommendationsTaskStatus;
 import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -115,6 +116,7 @@ public class EditLogDeserializer {
             .put(OperationTypeEPack.OP_DROP_FAILOVER_GROUP, DropFailoverGroupLog.class)
             .put(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, UpdateFailoverGroupLog.class)
             .put(OperationTypeEPack.OP_MV_CHANGE, MVChangeLog.class)
+            .put(OperationTypeEPack.OP_RECOMMENDATIONS_TASK_STATUS_CHANGE, RecommendationsTaskStatus.class)
 
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)
             .put(OperationType.OP_SAVE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)

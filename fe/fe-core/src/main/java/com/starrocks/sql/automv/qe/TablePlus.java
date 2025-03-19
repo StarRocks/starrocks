@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -87,9 +88,13 @@ public class TablePlus {
             printer.add("()").newLine();
         }
         int numBuckets = table.getDefaultDistributionInfo().getBucketNum();
-        String bucketKey = table.getDefaultDistributionInfo().getDistributionKey(table.getIdToColumn());
-        printer.add("DISTRIBUTED BY HASH(").add(bucketKey).add(")").spaces(1)
-                .add("BUCKETS").spaces(1).add(numBuckets).newLine();
+        if (table.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
+            String bucketKey = table.getDefaultDistributionInfo().getDistributionKey(table.getIdToColumn());
+            printer.add("DISTRIBUTED BY HASH(").add(bucketKey).add(")").spaces(1);
+        } else {
+            printer.add("DISTRIBUTED BY RANDOM").spaces(1);
+        }
+        printer.add("BUCKETS").spaces(1).add(numBuckets).newLine();
 
         printer.add("PROPERTIES").spaces(1).add("(").newLine();
         List<PrettyPrinter> propertyItems = table.getProperties().entrySet()

@@ -362,6 +362,7 @@ public final class ColumnPlus {
             Method method = getMethod();
             getter = o -> {
                 try {
+                    System.out.println(column.getName());
                     Object value = method.invoke(o);
                     Preconditions.checkArgument(column.isAllowNull() || value != null);
                     return value;

@@ -113,6 +113,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
+import com.starrocks.sql.automv.qe.RecommendationsTaskStatus;
 import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -1086,6 +1087,11 @@ public class EditLog {
                 case OperationTypeEPack.OP_MV_CHANGE: {
                     MVChangeLog mvChangeLog = (MVChangeLog) journal.data();
                     globalStateMgr.getMVLifecycleManager().replayMVChangeLog(mvChangeLog);
+                    break;
+                }
+                case OperationTypeEPack.OP_RECOMMENDATIONS_TASK_STATUS_CHANGE: {
+                    RecommendationsTaskStatus taskStatus = (RecommendationsTaskStatus) journal.data();
+                    globalStateMgr.getRecommendationsTaskMgr().applyLogEntry(taskStatus);
                     break;
                 }
                 case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {

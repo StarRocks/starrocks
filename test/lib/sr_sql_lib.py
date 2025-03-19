@@ -2779,6 +2779,27 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_true(len(accelerated_queries_list) > 0, "The number of AcceleratedQueries list should not be empty")
         tools.assert_true(any(map(lambda qs: qs == expect_queries, accelerated_queries_list)), "At least one of AcceleratedQueries should be %s" % (expect_queries))
 
+    def check_automv_async_recommend(self, task):
+        """
+        assert async mv recommendations
+        """
+        sql = "show recommendations from task '%s'" % (task)
+        max_times = 10
+        times = 0
+        res = None;
+        while times < max_times:
+            result = self.execute_sql(sql, True)
+            tools.assert_true(result["status"])
+            if ("status" in result["result"][0] and result["result"][0]["status"] == 'PENDING'):
+                times += 1
+                time.sleep(1)
+            else:
+                break
+
+        tools.assert_false("status" in result["result"][0])
+        tools.assert_true(all(map(lambda row: "CREATE CREATE MATERIALIZED VIEW _mv_", result["result"])))
+
+
     def wait_partitions_available(self, table, num_partitions):
         max_times = 10
         times = 0

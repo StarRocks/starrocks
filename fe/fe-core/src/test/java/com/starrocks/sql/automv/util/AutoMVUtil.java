@@ -179,6 +179,15 @@ public class AutoMVUtil {
         };
     }
 
+    public static void mockUpTunespaceExecutor(List<String> result) {
+        new MockUp<TunespaceExecutor.TunespaceExecuteVisitor>() {
+            @Mock
+            public void exec(String sql, Class<?> klass, ConnectContext context) throws Exception {
+                result.add(sql);
+            }
+        };
+    }
+
     public static synchronized void mockUpAuthorizer() {
         if (authorizerMockedStatic == null) {
             authorizerMockedStatic = Mockito.mockStatic(Authorizer.class);

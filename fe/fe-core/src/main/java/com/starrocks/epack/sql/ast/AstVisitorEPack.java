@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
+import com.starrocks.sql.automv.ast.SubmitRecommendationsTaskStmt;
 
 public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
 
@@ -220,6 +221,10 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitShowRecommendationsStmt(ShowRecommendationsStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    default R visitSubmitRecommendationsTaskStmt(SubmitRecommendationsTaskStmt node, C context) {
         return visitStatement(node, context);
     }
 }

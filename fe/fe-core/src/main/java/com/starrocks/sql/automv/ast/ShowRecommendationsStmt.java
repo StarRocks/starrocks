@@ -58,7 +58,9 @@ public class ShowRecommendationsStmt extends ShowStmt {
             .addColumn(new Column(TOTAL_BENEFIT, Type.DOUBLE))
             .addColumn(new Column(ACCELERATED_QUERIES, Type.STRING))
             .build();
+
     private TableName tableName;
+    private String taskName;
     private boolean single = false;
     private long limit = -1;
     private long offset = -1;
@@ -68,6 +70,14 @@ public class ShowRecommendationsStmt extends ShowStmt {
         this.tableName = tableName;
         this.limit = limit;
         this.offset = offset;
+    }
+
+    public String getTaskName() {
+        return taskName;
+    }
+
+    public void setTaskName(String taskName) {
+        this.taskName = taskName;
     }
 
     public boolean isSingle() {

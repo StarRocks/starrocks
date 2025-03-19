@@ -237,6 +237,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.automv.lifecycle.MVLifecycleManager;
+import com.starrocks.sql.automv.qe.RecommendationsTaskManager;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.SqlParser;
@@ -512,6 +513,8 @@ public class GlobalStateMgr {
     private final MVActiveChecker mvActiveChecker;
 
     private final MVLifecycleAutoKeeper mvLifeCycleAutoKeeper;
+
+    private final RecommendationsTaskManager recommendationsTaskMgr;
     private final ReplicationMgr replicationMgr;
 
     private final KeyMgr keyMgr;
@@ -799,6 +802,7 @@ public class GlobalStateMgr {
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
         this.mvActiveChecker = new MVActiveChecker();
         this.mvLifeCycleAutoKeeper = new MVLifecycleAutoKeeper();
+        this.recommendationsTaskMgr = new RecommendationsTaskManager();
 
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -1131,6 +1135,9 @@ public class GlobalStateMgr {
         return mvLifeCycleAutoKeeper.getMVLifecycleManager();
     }
 
+    public RecommendationsTaskManager getRecommendationsTaskMgr() {
+        return recommendationsTaskMgr;
+    }
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
         return connectorTblMetaInfoMgr;
     }
@@ -1517,6 +1524,7 @@ public class GlobalStateMgr {
         pipeScheduler.start();
         mvActiveChecker.start();
         mvLifeCycleAutoKeeper.start();
+        recommendationsTaskMgr.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
@@ -1694,6 +1702,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockIDEPack.MV_LIFECYCLE_MGR, mvLifeCycleAutoKeeper.getMVLifecycleManager()::load)
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
+                .put(SRMetaBlockIDEPack.RECOMMENDATIONS_TASK_MGR, recommendationsTaskMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1926,6 +1935,7 @@ public class GlobalStateMgr {
                 mvLifeCycleAutoKeeper.getMVLifecycleManager().save(imageWriter);
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
+                recommendationsTaskMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

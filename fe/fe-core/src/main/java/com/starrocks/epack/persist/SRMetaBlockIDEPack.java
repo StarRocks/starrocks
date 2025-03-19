@@ -25,4 +25,5 @@ public class SRMetaBlockIDEPack extends SRMetaBlockID {
     public static final SRMetaBlockIDEPack SECURITY_POLICY_MGR = new SRMetaBlockIDEPack(20002);
     public static final SRMetaBlockIDEPack FAILOVER_GROUP_MGR = new SRMetaBlockIDEPack(20003);
     public static final SRMetaBlockID MV_LIFECYCLE_MGR = new SRMetaBlockIDEPack(20004);
+    public static final SRMetaBlockID RECOMMENDATIONS_TASK_MGR = new SRMetaBlockIDEPack(20005);
 }

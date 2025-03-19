@@ -20,6 +20,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
+import com.starrocks.sql.automv.qe.RecommendationsTaskStatus;
 
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -46,6 +47,10 @@ public class EditLogEPack extends EditLog {
 
     public void logMVChangeLog(MVChangeLog mvChangeLog) {
         logEdit(OperationTypeEPack.OP_MV_CHANGE, mvChangeLog);
+    }
+
+    public void logRecommendationsTaskStatusChange(RecommendationsTaskStatus taskStatus) {
+        logEdit(OperationTypeEPack.OP_RECOMMENDATIONS_TASK_STATUS_CHANGE, taskStatus);
     }
 
     public void logCreatePasswordPolicy(CreatePasswordPolicyLog createPasswordPolicyLog) {

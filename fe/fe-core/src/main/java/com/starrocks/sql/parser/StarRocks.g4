@@ -707,7 +707,8 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT TASK qualifiedName?
+    : SUBMIT (SINGLE)? RECOMMENDATIONS TASK taskName=string FROM tunespace=qualifiedName (limitElement)?
+    | SUBMIT TASK qualifiedName?
         taskClause*
         AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
     ;
@@ -2719,7 +2720,7 @@ alterTunespaceStatement
     ;
 
 showRecommendationsStatement
-    : SHOW (SINGLE)? RECOMMENDATIONS FROM qualifiedName (limitElement)?
+    : SHOW (SINGLE)? RECOMMENDATIONS FROM (qualifiedName | (TASK taskName=string)) (limitElement)?
     ;
 
 alterTunespaceClause

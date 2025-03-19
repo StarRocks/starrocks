@@ -38,4 +38,5 @@ public class OperationTypeEPack extends OperationType {
 
     // AutoMV
     public static final short OP_MV_CHANGE = 20401;
+    public static final short OP_RECOMMENDATIONS_TASK_STATUS_CHANGE = 20402;
 }

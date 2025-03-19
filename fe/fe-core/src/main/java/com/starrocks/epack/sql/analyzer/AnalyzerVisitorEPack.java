@@ -39,6 +39,7 @@ import com.starrocks.sql.automv.analysis.TunespaceAnalyzer;
 import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
+import com.starrocks.sql.automv.ast.SubmitRecommendationsTaskStmt;
 
 public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
 
@@ -253,6 +254,11 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
 
     @Override
     public Void visitShowRecommendationsStmt(ShowRecommendationsStmt node, ConnectContext context) {
+        return TunespaceAnalyzer.analyze(node, context);
+    }
+
+    @Override
+    public Void visitSubmitRecommendationsTaskStmt(SubmitRecommendationsTaskStmt node, ConnectContext context) {
         return TunespaceAnalyzer.analyze(node, context);
     }
 }

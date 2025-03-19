@@ -106,6 +106,8 @@ public final class GlobalVariable {
     public static final String AUTOMV_STRING_TIME_FORMATS = "automv_string_time_formats";
 
     public static final String AUTOMV_ENABLE_11MV_SELECTIVITY_EVALUATION = "automv_enable_11mv_selectivity_evaluation";
+    public static final String AUTOMV_RECOMMENDATIONS_TASK_EXPIRE_TIME  = "automv_recommendations_task_expire_time";
+    public static final String AUTOMV_RECOMMENDATIONS_TASK_PENDING_LIMIT  = "automv_recommendations_task_pending_limit";
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
@@ -254,6 +256,12 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = AUTOMV_ENABLE_11MV_SELECTIVITY_EVALUATION)
     private static boolean autoMVEnable11mvSelectivityEvaluation = true;
+
+    @VariableMgr.VarAttr(name = AUTOMV_RECOMMENDATIONS_TASK_EXPIRE_TIME)
+    private static long autoMVRecommendationsTaskExpireTime = 24 * 3600L;
+
+    @VariableMgr.VarAttr(name = AUTOMV_RECOMMENDATIONS_TASK_PENDING_LIMIT)
+    private static long autoMVRecommendationsTaskPendingLimit = 100;
 
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
@@ -550,6 +558,22 @@ public final class GlobalVariable {
 
     public static boolean isAutoMVEnable11mvSelectivityEvaluation() {
         return autoMVEnable11mvSelectivityEvaluation;
+    }
+
+    public static void setAutoMVRecommendationsTaskExpireTime(long value) {
+        autoMVRecommendationsTaskExpireTime = value;
+    }
+
+    public static long getAutoMVRecommendationsTaskExpireTime() {
+        return autoMVRecommendationsTaskExpireTime;
+    }
+
+    public static void setAutoMVRecommendationsTaskPendingLimit(long value) {
+        autoMVRecommendationsTaskPendingLimit = value;
+    }
+
+    public static long getAutoMVRecommendationsTaskPendingLimit() {
+        return autoMVRecommendationsTaskPendingLimit;
     }
 
     private GlobalVariable() {

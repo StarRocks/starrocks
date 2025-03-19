@@ -512,6 +512,7 @@ import com.starrocks.sql.automv.ast.AlterTunespaceClause;
 import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
+import com.starrocks.sql.automv.ast.SubmitRecommendationsTaskStmt;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.statistic.StatsConstants;
@@ -1901,6 +1902,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
+        if (context.RECOMMENDATIONS() != null) {
+            String name = ((StringLiteral) visit(context.taskName)).getStringValue();
+            TableName tableName = qualifiedNameToTableName(getQualifiedName(context.qualifiedName()));
+            Optional<LimitElement> limitElement = Optional.ofNullable(context.limitElement())
+                    .map(limitElm -> (LimitElement) visitLimitElement(limitElm));
+            long limit = limitElement.map(LimitElement::getLimit).orElse(-1L);
+            long offset = limitElement.map(LimitElement::getOffset).orElse(-1L);
+            ShowRecommendationsStmt stmt = new ShowRecommendationsStmt(tableName, limit, offset);
+            stmt.setSingle(context.SINGLE() != null);
+            return new SubmitRecommendationsTaskStmt(name, stmt);
+        }
+
         QualifiedName qualifiedName = null;
         if (context.qualifiedName() != null) {
             qualifiedName = getQualifiedName(context.qualifiedName());
@@ -8517,12 +8530,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowRecommendationsStatement(StarRocksParser.ShowRecommendationsStatementContext ctx) {
-        TableName tableName = qualifiedNameToTableName(getQualifiedName(ctx.qualifiedName()));
+        ShowRecommendationsStmt stmt;
+        if (ctx.taskName != null) {
+            String name = ((StringLiteral) visit(ctx.taskName)).getStringValue();
+            stmt = new ShowRecommendationsStmt(null, -1, -1);
+            stmt.setTaskName(name);
+        } else {
+            TableName tableName = qualifiedNameToTableName(getQualifiedName(ctx.qualifiedName()));
+            stmt = new ShowRecommendationsStmt(tableName, -1, -1);
+        }
         Optional<LimitElement> limitElement = Optional.ofNullable(ctx.limitElement())
                 .map(limitElm -> (LimitElement) visitLimitElement(limitElm));
         long limit = limitElement.map(LimitElement::getLimit).orElse(-1L);
         long offset = limitElement.map(LimitElement::getOffset).orElse(-1L);
-        ShowRecommendationsStmt stmt = new ShowRecommendationsStmt(tableName, limit, offset);
+        stmt.setLimit(limit);
+        stmt.setOffset(offset);
         stmt.setSingle(ctx.SINGLE() != null);
         return stmt;
     }

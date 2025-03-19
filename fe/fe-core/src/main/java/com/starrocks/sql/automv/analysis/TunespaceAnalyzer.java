@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.analysis;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -35,6 +36,7 @@ import com.starrocks.sql.automv.ast.AlterTunespaceClause;
 import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
+import com.starrocks.sql.automv.ast.SubmitRecommendationsTaskStmt;
 import com.starrocks.sql.automv.qe.CollectAstVisitor;
 import com.starrocks.sql.automv.qe.QueryStatementPlus;
 import com.starrocks.sql.common.MetaUtils;
@@ -164,11 +166,27 @@ public class TunespaceAnalyzer {
 
         @Override
         public Void visitShowRecommendationsStmt(ShowRecommendationsStmt node, ConnectContext context) {
-            TableName tableName = node.getTableName();
-            String simpleTblName = tableName.getTbl();
-            analyzeAndCheckFullQualifiedTableName(tableName, context, checkTableExists(simpleTblName));
-            node.setTableName(tableName);
+            Preconditions.checkArgument(Boolean.logicalXor(node.getTaskName() != null, node.getTableName() != null));
+            if (node.getTableName() != null) {
+                TableName tableName = node.getTableName();
+                String simpleTblName = tableName.getTbl();
+                analyzeAndCheckFullQualifiedTableName(tableName, context, checkTableExists(simpleTblName));
+                node.setTableName(tableName);
+            } else {
+                if (node.getTaskName() == null || node.getTaskName().isBlank()) {
+                    throw new SemanticException("Invalid task name '%s'", node.getTaskName());
+                }
+            }
             return null;
+        }
+
+        @Override
+        public Void visitSubmitRecommendationsTaskStmt(SubmitRecommendationsTaskStmt node, ConnectContext context) {
+            if (node.getTaskName() == null || node.getTaskName().isBlank()) {
+                throw new SemanticException("Invalid task name '%s'", node.getTaskName());
+            }
+            Preconditions.checkArgument(node.getStmt().getTableName() != null);
+            return visitShowRecommendationsStmt(node.getStmt(), context);
         }
     }
 }
