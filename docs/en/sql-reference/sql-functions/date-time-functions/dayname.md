@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # dayname
 
-
-
 Returns the day corresponding to a date.
 
 The `date` parameter must be of the DATE or DATETIME type.

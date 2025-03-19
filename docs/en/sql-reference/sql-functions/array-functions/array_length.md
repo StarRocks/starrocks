@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_length
 
-
-
 Returns the number of elements in an array. The result type is INT. If the input parameter is NULL, the result is also NULL. Null elements are counted in the length.
 
 It has an alias [cardinality()](cardinality.md).

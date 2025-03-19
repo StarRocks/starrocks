@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bit_shift_right
 
-
-
 Shifts the binary representation of a numeric expression to the right by a specified number of bits.
 
 This function performs an **arithmetic right shift**, during which the bit length does not change, the low bit is dropped, and the sign bit is used as the high bit. For example, shifting `10101` to the right by one bit results in `11010`.

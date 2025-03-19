@@ -5,8 +5,6 @@ displayed_sidebar: docs
 
 # grouping_id
 
-
-
 grouping_id is used to distinguish the grouping statistics results of the same grouping standard.
 
 ## Syntax

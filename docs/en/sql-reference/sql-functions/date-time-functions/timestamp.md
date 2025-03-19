@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # timestamp
 
-
-
 Returns the DATETIME value of a date or datetime expression.
 
 ## Syntax

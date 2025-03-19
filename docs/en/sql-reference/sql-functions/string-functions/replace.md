@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # replace
 
-
-
 Replaces all occurrences of characters in a string with another string. This function performs a case-sensitive match when searching for `pattern`.
 
 This function is supported from v3.0.

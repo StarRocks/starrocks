@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_intersect
 
-
-
 Returns an array of the elements in the intersection of one or more arrays.
 
 ## Syntax

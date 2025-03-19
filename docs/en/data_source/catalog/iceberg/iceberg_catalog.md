@@ -302,8 +302,6 @@ Description: Whether to use credentials provided by REST backend for file system
 Required: No
 Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
 
-
-
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
 ```SQL
@@ -372,7 +370,6 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 Required: Yes
 
 Description: The URI of your database. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
-
 
 ###### iceberg.catalog.warehouse
 

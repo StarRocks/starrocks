@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # makedate
 
-
-
 Creates and returns a date based on the given year and day of year values.
 
 This function is supported from v3.1.

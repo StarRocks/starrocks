@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_append
 
-
-
 Adds a new element to the end of the array. Returns an array.
 
 ## Syntax

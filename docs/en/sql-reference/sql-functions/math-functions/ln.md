@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ln, dlog1, log
 
-
-
 Computes the natural (base `e`) logarithm of a number.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # map_filter
 
-
-
 Filters key-value pairs in a map by applying a Boolean array or a [Lambda expression](../Lambda_expression.md) to each key-value pair. The pair that evaluates to `true` is returned.
 
 This function is supported from v3.1 onwards.

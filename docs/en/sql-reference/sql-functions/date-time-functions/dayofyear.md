@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # dayofyear
 
-
-
 Returns the day of the year for a given date.
 
 The `date` parameter must be of the DATE or DATETIME type.

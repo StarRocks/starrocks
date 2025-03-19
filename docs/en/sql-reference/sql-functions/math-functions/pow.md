@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # pow, power, dpow, fpow
 
-
-
 Returns the result of `x` raised to the power of `y`.
 
 ## Syntax

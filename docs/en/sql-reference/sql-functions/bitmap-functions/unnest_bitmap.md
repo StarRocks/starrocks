@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # unnest_bitmap
 
-
-
 unnest_bitmap is a table function that takes a bitmap and converts elements in that bitmap into multiple rows of a table.
 
 StarRocks' [Lateral Join](../../../using_starrocks/Lateral_join.md) can be used in conjunction with the unnest_bitmap function to implement common column-to-row logic.

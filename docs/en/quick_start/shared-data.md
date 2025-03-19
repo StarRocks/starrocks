@@ -173,7 +173,6 @@ docker compose run minio_mc
 
 ---
 
-
 ## StarRocks configuration for shared-data
 
 At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio. When StarRocks started up it established the connection with MinIO and created the default storage volume in MinIO.

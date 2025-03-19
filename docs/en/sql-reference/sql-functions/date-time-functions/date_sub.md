@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # date_sub,subdate
 
-
-
 Subtracts the specified time interval from a date.
 
 ## Syntax

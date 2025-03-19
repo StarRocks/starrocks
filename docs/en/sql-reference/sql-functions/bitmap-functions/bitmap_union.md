@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_union
 
-
-
 Calculates the bitmap union of a set of values after grouping. Common usage scenarios include calculating PV and UV.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_contains_seq
 
-
-
 Checks whether all the elements of array2 appear in array1 in the same exact order. Therefore, the function will return 1, if and only if `array1 = prefix + array2 + suffix`.
 
 For example:

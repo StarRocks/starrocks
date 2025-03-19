@@ -125,4 +125,3 @@ ALTER TABLE example_mv1
 ```
 
 :::
-

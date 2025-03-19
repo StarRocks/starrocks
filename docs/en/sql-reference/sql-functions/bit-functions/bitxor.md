@@ -5,8 +5,6 @@ displayed_sidebar: docs
 
 # bitxor
 
-
-
 Returns the bitwise XOR of two numeric expressions.
 
 ## Syntax

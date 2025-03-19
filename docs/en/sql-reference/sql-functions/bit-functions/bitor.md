@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitor
 
-
-
 Returns the bitwise OR of two numeric expressions.
 
 ## Syntax

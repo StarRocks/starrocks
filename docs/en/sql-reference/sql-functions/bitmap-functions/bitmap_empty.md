@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_empty
 
-
-
 Returns an empty bitmap. It is mainly used to fill in the default value during insert or stream load. For example:
 
 ```bash

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_to_array
 
-
-
 Converts a BITMAP into a BIGINT array.
 
 ## Syntax

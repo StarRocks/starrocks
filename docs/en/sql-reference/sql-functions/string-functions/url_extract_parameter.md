@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # url_extract_parameter
 
-
-
 Extracts the value of the requested `name` parameter from the query string of a URL. Parameter extraction is handled in the manner as specified in [RFC 1866#section-8.2.1](https://datatracker.ietf.org/doc/html/rfc1866.html#section-8.2.1). If the specified parameter name does not exist, NULL is returned.
 
 This function is supported from v3.2.

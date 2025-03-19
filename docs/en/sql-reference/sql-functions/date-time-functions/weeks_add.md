@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # weeks_add
 
-
-
 Returns the value with the number of weeks added to date.
 
 ## Syntax

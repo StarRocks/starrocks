@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # unix_timestamp
 
-
-
 Converts a DATE or DATETIME value into a UNIX timestamp.
 
 If no parameter is specified, this function converts the current time into a UNIX timestamp.

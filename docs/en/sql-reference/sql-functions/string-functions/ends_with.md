@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ends_with
 
-
-
 Returns `true` if a string ends with a specified suffix. Otherwise, it returns `false`. If the argument is NULL, the result is NULL.
 
 ## Syntax

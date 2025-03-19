@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bit_shift_right_logical
 
-
-
 Shifts the binary representation of a numeric expression to the right by a specified number of bits.
 
 This function performs a **logical right shift,** during which the bit length does not change, the low bit is dropped, and 0 is appended to the high bit despite whether the original bit is positive or negative. **Logical** shifts are unsigned shifts. For example, shifting `10101` by one bit results in `00101`.

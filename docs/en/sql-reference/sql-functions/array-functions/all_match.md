@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # all_match
 
-
-
 Returns whether all elements of an array match the given predicate.
 
 - Returns `true` (1) if all the elements match the predicate (a special case is when the array is empty).

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # append_trailing_char_if_absent
 
-
-
 If the str string is not empty and does not contain trailing_char character in the end, it appends trailing_char character to the end. trailing_char can only contain one character. If it contains multiple characters, this function will return NULL.
 
 ## Syntax

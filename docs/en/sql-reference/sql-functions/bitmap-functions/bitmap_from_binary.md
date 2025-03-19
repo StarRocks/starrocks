@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_from_binary
 
-
-
 Converts a binary string with a specific format to a bitmap.
 
 This function can be used to load bitmap data to StarRocks.

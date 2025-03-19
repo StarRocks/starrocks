@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # floor, dfloor
 
-
-
 Returns the largest integer that is not more than `x`.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_remove
 
-
-
 Removes an element from an array.
 
 ## Syntax

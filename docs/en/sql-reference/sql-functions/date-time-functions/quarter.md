@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # quarter
 
-
-
 Returns the quarter part of a date, in the range of 1 to 4.
 
 ## Syntax

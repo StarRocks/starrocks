@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # current_timestamp
 
-
-
 Obtains the current date and returns a value if the DATETIME type.
 
 This function is a synonym of the [now()](./now.md) function.

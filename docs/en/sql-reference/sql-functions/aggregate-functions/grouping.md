@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # grouping
 
-
-
 Indicates whether a column is an aggregate column. If it is an aggregate column, 0 is returned. Otherwise, 1 is returned.
 
 ## Syntax

@@ -18,4 +18,3 @@ Compared to the classic shared-nothing StarRocks architecture, separation of sto
 - Elastic scalable compute. Because data is not stored in Compute Nodes (CNs), scaling can be done without data migration or shuffling across nodes.
 - Local disk cache for hot data to boost query performance.
 - Asynchronous data ingestion into object storage, allowing a significant improvement in loading performance.
-

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # to_date
 
-
-
 Converts a DATETIME value into a date.
 
 ## Syntax

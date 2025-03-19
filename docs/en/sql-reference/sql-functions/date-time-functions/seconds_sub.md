@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # seconds_sub
 
-
-
 Subtracts a time interval from a date value. The time interval is in seconds.
 
 ## Syntax

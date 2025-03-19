@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # base64_to_bitmap
 
-
-
 Before you import bitmap data into StarRocks, you need to serialize the data and encode the data as a Base64 string. When you import the Base64 string into StarRocks, you need to convert the string into bitmap data.
 This function is used to convert Base64 strings into bitmap data.
 

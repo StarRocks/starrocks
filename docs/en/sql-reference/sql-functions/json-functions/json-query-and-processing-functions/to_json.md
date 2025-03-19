@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # to_json
 
-
-
 Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
 
 If you want to cast values of other data types, see [cast](./cast.md).

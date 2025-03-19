@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # json_string
 
-
-
 Converting JSON object to JSON string
 
 ## Syntax

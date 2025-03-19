@@ -473,7 +473,6 @@ mysql> SHOW PROC '/replications';
 | Progress     | Progress of the task.           |
 | Error        | Error message (if any).         |
 
-
 **Example 15: Shows the information of running queries on the current FE node.**
 
 ```sql

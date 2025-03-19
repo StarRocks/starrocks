@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # concat
 
-
-
 This function combines multiple strings. If any of the parameter value is NULL, it will return NULL.
 
 ## Syntax

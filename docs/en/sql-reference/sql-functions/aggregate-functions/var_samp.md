@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # var_samp,variance_samp
 
-
-
 Returns the sample variance of an expression. Since v2.5.10, this function can also be used as a window function.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # conv
 
-
-
 Converts the number `x` from one numeric base system to another, and returns the result as a string value.
 
 ## Syntax

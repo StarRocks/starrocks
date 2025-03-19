@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # substring_index
 
-
-
 Extracts a substring that precedes or follows the `count` occurrences of the delimiter.
 
 - If `count` is positive, counting starts from the beginning of the string and this function returns the substring that precedes the `count`th delimiter. For example, `select substring_index('https://www.starrocks.io', '.', 2);` returns the substring before the second `.` delimiter, which is `https://www.starrocks`.

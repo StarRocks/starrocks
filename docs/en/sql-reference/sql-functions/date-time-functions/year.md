@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # year
 
-
-
 Returns the year part in a date and returns a value that ranges from 1000 to 9999.
 
 The `date` parameter must be of the DATE or DATETIME type.

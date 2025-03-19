@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # cast
 
-
-
 Converts a value between the JSON type and SQL type.
 
 ## Syntax

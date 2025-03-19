@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # regexp_extract_all
 
-
-
 Extracts all substrings from the target string (`str`) that matches a regular expression pattern (`pattern`) and corresponds to the regex group index specified by `pos`. This function returns an array.
 
 In regex, groups are enclosed within the parentheses () and numbered by counting their opening parentheses from left to right, starting from 1. For example, `([[:lower:]]+)C([[:lower:]]+)` is to match lowercase letters to the left or right side of the uppercase letter `C`. This pattern contains two groups: `([[:lower:]]+)` to the left of `C` is the first group and `([[:lower:]]+)` to the right of `C` is the second group.

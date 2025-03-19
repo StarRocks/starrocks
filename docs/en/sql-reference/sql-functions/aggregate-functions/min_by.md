@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # min_by
 
-
-
 Returns the value of `x` associated with the minimum value of `y`.
 
 For example, `SELECT min_by(subject, exam_result) FROM exam;` is to return the subject that has the lowest exam score.

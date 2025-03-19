@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # json_query
 
-
-
 Queries the value of an element that can be located by the `json_path` expression in a JSON object and returns a JSON value.
 
 ## Syntax

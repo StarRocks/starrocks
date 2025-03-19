@@ -187,4 +187,3 @@ This document outlines the partitioning and bucketing features supported by Star
 :::
 
 For detailed comparisons between List Partitioning and Expression Partitioning, refer to [Comparison between list partitioning and expression partitioning](list_partitioning.md).
-

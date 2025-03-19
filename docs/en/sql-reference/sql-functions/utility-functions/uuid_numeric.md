@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # uuid_numeric
 
-
-
 Returns a random UUID of the LARGEINT type. This function has an execution performance 2 orders of magnitude better than the `uuid` function.
 
 ## Syntax

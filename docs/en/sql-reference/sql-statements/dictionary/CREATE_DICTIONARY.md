@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # CREATE DICTIONARY
 
-
-
 Creates a dictionary object based on an original object. The dictionary object organizes the key-value mappings from the original object in the form of a hash table and is cached in the memory of all BE nodes. It can be viewed as a cached table.
 
 **Advantages**

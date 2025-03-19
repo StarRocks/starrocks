@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # hex
 
-
-
 If `x` is a numerical value, this function returns a hexadecimal string representation of the value.
 
 If `x` is a string, this function returns a hexadecimal string representation of the string where each character in the string is converted into two hexadecimal digits.

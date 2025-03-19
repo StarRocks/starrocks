@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bit_shift_left
 
-
-
 Shifts the binary representation of a numeric expression to the left by a specified number of bits.
 
 This function performs an **arithmetic left shift**, during which the bit length does not change, 0 is appended to the end, and the high bit remains unchanged. For example, shifting `10101` to the left by one bit results in `11010`.

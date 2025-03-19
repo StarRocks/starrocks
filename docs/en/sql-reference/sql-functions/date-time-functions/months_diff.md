@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # months_diff
 
-
-
 Returns the month difference between two date expressions (`expr1` − `expr2`), accurate to the month.
 
 ## Syntax

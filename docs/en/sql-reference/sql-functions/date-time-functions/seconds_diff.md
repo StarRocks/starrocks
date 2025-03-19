@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # seconds_diff
 
-
-
 Returns the second difference between two date expressions (`expr1` − `expr2`), accurate to the second.
 
 ## Syntax

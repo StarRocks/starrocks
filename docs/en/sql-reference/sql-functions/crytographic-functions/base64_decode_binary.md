@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # base64_decode_binary
 
-
-
 Decodes a Base64-encoded string and return a BINARY.
 
 This function is supported from v3.0.

@@ -534,4 +534,3 @@ Example:
 - Each table supports only one vector index.
 - Searches on multiple vector indexes in a single query statement are unsupported.
 - Vector search cannot be used as subqueries or in joins.
-

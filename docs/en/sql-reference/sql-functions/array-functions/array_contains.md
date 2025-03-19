@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_contains
 
-
-
 Checks whether the array contains a certain element. If yes, it returns 1; otherwise, it returns 0.
 
 ## Syntax

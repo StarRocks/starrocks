@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # json_length
 
-
-
  Returns the length of a JSON document. If a path is specified, this function returns the length of the value identified by the path.
 
 The length of a document is determined according to the following rules:

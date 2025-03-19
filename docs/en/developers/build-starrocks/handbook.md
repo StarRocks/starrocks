@@ -53,7 +53,6 @@ StarRocks Backend UT is built on top of google-test, so you can pass filter to r
 UDF_RUNTIME_DIR=./ STARROCKS_HOME=./ LD_LIBRARY_PATH=/usr/lib/jvm/java-18-openjdk-amd64/lib/server ./be/ut_build_ASAN/test/starrocks_test --gtest_filter="*MapColumn*"
 ```
 
-
 # Build options
 
 ## build with clang

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # to_base64
 
-
-
 Converts a string into a Base64-encoded string. This function is an inverse of [from_base64](from_base64.md).
 
 ## Syntax

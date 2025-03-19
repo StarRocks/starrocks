@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # host_name
 
-
-
 Obtains the hostname of the node on which the computation is performed.
 
 ## Syntax

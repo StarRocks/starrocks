@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # space
 
-
-
 Returns a string of the specified number of spaces.
 
 ## Syntax

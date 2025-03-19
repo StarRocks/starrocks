@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # parse_url
 
-
-
 Parses a URL and extracts a component from this URL.
 
 ## Syntax

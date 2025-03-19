@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # tanh
 
-
-
 Computes the hyperbolic tangent of the argument.
 
 This function is supported from v3.0.

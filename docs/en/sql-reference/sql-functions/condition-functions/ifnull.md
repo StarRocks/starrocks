@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ifnull
 
-
-
 If `expr1` is NULL, returns expr2. If `expr1` is not NULL, returns `expr1`.
 
 ## Syntax

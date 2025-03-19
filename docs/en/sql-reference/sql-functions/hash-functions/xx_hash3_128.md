@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # xx_hash3_128
 
-
-
 Returns the 128-bit xxhash3 hash value of the input string. 
 
 ## Syntax

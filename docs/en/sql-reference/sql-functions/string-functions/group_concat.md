@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # group_concat
 
-
-
 Concatenates non-null values from a group into a single string, with a `sep` argument, which is `,` by default if not specified. This function can be used to concatenate values from multiple rows of a column into one string.
 
 group_concat supports DISTINCT and ORDER BY in 3.0 versions later than 3.0.6 and 3.1 versions later than 3.1.3.

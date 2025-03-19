@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitand
 
-
-
 Returns the bitwise AND of two numeric expressions.
 
 ## Syntax

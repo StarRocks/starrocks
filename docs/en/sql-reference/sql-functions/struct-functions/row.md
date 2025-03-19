@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # row
 
-
-
 Creates a named STRUCT or ROW value from the given values. It supports unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, such as `col1, col2,...`.
 
 This function is supported from v3.1 onwards.

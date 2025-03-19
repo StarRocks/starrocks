@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # lower
 
-
-
 Converts all strings in an argument to lower-case.
 
 ## Syntax

@@ -206,7 +206,6 @@ The upgrade process lasts for a while. You can run the command `kubectl -n starr
 
 ### Scale StarRocks cluster
 
-
 #### Scale out BE cluster
 
 Run the following command to scale the BE cluster to 9 nodes:

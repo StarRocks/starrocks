@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # percentile_disc
 
-
-
 Returns a percentile value based on a discrete distribution of the input column `expr`. If the exact percentile value cannot be found, this function returns the larger value between the two closest values.
 
 This function is supported from v2.5 onwards.

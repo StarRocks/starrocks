@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # round, dround
 
-
-
 Rounds a number to a specified number of digits.
 
 - If `n` is not specified, `x` is rounded to the nearest integer.

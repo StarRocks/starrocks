@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # sinh
 
-
-
 Computes the hyperbolic sine of the argument.
 
 This function is supported from v3.0.

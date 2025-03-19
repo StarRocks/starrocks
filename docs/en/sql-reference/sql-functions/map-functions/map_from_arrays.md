@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # map_from_arrays
 
-
-
 Creates a MAP value from the given pair of key item array and value item array.
 
 This function is supported from v3.1 onwards.

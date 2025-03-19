@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # negative
 
-
-
 Returns the negative of input `arg`.
 
 ## Syntax

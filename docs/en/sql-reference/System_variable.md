@@ -550,7 +550,6 @@ Default value: `true`.
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
 
-
 ### enable_lake_tablet_internal_parallel
 
 * **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.

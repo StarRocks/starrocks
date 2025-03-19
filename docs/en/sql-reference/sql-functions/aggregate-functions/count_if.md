@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # count_if
 
-
-
 Returns the number of records that meet the specified condition or `0` if no records satisfy the condition.
 
 This function does not support `DISTINCT`, for example `count_if(DISTINCT x)`.

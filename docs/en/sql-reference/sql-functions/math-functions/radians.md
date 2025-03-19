@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # radians
 
-
-
 Converts `x` from an angle to a radian.
 
 ## Syntax

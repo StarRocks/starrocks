@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # months_add
 
-
-
 Adds a specified number of months to the date, accurate to the month.
 
 The [add_months](./add_months.md) function provides similar functionalities.

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_to_binary
 
-
-
 Converts Bitmap values to a Binary string.
 
 bitmap_to_binary is mainly used for exporting Bitmap data. The compression effect is better than [bitmap_to_base64](./bitmap_to_base64.md).

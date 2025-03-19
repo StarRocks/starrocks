@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_cum_sum
 
-
-
 Returns the cumulative sums of elements in an array.
 
 ## Syntax

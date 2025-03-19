@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # day
 
-
-
 Extracts the day part of a date or datetime expression and returns a value that ranges from 1 to 31.
 
 The `date` parameter must be of the DATE or DATETIME type.

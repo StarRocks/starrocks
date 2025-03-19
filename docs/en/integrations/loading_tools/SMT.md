@@ -639,7 +639,6 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
   
     Enable the Server Agent Service.
 
-
     ```Bash
     /opt/mssql/bin/mssql-conf set sqlagent.enabled true
     ```
@@ -661,7 +660,6 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
 
     ​    :::
 
-
         ```SQL
         USE XXX_databases
         GO
@@ -670,7 +668,6 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
         ```
 
 3. Make sure that CDC for the corresponding table is enabled.
-
 
     ```SQL
     EXEC sys.sp_cdc_enable_table 

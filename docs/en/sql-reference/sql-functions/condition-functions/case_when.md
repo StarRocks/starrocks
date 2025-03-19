@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # case
 
-
-
 CASE is a conditional expression. It returns the result in the THEN clause if a condition in the WHEN clause evaluates to true. If none of the conditions evaluate to true, it returns the result in the optional ELSE clause. If ELSE is not present, NULL is returned.
 
 ## Syntax

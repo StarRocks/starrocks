@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # fmod
 
-
-
 Returns the floating point remainder of the division ( `dividend`/`divisor` ). It is a modulo function.
 
 ## Syntax

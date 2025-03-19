@@ -52,7 +52,6 @@ expression ::=
 **Required**: NO<br/>
 **Description**: The number of the most recent partitions to be retained. Partitions are sorted in chronological order, **with the current date as a benchmark**; partitions older than the current date minus `partition_live_number` are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`. The partitions `p20230403` and `p20230404` are retained, and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`, and `p20230405`, and `p20230406`. Then partitions `p20230403`, `p20230404`, `p20230405`, and `p20230406` are retained, and the other partitions are deleted. <br/>
 
-
 ### Usage notes
 
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
@@ -153,7 +152,6 @@ partition_columns ::=
 
 **Required**: YES<br/>
 **Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
-
 
 ### Usage notes
 

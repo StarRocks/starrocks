@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ngram_search
 
-
-
 Calculate the ngram similarity of the two strings.
 
 :::info

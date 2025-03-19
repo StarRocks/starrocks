@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # to_days
 
-
-
 Returns the number of days between a date and 0000-01-01.
 
 The `date` parameter must be of the DATE or DATETIME type.

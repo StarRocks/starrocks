@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_agg
 
-
-
 Aggregates values (excluding NULLs) in a column into a bitmap (multiple rows into one row).
 
 ## Syntax

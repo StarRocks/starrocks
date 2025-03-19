@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # hll_union_agg
 
-
-
 HLL is an engineering implementation based on the HyperLogLog algorithm, which is used to save the intermediate results of HyperLogGog calculation process.
 
 It can only be used as the value column of a table and reduce the amount of data through aggregation to achieve the purpose of speeding up the query.

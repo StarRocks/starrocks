@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # current_version
 
-
-
 Returns the current version of StarRocks. Two syntaxes are provided for compatibility with different clients.
 
 ## Syntax

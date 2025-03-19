@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # greatest
 
-
-
 Returns the largest value from a list of one or more parameters.
 
 Generally, the return value has the same data type as the input.

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # weekofyear
 
-
-
 Returns the week number for a given date within a year.
 
 The `date` parameter must be of the DATE or DATETIME type.

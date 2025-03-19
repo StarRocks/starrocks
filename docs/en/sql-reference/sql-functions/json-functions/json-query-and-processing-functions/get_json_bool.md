@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # get_json_bool
 
-
-
 Parses and gets the boolean value from a specified JSON path in a JSON string.
 
 If the format of `json_str` or `json_path` is invalid, or if no matching content can be found, this function will return NULL.

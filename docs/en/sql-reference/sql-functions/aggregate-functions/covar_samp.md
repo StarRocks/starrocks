@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # covar_samp
 
-
-
 Returns the sample covariance of two expressions. This function is supported from v2.5.10. It can also be used as a window function.
 
 ## Syntax

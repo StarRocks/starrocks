@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # timestampadd
 
-
-
 Adds an integer expression interval to the date or datetime expression `datetime_expr`.
 
 The unit for the interval as mentioned must be one of the following:

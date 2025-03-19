@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # pmod
 
-
-
 Returns the positive remainder of `dividend` divided by`divisor`.
 
 ## Syntax

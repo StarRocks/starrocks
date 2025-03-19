@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_sort
 
-
-
 Sorts the elements of an array in ascending order.
 
 ## Syntax

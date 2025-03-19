@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # crc32
 
-
-
 Returns the 32-bit cyclic redundancy check (CRC) value of a string. If the input is NULL, NULL is returned.
 
 This function is used for error detection. It uses the CRC32 algorithm to detect changes between source and target data.

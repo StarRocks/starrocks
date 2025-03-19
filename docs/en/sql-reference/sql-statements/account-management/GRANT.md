@@ -267,4 +267,3 @@ GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 <UserPrivilegeCase />
 
 <MultiServiceAccess />
-

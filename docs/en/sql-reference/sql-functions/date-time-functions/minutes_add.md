@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # minutes_add
 
-
-
 Adds the specified minutes to the date, accurate to the minute.
 
 ## Syntax

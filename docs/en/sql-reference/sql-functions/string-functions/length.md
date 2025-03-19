@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # length
 
-
-
 This function returns the length of a string (in bytes).
 
 ## Syntax

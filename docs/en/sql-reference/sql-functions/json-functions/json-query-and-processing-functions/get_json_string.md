@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # get_json_string,get_json_object
 
-
-
 Analyzes and gets strings from the specified path (`json_path`) in a JSON string. If the format of `json_string` or `json_path` is wrong or if no matching value is found, this function will return NULL.
 
 The alias is get_json_object.

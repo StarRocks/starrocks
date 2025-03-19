@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # split_part
 
-
-
 This function splits a given string according to the separators and returns the requested part. (start counting from the beginning)
 
 ## Syntax

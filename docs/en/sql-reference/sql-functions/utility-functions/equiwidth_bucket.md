@@ -19,7 +19,6 @@ equiwidth_bucket(value, min, max, buckets)
 - `max`: max value of the histogram
 - `buckets`: number of histogram buckets
 
-
 ## Example
 
 ```SQL

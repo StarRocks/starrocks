@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # percentile_cont
 
-
-
 Computes the percentile value of `expr` with linear interpolation.
 
 ## Syntax

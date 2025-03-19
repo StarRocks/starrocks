@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_intersect
 
-
-
 Aggregation function, used to calculate the bitmap intersection after grouping. Common usage scenarios, such as calculating user retention rate.
 
 ## Syntax

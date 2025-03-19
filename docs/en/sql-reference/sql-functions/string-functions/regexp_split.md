@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # regexp_split
 
-
-
 Split string `str` by regexp expression `pattern`, return maximum `max_split` elements in `ARRAY<VARCHAR>` type.
 
 ## Syntax

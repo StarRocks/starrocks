@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # e
 
-
-
 Returns the constant e (the base of natural logarithms).
 
 ## Syntax

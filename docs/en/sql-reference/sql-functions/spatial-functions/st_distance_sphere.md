@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ST_Distance_Sphere
 
-
-
 Calculates the spherical distance between two points on the Earth in "meters". The parameters inputted are longitude at X, latitude at X, longitude at Y, latitude at Y.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # DROP DICTIONARY
 
-
-
 Delete a dictionary object or clear the cached data within a dictionary object.
 
 ## Syntax

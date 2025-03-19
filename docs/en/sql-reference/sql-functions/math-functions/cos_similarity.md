@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # cos_similarity
 
-
-
 Measures the similarity of two vectors by calculating the cosine of the angle between them. The angle is formed by the direction of the vectors while the difference in their magnitude is ignored.
 
 The similarity is between -1 and 1. Smaller angles between vectors indicate greater cosine similarity.

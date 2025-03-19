@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # percentile_union
 
-
-
 Aggregates PERCENTILE data.
 
 ## Syntax

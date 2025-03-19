@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # to_bitmap
 
-
-
 The input is unsigned bigint with the value ranging from 0 to 18446744073709551615, and the output is bitmap containing this element. This function is mainly used for the stream load task to import integer fields into the bitmap field of the StarRocks table. For example:
 
 ```bash

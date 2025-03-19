@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # uuid
 
-
-
 Returns a random UUID of the VARCHAR type. Two calls to this function can generate two different numbers. The UUID is 36 characters in length. It contains 5 hexadecimal numbers which are connected with four hyphens in the aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee format.
 
 ## Syntax

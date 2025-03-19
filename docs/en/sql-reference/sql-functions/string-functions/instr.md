@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # instr
 
-
-
 This function returns the position where str first appeared in substr (start counting from 1 and measured in characters). If str is not found in substr, then this function will return 0.
 
 ## Syntax

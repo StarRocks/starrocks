@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # unnest
 
-
-
 UNNEST is a table function that takes an array and converts elements in that array into multiple rows of a table. The conversion is also known as "flattening".
 
 You can use Lateral Join with UNNEST to implement common conversions, for example, from STRING, ARRAY, or BITMAP to multiple rows. For more information, see [Lateral join](../../../using_starrocks/Lateral_join.md).

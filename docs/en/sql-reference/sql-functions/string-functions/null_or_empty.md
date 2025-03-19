@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # null_or_empty
 
-
-
 This function returns true when the string is empty or NULL. Otherwise, it returns false.
 
 ## Syntax

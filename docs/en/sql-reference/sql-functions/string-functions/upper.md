@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # upper
 
-
-
 Converts a string to upper-case.
 
 ## Syntax

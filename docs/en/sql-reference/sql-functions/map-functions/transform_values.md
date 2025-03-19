@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # transform_values
 
-
-
 Transforms values in a map using a [Lambda expression](../Lambda_expression.md) and produces a new value for each entry in the map.
 
 This function is supported from v3.1 onwards.

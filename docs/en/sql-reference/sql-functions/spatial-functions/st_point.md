@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ST_Point
 
-
-
 Returns the corresponding Point with the given X-coordinate and Y-coordinate. At the moment this value only makes sense on a spherical set. X/Y corresponds to longitude/latitude.
 
 > **Caution**

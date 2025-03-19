@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_sum
 
-
-
 Sums all the elements in an array.
 
 From StarRocks 2.5, array_sum() can take a lambda expression as an argument. However, it cannot work directly with the Lambda expression. It must work on the result converted from [array_map()](./array_map.md).

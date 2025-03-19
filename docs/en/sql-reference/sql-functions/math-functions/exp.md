@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # exp,dexp
 
-
-
 Returns the value of e raised to the power of `x`. This function is called natural logarithms function.
 
 ## Syntax

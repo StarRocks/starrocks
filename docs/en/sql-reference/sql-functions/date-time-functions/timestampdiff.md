@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # timestampdiff
 
-
-
 Returns the interval from `datetime_expr2` to `datetime_expr1`. `datetime_expr1` and `datetime_expr2` must be of the DATE or DATETIME type.
 
 The unit for the integer result and the interval should be one of the following:

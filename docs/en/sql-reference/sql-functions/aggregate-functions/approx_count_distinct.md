@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # approx_count_distinct
 
-
-
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col).
 
 It is faster than the COUNT and DISTINCT combination and uses a fixed-size memory, so less memory is used for columns of high cardinality.

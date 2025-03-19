@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # percentile_hash
 
-
-
 Constructs DOUBLE values as PERCENTILE values.
 
 ## Syntax

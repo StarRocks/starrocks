@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ST_Contains
 
-
-
 Checks whether the geometric figure shape1 can fully contain shape2.
 
 ## Syntax

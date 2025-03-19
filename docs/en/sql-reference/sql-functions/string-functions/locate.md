@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # locate
 
-
-
 This function is used for finding the location of a substring in a string (starting counting from 1 and measured in characters). If the third argument pos is specified, it will start to find positions of substr in strings below pos. If str is not found, it will return 0.
 
 ## Syntax

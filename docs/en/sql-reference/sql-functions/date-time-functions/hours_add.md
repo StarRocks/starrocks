@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # hours_add
 
-
-
 Adds hours to a date or datetime.
 
 ## Syntax

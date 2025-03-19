@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # log10, dlog10
 
-
-
 Calculates the base 10 logarithm of a number.
 
 ## Syntax

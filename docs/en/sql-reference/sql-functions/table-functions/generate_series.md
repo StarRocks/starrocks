@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # generate_series
 
-
-
 Generates a series of values within the interval specified by `start` and `end`, and with an optional `step`.
 
 generate_series() is a table function. A table function can return a row set for each input row. The row set can contain zero, one, or multiple rows. Each row can contain one or more columns.

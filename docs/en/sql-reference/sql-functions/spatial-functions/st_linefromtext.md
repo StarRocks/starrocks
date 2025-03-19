@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ST_LineFromText,ST_LineStringFromText
 
-
-
 Converts a WKT (Well Known Text) to a memory representation in the form of Line.
 
 ## Syntax

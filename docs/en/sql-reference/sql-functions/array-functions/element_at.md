@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # element_at
 
-
-
 Returns the element at the specified position (index) from a given array. If any parameter is NULL or if the position does not exist, the result is NULL.
 
 This function is the alias of the subscript operator `[]`. It is supported from v3.0 onwards.

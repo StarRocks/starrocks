@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # sum
 
-
-
 Returns the sum of non-null values for `expr`. You can use the DISTINCT keyword to compute the sum of distinct non-null values.
 
 ## Syntax

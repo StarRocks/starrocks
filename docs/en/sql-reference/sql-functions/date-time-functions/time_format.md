@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # time_format
 
-
-
 Formats TIME-type values in the specified format.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # split
 
-
-
 This function splits a given string according to the separators, and returns the split parts in ARRAY.
 
 ## Syntax

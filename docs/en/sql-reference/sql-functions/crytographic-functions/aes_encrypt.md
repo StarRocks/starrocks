@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # aes_encrypt
 
-
-
 Uses the AES_128_ECB algorithm to encrypt a string and returns a binary string.
 
 AES is short for advanced encryption standard and ECB is short for electronic code book. The key used to encrypt the string is a 128-bit string.

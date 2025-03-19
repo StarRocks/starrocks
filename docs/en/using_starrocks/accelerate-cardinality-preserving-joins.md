@@ -476,4 +476,3 @@ Example:
     ```
 
 In the above example, table pruning is allowed in Q1, and Q2 as shown in the execution plan, while Q3, whose predicate affects the cardinality of final results, fails to perform table pruning.
-

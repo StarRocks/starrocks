@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # acos
 
-
-
 Computes the arc cosine of an argument.
 
 ## Syntax

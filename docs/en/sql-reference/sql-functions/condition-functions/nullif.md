@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # nullif
 
-
-
 Returns NULL if `expr1` is equal to `expr2`. Otherwise, returns `expr1`.
 
 ## Syntax

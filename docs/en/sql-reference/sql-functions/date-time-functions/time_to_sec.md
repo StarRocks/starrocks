@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # time_to_sec
 
-
-
 Converts a time value into the number of seconds. The formula used for the conversion is as follows:
 
 Hour x 3600 + Minute x 60 + Second

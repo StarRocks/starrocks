@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # sqrt, dsqrt
 
-
-
 Calculates the square root of a value. dsqrt is same as sqrt.
 
 ## Syntax

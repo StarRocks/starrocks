@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # from_days
 
-
-
 Returns a date from 0000-01-01.
 
 ## Syntax

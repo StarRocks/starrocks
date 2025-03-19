@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # second
 
-
-
 Returns the second part for a given date. The return value ranges from 0 to 59.
 
 The `date` parameter must be of the DATE or DATETIME type.

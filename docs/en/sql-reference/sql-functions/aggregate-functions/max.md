@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # max
 
-
-
 Returns the maximum value of the expr expression.
 
 ## Syntax

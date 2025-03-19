@@ -94,7 +94,6 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 
     :::note
 
-
     For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
     :::

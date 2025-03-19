@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # date
 
-
-
 Extracts the date part of a date or datetime expression.
 
 ## Syntax

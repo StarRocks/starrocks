@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_or
 
-
-
 Calculates the union of two input bitmaps and return a new bitmap.
 
 ## Syntax

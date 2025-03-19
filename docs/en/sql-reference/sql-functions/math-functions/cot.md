@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # cot
 
-
-
 Returns the cotangent of the angle in radians `x`. If the angle in radians `x` is `0` or `NULL`, `NULL` is returned.
 
 ## **Syntax**

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # dictionary_get
 
-
-
 Query the value mapped to the key in a dictionary object.
 
 ## Syntax

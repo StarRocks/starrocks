@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # dayofweek_iso
 
-
-
 Returns the ISO standard day of the week for the specified date as an integer within the range of `1` to `7`. In this standard, `1` represents Monday, and `7` represents Sunday.
 
 ## Syntax

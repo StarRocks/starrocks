@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # parse_json
 
-
-
 Converts a string to a JSON value.
 
 ## Syntax
@@ -82,7 +80,6 @@ mysql> SELECT parse_json('{star: "rocks"}');
 ```
 
 Example 6: If a JSON key contains a '.', for example, 'a.1', it must be escaped with '\\' or you need to enclose the entire key value along with double quotes in single quotes.
-
 
 ```plaintext
 mysql> select parse_json('{"b":4, "a.1": "1"}')->"a\\.1";

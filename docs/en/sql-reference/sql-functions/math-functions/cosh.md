@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # cosh
 
-
-
 Computes the hyperbolic cosine of the argument.
 
 This function is supported from v3.0.

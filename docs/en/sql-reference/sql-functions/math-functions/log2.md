@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # log2
 
-
-
 Calculates the base 2 logarithm of a number.
 
 ## Syntax

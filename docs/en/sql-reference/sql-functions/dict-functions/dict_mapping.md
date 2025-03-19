@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # dict_mapping
 
-
-
 Returns the value mapped to the specified key in a dictionary table.
 
 This function is mainly used to simplify the application of a global dictionary table. During data loading into a target table, StarRocks automatically obtains the value mapped to the specified key from the dictionary table by using the input parameters in this function, and then loads the value into the target table.

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # inet_aton
 
-
-
 Takes a string containing an IPv4 address in the format A.B.C.D. Returns a BIGINT number representing the corresponding IPv4 address in big endian.
 
 ## Syntax

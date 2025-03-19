@@ -43,4 +43,4 @@ Create a database in Apache Superset:
   - `Port`: the FE query port of your StarRocks cluster, for example, `9030`.
   - `Catalog`: the target catalog in your StarRocks cluster. Both internal and external catalogs are supported.
   - `Database`: the target database in your StarRocks cluster. Both internal and external databases are supported.
-  
+

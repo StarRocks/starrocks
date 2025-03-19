@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # multi_distinct_count
 
-
-
 Returns the total number of rows of the `expr`, equivalent to count(distinct expr).
 
 ## Syntax

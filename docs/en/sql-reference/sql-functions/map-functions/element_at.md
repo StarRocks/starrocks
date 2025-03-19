@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # element_at
 
-
-
 Returns the value for the specified key from a key-value pair of a map. If any input parameter is NULL or if the key does not exist in the map, the result is NULL.
 
 If you want to retrieve an element from an array, see [element_at](../array-functions/element_at.md).

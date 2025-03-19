@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ascii
 
-
-
 This function returns the ascii value of the leftmost character of a given string.
 
 ## Syntax

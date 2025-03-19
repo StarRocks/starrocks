@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # pi
 
-
-
 Returns the value of Pi.
 
 ## Syntax

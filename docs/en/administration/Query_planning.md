@@ -225,7 +225,6 @@ SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planne
 
 To specify the execution timeout for a SUBMIT TASK statement, use the `SET_VAR` Hint to set the system variable `query_timeout` in the SUBMIT TASK statement.
 
-
 ~~~SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ~~~

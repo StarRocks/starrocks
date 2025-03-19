@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # date_diff
 
-
-
 Returns the difference between two date values in the specified unit. This function returns the value of `expr1 - expr2` expressed in terms of `unit`.
 
 For example, `date_diff('second', '2010-11-30 23:59:59', '2010-11-30 20:58:59')` returns the difference between the two DATETIME values in unit of seconds.

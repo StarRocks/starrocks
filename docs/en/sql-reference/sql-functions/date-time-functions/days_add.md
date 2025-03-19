@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # days_add
 
-
-
 Adds a specified number of days to a given date or date time.
 
 ## Syntax

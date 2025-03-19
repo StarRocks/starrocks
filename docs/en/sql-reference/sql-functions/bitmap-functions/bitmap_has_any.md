@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_has_any
 
-
-
 Calculates whether there are intersecting elements between two Bitmap columns, and the return value is Boolean value.
 
 ## Syntax

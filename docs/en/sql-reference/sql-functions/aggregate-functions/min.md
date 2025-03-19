@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # min
 
-
-
 Returns the minimum value of the expr expression.
 
 ## Syntax

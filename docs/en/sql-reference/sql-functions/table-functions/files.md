@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # FILES
 
-
-
 Defines data files in remote storage. It can be used to:
 
 - [Load or query data from a remote storage system](#files-for-loading)
@@ -505,7 +503,6 @@ When used with SELECT, FILES() returns the data in the file as a table.
   +--------------------------------------+------+--------+---------------------+
   2 rows in set (0.03 sec)
   ```
-
 
 #### DESC FILES()
 

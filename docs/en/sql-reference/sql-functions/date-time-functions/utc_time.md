@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # utc_time
 
-
-
 Returns the current UTC time as a value in 'HH:MM:SS'.
 
 ## Syntax
@@ -24,7 +22,6 @@ MySQL > select utc_time();
 | 12:31:18       |
 +----------------+
 ```
-
 
 ## keyword
 

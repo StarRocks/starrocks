@@ -20,4 +20,3 @@ The following fields are provided in `views`:
 | SECURITY_TYPE        | The view `SQL SECURITY` characteristic. The value is one of `DEFINER` or `INVOKER`. |
 | CHARACTER_SET_CLIENT |                                                              |
 | COLLATION_CONNECTION |                                                              |
-

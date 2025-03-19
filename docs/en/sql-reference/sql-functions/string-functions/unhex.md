@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # unhex
 
-
-
 This function performs the opposite operation of hex().
 
 It interprets each pair of hexadecimal digits in the input string as a number and converts it to the byte represented by the number. The return value is a binary string.

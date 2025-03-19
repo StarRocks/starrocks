@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # sleep
 
-
-
 Delays the execution of an operation for a specified period of time (in seconds) and returns a BOOLEAN value to indicate whether the sleep is completed without interruption. `1` is returned if the sleep is completed without interruption. Otherwise, `0` is returned.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # str2date
 
-
-
 Converts a string into a DATE value according to the specified format. If the conversion fails, NULL is returned.
 
 The format must be consistent with that described in [date_format](./date_format.md).

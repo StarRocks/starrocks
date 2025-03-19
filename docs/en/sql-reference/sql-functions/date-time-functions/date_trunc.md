@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # date_trunc
 
-
-
 Truncates a time value based on the specified date part, such as year, day, hour, or minute.
 
 StarRocks also provides the year, quarter, month, week, day, and hour functions for you to extract the specified date part.

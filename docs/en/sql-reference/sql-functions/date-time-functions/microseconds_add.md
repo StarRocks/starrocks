@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # microseconds_add
 
-
-
 Adds a time interval to a date value. The time interval is in microseconds.
 
 ## Syntax

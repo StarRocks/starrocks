@@ -66,4 +66,3 @@ OBJECT_DATABASE: NULL
 As per their scenarios of applications, views in `sys` are only accessible to some `admin` roles by default. Depending on your specific needs, you can grant other users the SELECT privilege on these views.
 
 :::
-

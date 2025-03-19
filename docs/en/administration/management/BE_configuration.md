@@ -16,7 +16,6 @@ import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_not
 
 <CNConfigMethod />
 
-
 ## View BE configuration items
 
 You can view the BE configuration items using the following command:
@@ -1291,7 +1290,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: No
 - Description: The soft limit (in percentage) of memory resources that can be taken up by all load processes on a BE node.
 - Introduced in: -
-
 
 ##### load_process_max_memory_hard_limit_ratio
 

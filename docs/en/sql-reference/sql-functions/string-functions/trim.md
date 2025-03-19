@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # trim
 
-
-
 Removes consecutive spaces or specified characters from the beginning and end of the `str` argument. Removing specified characters are supported from StarRocks 2.5.0.
 
 ## Syntax

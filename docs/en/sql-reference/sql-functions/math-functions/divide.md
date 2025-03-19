@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # divide
 
-
-
 Return the quotient of x divide y. If y is 0, return null.
 
 ## Syntax

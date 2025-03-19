@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ST_X
 
-
-
 If point is of a valid Point type, return the corresponding X-coordinate value.
 
 ## Syntax

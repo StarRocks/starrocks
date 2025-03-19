@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_distinct
 
-
-
 Removes duplicate elements from an array.
 
 ## Syntax

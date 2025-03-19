@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # covar_pop
 
-
-
 Returns the population covariance of two expressions. This function is supported from v2.5.10. It can also be used as a window function.
 
 ## Syntax

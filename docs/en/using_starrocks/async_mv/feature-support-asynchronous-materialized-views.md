@@ -119,4 +119,3 @@ This document outlines the boundaries of competence for asynchronous materialize
 | Refresh Audit Log  | Record the SQL executed in the Audit Log when a materialized view is refreshed. | v2.5.8+<br />v3.0.3+<br />v3.1+  |
 | Hit Audit Log      | Record the hit materialized view and candidate materialized views in the Audit Log when a query is rewritten to a materialized view. | v3.1.4+<br />v3.2+               |
 | Monitoring Metrics | Dedicated monitoring metrics for materialized views.         | v3.1.4+<br />v3.2+               |
-

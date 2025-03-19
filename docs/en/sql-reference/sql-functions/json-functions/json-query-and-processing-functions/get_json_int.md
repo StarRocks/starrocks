@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # get_json_int
 
-
-
 This function analyzes and gets the integer value from a specified path in json string.
 
 json_path must start with `$` and use `.` as the path separator.

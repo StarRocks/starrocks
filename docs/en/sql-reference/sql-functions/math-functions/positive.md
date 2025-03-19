@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # positive
 
-
-
 Returns `x` as a value.
 
 ## Syntax

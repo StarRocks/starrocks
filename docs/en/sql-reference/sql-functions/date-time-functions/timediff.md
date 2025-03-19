@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # timediff
 
-
-
 Returns the difference between two DATETIME expressions.
 
 The return value must be of the TIME type.

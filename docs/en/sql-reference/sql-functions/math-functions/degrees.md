@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # degrees
 
-
-
 Converts the angle in radians `x` to degrees.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # monthname
 
-
-
 Returns the name of the month for a given date.  
 
 The `date` parameter must be of the DATE or DATETIME type.

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # jodatime_format
 
-
-
 Converts the specified date into a string in the specified Joda DateTimeFormat pattern format.
 
 ## Syntax

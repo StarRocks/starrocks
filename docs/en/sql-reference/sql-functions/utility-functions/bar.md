@@ -19,7 +19,6 @@ bar(size, min, max, width)
 - `max`: max value of the bar
 - `width`: width of the bar
 
-
 ## Example
 
 ```SQL

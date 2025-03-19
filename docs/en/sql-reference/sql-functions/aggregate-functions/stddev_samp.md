@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # stddev_samp
 
-
-
 Returns the sample standard deviation of an expression. Since v2.5.10, this function can also be used as a window function.
 
 ## Syntax

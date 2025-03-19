@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # sin
 
-
-
 Returns the sine of `x`, where `x` is in radians.
 
 ## Syntax

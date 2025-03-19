@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_remove
 
-
-
 Removes `input` from the Bitmap value `lhs` and returns a result set.
 
 ## Syntax

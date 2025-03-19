@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # hour
 
-
-
 Returns the hour for a given date. The return value ranges from 0 to 23.
 
 The `date` parameter must be of the DATE or DATETIME type.

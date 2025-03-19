@@ -64,4 +64,3 @@ You can enable and configure JIT compilation for expressions using the following
 - LARGEINT
 - FLOAT
 - DOUBLE
-

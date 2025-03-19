@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # hll_hash
 
-
-
 Converts a value to an hll type. Typically used in imports to map a value in the source data to an HLL column type in the StarRocks table.
 
 ## Syntax

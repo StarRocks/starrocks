@@ -60,7 +60,6 @@ insert into testing_data values
     (6, 85, true);
 ```
 
-
 ```Plain
 select * from testing_data;
 +------+-------+-----------+
@@ -106,7 +105,6 @@ Result:
 | [5, 0.9255426634106172]                       |
 +-----------------------------------------------+
 ```
-
 
 Query:
 

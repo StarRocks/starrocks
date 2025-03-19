@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_to_string
 
-
-
 Converts an input bitmap into a string that is separated by commas (,). This string contains all the bits in the bitmap. If the input is null, null is returned.
 
 ## Syntax

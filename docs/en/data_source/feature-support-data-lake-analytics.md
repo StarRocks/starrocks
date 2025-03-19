@@ -315,4 +315,3 @@ MaxCompute Catalog is supported from v3.3.0 onwards.
 ## Kudu Catalog
 
 Kudu Catalog is supported from v3.3.0 onwards.
-

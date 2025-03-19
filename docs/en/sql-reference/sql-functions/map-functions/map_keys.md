@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # map_keys
 
-
-
 Returns an array of all the keys in the specified map.
 
 This function is supported from v2.5.

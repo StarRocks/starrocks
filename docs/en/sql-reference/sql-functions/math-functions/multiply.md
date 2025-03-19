@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # multiply
 
-
-
 Computes the product of the arguments.
 
 ## Syntax

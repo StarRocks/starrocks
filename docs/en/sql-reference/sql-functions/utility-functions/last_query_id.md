@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # last_query_id
 
-
-
 Obtains the ID of the most recently executed query in the current session.
 
 ## Syntax

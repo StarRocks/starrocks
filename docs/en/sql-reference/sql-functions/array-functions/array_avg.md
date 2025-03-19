@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_avg
 
-
-
 Calculates the average value of all data in an ARRAY and return this result.
 
 ## Syntax

@@ -566,7 +566,6 @@ Try the following steps to identify the errors that occur when you start the FE 
 
   Having identified and resolved the problem, you must first terminate the existing BE process, delete the existing **storage** directory, create a new data storage directory, and then restart the BE node with the correct configuration.
 
-
 - If a CN node is not started properly, you can identify the problem by checking its log in **be/log/cn.WARNING**.
 
   ```Bash

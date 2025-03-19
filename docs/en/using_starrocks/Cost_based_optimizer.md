@@ -265,7 +265,6 @@ PROPERTIES(
 
 You can use the CREATE ANALYZE statement to customize an automatic collection task. You must have the INSERT and SELECT privileges on the coreesponding table to perform the ANALYZE TABLE operation.
 
-
 ```SQL
 -- Automatically collect stats of all databases.
 CREATE ANALYZE [FULL|SAMPLE] ALL [PROPERTIES (property [,property])]

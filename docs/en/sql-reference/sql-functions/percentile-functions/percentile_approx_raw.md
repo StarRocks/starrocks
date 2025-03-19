@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # percentile_approx_raw
 
-
-
 Returns the value that corresponds to a specified percentile from `x`.
 
 If `x` is a column, this function first sorts values in `x` in ascending order and returns the value that corresponds to percentile `y`.

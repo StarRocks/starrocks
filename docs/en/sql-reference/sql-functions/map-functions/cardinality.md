@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # cardinality
 
-
-
 Returns the number of elements in a MAP value. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`. One key-value pair constitutes one element. `{"a":1, "b":2}` contains two elements.
 
 This function is supported from v3.0 onwards. It is the alias of [map_size()](map_size.md).

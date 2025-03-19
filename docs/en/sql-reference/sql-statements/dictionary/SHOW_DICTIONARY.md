@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SHOW DICTIONARY
 
-
-
 Shows information about dictionary objects.
 
 ## Syntax

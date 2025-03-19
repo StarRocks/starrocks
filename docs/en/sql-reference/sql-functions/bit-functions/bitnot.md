@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitnot
 
-
-
 Returns the bitwise negation of a numeric expression.
 
 ## Syntax

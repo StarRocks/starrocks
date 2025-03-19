@@ -48,7 +48,6 @@ brew install openjdk@11
 
 MacOS is already installed by default.
 
-
 Everyone's Thrift and Protobuf installation directories may be different, you can use the brew list command to inspect:
 
 ```bash
@@ -156,7 +155,6 @@ export LOG_DIR=/Users/smith/Code/starrocks/fe/log
 ## DEBUG StarRocks FE in MacOS
 
 If you started the FE with the debug option, you can then attach the IDEA debugger to the FE process.
-
 
 ```
 ./start_fe.sh --debug

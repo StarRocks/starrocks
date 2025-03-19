@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # week
 
-
-
 Returns the week number for a given date. This function works in the same way as the WEEK function in MySQL.
 
 This function is supported from v2.3.

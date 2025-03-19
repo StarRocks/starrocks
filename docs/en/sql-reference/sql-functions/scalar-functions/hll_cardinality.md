@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # hll_cardinality
 
-
-
 Calculates the cardinality of a single HLL type value.
 
 ## Syntax

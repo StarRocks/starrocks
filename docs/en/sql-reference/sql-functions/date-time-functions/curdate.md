@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # curdate,current_date
 
-
-
 Obtains the current date and returns a value of the DATE type.
 
 ## Syntax

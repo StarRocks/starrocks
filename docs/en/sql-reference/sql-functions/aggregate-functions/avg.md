@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # avg
 
-
-
 Returns the average value of selected fields.
 
 Optional field DISTINCT parameters can be used to return the weighted average.

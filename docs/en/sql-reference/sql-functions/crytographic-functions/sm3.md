@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # sm3
 
-
-
 Uses the SM3 digest algorithm to encrypt a string into a 256-bit hexadecimal string. Every 32 bits are separated by a space.
 
 Digest algorithms have a broad range of use cases in digital signature, message authentication, and data integrity check. The SM3 algorithm is an enhancement of SHA-256.

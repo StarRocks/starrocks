@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # xx_hash3_64
 
-
-
 Returns the 64-bit xxhash3 hash value of the input string. xx_hash3_64 has better performance than [murmur_hash3_32](./murmur_hash3_32.md) by using AVX2 instruction and has state-of-art hash quality which is broadly integrated with many software.
 
 This function is supported from v3.2.0.

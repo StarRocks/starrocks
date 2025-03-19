@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # get_query_profile
 
-
-
 Obtains the profile of a query by using its `query_id`. This function returns empty if the `query_id` does not exist or is incorrect.
 
 To use this function, you must enable the profiling feature, that is, set the session variable `enable_profile` to `true` (`set enable_profile = true;`). If this feature is not enabled, an empty profile is returned.

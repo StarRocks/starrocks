@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_to_base64
 
-
-
 Converts a bitmap to a Base64-encoded string. This function is supported from v2.5.
 
 ## Syntax

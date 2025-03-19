@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_contains
 
-
-
 Calculates whether the input value is in the bitmap column, and returns a Boolean value.
 
 ## Syntax

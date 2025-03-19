@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bin
 
-
-
 Transforms the input `arg` into a binary.
 
 ## Syntax

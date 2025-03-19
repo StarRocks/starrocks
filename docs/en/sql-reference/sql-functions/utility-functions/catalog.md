@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # catalog
 
-
-
 Returns the name of the current catalog. The catalog can be a StarRocks internal catalog or an external catalog that is mapped to an external data source. For more information about catalogs, see [Catalog overview](../../../data_source/catalog/catalog_overview.md).
 
 If no catalog is selected, the StarRocks internal catalog `default_catalog` is returned.

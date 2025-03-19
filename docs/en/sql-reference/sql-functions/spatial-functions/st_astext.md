@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ST_AsText,ST_AsWKT
 
-
-
 Converts a geometric figure to WKT (Well Known Text) format.
 
 ## Syntax

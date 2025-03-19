@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # asin
 
-
-
 Computes the arc sine of the argument.
 
 ## Syntax

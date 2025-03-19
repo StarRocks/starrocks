@@ -629,7 +629,6 @@ For more usage instructions, see [Example - Column -14](#column).
 
 :::
 
-
 ### Modify rollup index
 
 #### Create a rollup index

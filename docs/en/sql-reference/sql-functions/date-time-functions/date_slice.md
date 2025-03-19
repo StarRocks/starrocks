@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # date_slice
 
-
-
 Converts a given time into the beginning or end of a time interval based on the specified time granularity.
 
 This function is supported from v2.5.

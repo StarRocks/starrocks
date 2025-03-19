@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # named_struct
 
-
-
 Creates a struct with the specified field names and values.
 
 This function is supported from v3.1 onwards.

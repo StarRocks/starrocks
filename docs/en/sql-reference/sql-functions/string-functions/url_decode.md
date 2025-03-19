@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # url_decode
 
-
-
 Translates a string back from the [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) format. This function is an inverse of [url_encode](./url_encode.md).
 
 This functions is supported from v3.2.

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_subset_limit
 
-
-
 Intercepts a specified number of elements from a BITMAP value with element value starting from `start range`. The output elements are a subset of `src`.
 
 This function is mainly used for scenarios such as paginated queries. It is supported from v3.1.

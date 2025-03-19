@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # rpad
 
-
-
 This function returns strings with a length of `len` (starting counting from the first syllable) in `str`. If `len` is longer than `str`, the return value is lengthened to `len` characters by adding pad characters behind `str`.  If `str` is longer than `len`, the return value is shortened to `len` characters. `len` means the length of characters, not bytes.
 
 ## Syntax

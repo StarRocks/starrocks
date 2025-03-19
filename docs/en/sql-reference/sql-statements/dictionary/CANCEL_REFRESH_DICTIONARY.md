@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # CANCEL REFRESH DICTIONARY
 
-
-
 Cancels the refresh of a dictionary object.
 
 ## Syntax

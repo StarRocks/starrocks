@@ -651,7 +651,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates the highest Compaction Score on each BE node.
 
-
 ### update_compaction_outputs_total
 
 - Unit: Count

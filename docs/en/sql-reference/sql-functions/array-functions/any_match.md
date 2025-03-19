@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # any_match
 
-
-
 Returns whether any elements of an array match the given predicate.
 
 - Returns `true` (1) if one or more elements match the predicate.

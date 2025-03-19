@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_filter
 
-
-
 Returns values from an array that matches the given filter.
 
 This function comes in the following two forms. The lambda adoption allows for more flexible array filtering. For more information about lambda functions, see [Lambda expression](../Lambda_expression.md). This function is supported from v2.5.

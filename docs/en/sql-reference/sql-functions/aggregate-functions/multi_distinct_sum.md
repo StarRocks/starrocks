@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # multi_distinct_sum
 
-
-
 Returns the sum of distinct values in `expr`, equivalent to sum(distinct expr).
 
 ## Syntax

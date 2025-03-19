@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_concat
 
-
-
 Concatenates multiple arrays into one array that contains all the elements in the arrays.
 
 Elements in the arrays to concatenate can be of the same type or different types. However, we recommend that the elements be of the same type.

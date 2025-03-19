@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # months_sub
 
-
-
 Subtracts specified months from the date.
 
 ## Syntax

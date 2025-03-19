@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ceil, dceil
 
-
-
 Returns values from the input `arg` rounded to the nearest equal or larger integer.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # now, current_timestamp, localtime, localtimestamp
 
-
-
 Returns the current date and time.
 
 From 3.1.6 onwards, this function can accept a precision input (`p`), which represents the number of digits to retain after seconds. A maximum of 6 digits can be retained (accurate to the microsecond). The digits after `p` are padded with 0. If `p` is not specified, a DATETIME value accurate to the second is returned.

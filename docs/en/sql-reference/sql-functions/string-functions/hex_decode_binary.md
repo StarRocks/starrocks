@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # hex_decode_binary
 
-
-
 Decodes a hex encoded string to a binary.
 
 This function is supported from v3.0.

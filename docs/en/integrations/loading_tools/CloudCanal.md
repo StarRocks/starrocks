@@ -10,7 +10,6 @@ BladePipe is a **real-time end-to-end data replication tool**, moving data betwe
 
 ![image.png](../../_assets/3.11-1.png)
 
-
 ## Features
 
 BladePipe presents a visualized management interface, allowing you to easily create DataJobs to achieve **schema migration, data migration, synchronization, verification and correction**, and more. In addition, it supports more refined and customized configurations by parameter settings. Now BladePipe supports data movement from the following source DataSources to StarRocks:
@@ -85,4 +84,3 @@ Taking a MySQL instance as an example, the following section describes how to mi
    - **Incremental**: Ongoing data changes will be continuously synchronized to the target instance (with latency less than a minute).
 
 ![image.png](../../_assets/3.11-8.png)
-

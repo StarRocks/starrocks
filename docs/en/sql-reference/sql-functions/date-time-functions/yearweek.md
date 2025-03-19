@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # yearweek
 
-
-
 Returns year and week number for a given date. This function works in the same way as the yearweek() function in MySQL.
 
 This function is supported from v3.3 onwards.

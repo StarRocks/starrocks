@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # square
 
-
-
 Calculates the square of a value.
 
 ## Syntax

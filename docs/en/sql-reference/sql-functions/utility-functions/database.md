@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # database
 
-
-
 Returns the name of the current database. If no database is selected, an empty value is returned.
 
 ## Syntax

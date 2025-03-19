@@ -5,8 +5,6 @@ displayed_sidebar: docs
 
 # count
 
-
-
 Returns the total number of rows specified by an expression.
 
 This function has three variations:

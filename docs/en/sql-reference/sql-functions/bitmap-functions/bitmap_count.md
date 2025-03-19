@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # bitmap_count
 
-
-
 Returns the 1-bit count for the input bitmap.
 
 ## Syntax

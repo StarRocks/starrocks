@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # window_funnel
 
-
-
 Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain. This function is commonly used for analyzing conversion rate. It is supported from v2.3.
 
 This function works according to the following rules:

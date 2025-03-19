@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # tan
 
-
-
 Returns the tangent of `x`, where `x` is in radians.
 
 ## Syntax

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # url_extract_host
 
-
-
 Extracts the host section from a URL.
 
 This function is supported from v3.3 onwards.

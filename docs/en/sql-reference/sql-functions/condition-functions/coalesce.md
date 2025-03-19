@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # coalesce
 
-
-
 Returns the first non-NULL expression among the input parameters. Returns NULL if non-NULL expressions cannot be found.
 
 ## Syntax

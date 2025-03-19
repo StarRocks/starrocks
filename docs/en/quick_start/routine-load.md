@@ -641,7 +641,6 @@ In this case, the data is in JSON format, so the property is set to `JSON`. The 
 
 The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. More information is available at the end of this page.
 
-
 ### Data source properties
 
 #### `kafka_broker_list`

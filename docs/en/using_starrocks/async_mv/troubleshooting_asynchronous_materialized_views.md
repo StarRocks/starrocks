@@ -358,7 +358,6 @@ If your materialized view fails to rewrite relevant queries, you can look into t
     - `TRACE LOGS MV <query>`: Available in v3.2 and later, this command analyzes the detailed rewrite process and the reasons of the failure.
     - `TRACE REASON MV <query>`: Available in v3.2.8 and later, this command provides concise reasons for rewrite failure.
     
-    
   ```SQL
   MySQL > TRACE REASON MV SELECT sum(c1) FROM `glue_ice`.`iceberg_test`.`ice_test3`;
   +----------------------------------------------------------------------------------------------------------------------+
@@ -369,7 +368,6 @@ If your materialized view fails to rewrite relevant queries, you can look into t
   |     MV rewrite fail for mv1: Rewrite rollup aggregate failed: cannot rewrite aggregate functions                     |
   +----------------------------------------------------------------------------------------------------------------------+
   ```
-
 
 - **Check whether the materialized view and the query match.**
 

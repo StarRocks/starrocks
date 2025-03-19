@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # regexp
 
-
-
 Checks whether a given expression matches the regular expression specified by `pattern`. If yes, 1 is returned. Otherwise, 0 is returned. NULL is returned if any of the input parameter is NULL.
 
 regexp() supports more complex matching conditions than [like()](like.md).

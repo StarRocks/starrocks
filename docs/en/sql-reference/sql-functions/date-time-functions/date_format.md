@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # date_format
 
-
-
 Converts a date into a string according to the specified format. Currently it supports strings with a maximum of 128 bytes. If the length of the returned value exceeds 128, NULL is returned.
 
 ## Syntax

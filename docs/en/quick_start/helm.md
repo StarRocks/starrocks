@@ -428,8 +428,6 @@ export FE_PROXY=`kubectl get services kube-starrocks-fe-proxy-service --output j
 ```
 :::
 
-
-
 ---
 
 ### Connect to StarRocks with a SQL client
@@ -459,7 +457,6 @@ mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
 mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
 ```
 
-
 <DDL />
 
 Exit from the MySQL client, or open a new shell to run commands at the command line to upload data.
@@ -467,8 +464,6 @@ Exit from the MySQL client, or open a new shell to run commands at the command l
 ```sql
 exit
 ```
-
-
 
 ## Upload data
 
@@ -492,7 +487,6 @@ You will be prompted for a password. Use the password that you added to the Kube
 :::
 
 The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now, we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
-
 
 ```bash
 curl --location-trusted -u root             \
@@ -586,7 +580,6 @@ Run this command if you are finished and would like to remove the StarRocks clus
 ```bash
 helm delete starrocks
 ```
-
 
 ---
 

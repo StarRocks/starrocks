@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # array_difference
 
-
-
 Calculates the difference between every two neighboring elements of an array by subtracting each element from its following element and returns an array that consists of the differences.
 
 ## Syntax
