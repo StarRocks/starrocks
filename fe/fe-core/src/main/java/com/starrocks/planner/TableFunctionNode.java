@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.thrift.TExplainLevel;
@@ -96,4 +97,21 @@ public class TableFunctionNode extends PlanNode {
         planNode.setNode_type(TPlanNodeType.TABLE_FUNCTION_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+
+    public boolean isFnResultRequired() {
+        return fnResultRequired;
+    }
+
+    @VisibleForTesting
+    public List<Integer> getOuterSlots() {
+        return outerSlots;
+    }
+>>>>>>> 56ca76c0ff ([BugFix] Do not prune nested-type object if the integral object is required to output (#57037))
 }
