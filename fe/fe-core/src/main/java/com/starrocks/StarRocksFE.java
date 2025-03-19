@@ -69,7 +69,6 @@ import com.starrocks.service.FrontendThriftServer;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
-import com.starrocks.task.AgentTaskQueue;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -296,8 +295,6 @@ public class StarRocksFE {
 
                 GlobalStateMgr.getCurrentState().markLeaderTransferred();
             }
-
-            AgentTaskQueue.failForLeaderTransfer();
         }
     }
 

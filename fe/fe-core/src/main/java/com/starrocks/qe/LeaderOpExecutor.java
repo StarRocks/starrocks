@@ -181,8 +181,7 @@ public class LeaderOpExecutor {
 
         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
-        LOG.info("Forward statement {} to Leader {}, sql: {}",
-                ctx.getStmtId(), thriftAddress, originStmt.originStmt);
+        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
         result = ThriftRPCRequestExecutor.call(
                 ThriftConnectionPool.frontendPool,
