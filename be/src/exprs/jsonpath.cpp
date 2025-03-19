@@ -229,7 +229,9 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
                 builder->clear();
                 vpack::ArrayBuilder ab(builder);
                 array_selector->iterate(next_item, [&](vpack::Slice array_item) {
-                    auto sub = extract(array_item, jsonpath, i + 1, builder);
+                    vpack::Builder tmpBuilder;
+                    tmpBuilder.clear();
+                    auto sub = extract(array_item, jsonpath, i + 1, &tmpBuilder);
                     if (!sub.isNone()) {
                         builder->add(sub);
                     }
