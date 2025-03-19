@@ -16,14 +16,13 @@ package com.starrocks.authentication;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.StarRocksFE;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
@@ -45,10 +44,7 @@ import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -97,7 +93,7 @@ public class AuthenticationMgr {
         } catch (AuthenticationException e) {
             throw new RuntimeException("should not happened!", e);
         }
-        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString());
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
@@ -480,54 +476,6 @@ public class AuthenticationMgr {
 
     public Map<UserIdentity, UserAuthenticationInfo> getUserToAuthenticationInfo() {
         return userToAuthenticationInfo;
-    }
-
-    private Class<?> authClazz = null;
-    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
-    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
-
-    public boolean isSupportKerberosAuth() {
-        if (!Config.enable_authentication_kerberos) {
-            LOG.error("enable_authentication_kerberos need to be set to true");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_principal.isEmpty()) {
-            LOG.error("authentication_kerberos_service_principal must be set in config");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
-            LOG.error("authentication_kerberos_service_key_tab must be set in config");
-            return false;
-        }
-
-        if (authClazz == null) {
-            try {
-                File jarFile = new File(KRB5_AUTH_JAR_PATH);
-                if (!jarFile.exists()) {
-                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
-                    return false;
-                } else {
-                    ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[] {
-                                    jarFile.toURL()
-                            },
-                            getClass().getClassLoader()
-                    );
-                    authClazz = Class.forName(AuthenticationMgr.KRB5_AUTH_CLASS_NAME, true, loader);
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to load {}", AuthenticationMgr.KRB5_AUTH_CLASS_NAME, e);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public Class<?> getAuthClazz() {
-        return authClazz;
     }
 
     public void saveV2(ImageWriter imageWriter) throws IOException {
