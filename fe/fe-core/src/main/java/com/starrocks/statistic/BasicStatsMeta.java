@@ -31,11 +31,14 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
 
 public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -148,7 +151,6 @@ public class BasicStatsMeta implements Writable {
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
-        long totalPartitionCount = table.getPartitions().size();
 
         long tableRowCount = 1L;
         long cachedTableRowCount = 1L;
@@ -158,7 +160,11 @@ public class BasicStatsMeta implements Writable {
         Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), table.getPartitions());
 
-        for (Partition partition : table.getPartitions()) {
+        Collection<Partition> allPartitions = table.getPartitions().stream()
+                .filter(p -> !(p.getName().startsWith(SHADOW_PARTITION_PREFIX)))
+                .collect(Collectors.toSet());
+        long totalPartitionCount = allPartitions.size();
+        for (Partition partition : allPartitions) {
             tableRowCount += partition.getRowCount();
             Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
             cachedTableRowCount += statistic.orElse(0L);
