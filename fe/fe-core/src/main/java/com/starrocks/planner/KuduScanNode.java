@@ -22,7 +22,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
@@ -34,9 +33,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-<<<<<<< HEAD
-import com.starrocks.thrift.*;
-=======
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -46,7 +42,6 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.Warehouse;
->>>>>>> 911f3b2300 ([BugFix] Fix fail to read kudu external table in multi-warehouse env (#56816))
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
