@@ -1811,4 +1811,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         return selectedPartitionNames;
     }
+
+    @Override
+    public void postTaskRun(TaskRunContext context) throws Exception {
+        // do nothing for mv refresh, no analyze table anymore
+    }
 }
