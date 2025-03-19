@@ -334,13 +334,13 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
-        if (column.t_iceberg_schema_field == nullptr) {
+        if (column.t_lake_schema_field == nullptr) {
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
-                                                         column.t_iceberg_schema_field));
+                                                         column.t_lake_schema_field));
         }
         if (_param.global_dictmaps->contains(column.slot_id())) {
             ASSIGN_OR_RETURN(

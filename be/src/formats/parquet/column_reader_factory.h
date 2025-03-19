@@ -26,7 +26,7 @@ public:
     // Create a column reader with iceberg schema
     static StatusOr<ColumnReaderPtr> create(const ColumnReaderOptions& opts, const ParquetField* field,
                                             const TypeDescriptor& col_type,
-                                            const TIcebergSchemaField* iceberg_schema_field);
+                                            const TIcebergSchemaField* lake_schema_field);
 
     static StatusOr<ColumnReaderPtr> create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict, const SlotId slot_id,
                                             int64_t num_rows);
@@ -38,9 +38,9 @@ private:
 
     // for schema changed
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                  bool case_sensitive, const TIcebergSchemaField* iceberg_schema_field,
+                                                  bool case_sensitive, const TIcebergSchemaField* lake_schema_field,
                                                   std::vector<int32_t>& pos,
-                                                  std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
+                                                  std::vector<const TIcebergSchemaField*>& lake_schema_subfield);
 
     static bool _has_valid_subfield_column_reader(
             const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
