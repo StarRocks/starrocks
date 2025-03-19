@@ -55,12 +55,12 @@ public:
 protected:
     GroupReaderParam::Column _build_column(int32_t idx_in_parquet, const tparquet::Type::type& type_in_parquet,
                                            SlotDescriptor* slot_desc, bool decode_needed,
-                                           const TIcebergSchemaField* t_iceberg_schema_field = nullptr) const {
+                                           const TIcebergSchemaField* t_lake_schema_field = nullptr) const {
         GroupReaderParam::Column column{};
         column.idx_in_parquet = idx_in_parquet;
         column.type_in_parquet = type_in_parquet;
         column.slot_desc = slot_desc;
-        column.t_iceberg_schema_field = t_iceberg_schema_field;
+        column.t_lake_schema_field = t_lake_schema_field;
         column.decode_needed = decode_needed;
         return column;
     }
@@ -82,16 +82,16 @@ private:
     bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
 };
 
-class IcebergMetaHelper : public MetaHelper {
+class LakeMetaHelper : public MetaHelper {
 public:
-    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema)
+    LakeMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_lake_schema)
             : MetaHelper(file_metadata, case_sensitive) {
-        _t_iceberg_schema = t_iceberg_schema;
-        DCHECK(_t_iceberg_schema != nullptr);
+        _lake_schema = t_lake_schema;
+        DCHECK(_lake_schema != nullptr);
         _init_field_mapping();
     }
 
-    ~IcebergMetaHelper() override = default;
+    ~LakeMetaHelper() override = default;
 
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                               std::vector<GroupReaderParam::Column>& read_cols,
@@ -101,9 +101,9 @@ private:
     void _init_field_mapping();
     bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
                         const TypeDescriptor* type_descriptor) const;
-    const TIcebergSchema* _t_iceberg_schema = nullptr;
+    const TIcebergSchema* _lake_schema = nullptr;
     // field name has already been formatted
-    std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;
+    std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_lake_field;
 };
 
 } // namespace starrocks::parquet

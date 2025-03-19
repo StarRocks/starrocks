@@ -313,10 +313,12 @@ public:
     bool has_partition() const override { return false; }
     const std::string& get_paimon_native_table() const;
     const std::string& get_time_zone() const;
+    const TIcebergSchema* get_paimon_schema() const { return &_t_paimon_schema; }
 
 private:
     std::string _paimon_native_table;
     std::string _time_zone;
+    TIcebergSchema _t_paimon_schema;
 };
 
 class OdpsTableDescriptor : public HiveTableDescriptor {

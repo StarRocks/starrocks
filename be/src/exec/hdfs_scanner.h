@@ -251,7 +251,7 @@ struct HdfsScannerParams {
 
     std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
 
-    const TIcebergSchema* iceberg_schema = nullptr;
+    const TIcebergSchema* lake_schema = nullptr;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
@@ -346,7 +346,7 @@ struct HdfsScannerContext {
 
     std::string timezone;
 
-    const TIcebergSchema* iceberg_schema = nullptr;
+    const TIcebergSchema* lake_schema = nullptr;
 
     HdfsScanStats* stats = nullptr;
 

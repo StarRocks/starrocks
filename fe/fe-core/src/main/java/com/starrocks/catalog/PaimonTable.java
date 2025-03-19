@@ -17,6 +17,8 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.thrift.TIcebergSchema;
+import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -140,10 +142,28 @@ public class PaimonTable extends Table {
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
         tPaimonTable.setPaimon_native_table(encodedTable);
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
+
+        // reuse TIcebergSchema directly for compatibility.
+        TIcebergSchema tPaimonSchema = new TIcebergSchema();
+        List<DataField> paimonFields = paimonNativeTable.rowType().getFields();
+        List<TIcebergSchemaField> tIcebergFields = new ArrayList<>(paimonFields.size());
+        for (DataField field : paimonFields) {
+            tIcebergFields.add(getTIcebergSchemaField(field));
+        }
+        tPaimonSchema.setFields(tIcebergFields);
+        tPaimonTable.setPaimon_schema(tPaimonSchema);
+
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
+    }
+
+    private TIcebergSchemaField getTIcebergSchemaField(DataField field) {
+        TIcebergSchemaField tPaimonSchemaField = new TIcebergSchemaField();
+        tPaimonSchemaField.setField_id(field.id());
+        tPaimonSchemaField.setName(field.name());
+        return tPaimonSchemaField;
     }
 
     @Override

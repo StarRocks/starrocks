@@ -380,6 +380,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         case LogicalType::TYPE_BIGINT:
             *converter = std::make_unique<NumericToNumericConverter<int32_t, int64_t>>();
             break;
+        case LogicalType::TYPE_DOUBLE:
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, double>>();
+            break;
         case LogicalType::TYPE_DATE:
             *converter = std::make_unique<Int32ToDateConverter>();
             break;
