@@ -538,8 +538,8 @@ t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
   `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
-  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
