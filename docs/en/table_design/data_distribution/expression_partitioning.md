@@ -42,12 +42,12 @@ expression ::=
 **Required**: YES<br/>
 **Description**: The partition granularity, which can be `hour`, `day`, `month`, or `year`. `week` partition granularity is not supported. If partition granularity is `hour`, the partition column must be of the DATETIME data type and cannot be of the DATE data type. <br/>
 
-#### `partition_column` 
+#### `partition_column`
 
 **Required**: YES<br/>
 **Description**: The name of the partition column.<br/><ul><li>The partition column can only be of the DATE or DATETIME data type. The partition column allows `NULL` values.</li><li>The partition column can be of the DATE or DATETIME data type if the `date_trunc` function is used. The partition column must be of the DATETIME data type if the `time_slice` function is used. </li><li>If the partition column is of the DATE data type, the supported range is [0000-01-01 ~ 9999-12-31]. If the partition column is of the DATETIME data type, the supported range is [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59].</li><li>Currently, you can specify only one partition column; multiple partition columns are not supported.</li></ul> <br/>
 
-#### `partition_live_number` 
+#### `partition_live_number`
 
 **Required**: NO<br/>
 **Description**: The number of the most recent partitions to be retained. Partitions are sorted in chronological order, **with the current date as a benchmark**; partitions older than the current date minus `partition_live_number` are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`. The partitions `p20230403` and `p20230404` are retained, and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`, and `p20230405`, and `p20230406`. Then partitions `p20230403`, `p20230404`, `p20230405`, and `p20230406` are retained, and the other partitions are deleted. <br/>

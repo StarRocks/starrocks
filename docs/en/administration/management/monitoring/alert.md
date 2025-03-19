@@ -17,33 +17,33 @@ In the following examples, all variables are prefixed with `$`. They should be r
 
 ### FE Service Suspension
 
-**PromSQL**
+#### PromSQL
 
 ```Plain
 count(up{group="fe", job="$job_name"}) >= 3
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when the number of active FE nodes falls below a specified value. You can adjust this value based on the actual number of FE nodes.
 
-**Resolution**
+#### Resolution
 
 Try to restart the suspended FE node.
 
 ### BE Service Suspension
 
-**PromSQL**
+#### PromSQL
 
 ```Plain
 node_info{type="be_node_num", job="$job_name",state="dead"} > 1
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when more than one BE node is suspended.
 
-**Resolution**
+#### Resolution
 
 Try to restart the suspended BE node.
 
@@ -51,17 +51,17 @@ Try to restart the suspended BE node.
 
 ### BE CPU Alert
 
-**PromSQL**
+#### PromSQL
 
 ```Plain
 (1-(sum(rate(starrocks_be_cpu{mode="idle", job="$job_name",instance=~".*"}[5m])) by (job, instance)) / (sum(rate(starrocks_be_cpu{job="$job_name",host=~".*"}[5m])) by (job, instance))) * 100 > 90
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when BE CPU Utilization exceeds 90%.
 
-**Resolution**
+#### Resolution
 
 Check whether there are large queries or large-scale data loading and forward the details to the support team for further investigation.
 
@@ -86,17 +86,17 @@ In emergencies, to quickly restore service, you can try to restart the correspon
 
 ### Memory Alert
 
-**PromSQL**
+#### PromSQL
 
 ```Plain
 (1-node_memory_MemAvailable_bytes{instance=~".*"}/node_memory_MemTotal_bytes{instance=~".*"})*100 > 90
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when memory usage exceeds 90%.
 
-**Resolution**
+#### Resolution
 
 Refer to the [Get Heap Profile](https://github.com/StarRocks/starrocks/pull/35322) for troubleshooting.
 
@@ -111,17 +111,17 @@ Refer to the [Get Heap Profile](https://github.com/StarRocks/starrocks/pull/3532
 
 #### Disk Load Alert
 
-**PromSQL**
+##### PromSQL
 
 ```SQL
 rate(node_disk_io_time_seconds_total{instance=~".*"}[1m]) * 100 > 90
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when disk load exceeds 90%.
 
-**Resolution**
+##### Resolution
 
 If the cluster triggers a `node_disk_io_time_seconds_total` alert, first check if there are any business changes. If so, consider rolling back the changes to maintain the previous resource balance. If no changes are identified or rollback is not possible, consider whether normal business growth is driving the need for resource expansion. You can use the `iotop` tool to analyze disk I/O usage. `iotop` has a UI similar to `top` and includes information such as `pid`, `user`, and I/O.
 
@@ -134,19 +134,19 @@ ADMIN EXECUTE ON $backend_id 'System.print(ExecEnv.io_profile_and_get_topn_stats
 
 #### Root Path Capacity Alert
 
-**PromSQL**
+##### PromSQL
 
 ```SQL
 node_filesystem_free_bytes{mountpoint="/"} /1024/1024/1024 < 5
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the available space in the root directory is less than 5GB.
 
-**Resolution**
+##### Resolution
 
-Common directories that may occupy significant space include **/var**, **/****opt**, and **/tmp**. Use the following command to check for large files and clear unnecessary files.
+Common directories that may occupy significant space include `/var`, `/opt`, and `/tmp`. Use the following command to check for large files and clear unnecessary files.
 
 ```Bash
 du -sh / --max-depth=1
@@ -154,17 +154,17 @@ du -sh / --max-depth=1
 
 #### Data Disk Capacity Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Bash
 (SUM(starrocks_be_disks_total_capacity{job="$job"}) by (host, path) - SUM(starrocks_be_disks_avail_capacity{job="$job"}) by (host, path)) / SUM(starrocks_be_disks_total_capacity{job="$job"}) by (host, path) * 100 > 90
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when disk capacity utilization exceeds 90%.
 
-**Resolution**
+##### Resolution
 
 1. Check if there have been changes in the loaded data volume.
 
@@ -182,7 +182,7 @@ An alert is triggered when disk capacity utilization exceeds 90%.
    ADMIN SET FRONTEND CONFIG ("catalog_trash_expire_second"="86400");
    ```
 
-   To persist this change, add the configuration item to the FE configuration file **fe.conf**.
+   To persist this change, add the configuration item to the FE configuration file `fe.conf`.
 
    After that, deleted data will be moved to the **trash** directory on BE nodes (`$storage_root_path/trash`). By default, deleted data is kept in the **trash** directory for one day, which may also result in the actual disk usage exceeding what is shown in `SHOW BACKENDS`.
 
@@ -194,25 +194,25 @@ An alert is triggered when disk capacity utilization exceeds 90%.
 
 #### FE Metadata Disk Capacity Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Bash
 node_filesystem_free_bytes{mountpoint="${meta_path}"} /1024/1024/1024 < 10
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the available disk space for FE metadata is less than 10GB.
 
-**Resolution**
+##### Resolution
 
-Use the following commands to check for directories occupying large amounts of space and clear unnecessary files. The metadata path is specified by the `meta_dir` configuration in **fe.conf**.
+Use the following commands to check for directories occupying large amounts of space and clear unnecessary files. The metadata path is specified by the `meta_dir` configuration in `fe.conf`.
 
 ```Bash
 du -sh /${meta_dir} --max-depth=1
 ```
 
-If the metadata directory occupies a lot of space, it is usually because the **bdb** directory is large, possibly due to CheckPoint failure. Refer to the [CheckPoint Failure Alert](#checkpoint-failure-alert) for troubleshooting. If this method does not solve the issue, contact the technical support team.
+If the metadata directory occupies a lot of space, it is usually because the `bdb` directory is large, possibly due to CheckPoint failure. Refer to the [CheckPoint Failure Alert](#checkpoint-failure-alert) for troubleshooting. If this method does not solve the issue, contact the technical support team.
 
 ## Cluster Service Exception Alerts
 
@@ -220,18 +220,18 @@ If the metadata directory occupies a lot of space, it is usually because the **b
 
 #### Cumulative Compaction Failure Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Bash
 increase(starrocks_be_engine_requests_total{job="$job_name" ,status="failed",type="cumulative_compaction"}[1m]) > 3
 increase(starrocks_be_engine_requests_total{job="$job_name" ,status="failed",type="base_compaction"}[1m]) > 3
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when there are three failures in Cumulative Compaction or Base Compaction within the last minute.
 
-**Resolution**
+##### Resolution
 
 Search the log of the corresponding BE node for the following keywords to identify the involved tablet.
 
@@ -259,33 +259,33 @@ ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "$tablet_id", "backend_id" = "
 
 #### High Compaction Pressure Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Bash
 starrocks_fe_max_tablet_compaction_score{job="$job_name",instance="$fe_leader"} > 100
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the highest Compaction Score exceeds 100, indicating high Compaction pressure.
 
-**Resolution**
+##### Resolution
 
 This alert is typically caused by frequent loading, `INSERT INTO VALUES`, or `DELETE` operations (at a rate of 1 per second). It is recommended to set the interval between loading or DELETE tasks to more than 5 seconds and avoid submitting high-concurrency DELETE tasks.
 
 #### Exceeding Version Count Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Bash
 starrocks_be_max_tablet_rowset_num{job="$job_name"} > 700
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when a tablet on a BE node has more than 700 data versions.
 
-**Resolution**
+##### Resolution
 
 Use the following command to check the tablet with excessive versions:
 
@@ -324,35 +324,35 @@ curl -XPOST http://$be_ip:$be_http_port/api/update_config?tablet_max_versions=20
 
 ### CheckPoint Failure Alert
 
-**PromSQL**
+#### PromSQL
 
 ```Bash
 starrocks_fe_meta_log_count{job="$job_name",instance="$fe_master"} > 100000
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when the FE node's BDB log count exceeds 100,000. By default, the system performs a CheckPoint when the BDB log count exceeds 50,000, and then resets the count to 0.
 
-**Resolution**
+#### Resolution
 
 This alert indicates that a CheckPoint was not performed. You need to investigate the FE logs to analyze the CheckPoint process and resolve the issue:
 
-In the **fe.log** of the Leader FE node, search for records like `begin to generate new image: image.xxxx`. If found, it means the system has started generating a new image. Continue checking the logs for records like `checkpoint finished save image.xxxx` to confirm successful image creation. If you find `Exception when generate new image file`, the image generation failed. You should carefully handle the metadata based on the specific error. It is recommended to contact the support team for further analysis.
+In the `fe.log` of the Leader FE node, search for records like `begin to generate new image: image.xxxx`. If found, it means the system has started generating a new image. Continue checking the logs for records like `checkpoint finished save image.xxxx` to confirm successful image creation. If you find `Exception when generate new image file`, the image generation failed. You should carefully handle the metadata based on the specific error. It is recommended to contact the support team for further analysis.
 
 ### Excessive FE Thread Count Alert
 
-**PromSQL**
+#### PromSQL
 
 ```Bash
 starrocks_fe_thread_pool{job="$job_name", type!="completed_task_count"} > 3000
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when the number of threads on the FE exceeds 3000.
 
-**Resolution**
+#### Resolution
 
 The default thread count limit for FE and BE nodes is 4096. A large number of UNION ALL queries typically lead to an excessive thread count. It is recommended to reduce the concurrency of UNION ALL queries and adjust the system variable `pipeline_dop`. If it is not possible to adjust SQL query granularity, you can globally adjust `pipeline_dop`:
 
@@ -372,17 +372,17 @@ ADMIN SET FRONTEND CONFIG ("thrift_server_max_worker_threads"="8192");
 
 ### High FE JVM Usage Alert
 
-**PromSQL**
+#### PromSQL
 
 ```SQL
 sum(jvm_heap_size_bytes{job="$job_name", type="used"}) * 100 / sum(jvm_heap_size_bytes{job="$job_name", type="max"}) > 90
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when the JVM usage on an FE node exceeds 90%.
 
-**Resolution**
+#### Resolution
 
 This alert indicates that JVM usage is too high. You can use the `jmap` command to analyze the situation. Since detailed monitoring information for this metric is still under development, direct insights are limited. Perform the following actions and send the results to the support team for analysis:
 
@@ -403,17 +403,17 @@ In emergencies, to quickly restore services, you can restart the corresponding F
 
 #### Loading Failure Alert
 
-**PromSQL**
+#### PromSQL
 
 ```SQL
 rate(starrocks_fe_txn_failed{job="$job_name",instance="$fe_master"}[5m]) * 100 > 5
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when the number of failed loading transactions exceeds 5% of the total.
 
-**Resolution**
+#### Resolution
 
 Check the logs of the Leader FE node to find information about the loading errors. Search for the keyword `status: ABORTED` to identify failed loading tasks.
 
@@ -423,7 +423,7 @@ Check the logs of the Leader FE node to find information about the loading error
 
 #### Routine Load Consumption Delay Alert
 
-**PromSQL**
+##### PromSQL
 
 ```SQL
 (sum by (job_name)(starrocks_fe_routine_load_max_lag_of_partition{job="$job_name",instance="$fe_mater"})) > 300000
@@ -432,14 +432,14 @@ starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="PAUSED"} 
 starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="UNSTABLE"} > 0
 ```
 
-**Alert Description**
+##### Alert Description
 
 - An alert is triggered when over 300,000 entries are delayed in consumption.
 - An alert is triggered when the number of pending Routine Load tasks exceeds 3.
 - An alert is triggered when there are tasks in the `PAUSED` state.
 - An alert is triggered when there are tasks in the `UNSTABLE` state.
 
-**Resolution**
+##### Resolution
 
 1. First, check if the Routine Load task status is `RUNNING`.
 
@@ -476,17 +476,17 @@ PROPERTIES
 
 #### Loading Transaction Limit Alert for a Single Database
 
-**PromSQL**
+##### PromSQL
 
 ```SQL
 sum(starrocks_fe_txn_running{job="$job_name"}) by(db) > 900
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the number of loading transactions for a single database exceeds 900 (100 in versions prior to v3.1).
 
-**Resolution**
+##### Resolution
 
 This alert is typically triggered by a large number of newly added loading tasks. You can temporarily increase the limit on loading transactions for a single database.
 
@@ -498,17 +498,17 @@ ADMIN SET FRONTEND CONFIG ("max_running_txn_num_per_db" = "2000");
 
 #### Query Latency Alert
 
-**PromSQL**
+##### PromSQL
 
 ```SQL
 starrocks_fe_query_latency_ms{job="$job_name", quantile="0.95"} > 5000
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the P95 query latency exceeds 5 seconds.
 
-**Resolution**
+##### Resolution
 
 1. Investigate whether there are any big queries.
 
@@ -544,7 +544,7 @@ In emergencies, you can resolve the issue by:
 
 #### Query Failure Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Plain
 sum by (job,instance)(starrocks_fe_query_err_rate{job="$job_name"}) * 100 > 10
@@ -553,11 +553,11 @@ sum by (job,instance)(starrocks_fe_query_err_rate{job="$job_name"}) * 100 > 10
 increase(starrocks_fe_query_internal_err{job="$job_name"})[1m] >10
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the query failure rate exceeds 0.1/second or 10 failed queries occur within one minute.
 
-**Resolution**
+##### Resolution
 
 When this alert is triggered, check the logs to identify the queries that failed.
 
@@ -577,34 +577,34 @@ For query failures caused by kernel issues, search the `fe.log` for the error an
 
 #### Query Overload Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Bash
 abs((sum by (exported_job)(rate(starrocks_fe_query_total{process="FE",job="$job_name"}[3m]))-sum by (exported_job)(rate(starrocks_fe_query_total{process="FE",job="$job_name"}[3m] offset 1m)))/sum by (exported_job)(rate(starrocks_fe_query_total{process="FE",job="$job_name"}[3m]))) * 100 > 100
 abs((sum(starrocks_fe_connection_total{job="$job_name"})-sum(starrocks_fe_connection_total{job="$job_name"} offset 3m))/sum(starrocks_fe_connection_total{job="$job_name"})) * 100 > 100
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the QPS or the number of connections increases by 100% within the last minute.
 
-**Resolution**
+##### Resolution
 
 Check whether the high-frequency queries in the `fe.audit.log` are expected. If there are legitimate changes in business behavior (for example, new services going live or increased data volumes), monitor machine load and scale BE nodes as needed.
 
 #### User Connection Limit Exceeded Alert
 
-**PromSQL**
+##### PromSQL
 
 ```Bash
 sum(starrocks_fe_connection_total{job="$job_name"}) by(user) > 90
 ```
 
-**Alert Description**
+##### Alert Description
 
 An alert is triggered when the number of user connections exceeds 90. (User connection limits are supported from versions v3.1.16, v3.2.12, and v3.3.4 onward.)
 
-**Resolution**
+##### Resolution
 
 Use the SQL command `SHOW PROCESSLIST` to check if the number of current connections is as expected. You can terminate unexpected connections using the `KILL` command. Additionally, ensure that frontend services are not holding connections open for too long, and consider adjusting the system variable `wait_timeout` (Unit: Seconds) to accelerate the system's automatic termination of idle connections.
 
@@ -632,17 +632,17 @@ In emergencies, you can increase the user connection limit temporarily to restor
 
 ### Schema Change Exception Alert
 
-**PromSQL**
+#### PromSQL
 
 ```Bash
 increase(starrocks_be_engine_requests_total{job="$job_name",type="schema_change", status="failed"}[1m]) > 1
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when more than one Schema Change task fails in the last minute.
 
-**Resolution**
+#### Resolution
 
 Run the following statement to check if the `Msg` field contains any error messages:
 
@@ -722,17 +722,17 @@ Before performing this operation, ensure the table has at least three complete r
 
 ### Materialized View Refresh Exception Alert
 
-**PromSQL**
+#### PromSQL
 
 ```Bash
 increase(starrocks_fe_mv_refresh_total_failed_jobs[5m]) > 0
 ```
 
-**Alert Description**
+#### Alert Description
 
 An alert is triggered when more than one materialized view refresh fails in the last five minutes.
 
-**Resolution**
+#### Resolution
 
 1. Check the materialized views that failed to refresh.
 

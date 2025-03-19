@@ -22,7 +22,7 @@ json_keys(json_doc[, path])
 
 Returns a JSON array.
 
-An empty array is returned if the JSON object is empty. 
+An empty array is returned if the JSON object is empty.
 
 `NULL` is returned if the JSON document is not a JSON object or the path does not identify a value in the document.
 

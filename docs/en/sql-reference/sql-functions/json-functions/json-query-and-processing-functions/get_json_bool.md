@@ -20,7 +20,7 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 
 - `json_str`: the JSON string. The supported data type is VARCHAR.
 - `json_path`: the JSON path. The supported data type is VARCHAR.
-   
+
   - `json_path` must start with `$` and use `.` as the path separator. If the path includes `.`, it can be enclosed in a pair of `"`.
   - `[ ]` is used as the array subscripts which starts from 0.
 

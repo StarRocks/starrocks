@@ -23,7 +23,7 @@ A database is a collection of data objects, such as tables, views, and materiali
 
 Tables are categorized into internal tables and external tables.
 
-**Internal tables**
+### Internal tables
 
 Internal tables are maintained in internal catalogs. The data of internal tables is stored in StarRocks. Internal tables are maintained in databases under the internal catalog. An internal table consists of rows and columns, where each row represents a record and each column represents an attribute or field of a data row.
 
@@ -37,7 +37,7 @@ StarRocks provides four types of internal tables, Primary Key tables, Duplicate 
 
 An internal table adopts a two-tier data distribution strategy, that is partitioning + bucketing, to achieve even data distribution. What's more, the replicas of each bucket are evenly distributed across BEs to guarantee high data availability.
 
-**External tables**
+### External tables
 
 External tables are maintained in external catalogs. The data of external tables is actually stored in external data sources. StarRocks only stores the metadata of these external tables, and you can use these tables to query data from external data sources.
 

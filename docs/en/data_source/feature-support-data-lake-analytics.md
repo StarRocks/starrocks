@@ -288,7 +288,7 @@ While StarRocks executes queries against an Iceberg view, it will try to parse t
 | DATE      | DATE                | v2.3+                |
 | TIMESTAMP | DATETIME            | v2.3+                |
 
-### ClickHouse 
+### ClickHouse
 
 Supported from v3.3.0 onwards.
 

@@ -6,9 +6,9 @@ displayed_sidebar: docs
 
 ## API Format
 
-1. The API format follows the pattern: `/api/{version}/{target-object-access-path}/{action}`. 
-2. `{version}` is denoted as `v{number}`, such as v1, v2, v3, v4, etc. 
-3. `{target-object-access-path}` is organized in a hierarchical manner, which will be explained in detail later. 
+1. The API format follows the pattern: `/api/{version}/{target-object-access-path}/{action}`.
+2. `{version}` is denoted as `v{number}`, such as v1, v2, v3, v4, etc.
+3. `{target-object-access-path}` is organized in a hierarchical manner, which will be explained in detail later.
 4. `{action}` is optional, API implementors should utilize the HTTP METHOD to convey the operation's meaning as much as possible. Only when the HTTP methods' semantics cannot be fulfilled should the action be used. For example, if there is no HTTP method available to rename an object.
 
 ## Definition of Target Object Access Path
@@ -75,7 +75,7 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 
 ## HTTP Status Codes
 
-1. HTTP status codes are returned by the REST API to indicate the success or failure of an operation. 
+1. HTTP status codes are returned by the REST API to indicate the success or failure of an operation.
 2. The status codes (2xx) for success operation as follows:
 
 - 200 OK: Indicates that the request has been successfully completed. It is used for viewing/listing/deleting/updating objects and querying the status of pending tasks.

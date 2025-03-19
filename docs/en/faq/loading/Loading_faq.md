@@ -11,7 +11,7 @@ You were running load jobs too frequently, and the data was not compacted in a t
 - Increase the amount of data loaded in each individual job, thereby reducing loading frequency.
 
 - Modify the some configuration items in the BE configuration file **be.conf** of each BE to accelerate compactions:
-   
+
   - For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can appropriately increase the values of `cumulative_compaction_num_threads_per_disk`, `base_compaction_num_threads_per_disk`, and `cumulative_compaction_check_interval_seconds`. Example:
 
     ```Plain

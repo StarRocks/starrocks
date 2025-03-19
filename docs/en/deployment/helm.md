@@ -74,7 +74,7 @@ displayed_sidebar: docs
     kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
     ```
     If the following result is returned, the deployment has been successfully completed.
-   
+
     ```bash
     NAME             PHASE     FESTATUS   BESTATUS   CNSTATUS   FEPROXYSTATUS
     kube-starrocks   running   running    running

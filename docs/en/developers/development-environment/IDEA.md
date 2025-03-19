@@ -11,7 +11,7 @@ Even if you are not using macOS, you can also refer to this tutorial.
 
 ### Thrift 0.13
 
-There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
+There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install.
 
 ```bash
 brew install alberttwong/thrift/thrift@0.13

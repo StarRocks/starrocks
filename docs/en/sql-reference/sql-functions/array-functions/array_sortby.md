@@ -261,7 +261,7 @@ select * from test_array_sortby_multi order by id asc;
 +------+------------+---------------------+---------------+------------------------------------------+
 ```
 
-Example 1: Sort `array_col1` according to `array_col2`, `array_col3`. 
+Example 1: Sort `array_col1` according to `array_col2`, `array_col3`.
 
 ```Plaintext
 select id, array_col1, array_col2, array_col3, array_sortby(array_col1, array_col2, array_col3) from test_array_sortby_multi order by id asc;
@@ -281,7 +281,7 @@ select id, array_col1, array_col2, array_col3, array_sortby(array_col1, array_co
 +------+------------+---------------------+---------------+--------------------------------------------------------+
 ```
 
-Example 2: Sort `array_col1` according to `array_col2`, `array_col3`, `array_col4`. 
+Example 2: Sort `array_col1` according to `array_col2`, `array_col3`, `array_col4`.
 
 ```Plaintext
 select id, array_col1, array_col2, array_col3, array_col4, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sortby_multi order by id asc;

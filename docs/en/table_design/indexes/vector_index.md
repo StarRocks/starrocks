@@ -24,7 +24,7 @@ By combining inverted files and product quantization, IVFPQ enables efficient ap
 
 ### Hierarchical Navigable Small World (HNSW)
 
-Hierarchical Navigable Small World (HNSW) is a graph-based algorithm for high-dimensional nearest neighbor search, also widely used in vector retrieval tasks. 
+Hierarchical Navigable Small World (HNSW) is a graph-based algorithm for high-dimensional nearest neighbor search, also widely used in vector retrieval tasks.
 
 HNSW builds a hierarchical graph structure in which each layer is a navigable small world (NSW) graph. In the graph, each vertex represents a data point, and edges indicate similarity between vertices. The higher layers of the graph contain fewer vertices with sparser connections for fast global search, while the lower layers include all vertices with denser connections for precise local search.
 

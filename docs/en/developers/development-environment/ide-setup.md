@@ -24,7 +24,7 @@ The overall idea is to write code on the MacBook,  then automatically synchroniz
 
 #### Thrift 0.13
 
-There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
+There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install.
 
 ```bash
 brew install alberttwong/thrift/thrift@0.13
@@ -155,7 +155,7 @@ From here on, all setup is complete. After Clion and the remote server are synch
 
 #### Debug
 
-BE debug is a little difficult, you have to use gdb in your remote server. Of course, you can use gdb server + Clion remote gdb, but I don't recommend it, it's too stuck. 
+BE debug is a little difficult, you have to use gdb in your remote server. Of course, you can use gdb server + Clion remote gdb, but I don't recommend it, it's too stuck.
 
 We need to change `start_backend.sh` script from:
 

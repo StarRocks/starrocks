@@ -11,7 +11,7 @@ StarRocks is compatible with MySQL protocols and supports standard SQL. Users ca
 
 ## Architecture choices
 
-StarRocks supports shared-nothing (Each BE has a portion of the data on its local storage) and shared-data (all data on object storage or HDFS and each CN has only cache on local storage). You can decide where the data is stored based on your needs. 
+StarRocks supports shared-nothing (Each BE has a portion of the data on its local storage) and shared-data (all data on object storage or HDFS and each CN has only cache on local storage). You can decide where the data is stored based on your needs.
 
 ![Architecture choices](../_assets/architecture_choices.png)
 
@@ -50,7 +50,7 @@ BEs are responsible for data storage and SQL execution.
 
 ### Shared-data
 
-Object storage and HDFS provide cost, reliability, and scalability benefits. In addition to the scalability of storage, CN nodes can be added and removed without the need to rebalance data since storage and compute are separate. 
+Object storage and HDFS provide cost, reliability, and scalability benefits. In addition to the scalability of storage, CN nodes can be added and removed without the need to rebalance data since storage and compute are separate.
 
 In the shared-data architecture, BEs are replaced with "compute nodes (CNs)" which are responsible only for data compute tasks and caching hot data. Data is stored in low-cost and reliable remote storage systems such as Amazon S3, GCP, Azure Blob Storage, MinIO, etc. When the cache is hit, query performance is comparable to that of the shared-nothing architecture. CN nodes can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and high elasticity and scalability.
 

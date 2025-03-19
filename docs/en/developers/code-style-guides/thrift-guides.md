@@ -18,7 +18,7 @@ To be back compatible, the ordinal of the field SHOULD NOT be changed.
 
 ## file name
 
-The names of messages are all lowercase, with underscores between words. 
+The names of messages are all lowercase, with underscores between words.
 Files should end in `.thrift`.
 
 ```
@@ -40,7 +40,7 @@ struct TmyStruct;           // Bad
 
 ## field name
 
-The names of struct members are all lowercase, with underscores between words. 
+The names of struct members are all lowercase, with underscores between words.
 
 ```
 1: optional i64 my_field;       // Good

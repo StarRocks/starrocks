@@ -233,7 +233,7 @@ This section takes the table `lineorder` (SSB 20G) as an example.
 - `lo_tax`: Integer type, cardinality 9, occupies 160M
 - `lo_partkey`: Integer type, cardinality 600,000, occupies 601M
 
-### Query 1: Query on single column of low cardinality 
+### Query 1: Query on single column of low cardinality
 
 #### Query table without bitmap index
 
@@ -395,7 +395,7 @@ IOTaskExecTime: 672.029ms // Total time for scanning data, significantly less th
     BitmapIndexFilterRows: 143.995M (143995376) // Number of rows filtered out by bitmap index.
 ```
 
-### Query 3: Query on single Column of high cardinality 
+### Query 3: Query on single Column of high cardinality
 
 #### Query table without bitmap index
 

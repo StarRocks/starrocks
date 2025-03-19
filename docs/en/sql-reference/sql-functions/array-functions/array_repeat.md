@@ -32,7 +32,7 @@ The data type of the return value is the ARRAY type of element.
 
 ## Examples
 
-Example 1: 
+Example 1:
 
 ```plain text
 mysql> select array_repeat(1,5) as res;
@@ -43,7 +43,7 @@ mysql> select array_repeat(1,5) as res;
 +-------------+
 ```
 
-Example 2: 
+Example 2:
 
 ```plain text
 mysql> select  array_repeat([1,2],3) as res;
@@ -54,7 +54,7 @@ mysql> select  array_repeat([1,2],3) as res;
 +---------------------+
 ```
 
-Example 3: 
+Example 3:
 
 ```Plain
 mysql> select array_repeat(1,-1) as res;
@@ -65,7 +65,7 @@ mysql> select array_repeat(1,-1) as res;
 +------+
 ```
 
-Example 4: 
+Example 4:
 
 ```Plain
 mysql> select  array_repeat(null,3) as res;

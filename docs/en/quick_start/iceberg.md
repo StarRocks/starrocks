@@ -272,7 +272,7 @@ StarRocks >
 ### Create an external catalog
 
 The external catalog is the configuration that allows StarRocks to operate on
-the Iceberg data as if it was in StarRocks databases and tables. The individual 
+the Iceberg data as if it was in StarRocks databases and tables. The individual
 configuration properties will be detailed after the command.
 
 ```sql
@@ -330,7 +330,7 @@ SHOW DATABASES;
 
 :::tip
 The database that you see was created in your PySpark
-session. When you added the CATALOG `iceberg`, the 
+session. When you added the CATALOG `iceberg`, the
 database `nyc` became visible in StarRocks.
 :::
 

@@ -52,12 +52,11 @@ ORDER BY (uid, name);
 After table creation, you can use `SHOW CREATE TABLE <table_name>;` to view the specified sort columns and the order of these columns in the `ORDER BY` clause from the returned result.
 :::
 
-Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part will be truncated. Therefore, each entry in the Prefix index of this table is uid (4 bytes) + name (only the first 32 bytes are taken), and the prefix fields are `uid` and `name`.
+Since the maximum length of a Prefix index entry is 36 bytes, and any excess will be truncated. Therefore, each entry in the Prefix index of this table is uid (4 bytes) + name (only the first 32 bytes are taken), and the prefix fields are `uid` and `name`.
 
-**Note**
+:::important
 
 - The number of prefix fields cannot exceed 3, and the maximum length of a Prefix index entry is 36 bytes.
-
 - Within the prefix fields, columns of the CHAR, VARCHAR, or STRING type can only appear once and must be at the end.
 
   Take the following table as example, where the first three columns are sort key columns. The prefix field of this table is `name` (20 bytes). It is because that this Prefix index begins with the VARCHAR-type column (`name`) and is truncated directly without including further columns even though the Prefix index entry does not reach 36 bytes in length. Therefore, this Prefix index only contains the `name` field.
@@ -76,6 +75,7 @@ Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part 
     +-------------+-------------+------+-------+---------+-------+
     6 rows in set (0.00 sec)
     ```
+:::
 
 - If the sort key is specified in the table using `ORDER BY`, the Prefix index is formed based on the sort key. If sort key is not specified using `ORDER BY`, the Prefix index is formed based on the Key columns.
 

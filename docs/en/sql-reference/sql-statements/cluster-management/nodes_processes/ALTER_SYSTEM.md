@@ -119,9 +119,11 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 - Drop Broker nodes.
 
-> **CAUTION**
->
-> Dropping a Broker node terminates the tasks currently running on it.
+  :::caution
+
+  Dropping a Broker node terminates the tasks currently running on it.
+
+  :::
 
   - Drop one or multiple Broker nodes with the same `broker_name`.
 

@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# char 
+# char
 
 CHAR() returns the character value of the given integer value according to the ASCII table.
 

@@ -355,9 +355,9 @@ If your materialized view fails to rewrite relevant queries, you can look into t
 
   StarRocks provides the TRACE statement for you to diagnose materialized view rewrite failure:
   
-    - `TRACE LOGS MV <query>`: Available in v3.2 and later, this command analyzes the detailed rewrite process and the reasons of the failure.
-    - `TRACE REASON MV <query>`: Available in v3.2.8 and later, this command provides concise reasons for rewrite failure.
-    
+  - `TRACE LOGS MV <query>`: Available in v3.2 and later, this command analyzes the detailed rewrite process and the reasons of the failure.
+  - `TRACE REASON MV <query>`: Available in v3.2.8 and later, this command provides concise reasons for rewrite failure.
+
   ```SQL
   MySQL > TRACE REASON MV SELECT sum(c1) FROM `glue_ice`.`iceberg_test`.`ice_test3`;
   +----------------------------------------------------------------------------------------------------------------------+

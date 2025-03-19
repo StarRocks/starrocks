@@ -383,7 +383,7 @@ The folder names below `starrocks/shared/` are generated when you load the data.
 
 ## Configuring StarRocks for shared-data
 
-Now that you have experienced using StarRocks with shared-data it is important to understand the configuration. 
+Now that you have experienced using StarRocks with shared-data it is important to understand the configuration.
 
 ### CN configuration
 

@@ -56,8 +56,8 @@ Steps to enable tracing in SR:
 3.  Open jaeger web UI, usually in `http://localhost:16686/search`
 4.  Do some data ingestion (streamload/insert into) and search TXN traces on web UI
 
-![trace_pic2.png](../../_assets/trace_pic2.png)(trace_pic2.png) 
-![trace_pic3.png](../../_assets/trace_pic3.png)(trace_pic3.png) 
+![trace_pic2.png](../../_assets/trace_pic2.png)(trace_pic2.png)
+![trace_pic3.png](../../_assets/trace_pic3.png)(trace_pic3.png)
 
 ### Adding traces
 

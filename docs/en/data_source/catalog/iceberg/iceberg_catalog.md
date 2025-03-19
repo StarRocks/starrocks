@@ -159,12 +159,12 @@ The following table describes the parameter you need to configure in `MetastoreP
 ##### iceberg.catalog.type
 
 Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`.
 
 ##### hive.metastore.uris
 
 Required: Yes
-Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
+Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`.
 
 </TabItem>
 <TabItem value="GLUE" label="AWS Glue">
@@ -205,7 +205,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 ###### iceberg.catalog.type
 
 Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`.
 
 ###### aws.glue.use_instance_profile
 
@@ -259,7 +259,7 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 ###### iceberg.catalog.uri
 
 Required: Yes
-Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
+Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`.
 
 ###### iceberg.catalog.security
 
@@ -458,7 +458,7 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
 ###### aws.s3.use_instance_profile
 
 Required: Yes
-Description:  Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
+Description:  Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
 
 ###### aws.s3.iam_role_arn
 
@@ -1058,7 +1058,7 @@ PROPERTIES
 </TabItem>
 
 </Tabs>
- 
+
  ---
 
 ## Use your catalog
@@ -1097,7 +1097,7 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
   ```SQL
   USE <catalog_name>.<db_name>
   ```
- 
+
 ---
 
 ### Drop an Iceberg catalog

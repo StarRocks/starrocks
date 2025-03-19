@@ -45,7 +45,7 @@ Taking a MySQL instance as an example, the following section describes how to mi
 
 1. Log in to the [BladePipe Cloud](https://cloud.bladepipe.com/). Click **DataSource** > **Add DataSource**.
 2. Select **StarRocks** as the **Type**, and fill in the setup form.
-   - **Client Address**：The port StarRocks provided to MySQL Client. BladePipe queries the metadata in databases via it. 
+   - **Client Address**：The port StarRocks provided to MySQL Client. BladePipe queries the metadata in databases via it.
    - **Account**: The user name of the StarRocks database. The INSERT privilege is required to write data to StarRocks. Follow the instruction provided in [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) to grant the database user the INSERT privilege.
    - **Http Address**：The port used to receive the request from BladePipe to write data to StarRocks.
 

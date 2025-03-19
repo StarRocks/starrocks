@@ -326,7 +326,7 @@ This version has been taken offline due to privilege issues in querying external
 - Added the date function `milliseconds_diff`. [#38171](https://github.com/StarRocks/starrocks/pull/38171)
 - Added the session variable `catalog`, which specifies the catalog to which the session belongs. [#41329](https://github.com/StarRocks/starrocks/pull/41329)
 - Supports [setting user-defined variables in hints](https://docs.starrocks.io/docs/3.2/administration/Query_planning/#user-defined-variable-hint). [#40746](https://github.com/StarRocks/starrocks/pull/40746)
-- Supports CREATE TABLE LIKE in Hive catalogs. [#37685](https://github.com/StarRocks/starrocks/pull/37685) 
+- Supports CREATE TABLE LIKE in Hive catalogs. [#37685](https://github.com/StarRocks/starrocks/pull/37685)
 - Added the view `information_schema.partitions_meta`, which records detailed metadata of partitions. [#39265](https://github.com/StarRocks/starrocks/pull/39265)
 - Added the view `sys.fe_memory_usage`, which records the memory usage for StarRocks. [#40464](https://github.com/StarRocks/starrocks/pull/40464)
 
@@ -376,7 +376,7 @@ Release date: February 8, 2024
 
 - Added the session variable `enable_strict_order_by`. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries. [#37910](https://github.com/StarRocks/starrocks/pull/37910)
 - Added the session variable `enable_materialized_view_for_insert`, which controls whether materialized views rewrite the queries in INSERT INTO SELECT statements. The default value is `false`. [#37505](https://github.com/StarRocks/starrocks/pull/37505)
-- When a single query is executed within the Pipeline framework, its memory limit is now constrained by the variable `query_mem_limit` instead of `exec_mem_limit`. Setting the value of `query_mem_limit` to `0` indicates no limit. [#34120](https://github.com/StarRocks/starrocks/pull/34120) 
+- When a single query is executed within the Pipeline framework, its memory limit is now constrained by the variable `query_mem_limit` instead of `exec_mem_limit`. Setting the value of `query_mem_limit` to `0` indicates no limit. [#34120](https://github.com/StarRocks/starrocks/pull/34120)
 
 ### Parameter Changes
 

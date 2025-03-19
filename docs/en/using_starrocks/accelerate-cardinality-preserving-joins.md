@@ -335,7 +335,7 @@ In the above example, table pruning is allowed in Q1, Q2, and Q3 as shown in the
 
 ### Table Pruning in INNER/LEFT/RIGHT JOINs Based on Foreign Keys
 
-Table pruning in **INNER JOINs** is more restrictive because the retained side must have a **Foreign Key** that references the pruned side, and reference integrity must be ensured. Currently, StarRocks does not enforce consistency checks on Foreign Key constraints. 
+Table pruning in **INNER JOINs** is more restrictive because the retained side must have a **Foreign Key** that references the pruned side, and reference integrity must be ensured. Currently, StarRocks does not enforce consistency checks on Foreign Key constraints.
 
 Although table pruning based on Foreign Keys is more strict, it is also more powerful. It allows the optimizer to leverage column equivalence inference in INNER JOINs, making pruning possible in more complex scenarios.
 

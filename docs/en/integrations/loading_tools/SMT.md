@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks Migration Tool (SMT) 
+# StarRocks Migration Tool (SMT)
 
 StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to load data from source databases through Flink into StarRocks. SMT mainly can:
 
@@ -23,9 +23,9 @@ Download link: https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
 
 ## Steps to use SMT
 
-The generally involved steps are as follows: 
+The generally involved steps are as follows:
 
-1. Configure the **conf/config_prod.conf** file. 
+1. Configure the **conf/config_prod.conf** file.
 
 2. Execute **starrocks-migration-tool**.
 
@@ -33,7 +33,7 @@ The generally involved steps are as follows:
 
    You can then use the SQL scripts in the **result** directory for metadata or data synchronization.
 
-## Configurations of SMT 
+## Configurations of SMT
 
 - `[db]`: information to connect the data source. Configure the information to connect the data source corresponding to the database type specified in the `type` patameter.
 
@@ -105,7 +105,7 @@ The generally involved steps are as follows:
 
 ### Introduction
 
-Flink CDC connector and SMT can synchronize data from MySQL within subsecond. 
+Flink CDC connector and SMT can synchronize data from MySQL within subsecond.
 
 ![img](../../_assets/load_tools.png)
 
@@ -619,7 +619,7 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
 
     After the above command is successfully executed, the Flink job to synchronize data keeps running.
 
-10. Observe the status of the Flink job. 
+10. Observe the status of the Flink job.
 
     ```Bash
     bin/flink list 
@@ -631,7 +631,7 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
 1. Make sure that the Server Agent Service is enabled.
 
     Check if the Server Agent Service is running normally.
-    
+
     ```sql
     EXEC master.dbo.xp_servicecontrol N'QUERYSTATE', N'SQLSERVERAGENT'
     GO
@@ -746,7 +746,7 @@ The Flink CDC connector captures data by directly reading full and incremental d
     ```
 
 7. Execute *starrocks-migrate-tool**. All SQL scripts are generated in the `result` directory.
-    
+
     ```Bash
     $./starrocks-migrate-tool
     $ls result
@@ -768,7 +768,7 @@ The Flink CDC connector captures data by directly reading full and incremental d
 
 ​    After the above command is successfully executed, the Flink job to synchronize data keeps running.
 
-10. Observe the status of the Flink job. 
+10. Observe the status of the Flink job.
     ```Bash
     bin/flink list 
     ```

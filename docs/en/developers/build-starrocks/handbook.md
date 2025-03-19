@@ -34,7 +34,7 @@ Unit tests of BE and FE are separted. In general, you can run BE test by
 ./run-be-ut.sh
 ```
 
-run FE test by 
+run FE test by
 ```
 ./run-fe-ut.sh
 ```

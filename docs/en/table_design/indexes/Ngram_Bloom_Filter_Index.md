@@ -22,7 +22,7 @@ And then each of these six substrings is written into the Bloom filter index.
 - To determine whether a query hits an N-gram bloom filter index, you can check the `BloomFilterFilterRows` field in the query's profile.
 - Only one type of index (Bloom Filter or N-gram Bloom Filter) can be created for a single column.
 
-## Basic operation 
+## Basic operation
 
 ### Create N-gram bloom filter index
 
@@ -54,7 +54,7 @@ N-gram bloom filter index-related parameters:
 
 For explanations of other parameters related to table creation, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
-### View N-gram bloom filter index 
+### View N-gram bloom filter index
 
 You can view all indexes of a table using `SHOW CREATE TABLE` or `SHOW INDEX FROM` table. Since index creation is asynchronous, you can only see the corresponding index after the index is successfully created.
 
@@ -89,7 +89,7 @@ Altering an index is an asynchronous operation. You can view the progress of thi
 
 ## Query that can be accelerated
 
-### `LIKE` queries 
+### `LIKE` queries
 
 An N-gram bloom filter index can accelerate `LIKE` queries if `gram_num` is small enough (smaller than the length of the string being queried for). Otherwise, the N-gram bloom filter index can not accelerate `LIKE` queries.
 

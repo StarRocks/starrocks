@@ -34,7 +34,7 @@ maxSnapshotAge ::= <int> { DAYS | HOURS | MINUTES }
 **Parameters**
 
 - `branch_name`: Name of the branch to create.
-- `AS OF VERSION`: ID of the snapshot (version) on which to create the branch. 
+- `AS OF VERSION`: ID of the snapshot (version) on which to create the branch.
 - `RETAIN`: Time to retain the branch. Format: `<int> <unit>`. Supported units: `DAYS`, `HOURS`, and `MINUTES`. Example: `7 DAYS`, `12 HOURS`, or `30 MINUTES`.
 - `WITH SNAPSHOT RETENTION`: The minimum number of snapshots to keep and/or the maximum time to keep the snapshots.
 
@@ -88,7 +88,7 @@ CREATE [OR REPLACE] TAG [IF NOT EXISTS] <tag_name>
 **Parameters**
 
 - `tag_name`: Name of the tag to create.
-- `AS OF VERSION`: ID of the snapshot (version) on which to create the tag. 
+- `AS OF VERSION`: ID of the snapshot (version) on which to create the tag.
 - `RETAIN`: Time to retain the tag. Format: `<int> <unit>`. Supported units: `DAYS`, `HOURS`, and `MINUTES`. Example: `7 DAYS`, `12 HOURS`, or `30 MINUTES`.
 
 **Example**
@@ -124,7 +124,7 @@ ALTER TABLE iceberg.sales.order
 EXECUTE fast_forward('main', 'test-branch');
 ```
 
-### Cherry pick a snapshot 
+### Cherry pick a snapshot
 
 You can cherry pick a specific snapshot and apply it to the current status of the table. This operation will create a new snapshot based on an existing snapshot, and the original snapshot will not be affected.
 

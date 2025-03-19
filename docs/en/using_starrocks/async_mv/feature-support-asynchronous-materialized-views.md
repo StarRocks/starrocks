@@ -75,7 +75,7 @@ This document outlines the boundaries of competence for asynchronous materialize
 | [Align partitions at a customized time granularity](use_cases/create_partitioned_materialized_view.md#align-partitions-at-a-customized-time-granularity)        | Create a materialized view and customize the time granularity for its partitions by using the `date_trunc` function with the `time_slice` or `date_slice` function. | v3.2+                    |
 | [Align partitions with multiple base tables](use_cases/create_partitioned_materialized_view.md#align-partitions-with-multiple-base-tables)               | Create a materialized view whose partitions are aligned with those of multiple base tables, as long as the base tables use the same type of Partitioning Key. | v3.3+                    |
 
-**Different Join Methods**
+### Different Join Methods
 
 - **Single Fact Table (v2.4+)**:  Establishing a partition mapping between the materialized view and the fact table ensures the automatic refresh of materialized view partitions when the fact table is updated.
 - **Multiple Fact Tables (v3.3+)**: Establishing a partition mapping between the materialized view and multiple fact tables that are joined/unioned at the same time granularity ensures the automatic refresh of materialized view partitions when any of the fact tables are updated.

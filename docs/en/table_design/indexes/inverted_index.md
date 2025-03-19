@@ -194,19 +194,19 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
 
     The following query statements do not meet the requirement:
 
-    - Because the `MATCH` predicate in the query statement is not in the WHERE clause, it can not be pushed down, resulting in a query error.
+  - Because the `MATCH` predicate in the query statement is not in the WHERE clause, it can not be pushed down, resulting in a query error.
 
-        ```SQL
-        MySQL [test]> SELECT value MATCH "test" FROM t_match;
-        ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
-        ```
+      ```SQL
+      MySQL [test]> SELECT value MATCH "test" FROM t_match;
+      ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
+      ```
 
-    - Because the column `value_test` against which the `MATCH` predicate in the query statement is performed is not an indexed column, the query fails.
+  - Because the column `value_test` against which the `MATCH` predicate in the query statement is performed is not an indexed column, the query fails.
 
-        ```SQL
-        MySQL [test]> SELECT * FROM t_match WHERE value_test match "test";
-        ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
-        ```
+      ```SQL
+      MySQL [test]> SELECT * FROM t_match WHERE value_test match "test";
+      ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
+      ```
 
 #### Supported queries when indexed column is not tokenized
 

@@ -20,7 +20,7 @@ DATETIME weeks_add(DATETIME expr1, INT expr2);
 
 ## Return value
 
-returns `DATETIME`. 
+returns `DATETIME`.
 
 `NULL` is returned if the date does not exist.
 

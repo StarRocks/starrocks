@@ -74,7 +74,7 @@ You can follow these steps to fix this issue:
 
 :::tip
 
-- This bug has been fixed in StarRocks v3.1. You can avoid this issue by upgrading your cluster to v3.1 or later. 
+- This bug has been fixed in StarRocks v3.1. You can avoid this issue by upgrading your cluster to v3.1 or later.
 - This solution does not apply if more than half of the FE nodes have encountered this issue. You must follow the instructions provided in [Measure of the last resort](#7-measure-of-the-last-resort) to fix the issue.
 
 :::
@@ -342,7 +342,7 @@ If the majority of the Follower nodes are not running, the FE group will not pro
 
 To solve this issue, you need to start all Follower nodes in the cluster. If they cannot be restarted, please refer to [The measure of last resort](#10-measure-of-the-last-resort).
 
-### 2. Node IP is changed 
+### 2. Node IP is changed
 
 If the `priority_networks` of the node is not configured, the FE node will randomly select an available IP address once it is restarted. If the IP address recorded in the BDBJE metadata is different from that used to start the node, the FE will not provide services.
 

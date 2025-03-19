@@ -20,7 +20,7 @@ MANN_WHITNEY_U_TEST (sample_data, sample_treatment[, alternative[, continuity_co
 
 - `sample_treatment`: the index of sample data. where each element indicates the treatment group that the corresponding sample belongs to. The values should be of type boolean, with `false` representing the first group and `true` representing the second group.
 
-- `alternative` (optional): A const string specifying the alternative hypothesis. It can be one of the following: 
+- `alternative` (optional): A const string specifying the alternative hypothesis. It can be one of the following:
 - - 'two-sided': The default value. Tests whether the means of the two populations are different.
 - - 'less': Tests whether the mean of the first population is less than the mean of the second population.
 - - 'greater': Tests whether the mean of the first population is greater than the mean of the second population.

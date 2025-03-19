@@ -494,7 +494,7 @@ SELECT * FROM site_clicks;
 
 ## Configuration details
 
-Now that you have experienced using StarRocks with shared-data it is important to understand the configuration. 
+Now that you have experienced using StarRocks with shared-data it is important to understand the configuration.
 
 ### CN configuration
 
@@ -666,7 +666,7 @@ The Kafka topic to consume from.
 "kafka_offsets" = "OFFSET_BEGINNING"
 ```
 
-These properties are presented together as there is one `kafka_offset` required for each `kafka_partitions` entry. 
+These properties are presented together as there is one `kafka_offset` required for each `kafka_partitions` entry.
 
 `kafka_partitions` is a list of one or more partitions to consume. If this property is not set, then all partitions are consumed.
 

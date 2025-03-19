@@ -9,7 +9,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 ## Comparisons between columnar storage and hybrid row-column storage
 
-**Hybrid row-column storage**
+### Hybrid row-column storage
 
 - Storage method: Data is stored in both row-by-row and column-by-column fashions. Simply put, a table that uses hybrid row-column storage contains an additional, hidden binary-type column `__row`. When data is written to the table, all values from the value columns of each involved row are encoded and written to the `__row` column (as shown below). As the data is stored in both row-by-row and column-by-column fashions, additional storage costs are incurred.
 
@@ -17,7 +17,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.<ul><li>User scenarios of row-by-row storage:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>User scenarios of column-by-column storage: Complex data analysis.</li></ul>
 
-**Column-oriented**
+### Column-oriented
 
 - Storage method: Data is stored in a column-by-column fashion.
 

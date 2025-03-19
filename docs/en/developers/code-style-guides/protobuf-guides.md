@@ -40,7 +40,7 @@ message myMessagePB       // Bad
 
 ## field name
 
-The names of messages are all lowercase, with underscores between words. 
+The names of messages are all lowercase, with underscores between words.
 
 ```
 optional int64 my_field = 3;        // Good

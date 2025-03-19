@@ -36,7 +36,7 @@ An error is returned if the JSON document is not a valid document.
 
 0 is returned in any of the following scenarios:
 
-- The **`path`** does not identify a value in the document. 
+- The **`path`** does not identify a value in the document.
 
 - The path is not a valid path expression.
 

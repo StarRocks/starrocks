@@ -92,7 +92,7 @@ storage_root_path =
 
 ## Clear cached data
 
-You can clear the cached data in case of emergencies. This will not affect the original data in your remote storage. 
+You can clear the cached data in case of emergencies. This will not affect the original data in your remote storage.
 
 Follow these steps to clear the cached data on a CN node:
 
@@ -136,7 +136,7 @@ done
 - Identification: If the sum of `fslib star cache meta memory size` and `fslib star cache data memory size` takes a significant proportion of the total memory usage of the CN node, it might indicate this issue.
 - Affected versions: v3.1.8 and earlier patch versions, and v3.2.3 and earlier patch versions
 - Fixed versions: v3.1.9, v3.2.4
-- Solutions: 
+- Solutions:
   - Upgrade the cluster to the fixed versions.
   - If you do not want to upgrade the cluster, you can clear the directory `${storage_root_path}/starlet_cache/star_cache/meta` of the CN nodes, and restart the nodes.
 

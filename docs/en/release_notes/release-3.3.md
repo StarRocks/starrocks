@@ -180,8 +180,8 @@ Fixed the following issues:
 - Memory leaks in `INSERT` tasks. [#53809](https://github.com/StarRocks/starrocks/pull/53809)
 - Concurrency issues caused by missing write locks in replication tasks. [#54061](https://github.com/StarRocks/starrocks/pull/54061)
 - `partition_ttl` of tables in the `statistics` database does not take effect. [#54398](https://github.com/StarRocks/starrocks/pull/54398)
-- Query Cache-related issues: 
-  - Crashes when Query Cache is enabled with Group Execution. [#54363](https://github.com/StarRocks/starrocks/pull/54363) 
+- Query Cache-related issues:
+  - Crashes when Query Cache is enabled with Group Execution. [#54363](https://github.com/StarRocks/starrocks/pull/54363)
   - Runtime Filter crashes. [#54305](https://github.com/StarRocks/starrocks/pull/54305)
 - Issues with materialized view Union Rewrite. [#54293](https://github.com/StarRocks/starrocks/pull/54293)
 - Missing padding in string updates for partial updates in Primary Key tables. [#54182](https://github.com/StarRocks/starrocks/pull/54182)
@@ -498,7 +498,7 @@ Fixed the following issues:
 - Cross-cluster Data Migration Tool fails to create tables in the target cluster due to control characters such as `\`, `\r` in the default values of fields.  [#47861](https://github.com/StarRocks/starrocks/pull/47861)
 - Persistent bRPC failures after BE restarts. [#40229](https://github.com/StarRocks/starrocks/pull/40229)
 - The `user_admin` role can change the root password using the ALTER USER command. [#47801](https://github.com/StarRocks/starrocks/pull/47801)
-- Primary key index write failures cause data write errors. [#48045](https://github.com/StarRocks/starrocks/pull/48045) 
+- Primary key index write failures cause data write errors. [#48045](https://github.com/StarRocks/starrocks/pull/48045)
 
 ### Behavior Changes
 
@@ -661,7 +661,7 @@ Release date: June 21, 2024
 
 - The default value of the materialized view property `partition_refresh_num` has been changed from `-1` to `1`. When a partitioned materialized view needs to be refreshed, instead of refreshing all partitions in a single task, the new behavior will incrementally refresh one partition at a time. This change is intended to prevent excessive resource consumption caused by the original behavior. The default behavior can be adjusted using the FE configuration `default_mv_partition_refresh_number`.
 - Originally, the database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748)
-- By default, Data Cache is enabled to accelerate data lake queries. Users can manually disable it by executing `SET enable_scan_datacache = false`. 
+- By default, Data Cache is enabled to accelerate data lake queries. Users can manually disable it by executing `SET enable_scan_datacache = false`.
 - If users want to re-use the cached data in Data Cache after downgrading a shared-data cluster from v3.3 to v3.2.8 and earlier, they need to manually rename the Blockfile in the directory **starlet_cache** by changing the file name format from `blockfile_{n}.{version}` to `blockfile_{n}`, that is, to remove the suffix of version information. For more information, refer to the [Data Cache Usage Notes](https://docs.starrocks.io/docs/using_starrocks/caching/block_cache/#usage-notes). v3.2.9 and later versions are compatible with the file name format in v3.3, so users do not need to perform this operation manually.
 - Supports dynamically modifying FE parameter `sys_log_level`. [#45062](https://github.com/StarRocks/starrocks/issues/45062)
 - The default value of the Hive Catalog property `metastore_cache_refresh_interval_sec` is changed from `7200` (two hours) to `60` (one minute). [#46681](https://github.com/StarRocks/starrocks/pull/46681)
