@@ -70,6 +70,8 @@ A set of parameters about how StarRocks accesses the metadata of your Kudu clust
 
 The following table describes the parameter you need to configure in `CatalogParams`.
 
+<!-- markdownlint-disable no-space-in-code -->
+
 | Parameter           | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                             |
 |---------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | kudu.catalog.type   | Yes      | The type of metastore that you use for your Kudu cluster. Set this parameter to `kudu` or `hive`.                                                                                                                                                                                                                                                                                                                       |

@@ -632,10 +632,12 @@ Please note that only certain aggregate functions that support Aggregate Rollup 
 - ARRAY_AGG_DISTINCT
 
 :::note
+
 - After pushdown, the aggregate functions need to be rolled up to align with the original semantics. For more instructions on Aggregation Rollup, Please refer to [Aggregation Rollup Rewrite](#aggregation-rollup-rewrite).
 - Aggregation pushdown supports Rollup rewrite of Count Distinct based on Bitmap or HLL functions.
 - Aggregation pushdown only supports pushing aggregate functions down to the Scan Operator before Join, Filter, or Where operators.
 - Aggregation pushdown only supports query rewrite and acceleration based on materialized view built on a single table.
+
 :::
 
 ### COUNT DISTINCT rewrite

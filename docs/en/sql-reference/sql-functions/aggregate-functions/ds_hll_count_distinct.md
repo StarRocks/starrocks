@@ -8,15 +8,16 @@ It is slower than APPROX_COUNT_DISTINCT(expr) but with higher precision because 
 
 ## Syntax
 
-```Haskell
+```SQL
 ds_hll_count_distinct(expr, [log_k], [tgt_type])
 ```
+
 - `log_k`: Integer. Range [4, 21]. Default: 17.
 - `tgt_type`: Valid values are `HLL_4`, `HLL_6` (default) and `HLL_8`.
 
 ## Examples
 
-```plain text
+```SQL
 mysql> CREATE TABLE t1 (
     ->   id BIGINT NOT NULL,
     ->   province VARCHAR(64),

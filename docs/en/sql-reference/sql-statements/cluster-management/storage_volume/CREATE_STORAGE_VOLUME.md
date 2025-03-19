@@ -255,10 +255,12 @@ To enable this feature, set the following properties in addition to the above cr
 ```
 
 :::note
+
 - The Partitioned Prefix feature is only supported for S3-compatible object storage systems, that is, the `TYPE` of the storage volume must be `S3`.
 - `LOCATIONS` of the storage volume must only contain the bucket name, for example, `s3://testbucket`. Specifying a sub-path after the bucket name is not allowed.
 - Both properties are immutable once the storage volume is created.
 - You cannot enable this feature when create a storage volume by using the FE configuration file **fe.conf**.
+
 :::
 
 ## Examples

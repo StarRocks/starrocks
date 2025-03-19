@@ -169,6 +169,7 @@ Specifies the character that is used to escape various special characters, such 
 >
 > The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.
 > Two examples are as follows:
+>
 > - When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
 > - Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
 
@@ -211,6 +212,7 @@ To address this issue, the system introduces the dynamic FE configuration item `
 From v3.4.0 onwards, the system supports unionizing files with different schema, and by default, an error will be returned if there are non-existent columns. By setting the property `fill_mismatch_column_with` to `null`, you can allow the system to assign NULL values to the non-existent columns instead of returning an error.
 
 `fill_mismatch_column_with`: The behavior of the system after a non-existent column is detected when unionizing files with different schema. Valid values:
+
 - `none`: An error will be returned if a non-existent column is detected.
 - `null`: NULL values will be assigned to the non-existent column.
 

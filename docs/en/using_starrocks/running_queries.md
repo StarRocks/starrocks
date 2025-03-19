@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 9
 ---
 
-# View Running Queries
+# View running queries
 
 This article describes how to view running queries in StarRocks and analyze their resource consumption.
 
@@ -30,6 +30,7 @@ This article describes how to view running queries in StarRocks and analyze thei
 | ResourceGroup | Resource group used by the query |
 
 **Example**:
+
 ```sql
 MySQL > show proc '/current_queries'\G
 ***************************[ 1. row ]***************************
@@ -55,6 +56,7 @@ ResourceGroup | rg1
 Similar to `current_queries`, `show proc '/global_current_queries'` shows information about queries running on all FE nodes. This command is supported since version 3.4.
 
 **Example**:
+
 ```sql
 MySQL root@127.1:(none)> show proc '/global_current_queries'\G
 ***************************[ 1. row ]***************************
@@ -94,6 +96,7 @@ ResourceGroup | rg1
 | FeStartTime | FE start time |
 
 **Example**:
+
 ```sql
 MySQL root@127.1:(none)> show running queries\G
 ***************************[ 1. row ]***************************

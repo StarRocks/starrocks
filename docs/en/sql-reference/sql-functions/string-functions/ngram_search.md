@@ -9,8 +9,10 @@ displayed_sidebar: docs
 Calculate the ngram similarity of the two strings.
 
 :::info
+
 - Currently, the character encoding only supports ASCII encoding and does not support UTF-8 encoding.
 - The function `ngram_search` is case-sensitive. Another function `ngram_search_case_insensitive` is case-insensitive. Other than that, these two functions are the same.
+
 :::
 
 ## Syntax

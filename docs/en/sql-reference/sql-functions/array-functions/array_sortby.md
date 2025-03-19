@@ -46,6 +46,7 @@ array3 = ["2023-01-01", "2023-01-04", "2023-01-03", "2023-01-05", "2023-01-02"]
 ```
 
 Sorting Steps:
+
 1. Compare array1:
 
 * The sorted index order of array1 is [4, 2, 3, 1, 0] because 4 < 5 < 5 < 5 < 6.

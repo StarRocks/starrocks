@@ -438,6 +438,8 @@ However, if the frequency of data updates in Hive, Hudi, or Delta Lake is high, 
 
 A set of parameters about how to connect Kudu Catalog. This parameter set is optional.
 
+<!-- markdownlint-disable no-space-in-code -->
+
 | Parameter                              | Required | Description                                                  |
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
 | kudu.master                 | No       | Specifies the Kudu Master address, which defaults to `localhost:7051`. |

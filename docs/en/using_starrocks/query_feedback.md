@@ -46,7 +46,7 @@ ALTER PLAN ADVISOR ADD SELECT COUNT(*) FROM (
 
 ### Enable automatic analysis for all queries
 
-To enable automatic analysis for all queries, you need to set the system variable `enable_plan_analyzer` (Default: `false) to `true`.
+To enable automatic analysis for all queries, you need to set the system variable `enable_plan_analyzer` (Default: `false`) to `true`.
 
 ```SQL
 SET enable_plan_analyzer = true;

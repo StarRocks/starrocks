@@ -25,6 +25,7 @@ Before a GRANT operation is performed, make sure that the related user or role h
 - Only users with the `user_admin` role can grant any privilege to other users and roles.
 - After a role is granted to a user, you must run [SET ROLE](SET_ROLE.md) to activate this role before you perform operations as this role. If you want all default roles to be activated upon login, run [ALTER USER](ALTER_USER.md) or [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md). If you want all privileges in the system to be activated for all users upon login, set the global variable `SET GLOBAL activate_all_roles_on_login = TRUE;`.
 - Common users can only grant privileges that have the `WITH GRANT OPTION` keyword to other users and roles.
+
 :::
 
 ## Syntax

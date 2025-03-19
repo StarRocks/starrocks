@@ -46,7 +46,7 @@ LIMIT 10;
 10 rows in set (0.03 sec)
 ```
 
-### Return the two sets of digits following the string `OVC: `
+### Return the two sets of digits following the string `OVC:`
 
 ```SQL
 SELECT regexp_extract(HourlySkyConditions, 'OVC:(\\d+ \\d+)', 1) FROM quickstart.weatherdata
@@ -72,7 +72,7 @@ LIMIT 10;
 10 rows in set (0.01 sec)
 ```
 
-### Return only the second set of digits following the string `OVC: `
+### Return only the second set of digits following the string `OVC:`
 
 ```SQL
 SELECT regexp_extract(HourlySkyConditions, 'OVC:(\\d+) (\\d+)', 2) FROM quickstart.weatherdata WHERE HourlySkyConditions LIKE '%OVC%' LIMIT 10;
