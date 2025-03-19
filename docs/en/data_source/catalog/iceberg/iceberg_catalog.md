@@ -838,6 +838,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.s3.region" = "us-west-2"
   );
   ```
+
 </TabItem>
 
 <TabItem value="HDFS" label="HDFS" >
@@ -1056,6 +1057,7 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+
 </TabItem>
 
 </Tabs>

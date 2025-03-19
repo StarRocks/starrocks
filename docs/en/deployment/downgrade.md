@@ -93,6 +93,7 @@ To downgrade a cluster from v3.3.0 or later to v3.2, follow these steps before d
    ```SQL
    SHOW PROC '/jobs/<db>/schema_change';
    ```
+
 :::
 
 After the compatibility configuration and the availability test, you can downgrade the FE nodes. You must first downgrade the Follower FE nodes and then the Leader FE node.

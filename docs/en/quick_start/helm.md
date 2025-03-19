@@ -73,6 +73,7 @@ Backend nodes are responsible for both data storage and executing query plans.
 ## Add the StarRocks Helm chart repo
 
 The Helm Chart contains the definitions of the StarRocks Operator and the custom resource StarRocksCluster.
+
 1. Add the Helm Chart Repo.
 
     ```Bash
@@ -175,6 +176,7 @@ starrocks:
 ### 3. Store metadata in persistent storage
 
 Setting a value for `starrocks.starrocksFESpec.storageSpec.name` to anything other than `""` causes:
+
 - Persistent storage to be used
 - the value of `starrocks.starrocksFESpec.storageSpec.name` to be used as the prefix for all storage volumes for the service.
 
@@ -193,6 +195,7 @@ starrocks:
 ### 4. Store data in persistent storage
 
 Setting a value for `starrocks.starrocksBeSpec.storageSpec.name` to anything other than `""` causes:
+
 - Persistent storage to be used
 - the value of `starrocks.starrocksBeSpec.storageSpec.name` to be used as the prefix for all storage volumes for the service.
 

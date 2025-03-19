@@ -14,6 +14,7 @@ displayed_sidebar: docs
 ## Definition of Target Object Access Path
 
 1. Target objects accessed by the REST API need to be categorized and organized into a hierarchical access path. The access path format is as follows:
+
 ```
 /primary_categories/primary_object/secondary_categories/secondary_object/.../categories/object
 ```
@@ -35,6 +36,7 @@ Taking catalog, database, table, column as examples:
 ## Selection of HTTP Method
 
 1. GET: Use the GET method to show a single object and list all objects of a certain category. The GET method's access to objects is read-only and does not provide a request body.
+
 ```
 # list all of the tables in database ssb_100g
 GET /api/v2/catalogs/default/databases/ssb_100g/tables
@@ -44,21 +46,25 @@ GET /api/v2/catalogs/default/databases/ssb_100g/tables/lineorder
 ```
 
 2. POST: Used to create objects. Parameters are passed through the request body. It is not idempotent. If the object already exists, the repeated creation will fail and return an error message.
+
 ```
 POST /api/v2/catalogs/default/databases/ssb_100g/tables/create -d@create_customer.sql
 ```
 
 3. PUT: Used to create objects. Parameters are passed through the request body. It is idempotent. If the object already exists, it will return success. PUT method is the CREATE IF NOT EXISTS version of the POST method.
+
 ```
 PUT /api/v2/databases/ssb_100g/tables/create -d@create_customer.sql
 ```
 
 4. DELETE: Used to delete objects. It does not provide a request body. If the object to be deleted does not exist, it will return success. DELETE method has the DROP IF EXISTS semantics.
+
 ```
 DELETE /api/v2/catalogs/default/databases/ssb_100g/tables/customer
 ```
 
 5. PATCH: Used to update objects. It provides a request body, which only contains the partial information that needs to be modified.
+
 ```
 PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": ["c_custkey"]}'
 ```
@@ -77,6 +83,7 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 - 202 Accepted: Indicates that the task submission is successful and the task is in a pending state. The response body must include the task URI for subsequent cancellation, deletion, and polling of task status.
 
 3. The error codes (4xx) indicate client errors. Users need to adjust and modify the HTTP request and retry.
+
 - 400 Bad Request: Invalid request parameters.
 - 401 Unauthorized: Missing authentication information, illegal authentication information, authentication failure.
 - 403 Forbidden: Authentication succeeded, but the user's operation failed the authorization check. No access permission.
@@ -86,6 +93,7 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 - 415 Not Acceptable: The media type of the request content does not match the media type specified in the Content-Type header.
 
 4. The error codes (5xx) indicate server errors. Users do not need to modify the request and can retry later.
+
 - 500 Internal Server Error: Internal server error, similar to Unknown error.
 - 503 Service Unavailable: The service is temporarily unavailable. For example, the user's access frequency is too high and has reached the rate limit; or the service is currently unable to provide service due to internal status, such as when creating a table with 3 replicas, but only 2 BEs are available; all Tablet replicas involved in a user's query are unavailable.
 
@@ -94,6 +102,7 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 1. When the API returns an HTTP code code of 200/201/202, the HTTP response is not empty. The API returns results in JSON format, including top-level fields "code", "message", and "result". All JSON fields are named using camel-case.
 
 2. In a successful API response, the "code" is "0", the "message" is "OK", and the "result" contains the actual results.
+
 ```json
 {
    "code":"0",
@@ -103,6 +112,7 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 ```
 
 3. In a failed API response, the "code" is not "0", the "message" is a simple error message, and the "result" can contain detailed error information, such as error stack traces.
+
 ```json
 {
    "code":"1",
@@ -116,6 +126,7 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 1. API parameters are passed in the precedence order of path, request body, query parameters, and header. Choose the appropriate method for parameter passing.
 
 2. Path parameters: Required parameters that represent the object's hierarchical relationship are placed in the path parameters.
+
 ```
  /api/v2/warehouses/{warehouseName}/backends/{backendId}
  /api/v2/warehouses/ware0/backends/10027

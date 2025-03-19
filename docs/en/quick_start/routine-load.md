@@ -613,6 +613,7 @@ CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
 ```
 
 The parameters for `CREATE ROUTINE LOAD ON` are:
+
 - database_name.job_name
 - table_name
 

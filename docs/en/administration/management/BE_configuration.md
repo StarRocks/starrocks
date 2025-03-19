@@ -738,6 +738,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: The minimum speed of each replication thread.
 - Introduced in: v3.3.5
+
 ##### replication_min_speed_time_seconds
 
 - Default: 300

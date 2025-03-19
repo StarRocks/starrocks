@@ -197,6 +197,7 @@ Fixed the following issues:
 Release date: November 29, 2024
 
 ### New Features
+
 - Added a new Materialized View parameter, `excluded_refresh_tables`, exclude tables that need to be refreshed. [#50926](https://github.com/StarRocks/starrocks/pull/50926)
 
 ### Improvements

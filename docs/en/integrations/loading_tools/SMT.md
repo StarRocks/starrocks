@@ -5,6 +5,7 @@ displayed_sidebar: docs
 # StarRocks Migration Tool (SMT) 
 
 StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to load data from source databases through Flink into StarRocks. SMT mainly can:
+
 - Generate statements to create tables in StarRocks based on information of the source database and the target StarRocks cluster.
 - Generate SQL statements that can be executed in Flink's SQL client to submit Flink jobs for synchronizing data, which simplifies full or incremental data synchronization in the pipeline. Currently, SMT supports the following source databases:
 
