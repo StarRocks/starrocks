@@ -1732,12 +1732,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DATACACHE_SHARING)
     private boolean enableDataCacheSharing = true;
 
-    // Default: 10 minutes
     @VarAttr(name = DATACACHE_SHARING_WORK_PERIOD)
     private int datacacheSharingWorkPeriod = 600;
 
     @VarAttr(name = HISTORICAL_NODES_MIN_UPDATE_INTERVAL)
-    private int historicalNodesMinUpdateInterval = 60;
+    private int historicalNodesMinUpdateInterval = 600;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;

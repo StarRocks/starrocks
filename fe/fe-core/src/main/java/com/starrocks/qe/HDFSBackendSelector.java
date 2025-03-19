@@ -177,7 +177,6 @@ public class HDFSBackendSelector implements BackendSelector {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         if (!sessionVariable.isEnableDataCacheSharing() ||
                 isCacheSharingExpired(sessionVariable.getDataCacheSharingWorkPeriod())) {
-            LOG.error("[Gavin] init candidate worker provider failed");
             return null;
         }
 
@@ -197,7 +196,6 @@ public class HDFSBackendSelector implements BackendSelector {
         long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(warehouse.getName());
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastUpdateTime > cacheSharingWorkPeriod * 1000) {
-            LOG.error("[Gavin] cache sharing is expired");
             return true;
         }
         return false;
@@ -347,8 +345,6 @@ public class HDFSBackendSelector implements BackendSelector {
             Collection<ComputeNode> candidateWorkers = candidateWorkerProvider.getAllWorkers();
             if (!candidateWorkers.isEmpty()) {
                 candidateHashRing = makeHashRing(candidateWorkers);
-            } else {
-                LOG.error("[Gavin] found empty candidate workers");
             }
         }
 
@@ -394,12 +390,8 @@ public class HDFSBackendSelector implements BackendSelector {
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
         if (candidateWorker != null) {
-            LOG.debug("[Gavin] record scan range with target node: {}, candidate node: {}:{}", worker.getHost(),
-                    candidateWorker.getHost(), candidateWorker.getBeRpcPort());
             scanRangeParams.scan_range.hdfs_scan_range.setCandidate_node(
                     String.format("%s:%d", candidateWorker.getHost(), candidateWorker.getBrpcPort()));
-        } else {
-            LOG.error("record scan range with empty candidate");
         }
         assignment.put(worker.getId(), scanNode.getId().asInt(), scanRangeParams);
     }

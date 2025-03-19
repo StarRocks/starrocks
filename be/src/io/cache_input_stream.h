@@ -17,11 +17,9 @@
 #include <memory>
 #include <string>
 
-#include "butil/endpoint.h"
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/io_buffer.h"
 #include "io/shared_buffered_input_stream.h"
-#include "service/backend_options.h"
 
 namespace starrocks::io {
 

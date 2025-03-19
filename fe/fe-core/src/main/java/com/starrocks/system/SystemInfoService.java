@@ -199,8 +199,7 @@ public class SystemInfoService implements GsonPostProcessable {
         historicalNodeMgr.updateHistoricalComputeNodeIds(computeNodeIds, updateTime, warehouse);
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
                 new UpdateHistoricalNodeLog(warehouse, updateTime, null, computeNodeIds));
-        LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}", warehouse,
-                computeNodeIds);
+        LOG.info("update historical compute nodes, warehouse: {}, nodes: {}", warehouse, computeNodeIds);
     }
 
     // Final entry of adding compute node
@@ -228,7 +227,6 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void addBackends(AddBackendClause addBackendClause) throws DdlException {
-        LOG.info("[Gavin] add backends.");
         for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
             checkSameNodeExist(pair.first, pair.second);
         }
@@ -301,22 +299,19 @@ public class SystemInfoService implements GsonPostProcessable {
 
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
                     new UpdateHistoricalNodeLog(warehouse, updateTime, null, computeNodeIds));
-            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}", warehouse,
-                    computeNodeIds.toString());
+            LOG.info("update historical compute nodes, warehouse: {}, nodes: {}", warehouse, computeNodeIds.toString());
         } else {
             List<Long> backendIds = new ArrayList<>(idToBackendRef.keySet());
             historicalNodeMgr.updateHistoricalBackendIds(backendIds, updateTime, warehouse);
 
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
                     new UpdateHistoricalNodeLog(warehouse, updateTime, backendIds, null));
-            LOG.info("[Gavin] update historical backend nodes, warehouse: {}, nodeIds: {}", warehouse,
-                    backendIds.toString());
+            LOG.info("update historical backend nodes, warehouse: {}, nodeIds: {}", warehouse, backendIds.toString());
         }
     }
 
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
-        LOG.info("[Gavin] add backend {}.", host);
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
@@ -1109,7 +1104,6 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void replayAddComputeNode(ComputeNode newComputeNode) {
-        LOG.info("[Gavin] replay add new compute node: {}", newComputeNode);
         // update idToComputeNode
         newComputeNode.setBackendState(BackendState.using);
 

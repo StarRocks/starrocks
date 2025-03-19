@@ -14,14 +14,12 @@
 
 #include "cache/block_cache/peer_cache_wrapper.h"
 
-#include "common/closure_guard.h"
 #include "common/logging.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/internal_service_recoverable_stub.h"
-#include "util/ref_count_closure.h"
 #include "util/hash_util.hpp"
+#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {
 
@@ -30,14 +28,14 @@ Status PeerCacheWrapper::init(const CacheOptions& options) {
     return Status::OK();
 }
 
-Status PeerCacheWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                                     ReadCacheOptions* options) {
+Status PeerCacheWrapper::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                              ReadCacheOptions* options) {
     if (options->use_adaptor && !_cache_adaptor->check_read_cache()) {
         return Status::ResourceBusy("resource is busy");
     }
 
     std::shared_ptr<PInternalService_RecoverableStub> stub =
-        ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(options->remote_host, options->remote_port);
+            ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(options->remote_host, options->remote_port);
     PFetchDataCacheRequest request;
     PFetchDataCacheResponse response;
     request.set_request_id(butil::monotonic_time_ns());
@@ -49,10 +47,6 @@ Status PeerCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
     cntl.set_timeout_ms(1000);
 
     auto begin_us = GetCurrentTimeMicros();
-
-    VLOG_CACHE << "[Gavin] start fetch datacache, request_id: " << request.request_id()
-               << ", cache_id: " << HashUtil::hash64(key.data(), key.size(), 0)
-               << ", offset: " << off << ", size: " << size;
     Status st;
     do {
         stub->fetch_datacache(&cntl, &request, &response, nullptr);
@@ -69,11 +63,10 @@ Status PeerCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
         cntl.response_attachment().swap(buffer->raw_buf());
     } while (false);
 
-    VLOG_CACHE << "[Gavin] finish read buffer from peer node: " << options->remote_host
-               << ", cache_id: " << HashUtil::hash64(key.data(), key.size(), 0)
-               << ", offset: " << off << ", size: " << buffer->size()
-               << ", request_id: " << request.request_id() << ", st: " << st
-               << ", buf: " << buffer << ", latency_us: " << GetCurrentTimeMicros() - begin_us;
+    VLOG_CACHE << "finish read buffer from peer node: " << options->remote_host
+               << ", cache_key: " << HashUtil::hash64(key.data(), key.size(), 0) << ", offset: " << off
+               << ", size: " << buffer->size() << ", request_id: " << request.request_id() << ", st: " << st
+               << ", latency_us: " << GetCurrentTimeMicros() - begin_us;
     return st;
 }
 

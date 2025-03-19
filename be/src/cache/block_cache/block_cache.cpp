@@ -15,8 +15,6 @@
 #include "cache/block_cache/block_cache.h"
 
 #include <fmt/format.h>
-#include <memory>
-#include "cache/block_cache/disk_space_monitor.h"
 
 #include "runtime/exec_env.h"
 
@@ -82,9 +80,6 @@ Status BlockCache::write(const CacheKey& cache_key, off_t offset, const IOBuffer
         return Status::OK();
     }
 
-    VLOG_CACHE << "[Gavin] write buffer, cache_id: "<< HashUtil::hash64(cache_key.data(), cache_key.size(), 0)
-               << ", size: " << buffer.size();
-
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
     return _local_cache->write(block_key, buffer, options);
@@ -108,9 +103,6 @@ Status BlockCache::read(const CacheKey& cache_key, off_t offset, size_t size, IO
     if (size == 0) {
         return Status::OK();
     }
-
-    VLOG_CACHE << "[Gavin] read buffer, cache_id: "<< HashUtil::hash64(cache_key.data(), cache_key.size(), 0)
-               << ", size: " << size;
 
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
@@ -172,7 +164,7 @@ Status BlockCache::read_buffer_from_remote_cache(const std::string& cache_key, s
         return Status::OK();
     }
 
-    return _remote_cache->read_buffer(cache_key, offset, size, buffer, options);
+    return _remote_cache->read(cache_key, offset, size, buffer, options);
 }
 
 void BlockCache::record_read_remote_storage(size_t size, int64_t latency_us, bool local_only) {
@@ -194,13 +186,17 @@ Status BlockCache::shutdown() {
     if (!_initialized.load(std::memory_order_relaxed)) {
         return Status::OK();
     }
-    Status st = _local_cache->shutdown();
+    _initialized.store(false, std::memory_order_relaxed);
+
     if (_disk_space_monitor) {
         _disk_space_monitor->stop();
     }
-    _initialized.store(false, std::memory_order_relaxed);
+    Status local_st = _local_cache->shutdown();
+    Status remote_st = _remote_cache->shutdown();
     _local_cache.reset();
-    return st;
+    _remote_cache.reset();
+
+    return local_st.ok() ? remote_st : local_st;
 }
 
 void BlockCache::disk_spaces(std::vector<DirSpace>* spaces) {

@@ -28,7 +28,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * This class keeps a historical backend or compute node set with the update time.
+ * This class keeps a historical backend or compute node IDs with the update time.
  */
 public class HistoricalNodeSet implements Writable {
     @SerializedName(value = "backendIds")

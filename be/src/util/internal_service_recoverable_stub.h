@@ -84,7 +84,8 @@ public:
                                   const ::starrocks::PProcessDictionaryCacheRequest* request,
                                   ::starrocks::PProcessDictionaryCacheResult* response,
                                   ::google::protobuf::Closure* done);
-    void fetch_datacache(::google::protobuf::RpcController* controller, const ::starrocks::PFetchDataCacheRequest* request,
+    void fetch_datacache(::google::protobuf::RpcController* controller,
+                         const ::starrocks::PFetchDataCacheRequest* request,
                          ::starrocks::PFetchDataCacheResponse* response, ::google::protobuf::Closure* done);
 
 private:

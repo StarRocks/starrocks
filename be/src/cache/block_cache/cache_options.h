@@ -19,13 +19,12 @@
 #include <string>
 #include <vector>
 
-#include "common/status.h"
 #include "cache/block_cache/dummy_types.h"
+#include "common/status.h"
 
 #ifdef WITH_STARCACHE
 #include "starcache/star_cache.h"
 #endif
-
 
 namespace starrocks {
 
@@ -114,11 +113,9 @@ struct ReadCacheOptions {
 // object cache and we'll deprecate it for some performance reasons. Now there is no need to
 // pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
 #ifdef WITH_STARCACHE
-using DataCacheHandle = starcache::ObjectHandle;
 using DataCacheMetrics = starcache::CacheMetrics;
 using DataCacheStatus = starcache::CacheStatus;
 #else
-using DataCacheHandle = DummyCacheHandle;
 using DataCacheMetrics = DummyCacheMetrics;
 using DataCacheStatus = DummyCacheStatus;
 #endif

@@ -605,8 +605,8 @@ void PInternalServiceImplBase<T>::_fetch_data(google::protobuf::RpcController* c
 
 template <typename T>
 void PInternalServiceImplBase<T>::fetch_datacache(google::protobuf::RpcController* cntl_base,
-                                                  const PFetchDataCacheRequest* request, PFetchDataCacheResponse* response,
-                                                  google::protobuf::Closure* done) {
+                                                  const PFetchDataCacheRequest* request,
+                                                  PFetchDataCacheResponse* response, google::protobuf::Closure* done) {
     auto task = [=]() { this->_fetch_datacache(cntl_base, request, response, done); };
     if (!_exec_env->datacache_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
@@ -616,8 +616,8 @@ void PInternalServiceImplBase<T>::fetch_datacache(google::protobuf::RpcControlle
 
 template <typename T>
 void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcController* cntl_base,
-                                                   const PFetchDataCacheRequest* request, PFetchDataCacheResponse* response,
-                                                   google::protobuf::Closure* done) {
+                                                   const PFetchDataCacheRequest* request,
+                                                   PFetchDataCacheResponse* response, google::protobuf::Closure* done) {
     auto begin_us = GetCurrentTimeMicros();
     // NOTE: we should give a default value to response to avoid concurrent risk
     // If we don't give response here, stream manager will call done->Run before
@@ -626,9 +626,9 @@ void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcControll
     Status st;
     st.to_protobuf(response->mutable_status());
 
-    VLOG_CACHE << "[Gavin] recv fetch_datacache from " << cntl->remote_side().ip << ":" << cntl->remote_side().port
+    VLOG_CACHE << "recv fetch_datacache from " << cntl->remote_side().ip << ":" << cntl->remote_side().port
                << ", request_id: " << request->request_id()
-               << ", cache_id: " << HashUtil::hash(request->cache_key().data(), request->cache_key().size(), 0)
+               << ", cache_key: " << HashUtil::hash(request->cache_key().data(), request->cache_key().size(), 0)
                << ", offset: " << request->offset() << ", size: " << request->size();
 
     BlockCache* block_cache = BlockCache::instance();
@@ -637,20 +637,20 @@ void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcControll
     } else {
         ReadCacheOptions options;
         IOBuffer buf;
-        st = block_cache->read_buffer(request->cache_key(), request->offset(), request->size(), &buf, &options);
+        st = block_cache->read(request->cache_key(), request->offset(), request->size(), &buf, &options);
         if (st.ok()) {
             cntl->response_attachment().swap(buf.raw_buf());
         }
     }
-    LOG_IF(WARNING, !st.ok()) << "failed to fetch datacache, req_id: " << request->request_id() << ", reason: "
-                              << st.message();
+    LOG_IF(WARNING, !st.ok()) << "failed to fetch datacache, req_id: " << request->request_id()
+                              << ", reason: " << st.message();
 
     if (done != nullptr) {
         // NOTE: only when done is not null, we can set response status
         st.to_protobuf(response->mutable_status());
         done->Run();
     }
-    VLOG_CACHE << "[Gavin] finish fetch_datacache, request_id: " << request->request_id() << ", st: " << st
+    VLOG_CACHE << "finish fetch_datacache, request_id: " << request->request_id() << ", st: " << st
                << ", size: " << cntl->response_attachment().size()
                << ", latency_us: " << GetCurrentTimeMicros() - begin_us;
 }

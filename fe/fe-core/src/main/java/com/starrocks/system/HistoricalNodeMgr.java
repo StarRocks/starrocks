@@ -42,7 +42,6 @@ public class HistoricalNodeMgr {
 
     public void updateHistoricalBackendIds(List<Long> backendIds, long currentTime, String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.computeIfAbsent(warehouse, k -> new HistoricalNodeSet());
-        //int minUpdateInterval = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
         nodeSet.updateHistoricalBackendIds(backendIds, currentTime);
     }
 
@@ -80,7 +79,6 @@ public class HistoricalNodeMgr {
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        LOG.info("start save image for historical node manager");
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Map<String, HistoricalNodeSet> serializedHistoricalNodes = whToComputeNodeIds.entrySet().stream()
                 .filter(entry -> warehouseManager.warehouseExists(entry.getKey()))
@@ -95,13 +93,11 @@ public class HistoricalNodeMgr {
             writer.writeJson(nodeSetEntry.getValue());
         }
         writer.close();
-        LOG.info("finish save image for historical node manager, whToComputeNodeIds: {}, serializedHistoricalNodes: {}",
-                whToComputeNodeIds, serializedHistoricalNodes);
+        LOG.info("save image for historical node manager, serializedHistoricalNodes: {}", serializedHistoricalNodes);
     }
 
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
-        LOG.info("start load image for historical");
         reader.readMap(String.class, HistoricalNodeSet.class, whToComputeNodeIds::put);
-        LOG.info("finish load image for historical node manager, whToComputeNodeIds: {}", whToComputeNodeIds);
+        LOG.info("load image for historical node manager, whToComputeNodeIds: {}", whToComputeNodeIds);
     }
 }
