@@ -277,14 +277,14 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
             // TopN Sorter needs timing when updating
             iteration_data_size += ck->bytes_usage();
             state.ResumeTiming();
-            ASSERT_TRUE(sorter->update(runtime_state, ck).ok());
+            sorter->update(runtime_state, ck);
             state.PauseTiming();
             mem_usage = std::max(mem_usage, sorter->mem_usage());
         }
         data_size = std::max(data_size, iteration_data_size);
 
         state.ResumeTiming();
-        ASSERT_TRUE(sorter->done(suite._runtime_state.get()).ok());
+        sorter->done(suite._runtime_state.get());
         item_processed += total_rows;
         state.PauseTiming();
         mem_usage = std::max(mem_usage, sorter->mem_usage());
@@ -293,13 +293,13 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         size_t actual_rows = 0;
         while (!eos) {
             ChunkPtr page;
-            ASSERT_TRUE(sorter->get_next(&page, &eos).ok());
+            sorter->get_next(&page, &eos);
             if (eos) break;
             actual_rows += page->num_rows();
         }
         ASSERT_TRUE(eos);
         ASSERT_EQ(expected_rows, actual_rows);
-        ASSERT_TRUE(sorter->done(suite._runtime_state.get()).ok());
+        sorter->done(suite._runtime_state.get());
     }
     state.counters["rows_sorted"] += item_processed;
     state.counters["data_size"] += data_size;
@@ -438,7 +438,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
             }
         }
         SortedRuns merged;
-        ASSERT_TRUE(merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged).ok());
+        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
         ASSERT_EQ(input_rows, merged.num_rows());
 
         num_rows += merged.num_rows();
