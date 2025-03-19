@@ -177,9 +177,6 @@ private:
     const size_t _offset;
     const TTopNType::type _topn_type;
 
-<<<<<<< HEAD
-    std::vector<JoinRuntimeFilter*> _runtime_filter;
-=======
     int _highest_nozero_pos(size_t val) {
         if (val == 0) {
             return 0;
@@ -199,7 +196,6 @@ private:
     size_t _buffered_chunks_capacity;
 
     std::vector<RuntimeFilter*> _runtime_filter;
->>>>>>> 54091b8764 ([BugFix] Fix topn with large limit  offset regression (#56590))
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_timer = nullptr;
