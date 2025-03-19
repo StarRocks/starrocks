@@ -38,7 +38,7 @@ USE test_insert_auto_increment;
 ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
 
 CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
-INSERT INTO t (name,job1,job2) VALUES (1,1,1),(2,2,2);
+INSERT INTO t (id, name,job1,job2) VALUES (DEFAULT, 1,1,1),(2,2,2);
 SELECT * FROM t ORDER BY name;
 
 INSERT INTO t (id,name,job1,job2) VALUES (DEFAULT,3,3,3),(DEFAULT,4,4,4);
@@ -57,7 +57,7 @@ CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 
 INSERT INTO t (id,name,job1,job2) VALUES (1,1,1,1),(100000,1,2,2);
 SELECT * FROM t ORDER BY job1;
 
-INSERT INTO t (name,job1,job2) VALUES (1,100,100);
+INSERT INTO t (id, name,job1,job2) VALUES (DEFAULT, 1,100,100);
 SELECT * FROM t ORDER BY job1;
 
 INSERT INTO t (id,name,job1,job2) VALUES (100000,1,100,100);
@@ -95,11 +95,6 @@ INSERT INTO t1 (id,name,job1,job2) VALUES (DEFAULT,1,1,1);
 INSERT INTO t2 (id,name,job1,job2) VALUES (1,DEFAULT,1,1);
 INSERT INTO t3 (id,name,job1,job2) VALUES (1,1,DEFAULT,1);
 INSERT INTO t4 (id,name,job1,job2) VALUES (1,1,1,DEFAULT);
-
-INSERT INTO t1 (name,job1,job2) VALUES (1,1,1);
-INSERT INTO t2 (id,job1,job2) VALUES (1,1,1);
-INSERT INTO t3 (id,name,job2) VALUES (1,1,1);
-INSERT INTO t4 (id,name,job1) VALUES (1,1,1);
 
 DROP TABLE t1;
 DROP TABLE t2;
@@ -275,7 +270,7 @@ SELECT * FROM t_auto_increment_partial_update_only;
 DROP TABLE t_auto_increment_partial_update_only;
 DROP DATABASE test_auto_increment_partial_update_only;
 
--- name: test_auto_increment_insert_partial_update
+-- name: test_auto_increment_insert_partial_update @sequential
 ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
 CREATE TABLE `t_auto_increment_insert_partial_update` (
   `k` STRING NOT NULL COMMENT "",
