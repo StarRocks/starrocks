@@ -92,6 +92,7 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(AnalyzeStatusSystemTable.create());
             super.registerTableUnlocked(ClusterSnapshotsTable.create());
             super.registerTableUnlocked(ClusterSnapshotJobsTable.create());
+            super.registerTableUnlocked(ApplicableRolesSystemTable.create());
             super.registerTableUnlocked(KeywordsSystemTable.create());
         }
     }

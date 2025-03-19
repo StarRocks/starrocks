@@ -22,7 +22,10 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
 import com.starrocks.thrift.TGetKeywordsRequest;
 import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
@@ -422,5 +425,42 @@ public class InformationSchemaDataSourceTest {
                 .orElse(null);
         Assert.assertNotNull("USER keyword should be present", userKeyword);
         Assert.assertFalse("USER keyword should not be reserved", userKeyword.isReserved());
+    }
+
+    @Test
+    public void testGetApplicableRoles() throws Exception {
+        starRocksAssert.withEnableMV();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TGetApplicableRolesRequest req = new TGetApplicableRolesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetApplicableRolesResponse response = impl.getApplicableRoles(req);
+        List<TApplicableRolesInfo> rolesList = response.getRoles();
+
+        Assert.assertNotNull("Roles list should not be null", rolesList);
+        Assert.assertFalse("Roles list should not be empty", rolesList.isEmpty());
+
+        List<String> roleNames = rolesList.stream()
+                .map(TApplicableRolesInfo::getRole_name)
+                .collect(Collectors.toList());
+
+        Assert.assertTrue("Roles should contain 'root'", roleNames.contains("root"));
+
+        TApplicableRolesInfo adminRole = rolesList.stream()
+                .filter(r -> r.getRole_name().equals("root"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("root role should be present", adminRole);
+        Assert.assertEquals("User should be root", "root", adminRole.getUser());
+        Assert.assertEquals("Host should be %", "%", adminRole.getHost());
+        Assert.assertEquals("isGrantable should be NO", "NO", "NO");
+        Assert.assertEquals("isDefault should be NO", "NO", "NO");
+        Assert.assertEquals("isMandatory should be NO", "NO", "NO");
     }
 }

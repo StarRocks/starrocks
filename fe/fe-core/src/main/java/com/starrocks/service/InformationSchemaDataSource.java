@@ -18,6 +18,9 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -52,7 +55,10 @@ import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
 import com.starrocks.thrift.TGetKeywordsRequest;
 import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
@@ -206,7 +212,6 @@ public class InformationSchemaDataSource {
         resp.setKeywords(keywordList);
         return resp;
     }
-
 
     private static class AuthDbRequestResult {
         public final List<String> authorizedDbs;
@@ -603,6 +608,56 @@ public class InformationSchemaDataSource {
             }
         }
         response.setTables_infos(infos);
+        return response;
+    }
+
+    // applicable_roles
+    public static TGetApplicableRolesResponse generateApplicableRolesResp(TGetApplicableRolesRequest request) throws TException {
+        TGetApplicableRolesResponse response = new TGetApplicableRolesResponse();
+        List<TApplicableRolesInfo> roleList = new ArrayList<>();
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        if (result.authorizedDbs.isEmpty()) {
+            response.setRoles(roleList);
+            return response;
+        }
+
+        UserIdentity currentUser = result.currentUser;
+        if (currentUser == null) {
+            response.setRoles(roleList);
+            return response;
+        }
+
+        AuthorizationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser)) {
+                String roleName = role.getName();
+                String roleHost = "%";
+
+                // TODO The related functions of 'isGrantable' may be expanded in the future
+                String isGrantable = "NO";
+                String isDefault = "NO";
+                String isMandatory = "NO";
+
+                TApplicableRolesInfo roleInfo = new TApplicableRolesInfo();
+                roleInfo.setUser(currentUser.getUser());
+                roleInfo.setHost(currentUser.getHost());
+                roleInfo.setGrantee(currentUser.getUser());
+                roleInfo.setGrantee_host(currentUser.getHost());
+                roleInfo.setRole_name(roleName);
+                roleInfo.setRole_host(roleHost);
+                roleInfo.setIs_grantable(isGrantable);
+                roleInfo.setIs_default(isDefault);
+                roleInfo.setIs_mandatory(isMandatory);
+
+                roleList.add(roleInfo);
+            }
+        } catch (PrivilegeException e) {
+            throw new RuntimeException(e);
+        }
+
+        response.setRoles(roleList);
         return response;
     }
 

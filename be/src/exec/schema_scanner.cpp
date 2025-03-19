@@ -20,6 +20,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/schema_scanner/schema_analyze_status.h"
+#include "exec/schema_scanner/schema_applicable_roles_scanner.h"
 #include "exec/schema_scanner/schema_be_bvars_scanner.h"
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
@@ -226,6 +227,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaClusterSnapshotsScanner>();
     case TSchemaTableType::SCH_CLUSTER_SNAPSHOT_JOBS:
         return std::make_unique<SchemaClusterSnapshotJobsScanner>();
+    case TSchemaTableType::SCH_APPLICABLE_ROLES:
+        return std::make_unique<SchemaApplicableRolesScanner>();
     case TSchemaTableType::SCH_KEYWORDS:
         return std::make_unique<SchemaKeywordsScanner>();
     default:

@@ -1,0 +1,32 @@
+-- name: test_applicable_roles
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+SELECT * FROM information_schema.applicable_roles ORDER BY ROLE_NAME ASC;
+
+SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME = 'root';
+
+SELECT * FROM information_schema.applicable_roles WHERE IS_GRANTABLE = 'NO';
+
+SELECT * FROM information_schema.applicable_roles WHERE IS_DEFAULT = 'NO';
+
+SELECT * FROM information_schema.applicable_roles WHERE IS_MANDATORY = 'NO';
+
+SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME LIKE 'r%' ORDER BY ROLE_NAME ASC;
+
+SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME IN ('root', 'admin') ORDER BY ROLE_NAME ASC;
+
+SELECT * FROM information_schema.applicable_roles ORDER BY IS_DEFAULT DESC, ROLE_NAME ASC;
+
+SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME = 'NON_EXISTENT_ROLE';
+
+DROP USER IF EXISTS test_user;
+CREATE USER test_user IDENTIFIED BY 'password';
+
+GRANT SELECT ON information_schema.applicable_roles TO test_user;
+
+SELECT * FROM information_schema.applicable_roles;
+
+DROP USER test_user;
+
+DROP DATABASE db_${uuid0};
