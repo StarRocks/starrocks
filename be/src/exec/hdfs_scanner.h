@@ -204,13 +204,7 @@ struct HdfsScannerParams {
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
-<<<<<<< HEAD
-    const TIcebergSchema* iceberg_schema = nullptr;
-=======
-    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
-
     const TIcebergSchema* lake_schema = nullptr;
->>>>>>> 9e3fe1c4f1 ([BugFix] Support paimon schema change (#56796))
 
     const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
 

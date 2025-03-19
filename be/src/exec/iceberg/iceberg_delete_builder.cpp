@@ -38,7 +38,6 @@ static const IcebergColumnMeta k_delete_file_path{
 static const IcebergColumnMeta k_delete_file_pos{
         .id = INT32_MAX - 102, .col_name = "pos", .type = TPrimitiveType::BIGINT};
 
-<<<<<<< HEAD
 Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
                                            int64_t file_length, std::set<int64_t>* need_skip_rowids) {
     std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
@@ -46,106 +45,6 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
     auto iter = std::make_unique<IcebergDeleteFileIterator>();
     RETURN_IF_ERROR(iter->init(_fs, timezone, delete_file_path, file_length, slot_descriptors, true));
     std::shared_ptr<::arrow::RecordBatch> batch;
-=======
-StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
-        const TIcebergDeleteFile& delete_file, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
-        std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<io::CacheInputStream>& cache_input_stream) const {
-    const OpenFileOptions options{.fs = _params.fs,
-                                  .path = delete_file.full_path,
-                                  .file_size = delete_file.length,
-                                  .fs_stats = &fs_scan_stats,
-                                  .app_stats = &app_scan_stats,
-                                  .datacache_options = _params.datacache_options};
-    ASSIGN_OR_RETURN(auto file,
-                     HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
-    std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
-    int64_t offset = 0;
-    while (offset < delete_file.length) {
-        const int64_t remain_length =
-                std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), delete_file.length - offset);
-        io_ranges.emplace_back(offset, remain_length);
-        offset += remain_length;
-    }
-
-    RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
-    return file;
-}
-
-Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
-    const ColumnPtr& file_path = chunk->get_column_by_slot_id(k_delete_file_path.id);
-    const ColumnPtr& pos = chunk->get_column_by_slot_id(k_delete_file_pos.id);
-    for (int i = 0; i < chunk->num_rows(); i++) {
-        if (file_path->get(i).get_slice() == _params.path) {
-            _deletion_bitmap->add_value(pos->get(i).get_int64());
-        }
-    }
-    return Status::OK();
-}
-
-Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {
-    HdfsScanStats app_scan_stats;
-    HdfsScanStats fs_scan_stats;
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
-    std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
-
-    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_scan_stats, app_scan_stats,
-                                                        shared_buffered_input_stream, cache_input_stream));
-
-    std::unique_ptr<parquet::FileReader> reader;
-    try {
-        reader = std::make_unique<parquet::FileReader>(_runtime_state->chunk_size(), file.get(),
-                                                       file->get_size().value());
-    } catch (std::exception& e) {
-        const auto s = strings::Substitute(
-                "IcebergDeleteBuilder::build_parquet create parquet::FileReader failed. reason = $0", e.what());
-        LOG(WARNING) << s;
-        return Status::InternalError(s);
-    }
-
-    auto scanner_ctx = std::make_unique<HdfsScannerContext>();
-    std::vector<HdfsScannerContext::ColumnInfo> columns;
-    THdfsScanRange scan_range;
-    scan_range.offset = 0;
-    scan_range.length = delete_file.length;
-    std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
-                                 &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
-    for (size_t i = 0; i < slot_descriptors.size(); i++) {
-        auto* slot = slot_descriptors[i];
-        HdfsScannerContext::ColumnInfo column;
-        column.slot_desc = slot;
-        column.idx_in_chunk = i;
-        column.decode_needed = true;
-        columns.emplace_back(column);
-    }
-
-    std::vector<TIcebergSchemaField> schema_fields;
-
-    // build file path field
-    TIcebergSchemaField file_path_field;
-    file_path_field.__set_field_id(k_delete_file_path.id);
-    file_path_field.__set_name(k_delete_file_path.col_name);
-    schema_fields.push_back(file_path_field);
-
-    // build position field
-    TIcebergSchemaField pos_field;
-    pos_field.__set_field_id(k_delete_file_pos.id);
-    pos_field.__set_name(k_delete_file_pos.col_name);
-    schema_fields.push_back(pos_field);
-
-    TIcebergSchema iceberg_schema = TIcebergSchema();
-    iceberg_schema.__set_fields(schema_fields);
-
-    std::atomic<int32_t> lazy_column_coalesce_counter = 0;
-    scanner_ctx->timezone = timezone;
-    scanner_ctx->slot_descs = slot_descriptors;
-    scanner_ctx->lake_schema = &iceberg_schema;
-    scanner_ctx->materialized_columns = std::move(columns);
-    scanner_ctx->scan_range = &scan_range;
-    scanner_ctx->lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
-    scanner_ctx->stats = &app_scan_stats;
-    RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
->>>>>>> 9e3fe1c4f1 ([BugFix] Support paimon schema change (#56796))
 
     Status status;
     while (true) {
@@ -318,7 +217,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
     scanner_ctx->timezone = timezone;
     scanner_ctx->stats = scan_stats.get();
     scanner_ctx->tuple_desc = delete_column_tuple_desc;
-    scanner_ctx->iceberg_schema = iceberg_equal_delete_schema;
+    scanner_ctx->lake_schema = iceberg_equal_delete_schema;
     scanner_ctx->materialized_columns = std::move(columns);
     scanner_ctx->scan_range = &scan_range;
     scanner_ctx->lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
