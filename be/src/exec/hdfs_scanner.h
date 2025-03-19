@@ -204,7 +204,7 @@ struct HdfsScannerParams {
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
-    const TIcebergSchema* iceberg_schema = nullptr;
+    const TIcebergSchema* lake_schema = nullptr;
 
     const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
 
@@ -289,7 +289,7 @@ struct HdfsScannerContext {
 
     std::string timezone;
 
-    const TIcebergSchema* iceberg_schema = nullptr;
+    const TIcebergSchema* lake_schema = nullptr;
 
     HdfsScanStats* stats = nullptr;
 

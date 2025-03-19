@@ -2451,7 +2451,7 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
             {""},
     };
     auto ctx = _create_scan_context(slot_descs, min_max_slots, filepath);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(TExprOpcode::GE, 2, 5, &t_conjuncts);

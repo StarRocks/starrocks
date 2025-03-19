@@ -614,9 +614,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
-        scanner_params.iceberg_schema = tbl->get_iceberg_schema();
+        scanner_params.lake_schema = tbl->get_iceberg_schema();
         scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
     }
+
+    if (dynamic_cast<const PaimonTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
+        scanner_params.lake_schema = tbl->get_paimon_schema();
+    }
+
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
         scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
     }
