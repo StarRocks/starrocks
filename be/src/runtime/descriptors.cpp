@@ -331,6 +331,7 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
         : HiveTableDescriptor(tdesc, pool) {
     _paimon_native_table = tdesc.paimonTable.paimon_native_table;
     _time_zone = tdesc.paimonTable.time_zone;
+    _t_paimon_schema = tdesc.paimonTable.paimon_schema;
 }
 
 const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
