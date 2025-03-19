@@ -60,8 +60,8 @@ public class CustomLdapSslSocketFactory extends SSLSocketFactory {
         try {
             customLdapSslSockFactory = CustomLdapSslSocketFactory.getSingletonInstance();
         } catch (Exception e) {
-            throw new RuntimeException(
-                    "Failed create CustomSslSocketFactory. Exception: " + e.getClass().getSimpleName() + ". Reason: " +
+            throw new CustomLdapSslSocketFactoryException(
+                    "Failed to create CustomSslSocketFactory. Exception: " + e.getClass().getSimpleName() + ". Reason: " +
                             e.getMessage(), e);
         }
         return customLdapSslSockFactory;
@@ -83,8 +83,7 @@ public class CustomLdapSslSocketFactory extends SSLSocketFactory {
         trustFactory.init(trustStore);
         SSLContext sslContext = SSLContext.getInstance(sslContextProtocol);
         sslContext.init(null, trustFactory.getTrustManagers(), null);
-        SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-        return sslSocketFactory;
+        return sslContext.getSocketFactory();
     }
 
     @Override
