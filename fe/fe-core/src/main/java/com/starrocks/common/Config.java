@@ -1862,6 +1862,24 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_column_level_privilege = false;
 
     /**
+     * ldap server protocol for authentication_ldap_simple
+     */
+    @ConfField(mutable = true)
+    public static String authentication_ldap_simple_server_protocol = "ldap";
+
+    /**
+     * ldaps trust store path for authentication_ldap_simple
+     */
+    @ConfField(mutable = true)
+    public static String authentication_ldaps_trust_store_path = null;
+
+    /**
+     * ldaps trust store password for authentication_ldap_simple
+     */
+    @ConfField(mutable = true)
+    public static String authentication_ldaps_trust_store_password = null;
+
+    /**
      * ldap server host for authentication_ldap_simple
      */
     @ConfField(mutable = true)
