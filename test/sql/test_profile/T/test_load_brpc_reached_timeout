@@ -27,7 +27,7 @@ function: wait_materialized_view_finish()
 
 admin enable failpoint "node_channel_set_brpc_timeout";
 admin enable failpoint "tablets_channel_add_chunk_wait_write_block";
-update information_schema.be_configs set value = "0" where name= "load_diagnose_small_rpc_timeout_threshold_ms";
+update information_schema.be_configs set value = "0" where name= "load_diagnose_rpc_timeout_profile_threshold_ms";
 update information_schema.be_configs set value = "30000" where name= "load_diagnose_send_rpc_timeout_ms";
 update information_schema.be_configs set value = "2000" where name= "load_fp_brpc_timeout_ms";
 update information_schema.be_configs set value = "10000" where name= "load_fp_tablets_channel_add_chunk_block_ms";

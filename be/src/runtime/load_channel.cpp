@@ -39,6 +39,8 @@
 #include "common/closure_guard.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
+#include "runtime/diagnose_daemon.h"
+#include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
@@ -429,7 +431,8 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     }
 }
 
-void LoadChannel::diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* result) {
+void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request,
+                           PLoadDiagnoseResult* result) {
     if (request->has_profile() && request->profile()) {
         Status st = _update_and_serialize_profile(result->mutable_profile_data(), config::pipeline_print_profile);
         result->mutable_profile_status()->set_status_code(st.code());
@@ -437,8 +440,22 @@ void LoadChannel::diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseRes
         if (!st.ok()) {
             result->clear_profile_data();
         }
-        VLOG(2) << "load channel diagnose profile, load_id: " << _load_id << ", txn_id: " << _txn_id
+        VLOG(2) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
                 << ", status: " << st;
+    }
+    if (request->has_stack_trace() && request->stack_trace()) {
+        DiagnoseRequest stack_trace_request;
+        stack_trace_request.type = DiagnoseType::STACK_TRACE;
+        stack_trace_request.context =
+                fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
+        Status st = ExecEnv::GetInstance()->diagnose_daemon()->diagnose(stack_trace_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                         << ", status: " << st;
+        }
+        result->mutable_stack_trace_status()->set_status_code(st.code());
+        result->mutable_stack_trace_status()->add_error_msgs(st.to_string());
+        VLOG(2) << "load channel diagnose stack trace, " << stack_trace_request.context << ", status: " << st;
     }
 }
 

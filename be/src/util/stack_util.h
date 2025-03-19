@@ -32,7 +32,7 @@ std::vector<int> get_thread_id_list();
 bool install_stack_trace_sighandler();
 std::string get_stack_trace_for_thread(int tid, int timeout_ms);
 std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeout_ms);
-std::string get_stack_trace_for_all_threads();
+std::string get_stack_trace_for_all_threads(const std::string& line_prefix = "");
 // get all thread stack trace, and filter by function pattern
 std::string get_stack_trace_for_function(const std::string& function_pattern);
 

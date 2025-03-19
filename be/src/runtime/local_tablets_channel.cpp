@@ -55,6 +55,7 @@
 namespace starrocks {
 
 DEFINE_FAIL_POINT(tablets_channel_add_chunk_wait_write_block);
+DEFINE_FAIL_POINT(tablets_channel_wait_secondary_replica_block);
 
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
@@ -347,6 +348,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             // Wait util seconary replica commit/abort by primary
             if (delta_writer->replica_state() == Secondary) {
                 int i = 0;
+                int64_t start_wait_time_ms = MonotonicMillis();
+                bool trigger_diagnose = false;
                 do {
                     auto state = delta_writer->get_state();
                     if (state == kCommitted || state == kAborted || state == kUninitialized) {
@@ -355,6 +358,17 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     i++;
                     // only sleep in bthread
                     bthread_usleep(10000); // 10ms
+                    FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_wait_secondary_replica_block, {
+                        int32_t timeout_ms = config::load_fp_tablets_channel_wait_secondary_replica_block_ms;
+                        if (timeout_ms > 0) {
+                            bthread_usleep(timeout_ms * 1000);
+                        }
+                    });
+                    if (!trigger_diagnose && (MonotonicMillis() - start_wait_time_ms >
+                                              config::load_diagnose_rpc_timeout_stack_trace_threshold_ms)) {
+                        _diagnose_primary_replica_stack_trace(tablet_id, request.id(), delta_writer.get());
+                        trigger_diagnose = true;
+                    }
                     auto elapse_time_ms = watch.elapsed_time() / 1000000;
                     if (elapse_time_ms > request.timeout_ms()) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
@@ -1155,6 +1169,41 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_UPDATE_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns);
+}
+
+void LocalTabletsChannel::_diagnose_primary_replica_stack_trace(int64_t tablet_id, const PUniqueId& load_id,
+                                                                AsyncDeltaWriter* async_delta_writer) {
+    auto delta_writer = async_delta_writer->writer();
+    if (delta_writer->replica_state() != ReplicaState::Secondary || delta_writer->replicas().empty()) {
+        return;
+    }
+    auto& primary_replica = delta_writer->replicas()[0];
+    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+    if (stub == nullptr) {
+        LOG(WARNING) << "failed to diagnose primary replica, txn_id: " << _txn_id << ", load_id: " << print_id(load_id)
+                     << ", tablet_id: " << tablet_id << ", primary_replica: [" << primary_replica.host() << ":"
+                     << primary_replica.port() << "]";
+        return;
+    }
+    auto closure = new ReusableClosure<PLoadDiagnoseResult>();
+    closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
+    SET_IGNORE_OVERCROWDED(closure->cntl, load);
+    PLoadDiagnoseRequest request;
+    request.mutable_id()->set_hi(load_id.hi());
+    request.mutable_id()->set_hi(load_id.lo());
+    request.set_txn_id(_txn_id);
+    request.set_stack_trace(true);
+    closure->ref();
+#ifndef BE_TEST
+    // best effort to diagnose so do not wait the result
+    stub->load_diagnose(&closure->cntl, &request, &closure->result, closure);
+#else
+    std::pair<PLoadDiagnoseRequest*, ReusableClosure<PLoadDiagnoseResult>*> rpc_pair{&request, closure};
+    TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::rpc::load_diagnose_send", &rpc_pair);
+#endif
+    LOG(INFO) << "send request to diagnose primary replica, txn_id: " << _txn_id << ", load_id: " << print_id(load_id)
+              << ", tablet_id: " << tablet_id << ", primary_replica: [" << primary_replica.host() << ":"
+              << primary_replica.port() << "]";
 }
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

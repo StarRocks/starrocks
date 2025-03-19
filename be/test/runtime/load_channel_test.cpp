@@ -798,13 +798,16 @@ TEST_F(LoadChannelTestForLakeTablet, test_load_diagnose) {
     diagnose_request.mutable_id()->set_hi(0);
     diagnose_request.mutable_id()->set_lo(0);
     diagnose_request.set_profile(true);
+    diagnose_request.set_stack_trace(true);
 
     PLoadDiagnoseResult diagnose_result;
-    _load_channel->diagnose(&diagnose_request, &diagnose_result);
+    _load_channel->diagnose("192.168.0.1", &diagnose_request, &diagnose_result);
 
     ASSERT_TRUE(diagnose_result.has_profile_status());
     ASSERT_OK(Status(diagnose_result.profile_status()));
     ASSERT_TRUE(diagnose_result.has_profile_data());
+    ASSERT_TRUE(diagnose_result.has_stack_trace_status());
+    ASSERT_OK(Status(diagnose_result.stack_trace_status()));
 
     const auto* buf = (const uint8_t*)(diagnose_result.profile_data().data());
     uint32_t len = diagnose_result.profile_data().size();

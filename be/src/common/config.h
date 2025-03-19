@@ -485,16 +485,24 @@ CONF_mInt32(load_rpc_slow_log_frequency_threshold_seconds, "60");
 // Whether to enable load diagnose. The diagnosis is initiated by OlapTableSink when meeting brpc timeout
 // from LoadChannel. It will send rpc to LoadChannel to check the status.
 CONF_mBool(enable_load_diagnose, "true");
-// If the rpc timeout exceeds this threshold, then diagnostics will be performed every time a timeout occurs;
-// if it is below this threshold, diagnostics will be performed once every 20 timeouts. This is used to avoid
-// frequent diagnostics for real-time loads which have a smaller brpc timeout.
-CONF_mInt32(load_diagnose_small_rpc_timeout_threshold_ms, "60000");
 // The timeout of the diagnosis rpc sent from OlapTableSink to LoadChannel
 CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "2000");
+// If the rpc timeout exceeds this threshold, then profile diagnostics will be performed every time
+// a timeout occurs; if it is below this threshold, diagnostics will be performed once every 20 timeouts.
+// This is used to avoid frequent diagnostics for real-time loads which have a smaller brpc timeout.
+CONF_mInt32(load_diagnose_rpc_timeout_profile_threshold_ms, "60000");
+// If the rpc timeout exceeds this threshold, then stack trace diagnostics will be enabled.
+// OlapTableSink will send stack trace request to the target BE.
+CONF_mInt32(load_diagnose_rpc_timeout_stack_trace_threshold_ms, "600000");
 // Used in load fail point. The brpc timeout used to simulate brpc exception "[E1008]Reached timeout"
 CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
 // Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
 CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
+// Used in load fail point. The block time to simulate waiting secondary replica spends much time
+CONF_mInt32(load_fp_tablets_channel_wait_secondary_replica_block_ms, "-1");
+
+// The interval for performing stack trace to control the frequency.
+CONF_mInt64(diagnose_stack_trace_interval_ms, "1800000");
 
 CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
