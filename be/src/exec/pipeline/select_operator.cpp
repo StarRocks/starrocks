@@ -87,7 +87,6 @@ bool SelectOperator::need_input() const {
 Status SelectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _curr_chunk = chunk;
     if (!_common_exprs.empty()) {
-        _curr_chunk->reset_schema();
         SCOPED_TIMER(_conjuncts_timer);
         for (const auto& [slot_id, expr] : _common_exprs) {
             ASSIGN_OR_RETURN(auto col, expr->evaluate(_curr_chunk.get()));
