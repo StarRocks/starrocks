@@ -2179,17 +2179,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> chosenBackendIds = systemInfoService.getNodeSelector()
                 .seqChooseBackendIds(replicationNum, true, true, locReq);
-        if (!CollectionUtils.isEmpty(chosenBackendIds)) {
-            return chosenBackendIds;
-        } else if (replicationNum > 1) {
-            List<Long> backendIds = systemInfoService.getBackendIds(true);
+        if (CollectionUtils.isEmpty(chosenBackendIds)) {
+            List<Long> backendIds = systemInfoService.getAvailableBackends().stream()
+                    .filter(b -> !b.checkDiskExceedLimitForCreate()).map(Backend::getId).collect(Collectors.toList());
             throw new DdlException(
-                    String.format("Table replication num should be less than or equal to the number of available BE nodes. "
-                            + "You can change this default by setting the replication_num table properties. "
-                            + "Current alive backend is [%s]. ", Joiner.on(",").join(backendIds)));
-        } else {
-            throw new DdlException("No alive nodes");
+                    String.format("Table replication num should be less than or equal to the number of available backends. "
+                                    + "You can change this default by setting the replication_num table properties "
+                                    + "or execute 'show backends' to check backend status. "
+                                    + "Current available backends(not decommissioned and have enough disk space) are [%s]",
+                            Joiner.on(",").join(backendIds)));
         }
+        return chosenBackendIds;
     }
 
     // Drop table
