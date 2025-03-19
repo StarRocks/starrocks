@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
 import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
 /**
@@ -151,6 +152,10 @@ public class StatisticsCollectionTrigger {
                 for (int i = 0; i < overwriteJobStats.getSourcePartitionIds().size(); i++) {
                     long sourcePartitionId = overwriteJobStats.getSourcePartitionIds().get(i);
                     long targetPartitionId = overwriteJobStats.getTargetPartitionIds().get(i);
+                    if (table.getPartition(targetPartitionId) == null ||
+                            table.getPartition(targetPartitionId).getName().startsWith(SHADOW_PARTITION_PREFIX)) {
+                        continue;
+                    }
                     StatisticExecutor.overwritePartitionStatistics(
                             statsConnectCtx, db.getId(), table.getId(), sourcePartitionId, targetPartitionId);
                 }
