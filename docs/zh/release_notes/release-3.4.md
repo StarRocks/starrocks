@@ -85,6 +85,17 @@ displayed_sidebar: docs
 - 存算一体集群支持备份恢复更多对象：逻辑视图、External Catalog 元数据，以及表达式分区和 List 分区。
 - [Preview] 支持在 Follower FE 上进行 CheckPoint，以避免 CheckPoint 期间 Leader FE 内存大量消耗，从而提升 Leader FE 的稳定性。
 
+### 行为变更
+
+由于存算分离架构和数据湖查询场景中使用统一的 Data Cache 实例，升级到 v3.4.0 后将会有以下行为变更：
+
+- BE 配置项 `datacache_disk_path` 现已废弃。数据将缓存在 `${storage_root_path}/datacache` 目录下。如果要为 Data Cache 分配专用磁盘，可以使用 Symlink 手动将该目录指向上述目录。
+- 存算分离集群中的缓存数据将自动迁移到 `${storage_root_path}/datacache`，升级后可重新使用。
+- `datacache_disk_size` 的行为变更：
+
+  - 当 `datacache_disk_size` 为 `0`（默认值）时，将启用缓存容量自动调整（与升级前的行为一致）。
+  - 当 `datacache_disk_size` 设置为大于 `0` 时，系统将在 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 之间选择一个较大的值作为缓存容量。
+
 ### 降级说明
 
 - 集群只可从 v3.4.0 降级至 v3.3.9 或更高版本。
