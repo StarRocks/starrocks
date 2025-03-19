@@ -426,12 +426,10 @@ public class PaimonMetadataTest {
         HdfsEnvironment environment = new HdfsEnvironment();
         ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
 
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("test_db", "test_table");
-
         // no predicate, limit 1
         PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(1).build();
-        List<RemoteFileInfo> result = metadata.getRemoteFiles(paimonTable, params);
+        List<RemoteFileInfo> result = metadata.getRemoteFiles(metadata.getTable("test_db", "test_table"), params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(1, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -440,7 +438,7 @@ public class PaimonMetadataTest {
         // no predicate, no limit
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(-1).build();
-        result = metadata.getRemoteFiles(paimonTable, params);
+        result = metadata.getRemoteFiles(metadata.getTable("test_db", "test_table"), params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -454,7 +452,7 @@ public class PaimonMetadataTest {
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
                 .setLimit(1).build();
-        result = metadata.getRemoteFiles(paimonTable, params);
+        result = metadata.getRemoteFiles(metadata.getTable("test_db", "test_table"), params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(1, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -464,7 +462,7 @@ public class PaimonMetadataTest {
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
                 .setLimit(-1).build();
-        result = metadata.getRemoteFiles(paimonTable, params);
+        result = metadata.getRemoteFiles(metadata.getTable("test_db", "test_table"), params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -478,7 +476,7 @@ public class PaimonMetadataTest {
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(userEqualPredicate)
                 .setLimit(1).build();
-        result = metadata.getRemoteFiles(paimonTable, params);
+        result = metadata.getRemoteFiles(metadata.getTable("test_db", "test_table"), params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(3, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -492,7 +490,7 @@ public class PaimonMetadataTest {
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames)
                 .setPredicate(Utils.compoundAnd(createDateGreaterPredicate, userEqualPredicate))
                 .setLimit(1).build();
-        result = metadata.getRemoteFiles(paimonTable, params);
+        result = metadata.getRemoteFiles(metadata.getTable("test_db", "test_table"), params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -513,7 +511,7 @@ public class PaimonMetadataTest {
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateCoalescePredicate)
                 .setLimit(1).build();
-        result = metadata.getRemoteFiles(paimonTable, params);
+        result = metadata.getRemoteFiles(metadata.getTable("test_db", "test_table"), params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
