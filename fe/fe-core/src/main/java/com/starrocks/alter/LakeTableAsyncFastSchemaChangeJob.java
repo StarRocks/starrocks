@@ -168,15 +168,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         }
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
 
-=======
->>>>>>> 5236f19b6e ([Enhancement] Reduce the size of data written to edit log when schema changes in shared-data clusters with fast schema evolution enabled. (#55282))
     private static class IndexSchemaInfo {
         @SerializedName("indexId")
         private final long indexId;
