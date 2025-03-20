@@ -62,6 +62,11 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
+    protected LakeTableAlterMetaJob getShadowCopy() {
+        return this;
+    }
+
+    @Override
     protected void updateCatalog(Database db, LakeTable table) {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             // re-use ENABLE_PERSISTENT_INDEX for both enable index and index's type.
