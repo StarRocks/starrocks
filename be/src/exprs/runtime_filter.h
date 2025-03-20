@@ -1585,7 +1585,8 @@ public:
     const MembershipFilter& membership_filter() const { return _membership_filter; }
 
     void evaluate(const Column* input_column, RunningContext* ctx) const override {
-        _min_max_filter.template t_evaluate<false>(input_column, ctx);
+        constexpr bool check_null_in_min_max_filter = std::is_same_v<MembershipFilter, RuntimeEmptyFilter<Type>>;
+        _min_max_filter.template t_evaluate<check_null_in_min_max_filter>(input_column, ctx);
         membership_filter().evaluate(input_column, ctx);
     }
 
