@@ -152,7 +152,7 @@ public class LakeTablet extends Tablet {
                                      long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
         Set<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
-        // it's possible that we won't get any alive replica
+        // Possibly there is no alive replicas at all.
         if (computeNodeIds == null) {
             return;
         }
