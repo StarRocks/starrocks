@@ -34,16 +34,16 @@ import javax.net.ssl.TrustManagerFactory;
 
 public class CustomLdapSslSocketFactory extends SSLSocketFactory {
     private SSLSocketFactory sslSocketFactory;
-    private static volatile CustomLdapSslSocketFactory singletonCustomLdapSslSockFact;
+    private static CustomLdapSslSocketFactory singletonCustomLdapSslSockFact;
 
     private CustomLdapSslSocketFactory()
-            throws KeyManagementException, KeyStoreException, FileNotFoundException, NoSuchAlgorithmException,
+            throws KeyManagementException, KeyStoreException, NoSuchAlgorithmException,
             CertificateException, IOException {
         sslSocketFactory = loadTrustStoreProgrammatically();
     }
 
     private static CustomLdapSslSocketFactory getSingletonInstance()
-            throws KeyManagementException, KeyStoreException, FileNotFoundException, NoSuchAlgorithmException,
+            throws KeyManagementException, KeyStoreException, NoSuchAlgorithmException,
             CertificateException, IOException {
         if (CustomLdapSslSocketFactory.singletonCustomLdapSslSockFact == null) {
             synchronized (CustomLdapSslSocketFactory.class) {
@@ -102,7 +102,7 @@ public class CustomLdapSslSocketFactory extends SSLSocketFactory {
     }
 
     @Override
-    public Socket createSocket(String host, int port) throws IOException, UnknownHostException {
+    public Socket createSocket(String host, int port) throws IOException {
         return sslSocketFactory.createSocket(host, port);
     }
 
@@ -113,7 +113,7 @@ public class CustomLdapSslSocketFactory extends SSLSocketFactory {
 
     @Override
     public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
-            throws IOException, UnknownHostException {
+            throws IOException {
         return sslSocketFactory.createSocket(localHost, port, localHost, localPort);
     }
 
