@@ -73,13 +73,8 @@ public abstract class LoadTask extends PriorityLeaderTask {
             // callback on pending task finished
             callback.onTaskFinished(attachment);
             isFinished = true;
-        } catch (LoadException e) {
-            failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
-            LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
-                    .add("error_msg", "Failed to execute load task").build(), e);
         } catch (StarRocksException e) {
             failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
-            failMsg.setCancelType(FailMsg.CancelType.USER_CANCEL);
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
                     .add("error_msg", "Failed to execute load task").build(), e);
         } catch (Exception e) {
