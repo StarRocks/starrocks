@@ -20,21 +20,24 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     outputs:
-      output1: ${{ steps.doc-changes-info.outputs.oss-doc }}
-      output2: ${{ steps.doc-changes-info.outputs.bare-metal-doc }}
-      output3: ${{ steps.doc-changes-info.outputs.operator-doc }}
+      output1: ${{ steps.doc-changes-info.outputs.doc }}
+      oss-doc: ${{ steps.doc-changes-info.outputs.oss-doc }}
+      bare-metal-doc: ${{ steps.doc-changes-info.outputs.bare-metal-doc }}
+      operator-doc: ${{ steps.doc-changes-info.outputs.operator-doc }}
     steps:
       - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
+            doc:
+                - 'docs/**'
             oss-doc:
-            - 'docs/en/**'
-            - 'docs/docusaurus/**'
+                - 'docs/en/**'
+                - 'docs/docusaurus/**'
             bare-metal-doc:
-            - 'docs/enterprise-edition/bare-metal/**'
+                - 'docs/enterprise-edition/bare-metal/**'
             operator-doc:
-            - 'docs/enterprise-edition/kubernetes/**'
+                - 'docs/enterprise-edition/kubernetes/**'
       - name: DOC CHECK INFO
         id: doc-changes-info
         run: |
@@ -102,7 +105,7 @@ jobs:
           node-version: 21
 
       - name: Combine open-source and Bare-Metal Enterprise docs
-        if: needs.doc-checker.outputs.output2 == 'true'
+        if: needs.doc-checker.outputs.bare-metal-doc == 'true'
         run: |
             # docusaurus config goes in workingdir and combined
             # open-source and Bare-Metal docs go in workingdir/docs
@@ -149,7 +152,7 @@ jobs:
             find workingdir/docs -name "*.md*" | xargs -d "\n" sed -i "s/displayed_sidebar:.*//"
   
       - name: Combine open-source and Kubernetes Enterprise docs
-        if: needs.doc-checker.outputs.output3 == 'true'
+        if: needs.doc-checker.outputs.operator-doc == 'true'
         run: |
             # docusaurus config goes in workingdir and combined
             # open-source and Enterprise docs go in workingdir/docs
