@@ -175,8 +175,7 @@ public class LakeTableHelper {
         Set<Long> needRemoveShardGroupIdSet = new HashSet<>();
         for (PhysicalPartition subPartition : subPartitions) {
             for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                long shardGroupId = index.getShardGroupId();
-                needRemoveShardGroupIdSet.add(shardGroupId);
+                needRemoveShardGroupIdSet.add(index.getShardGroupId());
             }
         }
         if (!needRemoveShardGroupIdSet.isEmpty()) {
