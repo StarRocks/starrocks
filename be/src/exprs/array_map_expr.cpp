@@ -194,7 +194,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         ASSIGN_OR_RETURN(column, tmp_col->replicate(aligned_offsets->get_data()));
         column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
 
-        RETURN_IF_ERROR(column->capacity_limit_reached());
+        if (column->capacity_limit_reached()) {
+            return Status::InternalError("array map's temp column exceed the limit");
+        }
     } else {
         // if all input arguments are constant and lambda expr doesn't rely on other capture columns,
         // we can evaluate it based on const column
