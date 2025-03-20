@@ -22,14 +22,15 @@
 
 namespace starrocks::pipeline {
 
-LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool enable_pre_agg,
-                                                     const std::vector<TExpr>& t_pre_agg_exprs,
+LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_nullable_key,
+                                                     bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
                                                      const std::vector<TSlotId>& t_pre_agg_output_slot_id,
                                                      const std::vector<ExprContext*>& sort_exprs,
                                                      std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
                                                      std::string sort_keys, int64_t offset, int64_t partition_limit,
                                                      const TTopNType::type topn_type)
         : _t_partition_exprs(t_partition_exprs),
+          _has_nullable_key(has_nullable_key),
           _enable_pre_agg(enable_pre_agg),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
@@ -181,7 +182,7 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                 _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
                         state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
                         _topn_type, ChunksSorterTopn::kDefaultMaxBufferRows, ChunksSorterTopn::kDefaultMaxBufferBytes,
-                        ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
+                        ChunksSorterTopn::max_buffered_chunks(_partition_limit)));
                 // create agg state for new partition
                 if (_enable_pre_agg) {
                     AggDataPtr agg_states = _mem_pool->allocate_aligned(_pre_agg->_agg_states_total_size,
@@ -374,7 +375,8 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         std::vector<bool> is_asc_order, std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
         bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
         const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset, int64_t limit, std::string sort_keys,
-        const std::vector<OrderByType>& order_by_types, const std::vector<RuntimeFilterBuildDescriptor*>&)
+        const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
+        const std::vector<RuntimeFilterBuildDescriptor*>&)
         : _topn_type(topn_type),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
@@ -385,7 +387,8 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
           _t_pre_agg_output_slot_id(t_pre_agg_output_slot_id),
           _offset(offset),
           _partition_limit(limit),
-          _sort_keys(std::move(sort_keys)) {}
+          _sort_keys(std::move(sort_keys)),
+          _has_outer_join_child(has_outer_join_child) {}
 
 LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driver_sequence) {
     if (auto it = _ctxs.find(driver_sequence); it != _ctxs.end()) {
@@ -393,8 +396,8 @@ LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driv
     }
 
     auto ctx = std::make_shared<LocalPartitionTopnContext>(
-            _t_partition_exprs, enable_pre_agg, _t_pre_agg_exprs, _t_pre_agg_output_slot_id, _sort_exprs, _is_asc_order,
-            _is_null_first, _sort_keys, _offset, _partition_limit, _topn_type);
+            _t_partition_exprs, _has_outer_join_child, enable_pre_agg, _t_pre_agg_exprs, _t_pre_agg_output_slot_id,
+            _sort_exprs, _is_asc_order, _is_null_first, _sort_keys, _offset, _partition_limit, _topn_type);
     auto* ctx_raw_ptr = ctx.get();
     _ctxs.emplace(driver_sequence, std::move(ctx));
     return ctx_raw_ptr;

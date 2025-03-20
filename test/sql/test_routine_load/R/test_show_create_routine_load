@@ -62,6 +62,7 @@ PROPERTIES
 "strip_outer_array"="false",
 "json_root"="",
 "strict_mode"="false",
+"pause_on_fatal_parse_error"="false",
 "timezone"="Asia/Shanghai",
 "partial_update"="false",
 "trim_space"="false",

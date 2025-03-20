@@ -88,9 +88,9 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.xnio.StreamConnection;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -252,6 +252,9 @@ public class ConnectContext {
     // `insert into table select external table`. Currently, this feature only supports hive table.
     private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
 
+    // Whether leader is transferred during executing stmt
+    private boolean isLeaderTransferred = false;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -277,7 +280,7 @@ public class ConnectContext {
         this(null);
     }
 
-    public ConnectContext(SocketChannel channel) {
+    public ConnectContext(StreamConnection connection) {
         closed = false;
         state = new QueryState();
         returnRows = 0;
@@ -289,15 +292,15 @@ public class ConnectContext {
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
 
-        mysqlChannel = new MysqlChannel(channel);
-        if (channel != null) {
-            remoteIP = mysqlChannel.getRemoteIp();
-        }
-
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
         this.sessionId = UUIDUtil.genUUID();
+
+        mysqlChannel = new MysqlChannel(connection);
+        if (connection != null) {
+            remoteIP = mysqlChannel.getRemoteIp();
+        }
     }
 
     /**
@@ -941,6 +944,22 @@ public class ConnectContext {
         this.queryMVContext = queryMVContext;
     }
 
+    public void startAcceptQuery(ConnectProcessor connectProcessor) {
+        mysqlChannel.startAcceptQuery(this, connectProcessor);
+    }
+
+    public void suspendAcceptQuery() {
+        mysqlChannel.suspendAcceptQuery();
+    }
+
+    public void resumeAcceptQuery() {
+        mysqlChannel.resumeAcceptQuery();
+    }
+
+    public void stopAcceptQuery() throws IOException {
+        mysqlChannel.stopAcceptQuery();
+    }
+
     // kill operation with no protect.
     public void kill(boolean killConnection, String cancelledMessage) {
         LOG.warn("kill query, {}, kill connection: {}",
@@ -1242,6 +1261,14 @@ public class ConnectContext {
             getState().setOk(0L, 0,
                     String.format("set session variables from user property failed: %s", e.getMessage()));
         }
+    }
+
+    public boolean isLeaderTransferred() {
+        return isLeaderTransferred;
+    }
+
+    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
+        this.isLeaderTransferred = isLeaderTransferred;
     }
 
     /**

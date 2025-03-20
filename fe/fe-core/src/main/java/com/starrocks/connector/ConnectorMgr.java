@@ -58,6 +58,21 @@ public class ConnectorMgr {
         }
     }
 
+    public CatalogConnector createHiddenConnector(ConnectorContext context, boolean isReplay) throws StarRocksConnectorException {
+        return ConnectorFactory.createConnector(context, isReplay);
+    }
+
+    public void addConnector(String catalogName, CatalogConnector connector) {
+        writeLock();
+        try {
+            Preconditions.checkState(!connectors.containsKey(catalogName),
+                    "Connector of catalog '%s' already exists", catalogName);
+            connectors.put(catalogName, connector);
+        } finally {
+            writeUnLock();
+        }
+    }
+
     public void removeConnector(String catalogName) {
         readLock();
         try {

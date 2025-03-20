@@ -846,7 +846,9 @@ public class ShowExecutor {
             List<List<String>> rows = Lists.newArrayList();
 
             List<LogicalSlot> slots = GlobalStateMgr.getCurrentState().getSlotManager().getSlots();
-            slots.sort(Comparator.comparingLong(LogicalSlot::getStartTimeMs)
+            slots.sort(
+                    Comparator.<LogicalSlot>comparingInt(x -> x.getState().getSortOrder())
+                            .thenComparing(LogicalSlot::getStartTimeMs)
                     .thenComparingLong(LogicalSlot::getExpiredAllocatedTimeMs));
 
             for (LogicalSlot slot : slots) {
@@ -1727,7 +1729,7 @@ public class ShowExecutor {
                                     LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
                                     tabletInfos.addAll(procDir.fetchComparableResult(
                                             statement.getVersion(), statement.getBackendId(), statement.getReplicaState(),
-                                            hideIpPort));
+                                            statement.getIsConsistent(), hideIpPort));
                                 }
                                 if (sizeLimit > -1 && CollectionUtils.isEmpty(statement.getOrderByPairs())
                                         && tabletInfos.size() >= sizeLimit) {

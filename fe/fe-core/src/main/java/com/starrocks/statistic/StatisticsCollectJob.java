@@ -144,6 +144,8 @@ public abstract class StatisticsCollectJob {
         return this.priority;
     }
 
+    abstract String getName();
+
     protected void setDefaultSessionVariable(ConnectContext context) {
         SessionVariable sessionVariable = context.getSessionVariable();
         // Statistics collecting is not user-specific, which means response latency is not that important.

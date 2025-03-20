@@ -291,13 +291,27 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.info("transfer optimize job {} state to {}", jobId, this.jobState);
     }
 
-    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tmpPartitionName) {
+    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tempPartitionName) {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.OPTIMIZE);
-            tbl.addDoubleWritePartition(sourcePartitionName, tmpPartitionName);
-            LOG.info("job {} add double write partition {} to {}", jobId, tmpPartitionName, sourcePartitionName);
+            Partition temp = tbl.getPartition(tempPartitionName, true);
+            if (temp != null) {
+                Preconditions.checkState(temp.getSubPartitions().size() == 1);
+                Partition p = tbl.getPartition(sourcePartitionName);
+                if (p != null) {
+                    Preconditions.checkState(p.getSubPartitions().size() == 1);
+                    tbl.addDoubleWritePartition(p.getId(), temp.getId());
+
+                    LOG.info("job {} add double write partition: {}:{} -> {}:{}", jobId, sourcePartitionName,
+                                p.getId(), tempPartitionName, temp.getId());
+                } else {
+                    LOG.warn("job {} add double partition {} does not exist", jobId, sourcePartitionName);
+                }
+            } else {
+                LOG.warn("job {} add double partition {} does not exist", jobId, tempPartitionName);
+            }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }

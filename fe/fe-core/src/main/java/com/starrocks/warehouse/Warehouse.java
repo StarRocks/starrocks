@@ -56,6 +56,8 @@ public abstract class Warehouse implements Writable {
         Text.writeString(out, json);
     }
 
+    public abstract long getResumeTime();
+
     public abstract Long getAnyWorkerGroupId();
 
     public abstract List<Long> getWorkerGroupIds();

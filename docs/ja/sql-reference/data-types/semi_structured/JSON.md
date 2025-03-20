@@ -4,23 +4,23 @@ displayed_sidebar: docs
 
 # JSON
 
-StarRocks は v2.2.0 から JSON データ型をサポートしています。このトピックでは、JSON の基本概念について説明します。また、JSON カラムの作成方法、JSON データのロード方法、JSON データのクエリ方法、および JSON 関数と演算子を使用して JSON データを構築および処理する方法についても説明します。
+バージョン 2.2.0 以降、StarRocks は JSON をサポートしています。この記事では、JSON の基本概念、StarRocks が JSON 型のカラムを作成し、JSON データをロードおよびクエリし、JSON 関数と演算子を通じて JSON データを構築および処理する方法を紹介します。
 
 ## JSON とは
 
-JSON は、半構造化データ用に設計された軽量のデータ交換フォーマットです。JSON はデータを階層的なツリー構造で表現し、さまざまなデータストレージおよび分析シナリオで柔軟かつ読み書きが容易です。JSON は `NULL` 値と次のデータ型をサポートします: NUMBER、STRING、BOOLEAN、ARRAY、および OBJECT。
+JSON は軽量なデータ交換フォーマットです。JSON 型データは半構造化されており、ツリー構造をサポートしています。JSON データは階層的で柔軟性があり、読みやすく処理しやすいため、データストレージや分析のシナリオで広く使用されています。JSON は、NUMBER、STRING、BOOLEAN、ARRAY、OBJECT、および NULL 値などのデータ型をサポートしています。
 
-JSON についての詳細は、[JSON website](https://www.json.org/json-en.html) をご覧ください。JSON の入力および出力構文については、[RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4) の JSON 仕様を参照してください。
+JSON の詳細については、[JSON 公式ウェブサイト](https://www.json.org/json-en.html) を参照してください。JSON データの入力および出力の構文については、JSON 仕様 [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4) を参照してください。
 
-StarRocks は、JSON データのストレージと効率的なクエリおよび分析の両方をサポートしています。StarRocks は入力テキストを直接保存するのではなく、JSON データをバイナリ形式で保存し、解析コストを削減し、クエリ効率を向上させます。
+StarRocks は JSON データの保存と効率的なクエリおよび分析をサポートしています。StarRocks は、入力テキストを直接保存するのではなく、バイナリ形式のエンコーディングを使用して JSON データを保存し、データ計算およびクエリ中の解析コストを削減し、クエリ効率を向上させます。
 
 ## JSON データの使用
 
-### JSON カラムの作成
+### JSON 型カラムの作成
 
-テーブルを作成する際に、`JSON` キーワードを使用して `j` カラムを JSON カラムとして指定できます。
+テーブルを作成する際、キーワード `JSON` を使用してカラム `j` を JSON 型として指定します。
 
-```sql
+```SQL
 CREATE TABLE `tj` (
     `id` INT(11) NOT NULL COMMENT "",
     `j`  JSON NULL COMMENT ""
@@ -34,50 +34,49 @@ PROPERTIES (
 );
 ```
 
-### データのロードと JSON データとしての保存
+### データのロードと JSON 型としての保存
 
-StarRocks は、データをロードして JSON データとして保存するための以下の方法を提供しています。
+StarRocks は、データをロードして JSON 型として保存するための以下の方法をサポートしています。
 
-- 方法 1: `INSERT INTO` を使用して、テーブルの JSON カラムにデータを書き込みます。以下の例では、`tj` という名前のテーブルが使用され、そのテーブルの `j` カラムは JSON カラムです。
+- 方法 1: `INSERT INTO` を使用して JSON 型カラム（例: カラム `j`）にデータを書き込みます。
 
-```plaintext
+```SQL
 INSERT INTO tj (id, j) VALUES (1, parse_json('{"a": 1, "b": true}'));
 INSERT INTO tj (id, j) VALUES (2, parse_json('{"a": 2, "b": false}'));
 INSERT INTO tj (id, j) VALUES (3, parse_json('{"a": 3, "b": true}'));
 INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false)); 
 ```
 
-> parse_json 関数は STRING データを JSON データとして解釈できます。json_object 関数は JSON オブジェクトを構築したり、既存のテーブルを JSON ファイルに変換したりできます。詳細は [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md) と [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md) を参照してください。
+> PARSE_JSON 関数は、文字列型データに基づいて JSON 型データを構築できます。JSON_OBJECT 関数は JSON オブジェクト型データを構築でき、既存のテーブルを JSON 型に変換することができます。詳細については、[PARSE_JSON](../../sql-functions/json-functions/json-constructor-functions/parse_json.md) および [JSON_OBJECT](../../sql-functions/json-functions/json-constructor-functions/json_object.md) を参照してください。
 
-- 方法 2: Stream Load を使用して JSON ファイルをロードし、そのファイルを JSON データとして保存します。詳細は [Load JSON data](../../../loading/StreamLoad.md#load-json-data) を参照してください。
+- 方法 2: Stream Load を使用して JSON ファイルをインポートし、JSON 型として保存します。インポート方法については、[Import JSON Data](../../../loading/StreamLoad.md) を参照してください。
+  - JSON ファイルのルートノードにある JSON オブジェクトを JSON 型としてインポートして保存するには、`jsonpaths` を `$` に設定します。
+  - JSON ファイル内の JSON オブジェクトの値を JSON 型としてインポートして保存するには、`jsonpaths` を `$.a` に設定します（ここで `a` はキーを表します）。その他の JSON パス式については、[JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path) を参照してください。
 
-  - ルート JSON オブジェクトをロードしたい場合は、`jsonpaths` を `$` に設定します。
-  - JSON オブジェクトの特定の値をロードしたい場合は、`jsonpaths` を `$.a` に設定します。ここで `a` はキーを指定します。StarRocks でサポートされている JSON パス式の詳細は [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions) を参照してください。
+- 方法 3: Broker Load を使用して Parquet ファイルをインポートし、JSON 型として保存します。インポート方法については、[Broker Load](../../sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
 
-- 方法 3: Broker Load を使用して Parquet ファイルをロードし、そのファイルを JSON データとして保存します。詳細は [Broker Load](../../sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
+インポート中に以下のようにデータ型の変換がサポートされています。
 
-StarRocks は、Parquet ファイルのロード時に以下のデータ型変換をサポートしています。
+| Parquet ファイルのデータ型                                     | 変換後の JSON データ型 |
+| ------------------------------------------------------------- | ------------------------ |
+| 整数型 (INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, UINT64) | JSON Number              |
+| 浮動小数点型 (FLOAT, DOUBLE)                                  | JSON Number              |
+| BOOLEAN                                                       | JSON Boolean             |
+| STRING                                                        | JSON String              |
+| MAP                                                           | JSON Object              |
+| STRUCT                                                        | JSON Object              |
+| LIST                                                          | JSON Array               |
+| UNION, TIMESTAMP, その他の型                                   | サポートされていません   |
 
-| Parquet ファイルのデータ型                                    | JSON データ型 |
-| ------------------------------------------------------------ | -------------- |
-| INTEGER (INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, and UINT64) | NUMBER         |
-| FLOAT and DOUBLE                                             | NUMBER         |
-| BOOLEAN                                                      | BOOLEAN        |
-| STRING                                                       | STRING         |
-| MAP                                                          | OBJECT         |
-| STRUCT                                                       | OBJECT         |
-| LIST                                                         | ARRAY          |
-| Other data types such as UNION and TIMESTAMP                 | Not supported  |
+- 方法 4: [Routine Load](../../../loading/RoutineLoad.md#導入-json-データ) を使用して、Kafka から JSON 形式のデータを継続的に消費し、StarRocks にインポートします。
 
-- 方法 4: [Routine](../../../loading/Loading_intro.md) load を使用して、Kafka から StarRocks に JSON データを継続的にロードします。
+### JSON 型データのクエリと処理
 
-### JSON データのクエリと処理
+StarRocks は JSON 型データのクエリと処理をサポートし、JSON 関数と演算子を使用することができます。
 
-StarRocks は JSON データのクエリと処理、および JSON 関数と演算子の使用をサポートしています。
+この例では、テーブル `tj` を使用して説明します。
 
-以下の例では、`tj` という名前のテーブルが使用され、そのテーブルの `j` カラムは JSON カラムとして指定されています。
-
-```plaintext
+```SQL
 mysql> select * from tj;
 +------+----------------------+
 | id   |          j           |
@@ -89,9 +88,9 @@ mysql> select * from tj;
 +------+----------------------+
 ```
 
-例 1: JSON カラムのデータをフィルタリングして、`id=1` の条件を満たすデータを取得します。
+例 1: 条件 `id=1` を満たす JSON 型カラムのデータをフィルタリングします。
 
-```plaintext
+```SQL
 mysql> select * from tj where id = 1;
 +------+---------------------+
 | id   |           j         |
@@ -100,29 +99,29 @@ mysql> select * from tj where id = 1;
 +------+---------------------+
 ```
 
-例 2: JSON カラム `j` のデータをフィルタリングして、指定された条件を満たすデータを取得します。
+例 2: JSON 型カラムに基づいてテーブル内のデータをフィルタリングします。
 
-> `j->'a'` は JSON データを返します。データを比較するために最初の例を使用できます（この例では暗黙の変換が行われます）。または、CAST 関数を使用して JSON データを INT に変換し、その後データを比較することもできます。
+> 以下の例では、`j->'a'` は JSON 型データを返します。最初の例と比較して、データに対して暗黙の変換を行います。または、CAST 関数を使用して JSON 型データを INT に構築して比較します。
 
-```plaintext
+```SQL
 mysql> select * from tj where j->'a' = 1;
 +------+---------------------+
 | id   | j                   |
 +------+---------------------+
 |    1 | {"a": 1, "b": true} |
-
-
-mysql> select * from tj where cast(j->'a' as INT) = 1;
 +------+---------------------+
-| id   | j                   |
+
+mysql> select * from tj where cast(j->'a' as INT) = 1; 
 +------+---------------------+
-|    1 | {"a": 1, "b": true} |
+|   id |         j           |
++------+---------------------+
+|   1  | {"a": 1, "b": true} |
 +------+---------------------+
 ```
 
-例 3: CAST 関数を使用して、テーブルの JSON カラムの値を BOOLEAN 値に変換します。その後、JSON カラムのデータをフィルタリングして、指定された条件を満たすデータを取得します。
+例 3: JSON 型カラムに基づいてテーブル内のデータをフィルタリングします（CAST 関数を使用して JSON 型カラムを BOOLEAN 型として構築できます）。
 
-```plaintext
+```SQL
 mysql> select * from tj where cast(j->'b' as boolean);
 +------+---------------------+
 |  id  |          j          |
@@ -132,9 +131,9 @@ mysql> select * from tj where cast(j->'b' as boolean);
 +------+---------------------+
 ```
 
-例 4: CAST 関数を使用して、テーブルの JSON カラムの値を BOOLEAN 値に変換します。その後、JSON カラムのデータをフィルタリングして、指定された条件を満たすデータを取得し、データに対して算術演算を行います。
+例 4: 条件を満たす JSON 型カラムのデータをフィルタリングし、数値演算を行います。
 
-```plaintext
+```SQL
 mysql> select cast(j->'a' as int) from tj where cast(j->'b' as boolean);
 +-----------------------+
 |  CAST(j->'a' AS INT)  |
@@ -151,12 +150,12 @@ mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
 +----------------------------+
 ```
 
-例 5: JSON カラムをソートキーとして使用して、テーブルのデータをソートします。
+例 5: JSON 型カラムに基づいてソートします。
 
-```plaintext
+```SQL
 mysql> select * from tj
-    ->        where j->'a' <= 3
-    ->        order by cast(j->'a' as int);
+       where j->'a' <= 3
+       order by cast(j->'a' as int);
 +------+----------------------+
 | id   | j                    |
 +------+----------------------+
@@ -165,21 +164,123 @@ mysql> select * from tj
 |    3 | {"a": 3, "b": true}  |
 |    4 | {"a": 4, "b": false} |
 +------+----------------------+
-4 rows in set (0.05 sec)
 ```
 
 ## JSON 関数と演算子
 
-JSON 関数と演算子を使用して、JSON データを構築および処理できます。詳細は [Overview of JSON functions and operators](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md) を参照してください。
+JSON 関数と演算子を使用して JSON データを構築および処理することができます。詳細については、[JSON Functions and Operators](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md) を参照してください。
 
-## 制限事項と使用上の注意
+## JSON 配列
 
-- JSON 値の最大長は 16 MB です。
+JSON は、オブジェクト、配列、または他の JSON データ型を配列内にネストすることができます。StarRocks は、これらの複雑なネストされた JSON データ構造を処理するための豊富な関数と演算子を提供しています。以下では、配列を含む JSON データを処理する方法を紹介します。
 
-- ORDER BY、GROUP BY、および JOIN 句は JSON カラムへの参照をサポートしていません。JSON カラムへの参照を作成したい場合は、CAST 関数を使用して JSON カラムを SQL カラムに変換してから参照を作成してください。詳細は [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md) を参照してください。
+`events` テーブルに `event_data` という JSON フィールドがあり、以下の内容を持っているとします。
+```
+{
+  "user": "Alice",
+  "actions": [
+    {"type": "click", "timestamp": "2024-03-17T10:00:00Z", "quantity": 1},
+    {"type": "view", "timestamp": "2024-03-17T10:05:00Z", "quantity": 2},
+    {"type": "purchase", "timestamp": "2024-03-17T10:10:00Z", "quantity": 3}
+  ]
+}
+```
 
-- JSON カラムは Duplicate Key、Primary Key、および Unique Key テーブルでサポートされています。集計テーブルではサポートされていません。
+以下の例では、いくつかの一般的な JSON 配列分析シナリオを示します。
 
-- JSON カラムは、DUPLICATE KEY、PRIMARY KEY、および UNIQUE KEY テーブルのパーティションキー、バケッティングキー、またはディメンションカラムとして使用できません。また、ORDER BY、GROUP BY、および JOIN 句でも使用できません。
+1. 配列要素の抽出: actions 配列から type、timestamp などの特定のフィールドを抽出し、投影操作を行います。
+2. 配列の展開: `json_each` 関数を使用して、ネストされた JSON 配列を多行多列のテーブル構造に展開し、後続の分析を行います。
+3. 配列計算: 配列関数を使用して、配列要素をフィルタリング、変換、および集計し、特定の操作タイプの数をカウントします。
 
-- StarRocks は、JSON データをクエリするために次の JSON 比較演算子を使用することを許可しています: `<`, `<=`, `>`, `>=`, `=`, および `!=`。`IN` を使用して JSON データをクエリすることはできません。
+### 1. JSON 配列から要素を抽出
+
+JSON 配列からネストされた要素を抽出するには、次の構文を使用します。
+- 戻り値の型は依然として JSON 配列であり、CAST 式を使用して型変換を行うことができます。
+```
+MySQL > SELECT json_query(event_data, '$.actions[*].type') as json_array FROM events;
++-------------------------------+
+| json_array                    |
++-------------------------------+
+| ["click", "view", "purchase"] |
++-------------------------------+
+
+MySQL > SELECT cast(json_query(event_data, '$.actions[*].type') as array<string>) array_string FROM events;
++-----------------------------+
+| array_string                |
++-----------------------------+
+| ["click","view","purchase"] |
++-----------------------------+
+```
+
+### 2. json_each を使用した展開
+StarRocks は `json_each` 関数を提供しており、JSON 配列を展開し、複数行のデータに変換します。例えば:
+```
+MySQL > select value from events, json_each(event_data->'actions');
++--------------------------------------------------------------------------+
+| value                                                                    |
++--------------------------------------------------------------------------+
+| {"quantity": 1, "timestamp": "2024-03-17T10:00:00Z", "type": "click"}    |
+| {"quantity": 2, "timestamp": "2024-03-17T10:05:00Z", "type": "view"}     |
+| {"quantity": 3, "timestamp": "2024-03-17T10:10:00Z", "type": "purchase"} |
++--------------------------------------------------------------------------+
+```
+
+type と timestamp フィールドを個別に抽出するには:
+```
+MySQL > select value->'timestamp', value->'type' from events, json_each(event_data->'actions');
++------------------------+---------------+
+| value->'timestamp'     | value->'type' |
++------------------------+---------------+
+| "2024-03-17T10:00:00Z" | "click"       |
+| "2024-03-17T10:05:00Z" | "view"        |
+| "2024-03-17T10:10:00Z" | "purchase"    |
++------------------------+---------------+
+```
+
+これにより、JSON 配列データはおなじみのリレーショナルモデルになり、一般的な関数を使用して分析を行うことができます。
+
+### 3. 配列関数を使用したフィルタリングと計算
+StarRocks は ARRAY 関連の関数もサポートしており、JSON 関数と組み合わせてより効率的なクエリを行うことができます。これらの関数を組み合わせることで、JSON 配列データをフィルタリング、変換、および集計することができます。以下の例では、これらの関数を使用する方法を示します。
+```
+MySQL > 
+WITH step1 AS (
+ SELECT cast(event_data->'actions' as ARRAY<JSON>) as docs
+   FROM events
+)
+SELECT array_filter(doc -> get_json_string(doc, 'type') = 'click', docs) as clicks
+FROM step1
++---------------------------------------------------------------------------+
+| clicks                                                                    |
++---------------------------------------------------------------------------+
+| ['{"quantity": 1, "timestamp": "2024-03-17T10:00:00Z", "type": "click"}'] |
++---------------------------------------------------------------------------+
+```
+
+さらに、他の ARRAY 関数を組み合わせて、配列要素に対する集計計算を行うことができます。
+```
+MySQL > 
+WITH step1 AS (
+ SELECT cast(event_data->'actions' as ARRAY<JSON>) as docs
+   FROM events
+), step2 AS (
+    SELECT array_filter(doc -> get_json_string(doc, 'type') = 'click', docs) as clicks
+    FROM step1
+)
+SELECT array_sum(
+            array_map(doc -> get_json_double(doc, 'quantity'), clicks)
+            ) as click_amount
+FROM step2
++--------------+
+| click_amount |
++--------------+
+| 1.0          |
++--------------+
+```
+
+## 制限事項と考慮事項
+
+- JSON 型データの最大サポート長は現在 16 MB です。
+- ORDER BY、GROUP BY、および JOIN 句は JSON 型カラムを参照することをサポートしていません。参照する必要がある場合は、事前に CAST 関数を使用して JSON 型カラムを他の SQL 型に変換することができます。具体的な変換方法については、[JSON Type Conversion](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md) を参照してください。
+- JSON 型カラムは、重複キーテーブル、主キーテーブル、およびユニークキーテーブルに存在できますが、集計テーブルには存在できません。
+- JSON 型カラムは、重複キーテーブル、主キーテーブル、およびユニークキーテーブルのパーティションキー、バケッティングキー、またはディメンションカラムとしてサポートされておらず、JOIN、GROUP BY、または ORDER BY 句で使用することはできません。
+- StarRocks は `<`, `<=`, `>`, `>=`, `=`, `!=` 演算子を使用して JSON データをクエリすることをサポートしていますが、IN 演算子はサポートしていません。

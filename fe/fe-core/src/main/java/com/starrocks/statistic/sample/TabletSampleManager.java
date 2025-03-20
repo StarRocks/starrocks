@@ -98,7 +98,7 @@ public class TabletSampleManager {
                             mediumHighWeight.addTabletStats(tabletStats);
                         } else if (rowCount >= MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD) {
                             mediumLowWeight.addTabletStats(tabletStats);
-                        } else {
+                        } else if (rowCount > 0) {
                             lowWeight.addTabletStats(tabletStats);
                         }
                     }

@@ -86,7 +86,7 @@ HashPartitionContext* HashPartitionContextFactory::create(int32_t driver_sequenc
         return it->second.get();
     }
 
-    auto ctx = std::make_shared<HashPartitionContext>(_t_partition_exprs);
+    auto ctx = std::make_shared<HashPartitionContext>(_has_nullable_key, _t_partition_exprs);
     auto* ctx_raw_ptr = ctx.get();
     _ctxs.emplace(driver_sequence, std::move(ctx));
     return ctx_raw_ptr;

@@ -379,7 +379,8 @@ public class Optimizer {
 
         // TODO(stephen): enable agg push down when query exists related mvs.
         if (context.getQueryMaterializationContext() != null &&
-                !context.getQueryMaterializationContext().getValidCandidateMVs().isEmpty()) {
+                context.getQueryMaterializationContext().getValidCandidateMVs().stream()
+                        .anyMatch(MaterializationContext::hasMultiTables)) {
             context.getSessionVariable().setCboPushDownAggregateMode(-1);
         }
     }
@@ -432,15 +433,16 @@ public class Optimizer {
         return tree;
     }
 
-    private void ruleBasedMaterializedViewRewrite(OptExpression tree,
-                                                  TaskContext rootTaskContext,
-                                                  ColumnRefSet requiredColumns) {
+    private void ruleBasedMaterializedViewRewriteStage2(OptExpression tree,
+                                                        TaskContext rootTaskContext,
+                                                        ColumnRefSet requiredColumns) {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
+        context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE2);
 
         // do rule based mv rewrite
-        if (!context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+        if (context.getQueryMaterializationContext().isNeedsFurtherMVRewrite()) {
             doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
         }
 
@@ -490,11 +492,13 @@ public class Optimizer {
         }
     }
 
-    private void doMVRewriteWithMultiStages(OptExpression tree,
-                                            TaskContext rootTaskContext) {
+    private void ruleBasedMaterializedViewRewriteStage1(OptExpression tree,
+                                                        TaskContext rootTaskContext) {
         if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
             return;
         }
+        context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE1);
+
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
@@ -584,7 +588,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
 
         // rule-based materialized view rewrite: early stage
-        doMVRewriteWithMultiStages(tree, rootTaskContext);
+        ruleBasedMaterializedViewRewriteStage1(tree, rootTaskContext);
         joinPredicatePushDownContext.reset();
 
         // Limit push must be after the column prune,
@@ -633,7 +637,8 @@ public class Optimizer {
 
         // Add a config to decide whether to rewrite sync mv.
         if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
-                && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+                && sessionVariable.isEnableSyncMaterializedViewRewrite()
+                && !context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             // Split or predicates to union all so can be used by mv rewrite to choose the best sort key indexes.
             // TODO: support adaptive for or-predicates to union all.
             if (SplitScanORToUnionRule.isForceRewrite()) {
@@ -694,7 +699,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
         // rule based materialized view rewrite
-        ruleBasedMaterializedViewRewrite(tree, rootTaskContext, requiredColumns);
+        ruleBasedMaterializedViewRewriteStage2(tree, rootTaskContext, requiredColumns);
 
         // this rewrite rule should be after mv.
         ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.HIVE_SCAN_NO_PROJECT);
