@@ -649,10 +649,25 @@ public class PaimonMetadata implements ConnectorMetadata {
             return true;
         }
 
-        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
+        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+
+        List<String> predicateColumns = new ArrayList<>();
+        for (ScalarOperator operator : scalarOperators) {
+            String columnName = null;
+            if (operator.getChild(0) instanceof ColumnRefOperator) {
+                columnName = ((ColumnRefOperator) operator.getChild(0)).getName();
+            }
+
+            if (columnName == null || columnName.isEmpty()) {
+                return false;
+            }
+
+            predicateColumns.add(columnName);
+        }
+
         List<String> partitionColNames = table.getPartitionColumnNames();
-        for (ColumnRefOperator c : columnRefOperators) {
-            if (!partitionColNames.contains(c.getName())) {
+        for (String columnName : predicateColumns) {
+            if (!partitionColNames.contains(columnName)) {
                 return false;
             }
         }
