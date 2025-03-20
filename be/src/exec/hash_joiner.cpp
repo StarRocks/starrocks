@@ -589,17 +589,17 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         if (multi_partitioned) {
             LogicalType build_type = rf_desc->build_expr_type();
             filter = std::shared_ptr<RuntimeFilter>(
-                    RuntimeFilterHelper::create_join_runtime_filter(nullptr, build_type, rf_desc->join_mode()));
+                    RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type, rf_desc->join_mode()));
             if (filter == nullptr) {
                 _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
-            filter->get_bloom_filter()->init(ht_row_count);
-            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(columns, build_type, filter.get(),
-                                                                           kHashJoinKeyColumnOffset, eq_null));
+            filter->get_membership_filter()->init(ht_row_count);
+            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_filter(columns, build_type, filter.get(),
+                                                                     kHashJoinKeyColumnOffset, eq_null));
         }
 
-        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(
+        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeMembershipFilterBuildParam(
                 multi_partitioned, eq_null, is_empty, std::move(columns), std::move(filter)));
     }
     return Status::OK();
