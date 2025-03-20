@@ -42,6 +42,10 @@ jobs:
         id: doc-changes-info
         run: |
           echo "doc=${{ steps.changes.outputs.doc }}" >> $GITHUB_OUTPUT
+          echo "oss-doc=${{ steps.changes.outputs.oss-doc }}" >> $GITHUB_OUTPUT
+          echo "bare-metal-doc=${{ steps.changes.outputs.bare-metal-doc }}" >> $GITHUB_OUTPUT
+          echo "operator-doc=${{ steps.changes.outputs.operator-doc }}" >> $GITHUB_OUTPUT
+
 
   remove-doc-label:
     needs: doc-checker
