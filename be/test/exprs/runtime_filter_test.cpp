@@ -1328,7 +1328,7 @@ TEST_F(RuntimeMembershipFilterTest, TestEvaluateEmptyFilter) {
     }
 
     const auto col = ColumnTestHelper::build_column<int32_t>({-1, 5, 10, 15, 20, 25, 200});
-    auto nullable_col = ColumnHelper::cast_to_nullable_column(col->get_ptr());
+    auto nullable_col = ColumnHelper::cast_to_nullable_column(col->clone()->get_ptr());
     nullable_col->append_nulls(2);
 
     // Non-null RF evaluates non-nullable column.
