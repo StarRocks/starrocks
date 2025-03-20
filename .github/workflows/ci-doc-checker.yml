@@ -117,7 +117,9 @@ jobs:
             cp -r docs/en/* workingdir/docs
             rm workingdir/docs/introduction/what_is_starrocks.md
             rm -rf workingdir/docs/deployment
+            mkdir -p workingdir/docs/deployment
             rsync -avhrW --progress ./docs/enterprise-edition/bare-metal/docs workingdir/docs/
+            ls docs/en/deployment/
             cp docs/en/deployment/plan_cluster.md workingdir/docs/deployment/15_plan_cluster.md
             rm -f workingdir/docs/README.md
 
