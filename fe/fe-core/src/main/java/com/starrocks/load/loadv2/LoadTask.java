@@ -73,13 +73,16 @@ public abstract class LoadTask extends PriorityLeaderTask {
             // callback on pending task finished
             callback.onTaskFinished(attachment);
             isFinished = true;
+<<<<<<< HEAD
         } catch (LoadException e) {
             failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
                     .add("error_msg", "Failed to execute load task").build(), e);
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 55a7c0b40c ([Enhancement] Improve broker load job retry (#56987))
             failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
-            failMsg.setCancelType(FailMsg.CancelType.USER_CANCEL);
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
                     .add("error_msg", "Failed to execute load task").build(), e);
         } catch (Exception e) {
