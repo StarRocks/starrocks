@@ -29,29 +29,4 @@ public class LoadErrorUtils {
     public static final ErrorMeta BACKEND_BRPC_TIMEOUT =
             new ErrorMeta("[E1008]Reached timeout", "Backend BRPC timeout");
 
-<<<<<<< HEAD
-    private static final ErrorMeta[] LOADING_TASK_TIMEOUT_ERRORS = new ErrorMeta[] {BACKEND_BRPC_TIMEOUT};
-
-    public static boolean isTimeoutFromLoadingTaskExecution(String errorMsg) {
-        for (ErrorMeta errorMeta : LOADING_TASK_TIMEOUT_ERRORS) {
-            if (errorMsg.contains(errorMeta.keywords)) {
-                return true;
-            }
-        }
-        return false;
-=======
-    public static boolean enableProfileAfterError(Coordinator coordinator) {
-        if (!(coordinator instanceof DefaultCoordinator defaultCoordinator)) {
-            return false;
-        }
-        if (defaultCoordinator.getExecStatus() == null || defaultCoordinator.getExecStatus().ok()
-                || defaultCoordinator.getExecStatus().getErrorMsg() == null) {
-            return false;
-        }
-        if (!defaultCoordinator.getQueryRuntimeProfile().hasLoadChannelProfile()) {
-            return false;
-        }
-        return defaultCoordinator.getExecStatus().getErrorMsg().contains(BACKEND_BRPC_TIMEOUT.getKeywords());
->>>>>>> 55a7c0b40c ([Enhancement] Improve broker load job retry (#56987))
-    }
 }
