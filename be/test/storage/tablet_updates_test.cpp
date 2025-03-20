@@ -20,6 +20,7 @@
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"
+#include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
 #include "util/failpoint/fail_point.h"
 
@@ -368,6 +369,18 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     // get tablet info
     TTabletInfo tablet_info;
     _tablet->updates()->get_tablet_info_extra(&tablet_info);
+
+    ASSERT_TRUE(_tablet->get_average_row_size() > 0);
+
+    // calulate checksum
+    uint32_t checksum = 0;
+    std::unique_ptr<MemTracker> tracker = std::make_unique<MemTracker>(-1);
+    EngineChecksumTask task(tracker.get(), _tablet->tablet_id(), 4, &checksum);
+    ASSERT_TRUE(task.execute().ok());
+    // add limit to tracker
+    tracker->set_limit(100000000);
+    EngineChecksumTask task2(tracker.get(), _tablet->tablet_id(), 4, &checksum);
+    ASSERT_TRUE(task2.execute().ok());
 }
 
 TEST_F(TabletUpdatesTest, writeread) {
@@ -1210,7 +1223,8 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index, bool show_status) {
+void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index, bool show_status,
+                                                   bool random_compaction) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 5;
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
@@ -1238,10 +1252,12 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index,
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
     EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
-    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
-    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
-    // the time interval is not enough after last compaction
-    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    if (!random_compaction) {
+        ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+        ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+        // the time interval is not enough after last compaction
+        EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    }
     EXPECT_TRUE(best_tablet->verify().ok());
 
     if (show_status) {
@@ -1346,6 +1362,12 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_rows_mapper) {
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_with_rows_mapper) {
     test_horizontal_compaction_with_rows_mapper(true);
+}
+
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_random_pick) {
+    config::chaos_test_enable_random_compaction_strategy = true;
+    test_horizontal_compaction(true, false, true);
+    config::chaos_test_enable_random_compaction_strategy = false;
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {

@@ -123,7 +123,7 @@ CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
 CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
-CONF_Int32(check_consistency_worker_count, "1");
+CONF_mInt32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
@@ -385,6 +385,10 @@ CONF_mInt64(size_tiered_min_level_size, "131072");
 CONF_mInt64(size_tiered_level_multiple, "5");
 CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
 CONF_mInt64(size_tiered_level_num, "7");
+
+// random compaction strategy is only used for chaos test,
+// should never be true in prodution.
+CONF_mBool(chaos_test_enable_random_compaction_strategy, "false");
 
 CONF_Bool(enable_check_string_lengths, "true");
 
@@ -1099,7 +1103,7 @@ CONF_String(dependency_librdkafka_debug, "all");
 CONF_mInt16(pulsar_client_log_level, "2");
 
 // max loop count when be waiting its fragments finish. It has no effect if the var is configured with value <= 0.
-CONF_Int64(loop_count_wait_fragments_finish, "0");
+CONF_mInt64(loop_count_wait_fragments_finish, "2");
 
 // the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
@@ -1283,6 +1287,8 @@ CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 // enable read pindex by page
 CONF_mBool(enable_pindex_read_by_page, "true");
 
+// check need to rebuild pindex or not
+CONF_mBool(enable_rebuild_pindex_check, "true");
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
@@ -1557,4 +1563,5 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
+CONF_mInt32(big_query_sec, "1");
 } // namespace starrocks::config

@@ -34,6 +34,8 @@ struct TMasterInfo {
     11: optional list<string> disabled_disks
     12: optional list<string> decommissioned_disks
     13: optional bool encrypted;
+    // field 14 is already used in main branch
+    15: optional Types.TNodeType node_type
 }
 
 struct TBackendInfo {

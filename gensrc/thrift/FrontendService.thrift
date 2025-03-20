@@ -608,6 +608,8 @@ struct TRoutineLoadJobInfo {
     17: optional string error_log_urls
     18: optional string tracking_sql
     19: optional string other_msg
+    20: optional string latest_source_position
+    21: optional string offset_lag
 }
 
 struct TGetRoutineLoadJobsResult {
@@ -1720,6 +1722,23 @@ struct TObjectDependencyRes {
     1: optional list<TObjectDependencyItem> items
 }
 
+struct TKeywordInfo {
+    1: optional string keyword;
+    2: optional bool reserved;
+}
+
+struct TGetKeywordsRequest {
+    1: optional TAuthInfo auth_info
+    // get keywords where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
+}
+
+struct TGetKeywordsResponse {
+    1: optional list<TKeywordInfo> keywords;
+    // max table id in keywords + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
+}
+
 struct TFeLocksItem {
     1: optional string lock_type
     2: optional string lock_object
@@ -2050,5 +2069,7 @@ service FrontendService {
 
     TClusterSnapshotsResponse getClusterSnapshotsInfo(1: TClusterSnapshotsRequest request)
     TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(1: TClusterSnapshotJobsRequest request)
+
+    TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
 }
 

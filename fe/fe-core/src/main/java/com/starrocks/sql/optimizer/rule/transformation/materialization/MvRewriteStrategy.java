@@ -48,6 +48,19 @@ public class MvRewriteStrategy {
         }
     }
 
+    public enum MVRewriteStage {
+        PHASE0(0),
+        PHASE1(1),
+        PHASE2(2);
+        private int ordinal;
+        MVRewriteStage(int ordinal) {
+            this.ordinal = ordinal;
+        }
+        public int getOrdinal() {
+            return this.ordinal;
+        }
+    }
+
     // general config
     public boolean enableMaterializedViewRewrite = false;
     // Whether enable force rewrite for query plans with join operator by rule based mv rewrite
@@ -146,7 +159,8 @@ public class MvRewriteStrategy {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
         // only enable multi-stages when force rewrite is enabled
-        if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+        if (sessionVariable.isEnableMaterializedViewMultiStagesRewrite() ||
+                sessionVariable.isEnableMaterializedViewForceRewrite()) {
             strategy.mvStrategy = MVStrategy.MULTI_STAGES;
         }
         strategy.enableForceRBORewrite = sessionVariable.isEnableForceRuleBasedMvRewrite();

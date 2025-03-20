@@ -330,6 +330,9 @@ public enum ErrorCode {
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'}, "%s column: %s has no matching %s column"),
+    // the error code is discontinuous because it's backported
+    ERR_LOAD_DATA_PARSE_ERROR(5611, new byte[] {'2', '2', '0', '0', '0'},
+            "%s. Check the 'TrackingSQL' field for detailed information."),
 
     /**
      * 5700 - 5799: Partition

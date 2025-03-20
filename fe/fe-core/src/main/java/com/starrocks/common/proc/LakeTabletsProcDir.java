@@ -42,7 +42,7 @@ import java.util.List;
  */
 public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
+            .add("TabletId").add("BackendId").add("DataSize").add("RowCount").add("MinVersion")
             .build();
 
     private final Database db;
@@ -83,6 +83,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds(ConnectContext.get().getCurrentWarehouseId())));
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
+                tabletInfo.add(lakeTablet.getMinVersion());
                 tabletInfos.add(tabletInfo);
             }
         } finally {

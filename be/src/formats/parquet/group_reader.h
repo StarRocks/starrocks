@@ -61,7 +61,7 @@ struct GroupReaderParam {
 
         SlotDescriptor* slot_desc = nullptr;
 
-        const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
+        const TIcebergSchemaField* t_lake_schema_field = nullptr;
 
         bool decode_needed;
 

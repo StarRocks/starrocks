@@ -42,7 +42,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
     public void start() {
         if (isStart.compareAndSet(false, true)) {
             dispatchScheduler.scheduleAtFixedRate(connectorAnalyzeTaskQueue::scheduledPendingTask, 0,
-                    Config.connector_table_query_trigger_analyze_schedule_interval, TimeUnit.SECONDS);
+                    Config.connector_table_query_trigger_task_schedule_interval, TimeUnit.SECONDS);
         }
     }
 

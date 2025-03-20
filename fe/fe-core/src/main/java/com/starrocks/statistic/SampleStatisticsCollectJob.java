@@ -46,6 +46,11 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         TabletSampleManager tabletSampleManager = TabletSampleManager.init(properties, table);
         SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), table.getName());
+        if (sampleInfo.getMaxSampleTabletNum() == 0) {
+            analyzeStatus.setProgress(100);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            return;
+        }
 
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
                 sampleInfo);
@@ -85,6 +90,11 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             }
         }
+    }
+
+    @Override
+    public String getName() {
+        return "Sample";
     }
 
 }

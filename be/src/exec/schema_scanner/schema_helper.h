@@ -117,6 +117,9 @@ public:
                                                  const TClusterSnapshotJobsRequest& req,
                                                  TClusterSnapshotJobsResponse* res);
 
+    static Status get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
+                               TGetKeywordsResponse* response);
+
 private:
     static Status _call_rpc(const SchemaScannerState& state,
                             std::function<void(ClientConnection<FrontendServiceClient>&)> callback);

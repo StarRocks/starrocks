@@ -95,15 +95,16 @@ public abstract class CostPredictor {
                 entity.setContentType("text/csv");
                 httpPost.setEntity(entity);
 
-                CloseableHttpResponse response = httpClient.execute(httpPost);
-                int status = response.getStatusLine().getStatusCode();
-                if (status == HttpStatus.SC_OK) {
-                    HttpEntity responseEntity = response.getEntity();
-                    String responseBody = EntityUtils.toString(responseEntity);
-                    return (long) Double.parseDouble(responseBody);
-                } else {
-                    // Handle the error
-                    throw new IOException("Failed to predict memory bytes: HTTP error code " + status);
+                try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
+                    int status = response.getStatusLine().getStatusCode();
+                    if (status == HttpStatus.SC_OK) {
+                        HttpEntity responseEntity = response.getEntity();
+                        String responseBody = EntityUtils.toString(responseEntity);
+                        return (long) Double.parseDouble(responseBody);
+                    } else {
+                        // Handle the error
+                        throw new IOException("Failed to predict memory bytes: HTTP error code " + status);
+                    }
                 }
             } catch (IOException e) {
                 // Log the error or handle it appropriately
@@ -134,8 +135,7 @@ public abstract class CostPredictor {
             }
             String address = Config.query_cost_prediction_service_address + HEALTH_URL;
             HttpGet httpGet = new HttpGet(address);
-            try {
-                CloseableHttpResponse response = httpClient.execute(httpGet);
+            try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
                 lastHealthCheckStatusCode = response.getStatusLine().getStatusCode();
                 if (lastHealthCheckStatusCode != HttpStatus.SC_OK) {
                     LOG.warn("service is not healthy, address={} status_code={}", address, lastHealthCheckStatusCode);

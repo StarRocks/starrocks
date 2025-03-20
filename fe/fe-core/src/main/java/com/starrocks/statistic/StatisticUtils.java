@@ -263,12 +263,11 @@ public class StatisticUtils {
             statsRowCount = tableStatistics.getOrDefault(partition.getId(), Optional.empty()).orElse(0L);
         }
 
-        return isPartitionStatsHealthy(table, partition, stats, statsRowCount);
+        return isPartitionStatsHealthy(partition, stats, statsRowCount);
     }
 
-    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats,
-                                                  long statsRowCount) {
-        if (stats == null || stats.isInitJobMeta()) {
+    public static boolean isPartitionStatsHealthy(Partition partition, BasicStatsMeta stats, long statsRowCount) {
+        if (stats == null) {
             return false;
         }
         if (!partition.hasData()) {
