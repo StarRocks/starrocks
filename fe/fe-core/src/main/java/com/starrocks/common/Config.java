@@ -2172,7 +2172,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double statistics_min_sample_row_ratio = 0.01;
 
-    @ConfField(mutable = true, comment = "The NDV estimator: DUJ1/LINEAR/POLYNOMIAL")
+    @ConfField(mutable = true, comment = "The NDV estimator: DUJ1/GEE/LINEAR/POLYNOMIAL")
     public static String statistics_sample_ndv_estimator =
             NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 

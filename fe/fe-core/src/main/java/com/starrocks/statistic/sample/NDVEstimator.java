@@ -22,6 +22,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.text.MessageFormat;
 
+/**
+ * Estimate the overall NDV based on sampled data
+ */
 public abstract class NDVEstimator {
 
     private static final Logger LOG = LogManager.getLogger(NDVEstimator.class);
@@ -31,6 +34,9 @@ public abstract class NDVEstimator {
         switch (desc) {
             case DUJ1 -> {
                 return new DUJ1Estimator();
+            }
+            case GEE -> {
+                return new GEEEstimator();
             }
             case LINEAR -> {
                 return new LinearEstimator();
@@ -44,7 +50,7 @@ public abstract class NDVEstimator {
 
     public enum NDVEstimatorDesc {
         DUJ1,
-        // GEE,
+        GEE,
         LINEAR,
         POLYNOMIAL;
 
@@ -115,24 +121,26 @@ public abstract class NDVEstimator {
         }
     }
 
-    // NOTE: GEE requires total number of rows in advance, we don't have that information now
-    // GEE (Guaranteed-Error Estimator) https://dl.acm.org/doi/pdf/10.1145/335168.335230
-    // D_GEE = d + (sqrt(n / r) - 1) * f1
-    // D_GEE is the estimated number of distinct values.
-    // n is the total number of rows in the table.
-    // r is the size of the random sample.
-    // d is the number of distinct values observed in the sample.
-    // f1 is the number of values that appear exactly once in the sample.
-    // static class GEEEstimator extends NDVEstimator {
-    //     @Override
-    //     String generate(double sampleRatio) {
-    //         String sampleRows = "SUM(t1.count)";
-    //         String onceCount = "SUM(IF(t1.count = 1, 1, 0))";
-    //         String sampleNdv = "COUNT(1)";
-    //         String fn = MessageFormat.format("{0} + (sqrt({1} / {2}) - 1) * {3}",
-    //                 sampleNdv, String.valueOf(info.getTotalRowCount()), sampleRows, onceCount);
-    //         return "IFNULL(" + fn + ", COUNT(1))";
-    //     }
-    // }
+    /**
+     * GEE (Guaranteed-Error Estimator) https://dl.acm.org/doi/pdf/10.1145/335168.335230
+     * D_GEE = d + (sqrt(n / r) - 1) * f1
+     * D_GEE is the estimated number of distinct values.
+     * n is the total number of rows in the table.
+     * r is the size of the random sample.
+     * d is the number of distinct values observed in the sample.
+     * f1 is the number of values that appear exactly once in the sample.
+     */
+    static class GEEEstimator extends NDVEstimator {
+
+        @Override
+        String generateQuery(double sampleRatio) {
+            String onceCount = "SUM(IF(t1.count = 1, 1, 0))";
+            String sampleNdv = "COUNT(1)";
+            double inverseRatio = 1 / sampleRatio;
+            double fold = Math.sqrt(inverseRatio - 1);
+            String fn = MessageFormat.format("{0} + {1} * {2}", sampleNdv, fold, onceCount);
+            return "IFNULL(" + fn + ", COUNT(1))";
+        }
+    }
 
 }
