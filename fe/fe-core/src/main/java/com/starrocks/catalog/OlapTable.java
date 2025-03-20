@@ -881,12 +881,14 @@ public class OlapTable extends Table {
             idToPartition.put(newPartitionId, partition);
             List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
             origPhysicalPartitions.forEach(physicalPartition -> {
-                if (physicalPartition.getId() != newPartitionId) {
+                // after refactor, the first physicalPartition id is different from logical partition id
+                if (physicalPartition.getParentId() != newPartitionId) {
                     partition.removeSubPartition(physicalPartition.getId());
                 }
             });
             origPhysicalPartitions.forEach(physicalPartition -> {
-                if (physicalPartition.getId() != newPartitionId) {
+                // after refactor, the first physicalPartition id is different from logical partition id
+                if (physicalPartition.getParentId() != newPartitionId) {
                     physicalPartition.setIdForRestore(GlobalStateMgr.getCurrentState().getNextId());
                     physicalPartition.setParentId(newPartitionId);
                     partition.addSubPartition(physicalPartition);
@@ -1410,6 +1412,11 @@ public class OlapTable extends Table {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
             physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
         }
+    }
+
+    public void removePhysicalPartition(PhysicalPartition physicalPartition) {
+        physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+        physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
     }
 
     public void addPhysicalPartition(PhysicalPartition physicalPartition) {
