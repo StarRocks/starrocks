@@ -44,10 +44,8 @@ public class CustomLdapSslSocketFactory extends SSLSocketFactory {
             throws KeyManagementException, KeyStoreException, NoSuchAlgorithmException,
             CertificateException, IOException {
         if (CustomLdapSslSocketFactory.singletonCustomLdapSslSockFact == null) {
-            synchronized (CustomLdapSslSocketFactory.class) {
-                if (CustomLdapSslSocketFactory.singletonCustomLdapSslSockFact == null) {
-                    CustomLdapSslSocketFactory.singletonCustomLdapSslSockFact = new CustomLdapSslSocketFactory();
-                }
+            if (CustomLdapSslSocketFactory.singletonCustomLdapSslSockFact == null) {
+                CustomLdapSslSocketFactory.singletonCustomLdapSslSockFact = new CustomLdapSslSocketFactory();
             }
         }
         return CustomLdapSslSocketFactory.singletonCustomLdapSslSockFact;
