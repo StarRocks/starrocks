@@ -117,9 +117,8 @@ private:
     bool _enable_late_materialization = false;
 
     bool _enable_partition_hash_join = false;
-    
-    bool _is_skew_join = false;
 
+    bool _is_skew_join = false;
 
     JoinHashTable _ht;
 
