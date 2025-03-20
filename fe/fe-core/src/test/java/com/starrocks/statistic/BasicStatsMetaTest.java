@@ -22,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
@@ -53,8 +54,10 @@ public class BasicStatsMetaTest extends PlanTestBase {
     public void testHealthy() {
         {
             // total row in cached table statistic is 6, the updated row is 100.
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
-            Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "region");
+            Database db =
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), "default_catalog", "test");
+            Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(new ConnectContext(), "default_catalog", "test", "region");
             List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
             new Expectations(partitions.get(0)) {
                 {
@@ -70,9 +73,11 @@ public class BasicStatsMetaTest extends PlanTestBase {
 
         {
             // total row in cached table statistic is 10000, the updated row is 10000, the delta row is 5000.
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
+            Database db =
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), "default_catalog", "test");
             Table tbl =
-                    GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "supplier");
+                    GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getTable(new ConnectContext(), "default_catalog", "test", "supplier");
             List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
             new Expectations(partitions.get(0)) {
                 {
@@ -98,8 +103,9 @@ public class BasicStatsMetaTest extends PlanTestBase {
 
     @Test
     public void testSerialization() throws IOException {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
-        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "region");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), "default_catalog", "test");
+        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), "default_catalog", "test", "region");
         {
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);

@@ -54,6 +54,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -1249,8 +1250,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 throw new SemanticException("Can't drop partitions with where expression and `IF EXISTS` keyword");
             }
             Expr expr = clause.getDropWhereExpr();
-            Database db = context.getGlobalStateMgr().getMetadataMgr()
-                    .getDb(context.getCurrentCatalog(), context.getDatabase());
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(context, context.getCurrentCatalog(), context.getDatabase());
             TableName tableName = new TableName(db.getFullName(), table.getName());
             List<String> dropPartitionNames = PartitionSelector.getPartitionNamesByExpr(context, tableName,
                     olapTable, expr, true);

@@ -311,7 +311,8 @@ public class AnalyzeMgr implements Writable {
 
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
         if (table == null) {
             return;
         }
@@ -420,7 +421,8 @@ public class AnalyzeMgr implements Writable {
 
     public void refreshConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
                                                               List<String> columns, boolean async) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
         if (table == null) {
             return;
         }
@@ -477,8 +479,8 @@ public class AnalyzeMgr implements Writable {
         for (Map.Entry<StatsMetaKey, ExternalBasicStatsMeta> entry : externalBasicStatsMetaMap.entrySet()) {
             StatsMetaKey tableKey = entry.getKey();
             try {
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableKey.getCatalogName(),
-                        tableKey.getDbName(), tableKey.getTableName());
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getTable(new ConnectContext(), tableKey.getCatalogName(), tableKey.getDbName(), tableKey.getTableName());
                 if (table == null) {
                     LOG.warn("Table {}.{}.{} not exists, clear it's statistics", tableKey.getCatalogName(),
                             tableKey.getDbName(), tableKey.getTableName());

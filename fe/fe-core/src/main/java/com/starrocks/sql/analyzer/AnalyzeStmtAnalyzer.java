@@ -248,7 +248,7 @@ public class AnalyzeStmtAnalyzer {
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, tbl.getCatalog(), tbl.getDb());
                     if (db == null) {
                         throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
                     }
@@ -262,7 +262,7 @@ public class AnalyzeStmtAnalyzer {
                 } else if (null != statement.getTableName().getTbl()) {
                     statement.getTableName().normalization(session);
                     Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .getDb(statement.getTableName().getCatalog(), statement.getTableName().getDb());
+                            .getDb(session, statement.getTableName().getCatalog(), statement.getTableName().getDb());
                     if (db == null) {
                         throw new SemanticException("Database %s is not found", statement.getTableName().getCatalogAndDb());
                     }

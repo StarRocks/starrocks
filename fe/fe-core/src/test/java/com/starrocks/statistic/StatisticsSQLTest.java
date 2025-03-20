@@ -240,9 +240,9 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testHiveHistogramStatisticsSQLWithStruct() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0", "subfield_db",
+        Table t0 = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(connectContext, "hive0", "subfield_db",
                 "subfield");
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("hive0", "subfield_db");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "subfield_db");
 
         List<String> columnNames = Lists.newArrayList("col_struct.c0", "col_struct.c1.c11");
         ExternalHistogramStatisticsCollectJob hiveHistogramStatisticsCollectJob = new ExternalHistogramStatisticsCollectJob(

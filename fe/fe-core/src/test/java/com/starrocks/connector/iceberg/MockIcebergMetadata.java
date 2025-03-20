@@ -28,6 +28,7 @@ import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -426,12 +427,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         return new Database(idGen.getAndIncrement(), dbName);
     }
 
     @Override
-    public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
+    public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(dbName).get(tblName).icebergTable;
