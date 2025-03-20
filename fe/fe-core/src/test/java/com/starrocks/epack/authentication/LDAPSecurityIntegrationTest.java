@@ -26,24 +26,56 @@ public class LDAPSecurityIntegrationTest {
     @Test
     public void testGetHostAndPort() {
         Map<String, String> properties = new HashMap<>();
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_LDAP_CONN_URL, "ldap://127.0.0.1:123");
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "ldap://127.0.0.1:123");
         LDAPSecurityIntegration integration = new LDAPSecurityIntegration("test", properties);
 
         Pair<String, Integer> hostAndPort = integration.getHostAndPort();
         Assert.assertEquals("127.0.0.1", hostAndPort.first);
         Assert.assertEquals(Integer.valueOf(123), hostAndPort.second);
 
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_LDAP_CONN_URL, "ldaps://127.0.0.1:123");
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "ldaps://127.0.0.1:123");
         hostAndPort = integration.getHostAndPort();
         Assert.assertEquals("127.0.0.1", hostAndPort.first);
         Assert.assertEquals(Integer.valueOf(123), hostAndPort.second);
 
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_LDAP_CONN_URL, "ldap://www.celerdata.com:123");
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "ldap://www.celerdata.com:123");
         hostAndPort = integration.getHostAndPort();
         Assert.assertEquals("www.celerdata.com", hostAndPort.first);
         Assert.assertEquals(Integer.valueOf(123), hostAndPort.second);
 
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_LDAP_CONN_URL, "ldap://www.celerdata.com:abc");
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "ldap://www.celerdata.com:abc");
+        hostAndPort = integration.getHostAndPort();
+        Assert.assertNull(hostAndPort);
+
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "www.celerdata.com:123");
+        hostAndPort = integration.getHostAndPort();
+        Assert.assertNull(hostAndPort);
+
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "ldap://www.celerdata.com");
+        hostAndPort = integration.getHostAndPort();
+        Assert.assertNull(hostAndPort);
+
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "ldap://admin-sandbox.celerdata.com:123");
+        hostAndPort = integration.getHostAndPort();
+        Assert.assertEquals("admin-sandbox.celerdata.com", hostAndPort.first);
+        Assert.assertEquals(Integer.valueOf(123), hostAndPort.second);
+
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_HOST, "admin-sandbox.celerdata.com");
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_PORT, "123");
+        hostAndPort = integration.getHostAndPort();
+        Assert.assertEquals("admin-sandbox.celerdata.com", hostAndPort.first);
+        Assert.assertEquals(Integer.valueOf(123), hostAndPort.second);
+
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_HOST, "admin-sandbox.celerdata.com");
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_PORT, "abc");
         hostAndPort = integration.getHostAndPort();
         Assert.assertNull(hostAndPort);
     }

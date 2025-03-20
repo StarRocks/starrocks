@@ -35,8 +35,6 @@ import java.util.Hashtable;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import javax.naming.Context;
 import javax.naming.NamingException;
 import javax.naming.directory.DirContext;
@@ -55,8 +53,8 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY = "ldap_cache_refresh_interval";
     public static final String LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_HOST = "ldap_server_host";
-    public static final String LDAP_SEC_INTEGRATION_LDAP_SERVER_PORT = "ldap_server_port";
-    public static final String LDAP_SEC_INTEGRATION_LDAP_CONN_URL = "ldap_conn_url";
+    public static final String LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_PORT = "ldap_server_port";
+    public static final String LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL = "ldap_conn_url";
 
     /**
      * When `ldap_group_match_use_member_uid` set to "false",
@@ -73,8 +71,6 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_USER_SEARCH_DEFAULT_ATTR = "uid";
 
     private static final String LDAPS_SERVER_SSL_DEFAULT_PORT = "636";
-
-    private static final Pattern URL_PATTERN = Pattern.compile("://([\\w.]+):(\\d+)");
 
     final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
             SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
@@ -104,11 +100,11 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public String getLdapServerPort() {
-        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_LDAP_SERVER_PORT, "389");
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_PORT, "389");
     }
 
     public String getLdapConnUrl() {
-        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_LDAP_CONN_URL, "");
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL, "");
     }
 
     public boolean isLdapSslConnAllowInsecure() {
@@ -184,19 +180,31 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public Pair<String, Integer> getHostAndPort() {
-        String url = getLdapUrlOnConnection();
-        Matcher matcher = URL_PATTERN.matcher(url);
-        if (matcher.find()) {
-            String host = matcher.group(1);
-            String port = matcher.group(2);
+        if (getLdapConnUrl().isEmpty()) {
             try {
-                return Pair.create(host, Integer.parseInt(port));
-            } catch (Exception e) {
-                LOG.warn("get host and port from url: {} failed", url);
+                return Pair.create(getLdapServerHost(), Integer.parseInt(getLdapServerPort()));
+            } catch (NumberFormatException e) {
+                LOG.warn("parse {} to number failed", getLdapServerPort());
                 return null;
             }
         } else {
-            return null;
+            String url = getLdapConnUrl();
+            String[] schemeHostPort = url.split("://");
+            if (schemeHostPort.length != 2) {
+                LOG.warn("invalid url format: {}", url);
+                return null;
+            }
+            String[] hostPort = schemeHostPort[1].split(":");
+            if (hostPort.length != 2) {
+                LOG.warn("get host:port from url: {} failed", url);
+                return null;
+            }
+            try {
+                return Pair.create(hostPort[0], Integer.parseInt(hostPort[1]));
+            } catch (NumberFormatException e) {
+                LOG.warn("parse {} to number failed", hostPort[1]);
+                return null;
+            }
         }
     }
 

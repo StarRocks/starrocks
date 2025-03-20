@@ -44,7 +44,6 @@ public class PortConnectivityCheckerEPack extends PortConnectivityChecker {
                 Pair<String, Integer> hostPort = ldapSecurityIntegration.getHostAndPort();
                 if (hostPort == null) {
                     LOG.warn("failed to get host and port for security integration: {}", integration.getName());
-                    ldapSecurityIntegration.setNetWorkReachable(false);
                     continue;
                 }
                 futureList.add(executor.submit(() ->

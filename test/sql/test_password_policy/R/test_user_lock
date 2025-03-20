@@ -17,7 +17,7 @@ execute as u1 with no revert;
 -- !result
 select current_user();
 -- result:
-E: (5206, "Access denied for user 'u1'@'%'. Account is locked, please contact your administrator.")
+E: (5291, "Access denied for user 'u1'@'%'. Account is locked, please contact your administrator.")
 -- !result
 execute as root with no revert;
 -- result:

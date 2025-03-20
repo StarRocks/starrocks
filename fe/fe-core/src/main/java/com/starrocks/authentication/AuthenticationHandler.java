@@ -133,6 +133,10 @@ public class AuthenticationHandler {
                                 throw new AuthenticationException("Cannot map any role ids for security integration");
                             } else {
                                 context.setCurrentRoleIds(roleIds);
+                                groupProviderName = securityIntegration.getGroupProviderName();
+                                if (groupProviderName == null) {
+                                    groupProviderName = List.of(Config.group_provider);
+                                }
                             }
                         }
 
