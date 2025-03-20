@@ -173,9 +173,15 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
                 ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets->get_data()));
                 cur_chunk->append_column(replicated_view_column, slot_id);
+                if (view_column->capacity_limit_reached()) {
+                    return Status::InternalError("Capacity limit reached for captured column in array_map");
+                }
             } else {
                 ASSIGN_OR_RETURN(auto replicated_column, captured_column->replicate(aligned_offsets->get_data()));
                 cur_chunk->append_column(replicated_column, slot_id);
+                if (replicated_column->capacity_limit_reached()) {
+                    return Status::InternalError("Capacity limit reached for captured column in array_map");
+                }
             }
         }
     }
