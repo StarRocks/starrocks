@@ -148,6 +148,11 @@ public class CatalogMocker {
     public static final long TEST_PARTITION1_PK_ID = 40003;
     public static final String TEST_PARTITION2_NAME_PK = "p2_pk";
     public static final long TEST_PARTITION2_PK_ID = 40004;
+<<<<<<< HEAD
+=======
+    public static final long TEST_PH_PARTITION2_PK_ID = 40014;
+    public static final long TEST_PARTITION3_ID = 40015;
+>>>>>>> 5d6f5f9ac6 ([BugFix] Fix several bugs when restore table with random distribution (#56942))
 
     public static final long TEST_BASE_TABLET_P1_ID = 60001;
     public static final long TEST_REPLICA3_ID = 70003;
@@ -307,6 +312,7 @@ public class CatalogMocker {
         // 3. range partition olap table
         MaterializedIndex baseIndexP1 = new MaterializedIndex(TEST_TBL2_ID, IndexState.NORMAL);
         MaterializedIndex baseIndexP2 = new MaterializedIndex(TEST_TBL2_ID, IndexState.NORMAL);
+        MaterializedIndex baseIndexP3 = new MaterializedIndex(TEST_TBL2_ID, IndexState.NORMAL);
         DistributionInfo distributionInfo2 =
                 new HashDistributionInfo(32, Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(1)));
         Partition partition1 =
@@ -476,13 +482,22 @@ public class CatalogMocker {
         {
             baseIndexP1 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
             baseIndexP2 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
+            baseIndexP3 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
             DistributionInfo distributionInfo4 = new RandomDistributionInfo(1);
             partition1 =
                     new Partition(TEST_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo4);
 
+<<<<<<< HEAD
             PhysicalPartition physicalPartition2 = new PhysicalPartitionImpl(
                         TEST_PARTITION2_ID, "", TEST_PARTITION1_ID, 0, baseIndexP2);
+=======
+            PhysicalPartition physicalPartition2 = new PhysicalPartition(
+                        TEST_PARTITION2_ID, "pp2", TEST_PARTITION1_ID, baseIndexP2);
+            PhysicalPartition physicalPartition3 = new PhysicalPartition(
+                        TEST_PARTITION3_ID, "pp3", TEST_PARTITION1_ID, baseIndexP3);
+>>>>>>> 5d6f5f9ac6 ([BugFix] Fix several bugs when restore table with random distribution (#56942))
             partition1.addSubPartition(physicalPartition2);
+            partition1.addSubPartition(physicalPartition3);
 
             rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
             rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);

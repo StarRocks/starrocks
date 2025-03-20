@@ -873,13 +873,20 @@ public class OlapTable extends Table {
             idToPartition.put(newPartitionId, partition);
             List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
             origPhysicalPartitions.forEach(physicalPartition -> {
-                if (physicalPartition.getId() != newPartitionId) {
+                // after refactor, the first physicalPartition id is different from logical partition id
+                if (physicalPartition.getParentId() != newPartitionId) {
                     partition.removeSubPartition(physicalPartition.getId());
                 }
             });
             origPhysicalPartitions.forEach(physicalPartition -> {
+<<<<<<< HEAD
                 if (physicalPartition.getId() != newPartitionId) {
                     physicalPartition.setIdForRestore(globalStateMgr.getNextId());
+=======
+                // after refactor, the first physicalPartition id is different from logical partition id
+                if (physicalPartition.getParentId() != newPartitionId) {
+                    physicalPartition.setIdForRestore(GlobalStateMgr.getCurrentState().getNextId());
+>>>>>>> 5d6f5f9ac6 ([BugFix] Fix several bugs when restore table with random distribution (#56942))
                     physicalPartition.setParentId(newPartitionId);
                     partition.addSubPartition(physicalPartition);
                 }
@@ -1369,6 +1376,11 @@ public class OlapTable extends Table {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
             physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
         }
+    }
+
+    public void removePhysicalPartition(PhysicalPartition physicalPartition) {
+        physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+        physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
     }
 
     public void addPhysicalPartition(PhysicalPartition physicalPartition) {
