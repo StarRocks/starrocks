@@ -187,7 +187,6 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testInactiveMV() throws Exception {
-
         starRocksAssert
                 .withTable("CREATE TABLE IF NOT EXISTS par_tbl1\n" +
                         "(\n" +
