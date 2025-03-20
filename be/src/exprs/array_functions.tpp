@@ -1824,7 +1824,9 @@ public:
 
         // wrap nullable and const column for result
         if (is_nullable_array) {
-            result_column = NullableColumn::create(std::move(result_column), array_null_column);
+            NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(array_null_column->clone_shared());
+            result_column = NullableColumn::create(std::move(result_column), null_column);
+
             result_column->check_or_die();
         }
         if (is_const_array && is_const_target) {
