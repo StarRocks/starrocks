@@ -72,7 +72,7 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::vector<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
-                    bool enable_late_materialization, bool enable_partition_hash_join,bool is_skew_join)
+                    bool enable_late_materialization, bool enable_partition_hash_join, bool is_skew_join)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),

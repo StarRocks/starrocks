@@ -67,7 +67,7 @@ public:
 
     // ====================================
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
-                                     size_t column_offset, bool eq_null, bool for_skew_broadcast_join);
+                                            size_t column_offset, bool eq_null, bool for_skew_broadcast_join);
     static Status fill_runtime_bloom_filter(const Columns& columns, LogicalType type, RuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
     static Status fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,

@@ -434,7 +434,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         }
     }
 
-    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list, _pass_through_type);
+    auto final_operators =
+            context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list, _pass_through_type);
 
     if (limit() != -1) {
         final_operators.emplace_back(
