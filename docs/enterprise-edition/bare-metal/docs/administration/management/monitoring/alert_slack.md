@@ -19,7 +19,7 @@ Follow these steps to configure Slack:
 
    ![Slack-3](../../../_assets/manager/slack_3.png)
 
-5. In the left-side navigation pane, choose **Install App**. On the **Install App** page, click **Install to {your workspace}**. After the installation succeeds, copy the **Bot User OAuth Token** of your App.
+5. In the left-side navigation pane, choose **Install App**. On the **Install App** page, click **Install to `{`your workspace`}`**. After the installation succeeds, copy the **Bot User OAuth Token** of your App.
 
    ![Slack-4](../../../_assets/manager/slack_4.png)
 

@@ -115,15 +115,16 @@ jobs:
             # open-source and Bare-Metal docs go in workingdir/docs
             mkdir -p workingdir/docs
             cp -r docs/en/* workingdir/docs
-            rm -rf workingdir/docs/deployment
             rm workingdir/docs/introduction/what_is_starrocks.md
+            rm -rf workingdir/docs/deployment
+            rsync -avhrW --progress ./docs/enterprise-edition/bare-metal/docs workingdir/docs/
+            cp docs/en/deployment/plan_cluster.md workingdir/docs/deployment/15_plan_cluster.md
+            rm -f workingdir/docs/README.md
+
             rm -rf workingdir/docs/quick_start
-            rm -rf workingdir/docs/benchmarking
-            rm -rf workingdir/docs/developers
-            rm -rf workingdir/docs/project_help
-            mkdir workingdir/docs/deployment
-            rm workingdir/docs/data_source/iceberg*
             rm -rf workingdir/docs/cover_pages
+            rm -rf workingdir/docs/project_help
+            rm -rf workingdir/docs/developers
             rm -rf workingdir/docs/release_notes
             rm -rf workingdir/docs/ecosystem_release
             rm workingdir/docs/data_source/icebergtutorial.mdx
@@ -137,7 +138,6 @@ jobs:
             rm workingdir/docs/loading/objectstorage.mdx
             rm workingdir/docs/unloading/unloading.mdx
             cp -r docs/docusaurus/* workingdir/
-
             cp -r \
             docs/enterprise-edition/bare-metal/docusaurus/docusaurus.config.js \
             docs/enterprise-edition/bare-metal/docusaurus/package.json \
@@ -147,12 +147,6 @@ jobs:
             docs/enterprise-edition/bare-metal/docusaurus/src \
             docs/enterprise-edition/bare-metal/docusaurus/static \
             workingdir/
-
-            rsync -avhrW --progress ./docs/enterprise-edition/bare-metal/docs workingdir/docs/
-            cp docs/en/deployment/plan_cluster.md workingdir/docs/deployment/15_plan_cluster.md
-
-            rsync -avhrW --progress ./docs/enterprise-edition/docusaurus/* workingdir/
-
             find workingdir/docs -name "*.md*" | xargs -d "\n" sed -i "s/displayed_sidebar:.*//"
   
       - name: Combine open-source and Kubernetes Enterprise docs
