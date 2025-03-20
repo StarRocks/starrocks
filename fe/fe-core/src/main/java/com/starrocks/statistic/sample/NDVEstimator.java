@@ -137,7 +137,7 @@ public abstract class NDVEstimator {
             String onceCount = "SUM(IF(t1.count = 1, 1, 0))";
             String sampleNdv = "COUNT(1)";
             double inverseRatio = 1 / sampleRatio;
-            double fold = Math.sqrt(inverseRatio - 1);
+            double fold = Math.sqrt(inverseRatio) - 1;
             String fn = MessageFormat.format("{0} + {1} * {2}", sampleNdv, fold, onceCount);
             return "IFNULL(" + fn + ", COUNT(1))";
         }

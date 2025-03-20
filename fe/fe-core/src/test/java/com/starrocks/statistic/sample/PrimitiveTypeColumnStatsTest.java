@@ -31,7 +31,7 @@ class PrimitiveTypeColumnStatsTest extends PlanTestBase {
             "POLYNOMIAL|COUNT(1) / 0.029700999999999977",
             "INVALID|IFNULL(SUM(t1.count) * COUNT(1) / (SUM(t1.count) - SUM(IF(t1.count = 1, 1, 0)) + SUM(IF(t1.count" +
                     " = 1, 1, 0)) * 0.01), COUNT(1))",
-            "GEE|IFNULL(COUNT(1) + 9.95 * SUM(IF(t1.count = 1, 1, 0)), COUNT(1))"
+            "GEE|IFNULL(COUNT(1) + 9 * SUM(IF(t1.count = 1, 1, 0)), COUNT(1))"
     })
     public void getDistinctCount(String estimator, String expectedQuery) {
         PrimitiveTypeColumnStats c1 = new PrimitiveTypeColumnStats("c1", Type.CHAR);
