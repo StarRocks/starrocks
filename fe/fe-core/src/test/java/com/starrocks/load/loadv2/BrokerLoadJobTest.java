@@ -468,7 +468,7 @@ public class BrokerLoadJobTest {
     }
 
     @Test
-    public void testTaskOnResourceGroupTaskFailed(@Injectable long taskId, @Injectable FailMsg failMsg) {
+    public void testTaskFailedUserCancelType(@Injectable long taskId, @Injectable FailMsg failMsg) {
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         new MockUp<EditLog>() {
             @Mock
