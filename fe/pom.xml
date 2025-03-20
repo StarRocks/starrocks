@@ -34,6 +34,7 @@ under the License.
         <module>spark-dpp</module>
         <module>fe-core</module>
         <module>hive-udf</module>
+        <module>../java-extensions/java-utils</module>
     </modules>
 
     <name>starrocks-fe</name>
@@ -186,6 +187,12 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>spark-dpp</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>java-utils</artifactId>
                 <version>1.0.0</version>
             </dependency>
 
@@ -1006,6 +1013,7 @@ under the License.
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>42.4.4</version>
+                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
