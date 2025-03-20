@@ -1352,9 +1352,10 @@ TEST_P(PersistentIndexTest, test_flush_varlen_to_immutable) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
+TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool varchar_key = false) {
     TCreateTabletReq request;
     request.tablet_id = tablet_id;
+    request.enable_persistent_index = varchar_key;
     request.__set_version(1);
     request.__set_version_hash(0);
     request.tablet_schema.schema_hash = schema_hash;
@@ -1365,7 +1366,11 @@ TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
     TColumn k1;
     k1.column_name = "pk";
     k1.__set_is_key(true);
-    k1.column_type.type = TPrimitiveType::BIGINT;
+    TColumnType ctype;
+    size_t len = varchar_key ? 128 : 8;
+    ctype.__set_type(varchar_key ? TPrimitiveType::VARCHAR : TPrimitiveType::BIGINT);
+    ctype.__set_len(len);
+    k1.__set_column_type(ctype);
     request.tablet_schema.columns.push_back(k1);
 
     TColumn k2;
@@ -1385,7 +1390,7 @@ TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
 }
 
 RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                              Column* one_delete = nullptr) {
+                              const vector<Slice>& varlen_keys, Column* one_delete = nullptr) {
     RowsetWriterContext writer_context;
     RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
     writer_context.rowset_id = rowset_id;
@@ -1401,15 +1406,24 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-    auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+    size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
+    LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
+    auto chunk = ChunkHelper::new_chunk(schema, size);
     auto& cols = chunk->columns();
-    size_t size = keys.size();
-    for (size_t i = 0; i < size; i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % size + 1)));
-        cols[2]->append_datum(Datum((int32_t)(keys[i] % size + 2)));
+    if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
+        for (size_t i = 0; i < size; i++) {
+            cols[0]->append_datum(Datum(varlen_keys[i]));
+            cols[1]->append_datum(Datum((int16_t)(i + 1)));
+            cols[2]->append_datum(Datum((int32_t)(i + 2)));
+        }
+    } else {
+        for (size_t i = 0; i < size; i++) {
+            cols[0]->append_datum(Datum(keys[i]));
+            cols[1]->append_datum(Datum((int16_t)(keys[i] % size + 1)));
+            cols[2]->append_datum(Datum((int32_t)(keys[i] % size + 2)));
+        }
     }
-    if (one_delete == nullptr && !keys.empty()) {
+    if (one_delete == nullptr && (size > 0)) {
         CHECK_OK(writer->flush_chunk(*chunk));
     } else if (one_delete == nullptr) {
         CHECK_OK(writer->flush());
@@ -1435,7 +1449,7 @@ void build_persistent_index_from_tablet(size_t N) {
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(uint64_t));
     }
 
-    RowsetSharedPtr rowset = create_rowset(tablet, keys);
+    RowsetSharedPtr rowset = create_rowset(tablet, keys, {});
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     auto version = 2;
     auto st = tablet->rowset_commit(version, rowset, 0);
@@ -1575,6 +1589,60 @@ TEST_P(PersistentIndexTest, test_build_from_tablet_flush_advance) {
     config::l0_max_mem_usage = 50000;
     build_persistent_index_from_tablet(100000);
     config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_load_from_tablet_mem_error) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_load_from_tablet_mem_error";
+    const std::string kIndexFile = "./PersistentIndexTest_test_load_from_tablet_mem_error/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+    TabletSharedPtr tablet = create_tablet(rand(), rand(), true);
+    tablet->set_enable_persistent_index(true);
+    const int N = 10;
+    vector<std::string> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_test_varlen_test_varlen_test_varlen_test_varlen_test_" + std::to_string(i);
+        values.emplace_back(i);
+        key_slices.emplace_back(keys[i]);
+    }
+    RowsetSharedPtr rowset = create_rowset(tablet, {}, key_slices);
+    auto st = tablet->rowset_commit(2, rowset, 0);
+    tablet->updates()->wait_apply_done();
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+        EditVersion version(0, 0);
+        PersistentIndexMetaPB index_meta;
+        index_meta.set_key_size(0);
+        index_meta.set_size(0);
+        version.to_pb(index_meta.mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+        IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+        version.to_pb(snapshot_meta->mutable_version());
+        PersistentIndex index(kPersistentIndexDir);
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(2, 0), N));
+        ASSERT_OK(index.insert(N, key_slices.data(), values.data(), false));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+    }
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("phmap_try_consume_mem_failed");
+    fp->setMode(trigger_mode);
+    PersistentIndex persistent_index(kPersistentIndexDir);
+    ASSERT_TRUE(persistent_index.load_from_tablet(tablet.get()).is_mem_limit_exceeded());
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 TEST_P(PersistentIndexTest, test_fixlen_replace) {
