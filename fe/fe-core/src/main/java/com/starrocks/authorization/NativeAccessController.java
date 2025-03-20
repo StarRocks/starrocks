@@ -41,7 +41,7 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.SYSTEM,
+        checkObjectTypeAction(context, privilegeType, ObjectType.SYSTEM,
                 null);
     }
 
@@ -53,7 +53,7 @@ public class NativeAccessController implements AccessController {
         }
 
         AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        if (!authorizationManager.canExecuteAs(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), impersonateUser)) {
+        if (!authorizationManager.canExecuteAs(context, impersonateUser)) {
             throw new AccessDeniedException();
         }
     }
@@ -61,30 +61,28 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkCatalogAction(ConnectContext context, String catalogName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.CATALOG,
+        checkObjectTypeAction(context, privilegeType, ObjectType.CATALOG,
                 Collections.singletonList(catalogName));
     }
 
     @Override
     public void checkAnyActionOnCatalog(ConnectContext context, String catalogName)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.CATALOG,
-                Collections.singletonList(catalogName));
+        checkAnyActionOnObject(context, ObjectType.CATALOG, Collections.singletonList(catalogName));
     }
 
     @Override
     public void checkDbAction(ConnectContext context, String catalogName, String db,
                               PrivilegeType privilegeType) throws AccessDeniedException {
         String catalog = catalogName == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : catalogName;
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.DATABASE,
+        checkObjectTypeAction(context, privilegeType, ObjectType.DATABASE,
                 Arrays.asList(catalog, db));
     }
 
     @Override
     public void checkAnyActionOnDb(ConnectContext context, String catalogName, String db)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.DATABASE,
-                Arrays.asList(catalogName, db));
+        checkAnyActionOnObject(context, ObjectType.DATABASE, Arrays.asList(catalogName, db));
     }
 
     @Override
@@ -93,7 +91,7 @@ public class NativeAccessController implements AccessController {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         Preconditions.checkNotNull(tableName.getDb());
 
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.TABLE,
+        checkObjectTypeAction(context, privilegeType, ObjectType.TABLE,
                 Arrays.asList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
@@ -103,8 +101,7 @@ public class NativeAccessController implements AccessController {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         Preconditions.checkNotNull(tableName.getDb());
 
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.TABLE,
-                Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
+        checkAnyActionOnObject(context, ObjectType.TABLE, Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
@@ -116,15 +113,14 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkViewAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.VIEW,
+        checkObjectTypeAction(context, privilegeType, ObjectType.VIEW,
                 Arrays.asList(tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
     public void checkAnyActionOnView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.VIEW,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
+        checkAnyActionOnObject(context, ObjectType.VIEW, Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
@@ -135,7 +131,7 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkMaterializedViewAction(ConnectContext context, TableName tableName,
                                             PrivilegeType privilegeType) throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType,
+        checkObjectTypeAction(context, privilegeType,
                 ObjectType.MATERIALIZED_VIEW,
                 Arrays.asList(tableName.getDb(), tableName.getTbl()));
     }
@@ -143,8 +139,7 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkAnyActionOnMaterializedView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.MATERIALIZED_VIEW,
-                Arrays.asList(tableName.getDb(), tableName.getTbl()));
+        checkAnyActionOnObject(context, ObjectType.MATERIALIZED_VIEW, Arrays.asList(tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
@@ -163,15 +158,13 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkAnyActionOnFunction(ConnectContext context, String database, Function function)
             throws AccessDeniedException {
-        checkAnyActionOnFunctionObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.FUNCTION,
-                database, function);
+        checkAnyActionOnFunctionObject(context, ObjectType.FUNCTION, database, function);
     }
 
     @Override
     public void checkAnyActionOnAnyFunction(ConnectContext context, String database)
             throws AccessDeniedException {
-        checkAnyActionOnFunctionObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.FUNCTION,
-                database, null);
+        checkAnyActionOnFunctionObject(context, ObjectType.FUNCTION, database, null);
     }
 
     @Override
@@ -184,8 +177,7 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkAnyActionOnGlobalFunction(ConnectContext context, Function function)
             throws AccessDeniedException {
-        checkAnyActionOnFunctionObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.GLOBAL_FUNCTION,
-                null, function);
+        checkAnyActionOnFunctionObject(context, ObjectType.GLOBAL_FUNCTION, null, function);
     }
 
     @Override
@@ -199,8 +191,7 @@ public class NativeAccessController implements AccessController {
             if (manager.provider.isAvailablePrivType(ObjectType.TABLE, privilegeType)) {
                 PEntryObject allTableInDbObject = manager.provider.generateObject(
                         ObjectType.TABLE,
-                        Lists.newArrayList(db, "*"),
-                        GlobalStateMgr.getCurrentState());
+                        Lists.newArrayList(db, "*"));
                 if (manager.provider.searchActionOnObject(ObjectType.TABLE, allTableInDbObject, collection, privilegeType)) {
                     return;
                 }
@@ -210,8 +201,7 @@ public class NativeAccessController implements AccessController {
             if (manager.provider.isAvailablePrivType(ObjectType.VIEW, privilegeType)) {
                 PEntryObject allViewInDbObject = manager.provider.generateObject(
                         ObjectType.VIEW,
-                        Lists.newArrayList(db, "*"),
-                        GlobalStateMgr.getCurrentState());
+                        Lists.newArrayList(db, "*"));
                 if (manager.provider.searchActionOnObject(ObjectType.VIEW, allViewInDbObject, collection, privilegeType)) {
                     return;
                 }
@@ -221,8 +211,7 @@ public class NativeAccessController implements AccessController {
             if (manager.provider.isAvailablePrivType(ObjectType.MATERIALIZED_VIEW, privilegeType)) {
                 PEntryObject allMvInDbObject = manager.provider.generateObject(
                         ObjectType.MATERIALIZED_VIEW,
-                        Lists.newArrayList(db, "*"),
-                        GlobalStateMgr.getCurrentState());
+                        Lists.newArrayList(db, "*"));
                 if (manager.provider.searchActionOnObject(
                         ObjectType.MATERIALIZED_VIEW, allMvInDbObject, collection, privilegeType)) {
                     return;
@@ -241,49 +230,46 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkResourceAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.RESOURCE,
+        checkObjectTypeAction(context, privilegeType, ObjectType.RESOURCE,
                 Collections.singletonList(name));
     }
 
     @Override
     public void checkAnyActionOnResource(ConnectContext context, String name) throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.RESOURCE,
-                Collections.singletonList(name));
+        checkAnyActionOnObject(context, ObjectType.RESOURCE, Collections.singletonList(name));
     }
 
     @Override
     public void checkResourceGroupAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType,
+        checkObjectTypeAction(context, privilegeType,
                 ObjectType.RESOURCE_GROUP, Collections.singletonList(name));
     }
 
     @Override
     public void checkPipeAction(ConnectContext context, PipeName name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.PIPE,
+        checkObjectTypeAction(context, privilegeType, ObjectType.PIPE,
                 Lists.newArrayList(name.getDbName(), name.getPipeName()));
     }
 
     @Override
     public void checkAnyActionOnPipe(ConnectContext context, PipeName name)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.PIPE,
-                Lists.newArrayList(name.getDbName(), name.getPipeName()));
+        checkAnyActionOnObject(context, ObjectType.PIPE, Lists.newArrayList(name.getDbName(), name.getPipeName()));
     }
 
     @Override
     public void checkStorageVolumeAction(ConnectContext context, String storageVolume,
                                          PrivilegeType privilegeType) throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        checkObjectTypeAction(context,
                 privilegeType, ObjectType.STORAGE_VOLUME, Collections.singletonList(storageVolume));
     }
 
     @Override
     public void checkAnyActionOnStorageVolume(ConnectContext context, String storageVolume)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.STORAGE_VOLUME,
-                Collections.singletonList(storageVolume));
+        checkAnyActionOnObject(context, ObjectType.STORAGE_VOLUME, Collections.singletonList(storageVolume));
     }
 
     @Override
@@ -305,8 +291,7 @@ public class NativeAccessController implements AccessController {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject object = manager.provider.generateFunctionObject(objectType, databaseId, function.getFunctionId(),
-                    GlobalStateMgr.getCurrentState());
+            PEntryObject object = manager.provider.generateFunctionObject(objectType, databaseId, function.getFunctionId());
             boolean checkResult = manager.provider.check(objectType, privilegeType, object, collection);
             if (!checkResult) {
                 throw new AccessDeniedException();
@@ -323,11 +308,12 @@ public class NativeAccessController implements AccessController {
         }
     }
 
-    protected static void checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds, PrivilegeType privilegeType,
+    protected static void checkObjectTypeAction(ConnectContext context, PrivilegeType privilegeType,
                                                 ObjectType objectType, List<String> objectTokens) throws AccessDeniedException {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds());
             boolean checkResult = manager.checkAction(collection, objectType, privilegeType, objectTokens);
             if (!checkResult) {
                 throw new AccessDeniedException();
@@ -353,13 +339,13 @@ public class NativeAccessController implements AccessController {
                 .collect(Collectors.joining("."));
     }
 
-    protected static void checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
+    protected static void checkAnyActionOnObject(ConnectContext context, ObjectType objectType,
                                                  List<String> objectTokens) throws AccessDeniedException {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject pEntryObject = manager.provider.generateObject(
-                    objectType, objectTokens, GlobalStateMgr.getCurrentState());
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds());
+            PEntryObject pEntryObject = manager.provider.generateObject(objectType, objectTokens);
             boolean checkResult = manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
             if (!checkResult) {
                 throw new AccessDeniedException();
@@ -374,7 +360,7 @@ public class NativeAccessController implements AccessController {
         }
     }
 
-    private static void checkAnyActionOnFunctionObject(UserIdentity currentUser, Set<Long> roleIds,
+    private static void checkAnyActionOnFunctionObject(ConnectContext context,
                                                        ObjectType objectType,
                                                        String dbName, Function function) throws AccessDeniedException {
         // database == null means global function
@@ -383,7 +369,7 @@ public class NativeAccessController implements AccessController {
             databaseId = PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID;
         } else {
             Database database = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+                    .getDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             if (database == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -399,9 +385,9 @@ public class NativeAccessController implements AccessController {
 
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject pEntryObject = manager.provider.generateFunctionObject(
-                    objectType, databaseId, functionId, GlobalStateMgr.getCurrentState());
+            PrivilegeCollectionV2 collection =
+                    manager.mergePrivilegeCollection(context.getCurrentUserIdentity(), context.getCurrentRoleIds());
+            PEntryObject pEntryObject = manager.provider.generateFunctionObject(objectType, databaseId, functionId);
             boolean checkResult = manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
             if (!checkResult) {
                 throw new AccessDeniedException();
@@ -419,13 +405,12 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkWarehouseAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, ObjectType.WAREHOUSE,
+        checkObjectTypeAction(context, privilegeType, ObjectType.WAREHOUSE,
                 Collections.singletonList(name));
     }
 
     @Override
     public void checkAnyActionOnWarehouse(ConnectContext context, String name) throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.WAREHOUSE,
-                Collections.singletonList(name));
+        checkAnyActionOnObject(context, ObjectType.WAREHOUSE, Collections.singletonList(name));
     }
 }

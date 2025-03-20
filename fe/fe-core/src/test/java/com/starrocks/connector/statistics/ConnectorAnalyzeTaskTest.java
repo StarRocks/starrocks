@@ -63,10 +63,10 @@ public class ConnectorAnalyzeTaskTest {
 
     @Test
     public void testMergeTask() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "partitioned_db", "orders");
         String tableUUID = table.getUUID();
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
 
         ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_custkey", "o_orderstatus"));
@@ -76,7 +76,7 @@ public class ConnectorAnalyzeTaskTest {
 
     @Test
     public void testTaskRun() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "partitioned_db", "orders");
         String tableUUID = table.getUUID();
         ExternalAnalyzeStatus externalAnalyzeStatus = new ExternalAnalyzeStatus(1, "hive0", "partitioned_db", "orders",
@@ -85,7 +85,7 @@ public class ConnectorAnalyzeTaskTest {
         externalAnalyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(externalAnalyzeStatus);
 
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
         Optional<AnalyzeStatus> result = task1.run();
         Assert.assertTrue(result.isEmpty());
@@ -125,10 +125,10 @@ public class ConnectorAnalyzeTaskTest {
 
     @Test
     public void testTaskRunWithStructSubfield() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "subfield_db", "subfield");
         String tableUUID = table.getUUID();
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("col_int", "col_struct.c0"));
         Optional<AnalyzeStatus> result = task.run();
         Assert.assertTrue(result.isPresent());
@@ -139,11 +139,11 @@ public class ConnectorAnalyzeTaskTest {
 
     @Test
     public void testTaskRunWithTableUpdate() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "partitioned_db", "orders");
         String tableUUID = table.getUUID();
 
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
         new MockUp<ExternalFullStatisticsCollectJob>() {
             @Mock
@@ -189,11 +189,11 @@ public class ConnectorAnalyzeTaskTest {
 
     @Test
     public void testSampleTaskRun() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "partitioned_db", "orders");
         String tableUUID = table.getUUID();
 
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
         new MockUp<ExternalSampleStatisticsCollectJob>() {
             @Mock

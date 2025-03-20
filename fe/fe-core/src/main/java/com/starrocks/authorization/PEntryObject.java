@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authorization;
-
-import com.starrocks.server.GlobalStateMgr;
 
 /**
  * Each `GRANT`/`REVOKE` statement will create some privilege entry object
@@ -60,7 +57,7 @@ public interface PEntryObject extends Comparable<PEntryObject> {
     /**
      * validate this object to see if still exists
      */
-    boolean validate(GlobalStateMgr globalStateMgr);
+    boolean validate();
 
     /**
      * used in Collections.sort() to accelerate lookup

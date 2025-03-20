@@ -477,15 +477,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4", Type.DATE);
         Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
-                        "'test" +
-                        ".t0_stats', " +
-                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
-                "'[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', NOW() FROM " +
-                        "( SELECT `v4` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v4` is not " +
-                        "null  " +
-                        "and `v4` " +
-                        "not in (\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId,
+                                "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
+                                "'test" +
+                                ".t0_stats', " +
+                                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                                "'[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', NOW() FROM " +
+                                "( SELECT `v4` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v4` is not " +
+                                "null  " +
+                                "and `v4` " +
+                                "not in (\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId,
                         dbid)),
                 normalize.apply(sql));
 
@@ -583,8 +583,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testExternalAnalyzeJob() {
-        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", database.getFullName(),
                 table.getName(), null, null,
@@ -610,8 +611,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testExternalAnalyzeJobCollect() {
-        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", database.getFullName(),
                 table.getName(), null, null,
@@ -809,7 +811,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
 
                 ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("iceberg0",
-                        "partitioned_db", "t1",  List.of("id"), StatsConstants.AnalyzeType.FULL,
+                        "partitioned_db", "t1", List.of("id"), StatsConstants.AnalyzeType.FULL,
                         LocalDateTime.now().plusHours(2), Maps.newHashMap());
                 externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("id", StatsConstants.AnalyzeType.FULL,
                         LocalDateTime.now().plusHours(2)));
@@ -915,7 +917,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         List<StatisticsCollectJob> statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
         Assert.assertEquals(1, statsJobs.size());
 
-
         // test collect statistics time after table update time
         new MockUp<AnalyzeMgr>() {
             @Mock
@@ -924,9 +925,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ExternalBasicStatsMeta externalBasicStatsMeta =
                         new ExternalBasicStatsMeta("paimon0", "pmn_db1", "partitioned_table", null,
                                 StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
-                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
-                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
-                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pt", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null, LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null, LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pt", null, LocalDateTime.now().plusHours(20)));
 
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "partitioned_table"), externalBasicStatsMeta);
                 return metaMap;
@@ -967,8 +968,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ExternalBasicStatsMeta externalBasicStatsMeta =
                         new ExternalBasicStatsMeta("paimon0", "pmn_db1", "unpartitioned_table", null,
                                 StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
-                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
-                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null, LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null, LocalDateTime.now().plusHours(20)));
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "unpartitioned_table"),
                         externalBasicStatsMeta);
@@ -1030,8 +1031,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testExternalFullStatisticsBuildCollectSQLList() {
-        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
@@ -1052,8 +1054,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         collectSqlList = collectJob.buildCollectSQLList(3);
         Assert.assertEquals(4, collectSqlList.size());
 
-        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "tpch");
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "region");
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
                         database,
@@ -1070,8 +1072,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(), "r_regionkey", "r_name", "r_comment");
         assertContains(collectSqlList.get(0).toString(), "1=1");
 
-        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1_par_null");
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1_par_null");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
                         database,
@@ -1094,10 +1097,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testIcebergPartitionTransformFullStatisticsBuildCollectSQLList() {
         // test partition column type is timestamp without time zone
         Database database =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_transforms_db");
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getDb(connectContext, "iceberg0", "partitioned_transforms_db");
         Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                        "t0_year");
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                                "t0_year");
 
         ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
@@ -1111,8 +1116,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(),
                 "`ts` >= '2019-01-01 00:00:00' and `ts` < '2020-01-01 00:00:00'");
 
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                "t0_month");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_month");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1125,8 +1131,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(),
                 "ts` >= '2022-01-01 00:00:00' and `ts` < '2022-02-01 00:00:00'");
 
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                "t0_day");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_day");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1139,8 +1146,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(),
                 "`ts` >= '2022-01-01 00:00:00' and `ts` < '2022-01-02 00:00:00'");
 
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                "t0_hour");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_hour");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1158,8 +1166,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setTimeZone("America/New_York");
         connectContext.setThreadLocalInfo();
 
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                "t0_year_tz");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_year_tz");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1172,8 +1181,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(),
                 "`ts` >= '2018-12-31 19:00:00' and `ts` < '2019-12-31 19:00:00'");
 
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                "t0_month_tz");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_month_tz");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1186,8 +1196,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(),
                 "`ts` >= '2021-12-31 19:00:00' and `ts` < '2022-01-31 19:00:00'");
 
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                "t0_day_tz");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_day_tz");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1200,8 +1211,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(),
                 "`ts` >= '2021-12-31 19:00:00' and `ts` < '2022-01-01 19:00:00'");
 
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                "t0_hour_tz");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_hour_tz");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1216,8 +1228,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setTimeZone(oldTimeZone);
 
         // test partition transform is identity
-        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_db");
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_db",
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "iceberg0", "partitioned_db");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "iceberg0", "partitioned_db",
                 "t1");
         collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
@@ -1235,10 +1247,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testExternalFullStatisticsBuildCollectSQLWithException1() {
         // test partition transform is bucket
         Database database =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_transforms_db");
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getDb(connectContext, "iceberg0", "partitioned_transforms_db");
         Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                        "t0_bucket");
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                                "t0_bucket");
         ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1257,9 +1271,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testExternalFullStatisticsBuildCollectSQLWithException2() {
         // test partition field is null
         Database database =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_db");
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "iceberg0", "partitioned_db");
         Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_db",
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "iceberg0", "partitioned_db",
                         "t1");
         ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
@@ -1285,10 +1299,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testExternalFullStatisticsBuildCollectSQLWithException3() {
         // test partition transform is bucket
         Database database =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_transforms_db");
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getDb(connectContext, "iceberg0", "partitioned_transforms_db");
         Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
-                        "t0_date_month_identity_evolution");
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                                "t0_date_month_identity_evolution");
         ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
                         database,
@@ -1308,9 +1324,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testExternalPaimonFullStatisticsBuildCollectSQL() {
         // test partition
         Database database =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("paimon0", "pmn_db1");
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "paimon0", "pmn_db1");
         Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("paimon0", "pmn_db1",
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "paimon0", "pmn_db1",
                         "partitioned_table");
         ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("paimon0",
@@ -1336,7 +1352,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(3, lists.size());
 
         //test unpartitioned table
-        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("paimon0", "pmn_db1",
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "paimon0", "pmn_db1",
                 "unpartitioned_table");
         //test partition is null
         collectJob = (ExternalFullStatisticsCollectJob)
@@ -1717,7 +1733,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " PARTITION BY (c2, c3) " +
                 " PROPERTIES('replication_num'='1')");
         Table table = starRocksAssert.getTable("test", "t_gen_col");
-        List<String> cols =  StatisticUtils.getCollectibleColumns(table);
+        List<String> cols = StatisticUtils.getCollectibleColumns(table);
         Assert.assertTrue(cols.size() == 3);
         Assert.assertTrue(cols.contains("c3"));
         starRocksAssert.dropTable("test.t_gen_col");
@@ -1733,7 +1749,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " PARTITION BY c2, date_trunc('month', c1) " +
                 " PROPERTIES('replication_num'='1')");
         Table table = starRocksAssert.getTable("test", "t_gen_col");
-        List<String> cols =  StatisticUtils.getCollectibleColumns(table);
+        List<String> cols = StatisticUtils.getCollectibleColumns(table);
         Assert.assertTrue(cols.size() == 2);
         starRocksAssert.dropTable("test.t_gen_col");
     }

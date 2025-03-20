@@ -25,6 +25,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -128,10 +129,10 @@ public class DictionaryCacheSink extends DataSink {
     }
 
     private TOlapTableSchemaParam buildTSchema() {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(),
                                         dictionary.getCatalogName(), dictionary.getDbName());
         String queryableObject = dictionary.getQueryableObject();
-        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(),
                                         dictionary.getCatalogName(), dictionary.getDbName(), queryableObject);
         Preconditions.checkNotNull(tbl);
 

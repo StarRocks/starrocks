@@ -46,7 +46,7 @@ public class CatalogConnectorMetadataTest {
     void testListDbNames(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {
-                connectorMetadata.listDbNames();
+                connectorMetadata.listDbNames((ConnectContext) any);
                 result = ImmutableList.of("test_db1", "test_db2");
                 times = 1;
             }
@@ -58,7 +58,7 @@ public class CatalogConnectorMetadataTest {
                 metaMetadata
         );
 
-        List<String> dbNames = catalogConnectorMetadata.listDbNames();
+        List<String> dbNames = catalogConnectorMetadata.listDbNames(new ConnectContext());
         List<String> expected = ImmutableList.of("test_db1", "test_db2", InfoSchemaDb.DATABASE_NAME);
         assertEquals(expected, dbNames);
     }
@@ -67,7 +67,7 @@ public class CatalogConnectorMetadataTest {
     void testListTableNames(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {
-                connectorMetadata.listTableNames("test_db");
+                connectorMetadata.listTableNames((ConnectContext) any, "test_db");
                 result = ImmutableList.of("test_tbl1", "test_tbl2");
                 times = 1;
             }
@@ -79,7 +79,7 @@ public class CatalogConnectorMetadataTest {
                 metaMetadata
         );
 
-        List<String> tblNames = catalogConnectorMetadata.listTableNames(InfoSchemaDb.DATABASE_NAME);
+        List<String> tblNames = catalogConnectorMetadata.listTableNames(new ConnectContext(), InfoSchemaDb.DATABASE_NAME);
         List<String> expected = ImmutableList.of("tables", "table_privileges", "referential_constraints",
                 "key_column_usage", "routines", "schemata", "columns", "character_sets", "collations",
                 "table_constraints", "engines", "user_privileges", "schema_privileges", "statistics",
@@ -87,7 +87,7 @@ public class CatalogConnectorMetadataTest {
         );
         assertEquals(expected, tblNames);
 
-        tblNames = catalogConnectorMetadata.listTableNames("test_db");
+        tblNames = catalogConnectorMetadata.listTableNames(new ConnectContext(), "test_db");
         expected = ImmutableList.of("test_tbl1", "test_tbl2");
         assertEquals(expected, tblNames);
     }
@@ -96,7 +96,7 @@ public class CatalogConnectorMetadataTest {
     void testGetDb(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {
-                connectorMetadata.getDb("test_db");
+                connectorMetadata.getDb((ConnectContext) any, "test_db");
                 result = null;
                 times = 1;
             }
@@ -108,16 +108,16 @@ public class CatalogConnectorMetadataTest {
                 metaMetadata
         );
 
-        Database db = catalogConnectorMetadata.getDb("test_db");
+        Database db = catalogConnectorMetadata.getDb(new ConnectContext(), "test_db");
         assertNull(db);
-        assertNotNull(catalogConnectorMetadata.getDb(InfoSchemaDb.DATABASE_NAME));
+        assertNotNull(catalogConnectorMetadata.getDb(new ConnectContext(), InfoSchemaDb.DATABASE_NAME));
     }
 
     @Test
     void testDbExists(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {
-                connectorMetadata.dbExists("test_db");
+                connectorMetadata.dbExists((ConnectContext) any, "test_db");
                 result = true;
                 times = 1;
             }
@@ -129,21 +129,21 @@ public class CatalogConnectorMetadataTest {
                 metaMetadata
         );
 
-        assertTrue(catalogConnectorMetadata.dbExists("test_db"));
-        assertTrue(catalogConnectorMetadata.dbExists(InfoSchemaDb.DATABASE_NAME));
+        assertTrue(catalogConnectorMetadata.dbExists(new ConnectContext(), "test_db"));
+        assertTrue(catalogConnectorMetadata.dbExists(new ConnectContext(), InfoSchemaDb.DATABASE_NAME));
     }
 
     @Test
     void testTableExists() {
         MockedJDBCMetadata mockedJDBCMetadata = new MockedJDBCMetadata(new HashMap<>());
-        assertTrue(mockedJDBCMetadata.tableExists("db1", "tbl1"));
+        assertTrue(mockedJDBCMetadata.tableExists(new ConnectContext(), "db1", "tbl1"));
     }
 
     @Test
     void testGetTable(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {
-                connectorMetadata.getTable("test_db", "test_tbl");
+                connectorMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = null;
                 times = 1;
             }
@@ -155,9 +155,9 @@ public class CatalogConnectorMetadataTest {
                 metaMetadata
         );
 
-        Table table = catalogConnectorMetadata.getTable("test_db", "test_tbl");
+        Table table = catalogConnectorMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertNull(table);
-        assertNotNull(catalogConnectorMetadata.getTable(InfoSchemaDb.DATABASE_NAME, "tables"));
+        assertNotNull(catalogConnectorMetadata.getTable(new ConnectContext(), InfoSchemaDb.DATABASE_NAME, "tables"));
     }
 
     @Test
@@ -196,10 +196,9 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.createTableLike(null);
                 connectorMetadata.createTable(null);
                 connectorMetadata.createDb("test_db");
-                connectorMetadata.dropDb("test_db", false);
+                connectorMetadata.dropDb((ConnectContext) any, "test_db", false);
                 connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
                 connectorMetadata.getPartitions(null, null);
-                connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
                 connectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
             }
         };
@@ -233,10 +232,9 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.createTableLike(null);
         catalogConnectorMetadata.createTable(null);
         catalogConnectorMetadata.createDb("test_db");
-        catalogConnectorMetadata.dropDb("test_db", false);
+        catalogConnectorMetadata.dropDb(new ConnectContext(), "test_db", false);
         connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
         catalogConnectorMetadata.getPartitions(null, null);
-        catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
         catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
     }
 }

@@ -177,9 +177,9 @@ public class PaimonMetadataTest {
                 result = "hdfs://127.0.0.1:10000/paimon";
             }
         };
-        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
+        com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
-        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
+        Assert.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         Assert.assertEquals("db1", paimonTable.getCatalogDBName());
         Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
@@ -201,7 +201,7 @@ public class PaimonMetadataTest {
                 result = new Catalog.DatabaseNotExistException("Database does not exist");
             }
         };
-        Assert.assertNull(metadata.getDb("nonexistentDb"));
+        Assert.assertNull(metadata.getDb(connectContext, "nonexistentDb"));
     }
 
     @Test
@@ -213,8 +213,8 @@ public class PaimonMetadataTest {
                 result = new Catalog.TableNotExistException(identifier);
             }
         };
-        Assert.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
-        Assert.assertNull(metadata.getTable("nonexistentDb", "nonexistentTbl"));
+        Assert.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
+        Assert.assertNull(metadata.getTable(connectContext, "nonexistentDb", "nonexistentTbl"));
     }
 
     @Test
@@ -233,7 +233,7 @@ public class PaimonMetadataTest {
                 result = scan;
             }
         };
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1$manifests");
         List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
         List<RemoteFileInfo> result =
                 metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
@@ -272,8 +272,8 @@ public class PaimonMetadataTest {
         List<String> expectations = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
         Assertions.assertThat(result).hasSameElementsAs(expectations);
         Config.enable_paimon_refresh_manifest_files = true;
-        metadata.refreshTable("db1", metadata.getTable("db1", "tbl1"), new ArrayList<>(), false);
-        metadata.refreshTable("db1", metadata.getTable("db1", "tbl1"), expectations, false);
+        metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), new ArrayList<>(), false);
+        metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), expectations, false);
 
     }
 
@@ -315,7 +315,7 @@ public class PaimonMetadataTest {
                 result = scan;
             }
         };
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
         List<RemoteFileInfo> result =
                 metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
@@ -460,7 +460,7 @@ public class PaimonMetadataTest {
             }
         };
 
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
 
         ExternalScanPartitionPruneRule rule0 = new ExternalScanPartitionPruneRule();
 
@@ -482,6 +482,7 @@ public class PaimonMetadataTest {
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
     }
+
     @Test
     public void testGetTableStatistics() {
         String stats = "{\n" +

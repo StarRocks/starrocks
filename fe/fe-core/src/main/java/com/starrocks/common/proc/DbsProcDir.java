@@ -45,6 +45,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
@@ -101,7 +102,8 @@ public class DbsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+        ConnectContext context = new ConnectContext();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(context);
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;

@@ -26,6 +26,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -241,7 +242,7 @@ public class UserProperty {
 
         // check whether the database exists
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(newCatalog, newDatabase);
+        Database db = metadataMgr.getDb(new ConnectContext(), newCatalog, newDatabase);
         if (db == null) {
             String catalogDbName = newCatalog + "." + newDatabase;
             throw new StarRocksConnectorException(catalogDbName + " not exists");

@@ -17,6 +17,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -54,10 +55,10 @@ public class RefreshTableStmtTest {
                 GlobalStateMgr.getCurrentState().getMetadataMgr();
                 result = metadataMgr;
 
-                metadataMgr.getTable(anyString, anyString, anyString);
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = table;
 
-                metadataMgr.getDb(anyString, anyString);
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
                 result = database;
             }
         };

@@ -132,7 +132,7 @@ public class JDBCMetaCacheTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
-            List<String> result = jdbcMetadata.listDbNames();
+            List<String> result = jdbcMetadata.listDbNames(connectContext);
             List<String> expectResult = Lists.newArrayList("test");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -145,7 +145,7 @@ public class JDBCMetaCacheTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
-            Database db = jdbcMetadata.getDb("test");
+            Database db = jdbcMetadata.getDb(connectContext, "test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
             Assert.fail();
@@ -156,7 +156,7 @@ public class JDBCMetaCacheTest {
     public void testListTableNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> result = jdbcMetadata.listTableNames("test");
+            List<String> result = jdbcMetadata.listTableNames(connectContext, "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -168,14 +168,14 @@ public class JDBCMetaCacheTest {
     public void testGetTable() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table = jdbcMetadata.getTable("test", "tbl1");
+            Table table = jdbcMetadata.getTable(connectContext, "test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
-            Table table2 = jdbcMetadata.getTable("test", "tbl1");
+            Table table2 = jdbcMetadata.getTable(connectContext, "test", "tbl1");
             Assert.assertTrue(table2 instanceof JDBCTable);
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
             Map<String, String> properties = new HashMap<>();
             jdbcMetadata.refreshCache(properties);
-            Table table3 = jdbcMetadata.getTable("test", "tbl1");
+            Table table3 = jdbcMetadata.getTable(connectContext, "test", "tbl1");
             Assert.assertFalse(table3 instanceof JDBCTable);
         } catch (Exception e) {
             System.out.println(e.getMessage());

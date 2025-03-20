@@ -219,13 +219,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return icebergCatalog.listAllDatabases();
     }
 
     @Override
     public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
-        if (dbExists(dbName)) {
+        if (dbExists(new ConnectContext(), dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
 
@@ -233,8 +233,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
-        if (listTableNames(dbName).size() != 0) {
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        context.getCurrentWarehouseName();
+
+        if (listTableNames(context, dbName).size() != 0) {
             throw new StarRocksConnectorException("Database %s not empty", dbName);
         }
 
@@ -243,7 +245,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         if (databases.containsKey(dbName)) {
             return databases.get(dbName);
         }
@@ -260,7 +262,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return icebergCatalog.listTables(dbName);
     }
 
@@ -290,7 +292,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
-        Database db = getDb(stmt.getDbName());
+        Database db = getDb(new ConnectContext(), stmt.getDbName());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -315,7 +317,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
-        Database db = getDb(stmt.getDbName());
+        Database db = getDb(new ConnectContext(), stmt.getDbName());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -360,7 +362,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void dropTable(DropTableStmt stmt) {
-        Table icebergTable = getTable(stmt.getDbName(), stmt.getTableName());
+        Table icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
 
         if (icebergTable != null && icebergTable.isIcebergView()) {
             icebergCatalog.dropView(stmt.getDbName(), stmt.getTableName());
@@ -387,7 +389,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
 
         try {
@@ -404,7 +406,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 dbName = dbName.toLowerCase();
                 tblName = tblName.toLowerCase();
             }
-            Database db = getDb(dbName);
+            Database db = getDb(context, dbName);
             IcebergTable table =
                     IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
@@ -513,7 +515,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         return icebergCatalog.tableExists(dbName, tblName);
     }
 
@@ -526,7 +528,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        Table table = getTable(dbName, tblName);
+        Table table = getTable(new ConnectContext(), dbName, tblName);
         return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
     }
 
@@ -598,7 +600,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId, String serializedPredicate,
                                                     MetadataTableType metadataTableType) {
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
-        IcebergTable icebergTable = (IcebergTable) getTable(dbName, tableName);
+        IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
         if (snapshotId == -1) {
             Snapshot currentSnapshot = nativeTable.currentSnapshot();
@@ -1153,7 +1155,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<TIcebergDataFile> dataFiles = commitInfos.stream()
                 .map(TSinkCommitInfo::getIceberg_data_file).collect(Collectors.toList());
 
-        IcebergTable table = (IcebergTable) getTable(dbName, tableName);
+        IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTbl = table.getNativeTable();
         Transaction transaction = nativeTbl.newTransaction();
         BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite);

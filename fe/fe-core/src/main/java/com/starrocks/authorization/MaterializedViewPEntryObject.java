@@ -15,7 +15,6 @@
 package com.starrocks.authorization;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -28,7 +27,7 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
         super(dbUUID, tblUUID);
     }
 
-    public static MaterializedViewPEntryObject generate(GlobalStateMgr mgr, List<String> tokens)
+    public static MaterializedViewPEntryObject generate(List<String> tokens)
             throws PrivilegeException {
         if (tokens.size() != 2) {
             throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
@@ -40,7 +39,7 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
             dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
             tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
         } else {
-            Database database = mgr.getMetadataMgr().getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, tokens.get(0));
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tokens.get(0));
             if (database == null) {
                 throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
             }
@@ -49,8 +48,8 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
             if (Objects.equals(tokens.get(1), "*")) {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
-                Table table = mgr.getMetadataMgr().getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        database.getFullName(), tokens.get(1));
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(database.getFullName(), tokens.get(1));
                 if (table == null || !table.isMaterializedView()) {
                     throw new PrivObjNotFoundException(
                             "cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0));

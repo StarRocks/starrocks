@@ -88,7 +88,8 @@ public class ColocateTableTest {
     public void dropDb() throws Exception {
         String dropDbStmtStr = "drop database " + dbName;
         DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(dropDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .dropDb(connectContext, dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
     }
 
     private static void createTable(String sql) throws Exception {
@@ -243,7 +244,7 @@ public class ColocateTableTest {
 
     @Test
     public void testReplicationNum() throws Exception {
-        
+
         createTable("create table " + dbName + "." + tableName1 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
@@ -262,7 +263,7 @@ public class ColocateTableTest {
         new MockUp<SystemInfoService>() {
             @Mock
             public List<Long> getAvailableBackendIds() {
-                return Arrays.asList(10001L, 10002L, 10003L);       
+                return Arrays.asList(10001L, 10002L, 10003L);
             }
         };
 

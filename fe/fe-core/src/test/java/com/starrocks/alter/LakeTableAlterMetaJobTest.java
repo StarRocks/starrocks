@@ -90,7 +90,7 @@ public class LakeTableAlterMetaJobTest {
     public void tearDown() throws DdlException, MetaNotFoundException {
         db.dropTable(table.getName());
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
         } catch (MetaNotFoundException ignored) {
         }
     }
@@ -218,7 +218,7 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testDropDb01() throws DdlException, MetaNotFoundException {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(db.getFullName(), true);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
@@ -238,7 +238,7 @@ public class LakeTableAlterMetaJobTest {
         job.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(db.getFullName(), true);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
@@ -264,7 +264,7 @@ public class LakeTableAlterMetaJobTest {
         job.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(db.getFullName(), true);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }

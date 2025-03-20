@@ -71,6 +71,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.Load;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.SystemInfoService;
@@ -616,7 +617,7 @@ public class CatalogMocker {
                 minTimes = 0;
                 result = new Database();
 
-                globalStateMgr.getLocalMetastore().listDbNames();
+                globalStateMgr.getLocalMetastore().listDbNames((ConnectContext) any);
                 minTimes = 0;
                 result = Lists.newArrayList(TEST_DB_NAME);
 

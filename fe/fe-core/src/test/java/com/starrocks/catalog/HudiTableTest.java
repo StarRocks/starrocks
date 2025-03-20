@@ -115,7 +115,7 @@ public class HudiTableTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getTable(anyString, anyString, anyString);
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = oTable;
             }
         };

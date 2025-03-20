@@ -74,7 +74,7 @@ public class UpdateAnalyzer {
 
         TableName tableName = updateStmt.getTableName();
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(tableName.getCatalog(), tableName.getDb());
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
