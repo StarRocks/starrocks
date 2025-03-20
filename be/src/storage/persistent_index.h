@@ -242,7 +242,7 @@ public:
     virtual Status load_wals(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // load snapshot
-    virtual bool load_snapshot(phmap::BinaryInputArchive& ar) = 0;
+    virtual Status load_snapshot(phmap::BinaryInputArchive& ar) = 0;
 
     // load according meta
     virtual Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) = 0;
@@ -366,7 +366,7 @@ public:
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     // load snapshot
-    bool load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
+    Status load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
 
     // load according meta
     Status load(const MutableIndexMetaPB& meta);
