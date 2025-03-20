@@ -467,7 +467,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
         *upserts = src;
         return Status::OK();
     }
-    if (!_merge_condition.empty()) {
+    if (!config::enable_delete_with_condition && !_merge_condition.empty()) {
         // Do not support delete with condition now
         return Status::InternalError(
                 fmt::format("memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
