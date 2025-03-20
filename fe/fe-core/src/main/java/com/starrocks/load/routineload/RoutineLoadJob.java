@@ -2083,6 +2083,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setStatistic(getStatistic());
             String progressJsonStr = getProgress().toJsonString();
             info.setProgress(progressJsonStr);
+            info.setTimestamp_progress(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
                     info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
