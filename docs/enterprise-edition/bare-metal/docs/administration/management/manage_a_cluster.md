@@ -6,7 +6,7 @@ import TimezoneError from '../../_assets/commonMarkdown/_timezone.md'
 
 ### Upgrade
 
-Obtain the installation package of CelerData Manager of the target version from your CelerData sales manager and then decompress it.
+Obtain the CelerData Manager installation package for the target version from your CelerData sales manager and then decompress it.
 
 ```Shell
 $ tar -zxvf  CelerData-EE-x.x.x.tar.gz

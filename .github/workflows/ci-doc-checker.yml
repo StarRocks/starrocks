@@ -21,7 +21,7 @@ jobs:
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     outputs:
       output1: ${{ steps.doc-changes-info.outputs.oss-doc }}
-      output2: ${{ steps.doc-changes-info.bare-metal-doc }}
+      output2: ${{ steps.doc-changes-info.outputs.bare-metal-doc }}
       output3: ${{ steps.doc-changes-info.outputs.operator-doc }}
     steps:
       - uses: dorny/paths-filter@v3
