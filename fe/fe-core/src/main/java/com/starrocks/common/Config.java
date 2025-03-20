@@ -38,6 +38,7 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.statistic.sample.NDVEstimator;
 
 import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
@@ -2141,6 +2142,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static double statistics_min_sample_row_ratio = 0.01;
+
+    @ConfField(mutable = true, comment = "The NDV estimator: DUJ1/GEE/LINEAR/POLYNOMIAL")
+    public static String statistics_sample_ndv_estimator =
+            NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 
     /**
      * The partition size of sample collect, default 1k partitions
