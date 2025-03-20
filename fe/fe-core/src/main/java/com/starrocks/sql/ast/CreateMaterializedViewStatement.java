@@ -105,11 +105,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
-<<<<<<< HEAD
-=======
                                            int queryStopIndex,
-                                           String originalDBName,
->>>>>>> 53737b1b8 ([BugFix] Fix materialized view originalViewDefineSql error (#56172))
                                            NodePosition pos) {
         super(pos);
         this.tableName = tableName;

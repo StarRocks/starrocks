@@ -2053,12 +2053,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-<<<<<<< HEAD
-                partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
-=======
                 partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex, queryStopIndex,
-                currentDBName,
->>>>>>> 53737b1b8 ([BugFix] Fix materialized view originalViewDefineSql error (#56172))
                 createPos(context));
     }
 
