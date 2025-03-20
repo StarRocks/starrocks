@@ -2298,8 +2298,8 @@ public class CreateTableTest {
             Deencapsulation.invoke(metastore, "chosenBackendIdBySeq", 3, HashMultimap.create());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains(
-                    "Current available backends(not decommissioned and have enough disk space) are [10000,10001]"));
+            Assert.assertTrue(e.getMessage().contains("Current available backends: [10000,10001]"));
+            Assert.assertTrue(e.getMessage().contains("backends without enough disk space: [10002]"));
         }
     }
 }

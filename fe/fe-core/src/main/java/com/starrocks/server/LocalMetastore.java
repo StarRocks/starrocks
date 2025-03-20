@@ -2180,14 +2180,26 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         List<Long> chosenBackendIds = systemInfoService.getNodeSelector()
                 .seqChooseBackendIds(replicationNum, true, true, locReq);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
-            List<Long> backendIds = systemInfoService.getAvailableBackends().stream()
-                    .filter(b -> !b.checkDiskExceedLimitForCreate()).map(Backend::getId).collect(Collectors.toList());
-            throw new DdlException(
-                    String.format("Table replication num should be less than or equal to the number of available backends. "
-                                    + "You can change this default by setting the replication_num table properties "
-                                    + "or execute 'show backends' to check backend status. "
-                                    + "Current available backends(not decommissioned and have enough disk space) are [%s]",
-                            Joiner.on(",").join(backendIds)));
+            StringBuffer sb = new StringBuffer();
+            List<Backend> availableBes = systemInfoService.getAvailableBackends();
+            List<Long> availableBeIds = availableBes.stream().filter(b -> !b.checkDiskExceedLimitForCreate()).map(Backend::getId)
+                    .collect(Collectors.toList());
+            sb.append(String.format("Table replication num should be less than or equal to the number of available backends. "
+                    + "You can change this default by setting the replication_num table properties. "
+                    + "Current available backends: [%s]", Joiner.on(",").join(availableBeIds)));
+
+            List<Long> decommissionedBeIds = systemInfoService.getDecommissionedBackendIds();
+            if (!decommissionedBeIds.isEmpty()) {
+                sb.append(String.format(", decommissioned backends: [%s]", Joiner.on(",").join(decommissionedBeIds)));
+            }
+
+            List<Long> noDiskSpaceBeIds = availableBes.stream().filter(b -> b.checkDiskExceedLimitForCreate()).map(Backend::getId)
+                    .collect(Collectors.toList());
+            if (!noDiskSpaceBeIds.isEmpty()) {
+                sb.append(String.format(", backends without enough disk space: [%s]", Joiner.on(",").join(noDiskSpaceBeIds)));
+            }
+
+            throw new DdlException(sb.toString());
         }
         return chosenBackendIds;
     }
