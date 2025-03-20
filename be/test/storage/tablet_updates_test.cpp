@@ -3299,6 +3299,10 @@ void TabletUpdatesTest::update_and_recover(bool enable_persistent_index) {
     }
     ASSERT_EQ(N, read_tablet(_tablet, version - 1));
     ASSERT_EQ(N / 2, read_tablet(_tablet, old_version));
+    if (_tablet) {
+        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
+        _tablet.reset();
+    }
 }
 
 TEST_F(TabletUpdatesTest, test_update_and_recover) {
