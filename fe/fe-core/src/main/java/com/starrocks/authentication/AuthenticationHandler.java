@@ -15,13 +15,13 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -74,6 +74,7 @@ public class AuthenticationHandler {
                         try {
                             AuthenticationProvider provider =
                                     AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                            Preconditions.checkState(provider != null);
                             provider.authenticate(user, remoteHost, authResponse, randomString, matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
 
@@ -119,12 +120,9 @@ public class AuthenticationHandler {
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
+                        provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
+
                         if (securityIntegration.getType().equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
-                            userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
-                                    securityIntegration);
-
-                            provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
-
                             AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
                             Set<Long> roleIds = authorizationMgr.getRoleMappingMetaMgr()
                                     .getMappedRoleIdsForLdapUser(securityIntegration.getName(), user);
@@ -132,22 +130,19 @@ public class AuthenticationHandler {
                                 LOG.info("authenticate '{}' with security integration '{}' successfully," +
                                                 " but cannot map any role, will try other auth mechanisms",
                                         user, securityIntegration.getName());
+                                throw new AuthenticationException("Cannot map any role ids for security integration");
                             } else {
-                                authenticatedUser = UserIdentity.createEphemeralUserIdent(user, authMechanism);
                                 context.setCurrentRoleIds(roleIds);
                             }
-                        } else {
-                            provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
-                            // the ephemeral user is identified as 'username'@'auth_mechanism'
-                            authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
-
-                            groupProviderName = securityIntegration.getGroupProviderName();
-                            if (groupProviderName == null) {
-                                groupProviderName = List.of(Config.group_provider);
-                            }
-
-                            authenticatedGroupList = securityIntegration.getGroupAllowedLoginList();
                         }
+
+                        authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
+                        groupProviderName = securityIntegration.getGroupProviderName();
+                        if (groupProviderName == null) {
+                            groupProviderName = List.of(Config.group_provider);
+                        }
+
+                        authenticatedGroupList = securityIntegration.getGroupAllowedLoginList();
                     } catch (AuthenticationException e) {
                         LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
                                 user, remoteHost, securityIntegration, e.getMessage());

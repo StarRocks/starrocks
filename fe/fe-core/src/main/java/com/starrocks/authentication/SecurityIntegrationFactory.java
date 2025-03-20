@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Map;
@@ -24,8 +25,8 @@ import java.util.Map;
 public class SecurityIntegrationFactory {
     private static final ImmutableSortedSet<String> SUPPORTED_AUTH_MECHANISM =
             ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
-                    .add(OIDCSecurityIntegration.TYPE)
                     .add(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)
+                    .add(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name())
                     .build();
 
     public static void checkSecurityIntegrationIsSupported(String securityIntegrationType) {
@@ -39,7 +40,7 @@ public class SecurityIntegrationFactory {
         checkSecurityIntegrationIsSupported(type);
 
         SecurityIntegration securityIntegration = null;
-        if (type.equalsIgnoreCase(OIDCSecurityIntegration.TYPE)) {
+        if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name())) {
             securityIntegration = new OIDCSecurityIntegration(name, propertyMap);
         } else if (type.equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
             securityIntegration = new LDAPSecurityIntegration(name, propertyMap);

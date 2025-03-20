@@ -24,13 +24,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public class LDAPAuthProviderForNative implements AuthenticationProvider {
-    public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name();
-
     @Override
     public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
             throws AuthenticationException {
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.toString());
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
         info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());

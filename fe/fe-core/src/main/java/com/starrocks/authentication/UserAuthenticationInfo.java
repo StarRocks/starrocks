@@ -22,9 +22,6 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.MysqlPassword;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class UserAuthenticationInfo implements Writable {
     protected static final String ANY_HOST = "%";
     protected static final String ANY_USER = "%";
@@ -63,13 +60,6 @@ public class UserAuthenticationInfo implements Writable {
     public UserAuthenticationInfo() {
     }
 
-    /**
-     * extra user authentication info when authenticating, it may have different usage for different
-     * auth plugin, since the authenticate info for different auth mechanism can vary a log, here we
-     * use a general Object map to represent this requirement.
-     */
-    public Map<String, Object> extraInfo = new HashMap<>();
-
     public boolean matchUser(String remoteUser) {
         return isAnyUser || userPattern.match(remoteUser);
     }
@@ -84,8 +74,6 @@ public class UserAuthenticationInfo implements Writable {
         userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
         hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
     }
-
-
 
     public byte[] getPassword() {
         return password;

@@ -17,11 +17,9 @@ package com.starrocks.epack.authentication;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
-import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.security.SslUtils;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -98,7 +96,7 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
 
     @Override
     public AuthenticationProvider getAuthenticationProvider() throws AuthenticationException {
-        return AuthenticationProviderFactory.create(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name());
+        return new LDAPAuthProviderForExternal(name);
     }
 
     public String getLdapServerHost() {

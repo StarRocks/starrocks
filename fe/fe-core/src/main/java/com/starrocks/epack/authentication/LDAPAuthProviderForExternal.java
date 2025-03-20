@@ -11,12 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.epack.authentication;
 
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
@@ -33,7 +34,11 @@ import javax.naming.directory.SearchResult;
 
 public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     private static final Logger LOG = LogManager.getLogger(LDAPAuthProviderForExternal.class);
-    public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name();
+    private final String securityIntegrationName;
+
+    public LDAPAuthProviderForExternal(String securityIntegrationName) {
+        this.securityIntegrationName = securityIntegrationName;
+    }
 
     @Override
     public UserAuthenticationInfo analyzeAuthOption(
@@ -130,8 +135,8 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     @Override
     public void authenticate(String user, String host, byte[] password, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
-        LDAPSecurityIntegration ldapSecurityIntegration =
-                (LDAPSecurityIntegration) authenticationInfo.extraInfo.get(PLUGIN_NAME);
+        LDAPSecurityIntegration ldapSecurityIntegration = (LDAPSecurityIntegration) GlobalStateMgr.getCurrentState()
+                .getAuthenticationMgr().getSecurityIntegration(securityIntegrationName);
         try {
             boolean authenticated = LDAPAuthProviderForExternal.authenticate(
                     user, StringUtils.stripEnd(new String(password), "\0"), ldapSecurityIntegration);

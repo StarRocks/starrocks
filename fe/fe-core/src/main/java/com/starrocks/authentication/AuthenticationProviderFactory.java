@@ -14,34 +14,22 @@
 
 package com.starrocks.authentication;
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.common.Config;
-import com.starrocks.epack.authentication.LDAPAuthProviderForExternal;
-import com.starrocks.epack.authentication.PlainPasswordAuthenticationProviderEPack;
-
-import java.util.Map;
+import com.starrocks.mysql.privilege.AuthPlugin;
 
 public class AuthenticationProviderFactory {
-    private static final Map<String, AuthenticationProvider> PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER =
-            ImmutableMap.<String, AuthenticationProvider>builder()
-                    .put(PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProviderEPack())
-                    .put(LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative())
-                    .put(KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider())
-                    .put(LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal())
-                    .put(OpenIdConnectAuthenticationProvider.PLUGIN_NAME, new OpenIdConnectAuthenticationProvider(
-                            Config.oidc_jwks_url,
-                            Config.oidc_principal_field,
-                            Config.oidc_required_issuer,
-                            Config.oidc_required_audience))
-                    .build();
+    private AuthenticationProviderFactory() {
+    }
 
-    private AuthenticationProviderFactory() {}
-
-    public static AuthenticationProvider create(String plugin) throws AuthenticationException {
-        if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(plugin)) {
-            throw new AuthenticationException("Cannot find " + plugin + " from "
-                    + PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.keySet());
+    public static AuthenticationProvider create(String plugin) {
+        if (plugin == null) {
+            return null;
         }
-        return PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.get(plugin);
+
+        try {
+            AuthPlugin.Server authPlugin = AuthPlugin.Server.valueOf(plugin);
+            return authPlugin.getProvider();
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

@@ -79,6 +79,10 @@ public class MysqlAuthPacket extends MysqlPacket {
         return pluginName;
     }
 
+    public void setPluginName(String pluginName) {
+        this.pluginName = pluginName;
+    }
+
     public boolean isSSLConnRequest() {
         return capability.isSSL();
     }

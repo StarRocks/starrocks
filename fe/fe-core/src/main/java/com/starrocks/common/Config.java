@@ -1914,12 +1914,6 @@ public class Config extends ConfigBase {
     public static String auth_token = "";
 
     /**
-     * If set to true and the jar that use to authentication is loaded in fe, kerberos authentication is supported.
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_authentication_kerberos = false;
-
-    /**
      * If kerberos authentication is enabled, the configuration must be filled.
      * like "starrocks-fe/<HOSTNAME>@STARROCKS.COM".
      * <p>
