@@ -654,16 +654,16 @@ PROPERTIES (
 
     |  Hiveの列タイプ   |  StarRocksの列タイプ   | 説明 |
     | --- | --- | ---|
-    |   INT/INTEGER  | INT    |
-    |   BIGINT  | BIGINT    |
+    |   INT/INTEGER  | INT    ||
+    |   BIGINT  | BIGINT    ||
     |   TIMESTAMP  | DATETIME    | TIMESTAMPデータをDATETIMEデータに変換する際、精度とタイムゾーン情報が失われます。セッション変数のタイムゾーンに基づいて、タイムゾーンオフセットのないDATETIMEデータに変換する必要があります。 |
-    |  STRING  | VARCHAR   |
-    |  VARCHAR  | VARCHAR   |
-    |  CHAR  | CHAR   |
-    |  DOUBLE | DOUBLE |
-    | FLOAT | FLOAT|
-    | DECIMAL | DECIMAL|
-    | ARRAY | ARRAY |
+    |  STRING  | VARCHAR   ||
+    |  VARCHAR  | VARCHAR   ||
+    |  CHAR  | CHAR   ||
+    |  DOUBLE | DOUBLE ||
+    | FLOAT | FLOAT||
+    | DECIMAL | DECIMAL||
+    | ARRAY | ARRAY ||
 
 > 注：
 >

@@ -124,8 +124,8 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
     > If a Flink cluster is already running in your system, you must stop the Flink cluster and restart it to load and validate the JAR packages.
     >
     > ```Bash
-    > $ ./bin/stop-cluster.sh
-    > $ ./bin/start-cluster.sh
+    > ./bin/stop-cluster.sh
+    > ./bin/start-cluster.sh
     > ```
 
 5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU.
