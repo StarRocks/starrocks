@@ -114,6 +114,13 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
+    protected LakeTableAsyncFastSchemaChangeJob getShadowCopy() {
+        LakeTableAsyncFastSchemaChangeJob copied = new LakeTableAsyncFastSchemaChangeJob();
+        copyOnlyForNonFirstLog(copied);
+        return copied;
+    }
+
+    @Override
     protected void updateCatalog(Database db, LakeTable table) {
         updateCatalogUnprotected(db, table);
     }
@@ -155,15 +162,21 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected void restoreState(LakeTableAlterMetaJobBase job) {
-        this.schemaInfos = new ArrayList<>(((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos);
+        List<IndexSchemaInfo> jobSchemaInfos = ((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos;
+        if (jobSchemaInfos != null && !jobSchemaInfos.isEmpty()) {
+            this.schemaInfos = new ArrayList<>(jobSchemaInfos);
+        }
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
 
+=======
+>>>>>>> 5236f19b6e ([Enhancement] Reduce the size of data written to edit log when schema changes in shared-data clusters with fast schema evolution enabled. (#55282))
     private static class IndexSchemaInfo {
         @SerializedName("indexId")
         private final long indexId;
