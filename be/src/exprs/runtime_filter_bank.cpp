@@ -84,8 +84,6 @@ RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool,
         return create_runtime_empty_filter(pool, ltype, join_mode);
     case RuntimeFilterSerializeType::BLOOM_FILTER:
         return create_runtime_bloom_filter(pool, ltype, join_mode);
-    case RuntimeFilterSerializeType::BITSET_FILTER:
-        return create_runtime_bitset_filter(pool, ltype, join_mode);
     case RuntimeFilterSerializeType::NONE:
     default:
         return nullptr;
