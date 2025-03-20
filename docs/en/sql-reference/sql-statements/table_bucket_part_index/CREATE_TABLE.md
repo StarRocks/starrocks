@@ -666,10 +666,11 @@ PROPERTIES (
 #### Set fast schema evolution
 
 `fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+
   > **NOTE**
   >
-  > - This parameter is only supported for shared-nothing clusters since v3.2.0.
-  > - If you need to enable fast schema evolution for tables in a shared-data cluster, you must configure fast schema evolution at the cluster level using FE dynamic parameter `enable_fast_schema_evolution`.
+  > - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
+  > - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
 
 #### Forbid Base Compaction
 

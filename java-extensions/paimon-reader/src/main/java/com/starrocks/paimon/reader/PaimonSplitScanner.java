@@ -73,8 +73,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
         for (int i = 0; i < requiredFields.length; i++) {
             int index = fieldNames.indexOf(requiredFields[i]);
             if (index == -1) {
-                throw new RuntimeException(String.format("Cannot find field %s in schema %s",
-                        requiredFields[i], fieldNames));
+                throw new RuntimeException(String.format("Cannot find field %s in schema %s of table %s",
+                        requiredFields[i], fieldNames, table.name()));
             }
             DataType dataType = table.rowType().getTypeAt(index);
             String type = PaimonTypeUtils.fromPaimonType(dataType);
@@ -116,7 +116,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
             initReader();
         } catch (Exception e) {
             close();
-            String msg = "Failed to open the paimon reader.";
+            String msg = "Failed to open the paimon reader for table " + table.name();
             LOG.error(msg, e);
             throw new IOException(msg, e);
         }
@@ -129,7 +129,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
                 iterator.close();
             }
         } catch (Exception e) {
-            String msg = "Failed to close the paimon reader.";
+            String msg = "Failed to close the paimon reader for table " + table.name();
             LOG.error(msg, e);
             throw new IOException(msg, e);
         }
@@ -158,7 +158,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
             return numRows;
         } catch (Exception e) {
             close();
-            String msg = "Failed to get the next off-heap table chunk of paimon.";
+            String msg = "Failed to get the next off-heap table chunk for table " + table.name();
             LOG.error(msg, e);
             throw new IOException(msg, e);
         }

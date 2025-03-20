@@ -86,6 +86,8 @@ public class AggStateCombinatorTest extends MVTestBase {
         }
         Config.enable_materialized_view_text_based_rewrite = false;
         setGlobalVariableVariable("cbo_push_down_aggregate_mode", "-1");
+
+        FeConstants.setLengthForVarchar = false;
     }
 
     private static final Set<String> SUPPORTED_AGG_STATE_FUNCTIONS = ImmutableSet.of(

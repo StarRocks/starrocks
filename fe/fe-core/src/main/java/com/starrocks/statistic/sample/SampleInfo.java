@@ -103,10 +103,10 @@ public class SampleInfo {
     }
 
     public int getMaxSampleTabletNum() {
-        int max = highWeightTablets.size();
-        max = Math.max(max, mediumHighWeightTablets.size());
-        max = Math.max(max, mediumLowWeightTablets.size());
-        max = Math.max(max, lowWeightTablets.size());
+        int max = getHighWeightTablets().size();
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getLowWeightTablets().size());
         return max;
     }
 

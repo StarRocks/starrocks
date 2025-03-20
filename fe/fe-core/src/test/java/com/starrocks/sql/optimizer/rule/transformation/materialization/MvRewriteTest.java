@@ -2131,7 +2131,7 @@ public class MvRewriteTest extends MVTestBase {
      */
     @Test
     public void testCandidateOrdering_ManyDimensions() throws Exception {
-        final int numDimensions = 50;
+        final int numDimensions = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         StringBuilder createTableBuilder = new StringBuilder("create table t_many_dimensions ( ");
         Function<Integer, String> columnNameGen = (i) -> "c" + i;
         for (int i = 0; i < numDimensions; i++) {

@@ -57,7 +57,8 @@ enum TDataSinkType {
     TABLE_FUNCTION_TABLE_SINK,
     BLACKHOLE_TABLE_SINK,
     DICTIONARY_CACHE_SINK,
-    MULTI_OLAP_TABLE_SINK
+    MULTI_OLAP_TABLE_SINK,
+    SPLIT_DATA_STREAM_SINK
 }
 
 enum TResultSinkType {
@@ -269,6 +270,12 @@ struct TTableFunctionTableSink {
     2: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+struct TSplitDataStreamSink {
+    1: optional list<TDataStreamSink> sinks;
+    2: optional list< list<TPlanFragmentDestination> > destinations;
+    3: optional list<Exprs.TExpr> splitExprs;
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -285,4 +292,5 @@ struct TDataSink {
   14: optional TDictionaryCacheSink dictionary_cache_sink
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
+  17: optional TSplitDataStreamSink split_stream_sink
 }

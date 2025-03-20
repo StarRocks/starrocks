@@ -21,7 +21,6 @@
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>java-utils</artifactId>
-            <version>${java-utils.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

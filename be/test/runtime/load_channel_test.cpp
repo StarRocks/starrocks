@@ -249,11 +249,21 @@ protected:
     std::shared_ptr<LoadChannel> _load_channel;
 };
 
+LoadChannelOpenContext create_open_context(const PTabletWriterOpenRequest* request, PTabletWriterOpenResult* response) {
+    LoadChannelOpenContext open_context;
+    open_context.cntl = nullptr;
+    open_context.request = request;
+    open_context.response = response;
+    open_context.done = nullptr;
+    open_context.receive_rpc_time_ns = MonotonicNanos();
+    return open_context;
+}
+
 TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
     PTabletWriterOpenRequest open_request = _open_request;
     PTabletWriterOpenResult open_response;
     open_request.set_num_senders(1);
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    _load_channel->open(create_open_context(&open_request, &open_response));
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -325,7 +335,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
 TEST_F(LoadChannelTestForLakeTablet, test_write_concurrently) {
     PTabletWriterOpenRequest open_request = _open_request;
     PTabletWriterOpenResult open_response;
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    _load_channel->open(create_open_context(&open_request, &open_response));
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -398,7 +408,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_abort) {
     PTabletWriterOpenRequest open_request = _open_request;
     PTabletWriterOpenResult open_response;
     open_request.set_num_senders(1);
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    _load_channel->open(create_open_context(&open_request, &open_response));
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -469,7 +479,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
         PTabletWriterOpenResult open_response;
         open_request.set_num_senders(1);
         open_request.set_is_incremental(true);
-        _load_channel->open(nullptr, open_request, &open_response, nullptr);
+        _load_channel->open(create_open_context(&open_request, &open_response));
         ASSERT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
         ch = _load_channel->get_tablets_channel(TabletsChannelKey(open_request.id(), 0, kIndexId));
         ASSERT_NE(nullptr, ch.get());
@@ -482,7 +492,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
         PTabletWriterOpenResult open_response;
         open_request.set_is_incremental(true);
         // open again with incremental info.
-        _load_channel->open(nullptr, open_request, &open_response, nullptr);
+        _load_channel->open(create_open_context(&open_request, &open_response));
         EXPECT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
 
         auto ch2 = _load_channel->get_tablets_channel(TabletsChannelKey(open_request.id(), 0, kIndexId));
@@ -497,7 +507,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_add_segment) {
         PTabletWriterOpenRequest open_request = _open_request;
         PTabletWriterOpenResult open_response;
         open_request.set_num_senders(1);
-        _load_channel->open(nullptr, open_request, &open_response, nullptr);
+        _load_channel->open(create_open_context(&open_request, &open_response));
         ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
     }
 
@@ -597,7 +607,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_final_profile) {
     open_request.mutable_load_channel_profile_config()->CopyFrom(profile_config);
 
     PTabletWriterOpenResult open_response;
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    _load_channel->open(create_open_context(&open_request, &open_response));
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -676,7 +686,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_slow_log_profile) {
     open_request.mutable_load_channel_profile_config()->CopyFrom(profile_config);
 
     PTabletWriterOpenResult open_response;
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    _load_channel->open(create_open_context(&open_request, &open_response));
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -746,7 +756,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_load_diagnose) {
     open_request.set_num_senders(1);
 
     PTabletWriterOpenResult open_response;
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    _load_channel->open(create_open_context(&open_request, &open_response));
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -788,13 +798,16 @@ TEST_F(LoadChannelTestForLakeTablet, test_load_diagnose) {
     diagnose_request.mutable_id()->set_hi(0);
     diagnose_request.mutable_id()->set_lo(0);
     diagnose_request.set_profile(true);
+    diagnose_request.set_stack_trace(true);
 
     PLoadDiagnoseResult diagnose_result;
-    _load_channel->diagnose(&diagnose_request, &diagnose_result);
+    _load_channel->diagnose("192.168.0.1", &diagnose_request, &diagnose_result);
 
     ASSERT_TRUE(diagnose_result.has_profile_status());
     ASSERT_OK(Status(diagnose_result.profile_status()));
     ASSERT_TRUE(diagnose_result.has_profile_data());
+    ASSERT_TRUE(diagnose_result.has_stack_trace_status());
+    ASSERT_OK(Status(diagnose_result.stack_trace_status()));
 
     const auto* buf = (const uint8_t*)(diagnose_result.profile_data().data());
     uint32_t len = diagnose_result.profile_data().size();

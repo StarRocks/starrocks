@@ -85,6 +85,17 @@ displayed_sidebar: docs
 - 共有なしクラスタは、ビュー、external catalogメタデータ、および式に基づくパーティション化とリストパーティション化戦略で作成されたパーティションなど、より多くのオブジェクトのバックアップと復元をサポートします。
 - [プレビュー] CheckPointをFollower FEでサポートし、CheckPoint中のLeader FEの過剰なメモリを回避し、Leader FEの安定性を向上させます。
 
+### 動作の変更
+
+共有データアーキテクチャとデータレイククエリシナリオの両方で使用される Data Cache インスタンスが統一されたため、v3.4.0 へのアップグレード後に以下の動作が変更されます：
+
+- BE の設定項目 `datacache_disk_path` は廃止された。データは `${storage_root_path}/datacache` ディレクトリ以下にキャッシュされる。Data Cache 専用のディスクを割り当てたい場合は、シンボリックリンクを使用して手動で上記のディレクトリを指定してください。
+- 共有データクラスタのキャッシュデータは自動的に `${storage_root_path}/datacache` に移行され、アップグレード後も再利用できる。
+- `datacache_disk_size` の動作が変わる：
+
+  - `datacache_disk_size` が `0` (デフォルト) の場合、キャッシュ容量の自動調整が有効になる (アップグレード前の動作と同じ)。
+  - `datacache_disk_size` が `0` より大きい値に設定されている場合、システムは `datacache_disk_size` と `starlet_star_cache_disk_size_percent` の間の大きい値をキャッシュ容量として選択する。
+
 ### ダウングレードノート
 
 - クラスタはv3.4.0からv3.3.9以降にのみダウングレードできます。

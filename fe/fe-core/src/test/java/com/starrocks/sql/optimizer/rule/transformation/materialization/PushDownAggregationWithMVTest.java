@@ -77,17 +77,15 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
 
         // Get the execution plan with push down enabled
         String planWithPushDown = getFragmentPlan(sql);
-        Assert.assertTrue(planWithPushDown, planWithPushDown.contains("  2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(4: amount)\n" +
-                "  |  group by: 1: id, 3: city\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : 10: id\n" +
-                "  |  <slot 3> : 12: city\n" +
-                "  |  <slot 4> : 13: amount\n" +
+        Assert.assertTrue(planWithPushDown, planWithPushDown.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(17: amount)\n" +
+                "  |  group by: 14: id, 16: city\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     TABLE: mv1\n"));
+                "     TABLE: mv1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: mv1"));
         // Now test with push down disabled
         testContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         String planWithoutPushDown = getFragmentPlan(sql);

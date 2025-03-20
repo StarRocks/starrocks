@@ -45,6 +45,10 @@ public class IntersectAddDistinctRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression intersectOpt, OptimizerContext context) {
+        if (!context.getSessionVariable().isCboEnableIntersectAddDistinct()) {
+            return Lists.newArrayList(intersectOpt);
+        }
+
         List<OptExpression> newInputs = Lists.newArrayList();
         for (int i = 0; i < intersectOpt.getInputs().size(); i++) {
             newInputs.add(addDistinct(intersectOpt, i, context));

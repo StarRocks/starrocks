@@ -41,6 +41,7 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/lrucache_module.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -64,6 +65,7 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
@@ -103,6 +105,10 @@
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
+#endif
+
+#ifdef WITH_STARCACHE
+#include "cache/object_cache/starcache_module.h"
 #endif
 
 namespace starrocks {
@@ -362,22 +368,19 @@ void CacheEnv::destroy() {
 Status CacheEnv::_init_starcache_based_object_cache() {
 #ifdef WITH_STARCACHE
     if (_block_cache != nullptr && _block_cache->is_initialized()) {
-        _starcache_based_object_cache = std::make_shared<ObjectCache>();
-        RETURN_IF_ERROR(_starcache_based_object_cache->init(_block_cache->starcache_instance()));
+        _starcache_based_object_cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
     }
 #endif
     return Status::OK();
 }
 
 Status CacheEnv::_init_lru_base_object_cache() {
-    _lru_based_object_cache = std::make_shared<ObjectCache>();
-
     ObjectCacheOptions options;
     int64_t storage_cache_limit = _global_env->get_storage_page_cache_size();
     storage_cache_limit = _global_env->check_storage_page_cache_size(storage_cache_limit);
     options.capacity = storage_cache_limit;
-    RETURN_IF_ERROR(_lru_based_object_cache->init(options));
 
+    _lru_based_object_cache = std::make_shared<LRUCacheModule>(options);
     LOG(INFO) << "object cache init successfully";
     return Status::OK();
 }
@@ -784,6 +787,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
+    _diagnose_daemon = new DiagnoseDaemon();
+    RETURN_IF_ERROR(_diagnose_daemon->init());
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
@@ -888,6 +893,10 @@ void ExecEnv::stop() {
         _dictionary_cache_pool->shutdown();
     }
 
+    if (_diagnose_daemon) {
+        _diagnose_daemon->stop();
+    }
+
 #ifndef BE_TEST
     close_s3_clients();
 #endif
@@ -946,6 +955,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     SAFE_DELETE(_put_combined_txn_log_thread_pool);
+    SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _metrics = nullptr;

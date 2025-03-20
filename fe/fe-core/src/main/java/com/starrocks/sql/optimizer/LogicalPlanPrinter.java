@@ -46,6 +46,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
@@ -705,6 +707,27 @@ public class LogicalPlanPrinter {
             sb.append(" group by [" + aggregate.getGroupBys() + "]");
             sb.append(" having [" + aggregate.getPredicate() + "]");
             return new OperatorStr(sb.toString(), step, Collections.singletonList(child));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalConcatenater(OptExpression optExpression, Integer step) {
+            return visitPhysicalUnion(optExpression, step);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalSplitProducer(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            PhysicalSplitProduceOperator op = (PhysicalSplitProduceOperator) optExpression.getOp();
+            String sb = "SplitProducer(splitId=" + op.getSplitId() + ")";
+            return new OperatorStr(sb, step, Collections.singletonList(child));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalSplitConsumer(OptExpression optExpression, Integer step) {
+            PhysicalSplitConsumeOperator op = (PhysicalSplitConsumeOperator) optExpression.getOp();
+            String sb = "SplitConsumer(cteid=" + op.getSplitId() + ")";
+            return new OperatorStr(sb, step, Collections.emptyList());
         }
     }
 }

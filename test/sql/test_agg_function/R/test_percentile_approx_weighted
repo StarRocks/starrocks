@@ -1,0 +1,398 @@
+-- name: test_percentile_approx 
+CREATE TABLE t1 (
+    c1 int,
+    c2 double,
+    c3 tinyint,
+    c4 int,
+    c5 bigint,
+    c6 largeint,
+    c7 string,
+    c8 double,
+    c9 date,
+    c10 datetime,
+    c11 array<int>,
+    c12 map<double, double>,
+    c13 struct<a bigint, b double>
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 
+    select generate_series, generate_series,  11, 111, 1111, 11111, "111111", 1.1, "2024-09-01", "2024-09-01 18:00:00", [1, 2, 3], map(1, 5.5), row(100, 100)
+    from table(generate_series(1, 50000, 3));
+-- result:
+-- !result
+insert into t1 values
+    (1, 1, 11, 111, 1111, 11111, "111111", 1.1, "2024-09-01", "2024-09-01 18:00:00", [1, 2, 3], map(1, 5.5), row(100, 100)),
+    (2, 2, 22, 222, 2222, 22222, "222222", 2.2, "2024-09-02", "2024-09-02 11:00:00", [3, 4, 5], map(1, 511.2), row(200, 200)),
+    (3, 3, 33, 333, 3333, 33333, "333333", 3.3,  "2024-09-03", "2024-09-03 00:00:00", [4, 1, 2], map(1, 666.6), row(300, 300)),
+    (4, 4, 11, 444, 4444, 44444, "444444", 4.4, "2024-09-04", "2024-09-04 12:00:00", [7, 7, 5], map(1, 444.4), row(400, 400)),
+    (5, null, null, null, null, null, null, null, null, null, null, null, null);
+-- result:
+-- !result
+select percentile_approx_weighted(c1, c2, 0.5) from t1;
+-- result:
+35355.93359375
+-- !result
+select percentile_approx_weighted(c1, 1, 0.9) from t1;
+-- result:
+44998.89453125
+-- !result
+select percentile_approx_weighted(c1, NULL, 0.9) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the second parameter's type is bigint type column.")
+-- !result
+select percentile_approx_weighted(c1, c1, 0.9, 10000) from t1;
+-- result:
+47434.98828125
+-- !result
+select percentile_approx_weighted(c2, c1, 0.5) from t1;
+-- result:
+35355.93359375
+-- !result
+select percentile_approx_weighted(c2, 1, 0.9) from t1;
+-- result:
+44999.19921875
+-- !result
+select percentile_approx_weighted(c2, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c2, 10, 0.9, 5000) from t1;
+-- result:
+44999.19921875
+-- !result
+select percentile_approx_weighted(c2, c1, 0.9, 10000) from t1;
+-- result:
+47434.98828125
+-- !result
+select percentile_approx_weighted(c3, c1, 0.5) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c3, 1, 0.9) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c3, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c3, 10, 0.9, 5000) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c3, c1, 0.9, 10000) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c4, c1, 0.5) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c4, 1, 0.9) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c4, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c4, 10, 0.9, 5000) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c4, c1, 0.9, 10000) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c5, c1, 0.5) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c5, c1, 0.9, 10000) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c5, 1, 0.9) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c5, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c5, 10, 0.9, 5000) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c6, c1, 0.5) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c6, c1, 0.9, 10000) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c6, 1, 0.9) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c6, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c6, 10, 0.9, 5000) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c7, c1, 0.5) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the first parameter's type is numeric type.")
+-- !result
+select percentile_approx_weighted(c9, c1, 0.5) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the first parameter's type is numeric type.")
+-- !result
+select percentile_approx_weighted(c10, c1, 0.5) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the first parameter's type is numeric type.")
+-- !result
+select percentile_approx_weighted(c11[0], c1, 0.5) from t1;
+-- result:
+None
+-- !result
+select percentile_approx_weighted(c11[0], 1, 0.5) from t1;
+-- result:
+None
+-- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
+-- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
+-- !result
+select percentile_approx_weighted(c12[1], c1, 0.5) from t1;
+-- result:
+5.5
+-- !result
+select percentile_approx_weighted(c12[2], c1, 0.5) from t1;
+-- result:
+None
+-- !result
+select percentile_approx_weighted(c12[1], 1, 0.5) from t1;
+-- result:
+5.5
+-- !result
+select percentile_approx_weighted(c13.a, c1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+select percentile_approx_weighted(c13.b, c1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+select percentile_approx_weighted(c13.a, 1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+select percentile_approx_weighted(c13.b, 1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ percentile_approx_weighted(c2, c1, v1) from tt;
+-- result:
+35355.93359375
+-- !result
+with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ percentile_approx_weighted(c2, c1, v1, v2 + 1) from tt;
+-- result:
+35355.93359375
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+select percentile_approx_weighted(c1, c2, 0.5) from t1;
+-- result:
+35355.93359375
+-- !result
+select percentile_approx_weighted(c1, 1, 0.9) from t1;
+-- result:
+44998.89453125
+-- !result
+select percentile_approx_weighted(c1, NULL, 0.9) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the second parameter's type is bigint type column.")
+-- !result
+select percentile_approx_weighted(c1, c1, 0.9, 10000) from t1;
+-- result:
+47434.98828125
+-- !result
+select percentile_approx_weighted(c2, c1, 0.5) from t1;
+-- result:
+35355.93359375
+-- !result
+select percentile_approx_weighted(c2, 1, 0.9) from t1;
+-- result:
+44999.19921875
+-- !result
+select percentile_approx_weighted(c2, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c2, 10, 0.9, 5000) from t1;
+-- result:
+44999.19921875
+-- !result
+select percentile_approx_weighted(c2, c1, 0.9, 10000) from t1;
+-- result:
+47434.98828125
+-- !result
+select percentile_approx_weighted(c3, c1, 0.5) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c3, 1, 0.9) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c3, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c3, 10, 0.9, 5000) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c3, c1, 0.9, 10000) from t1;
+-- result:
+11.0
+-- !result
+select percentile_approx_weighted(c4, c1, 0.5) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c4, 1, 0.9) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c4, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c4, 10, 0.9, 5000) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c4, c1, 0.9, 10000) from t1;
+-- result:
+111.0
+-- !result
+select percentile_approx_weighted(c5, c1, 0.5) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c5, c1, 0.9, 10000) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c5, 1, 0.9) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c5, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c5, 10, 0.9, 5000) from t1;
+-- result:
+1111.0
+-- !result
+select percentile_approx_weighted(c6, c1, 0.5) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c6, c1, 0.9, 10000) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c6, 1, 0.9) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c6, 0, 0.9, 2048) from t1;
+-- result:
+nan
+-- !result
+select percentile_approx_weighted(c6, 10, 0.9, 5000) from t1;
+-- result:
+11111.0
+-- !result
+select percentile_approx_weighted(c7, c1, 0.5) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the first parameter's type is numeric type.")
+-- !result
+select percentile_approx_weighted(c9, c1, 0.5) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the first parameter's type is numeric type.")
+-- !result
+select percentile_approx_weighted(c10, c1, 0.5) from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the first parameter's type is numeric type.")
+-- !result
+select percentile_approx_weighted(c11[0], c1, 0.5) from t1;
+-- result:
+None
+-- !result
+select percentile_approx_weighted(c11[0], 1, 0.5) from t1;
+-- result:
+None
+-- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
+-- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
+-- !result
+select percentile_approx_weighted(c12[1], c1, 0.5) from t1;
+-- result:
+5.5
+-- !result
+select percentile_approx_weighted(c12[2], c1, 0.5) from t1;
+-- result:
+None
+-- !result
+select percentile_approx_weighted(c12[1], 1, 0.5) from t1;
+-- result:
+5.5
+-- !result
+select percentile_approx_weighted(c13.a, c1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+select percentile_approx_weighted(c13.b, c1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+select percentile_approx_weighted(c13.a, 1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+select percentile_approx_weighted(c13.b, 1, 0.5) from t1;
+-- result:
+100.0
+-- !result
+with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ percentile_approx_weighted(c2, c1, v1) from tt;
+-- result:
+35355.93359375
+-- !result
+with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ percentile_approx_weighted(c2, c1, v1, v2 + 1) from tt;
+-- result:
+35355.93359375
+-- !result

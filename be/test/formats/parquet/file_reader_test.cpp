@@ -21,6 +21,7 @@
 #include <set>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/starcache_module.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -2534,7 +2535,7 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
             {""},
     };
     auto ctx = _create_scan_context(slot_descs, min_max_slots, filepath);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(TExprOpcode::GE, 2, 5, &t_conjuncts);
@@ -3349,8 +3350,7 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     options.engine = "starcache";
     Status status = block_cache->init(options);
     ASSERT_TRUE(status.ok());
-    auto cache = std::make_shared<ObjectCache>();
-    ASSERT_OK(cache->init(block_cache->starcache_instance()));
+    auto cache = std::make_shared<StarCacheModule>(block_cache->starcache_instance());
 
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),

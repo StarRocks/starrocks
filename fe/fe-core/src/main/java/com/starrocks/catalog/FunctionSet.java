@@ -253,6 +253,7 @@ public class FunctionSet {
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
     public static final String DS_HLL_COUNT_DISTINCT = "ds_hll_count_distinct";
+    public static final String DS_THETA_COUNT_DISTINCT = "ds_theta_count_distinct";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -265,6 +266,7 @@ public class FunctionSet {
     public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
+    public static final String PERCENTILE_APPROX_WEIGHTED = "percentile_approx_weighted";
     public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String PERCENTILE_DISC = "percentile_disc";
     public static final String LC_PERCENTILE_DISC = "percentile_disc_lc";
@@ -628,6 +630,7 @@ public class FunctionSet {
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
                     .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                    .add(FunctionSet.DS_THETA_COUNT_DISTINCT)
                     .add(FunctionSet.MD5_SUM_NUMERIC)
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
@@ -1139,6 +1142,11 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
+            // ds_theta_count_distinct(col)
+            addBuiltin(AggregateFunction.createBuiltin(DS_THETA_COUNT_DISTINCT,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+
             // HLL_RAW
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
                     Lists.newArrayList(t), Type.HLL, Type.VARBINARY,
@@ -1546,6 +1554,14 @@ public class FunctionSet {
                 false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
+                false, false, false));
+        // percentile_approx_weighted
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(Type.DOUBLE, Type.BIGINT, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
+                false, false, false));
+        // percentile_approx_weighted
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(Type.DOUBLE, Type.BIGINT, Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_UNION,

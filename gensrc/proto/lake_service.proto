@@ -250,7 +250,7 @@ message TabletInfoPB {
 
 message VacuumRequest {
     // This field is deprecated, use |tablet_infos| instead.
-    repeated int64 tablet_ids = 1 [deprecated = true]; // deprecated
+    repeated int64 tablet_ids = 1; // deprecated
     // Tablet metadata files with version numbers greater than or equals to min_retain_version
     // will NOT be vacuumed. For tablet metadata files with version numbers less than
     // min_retain_version, decide whether they should be deleted by comparing the create time

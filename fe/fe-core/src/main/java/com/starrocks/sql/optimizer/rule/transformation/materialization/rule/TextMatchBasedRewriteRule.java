@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
@@ -181,12 +182,15 @@ public class TextMatchBasedRewriteRule extends Rule {
             try {
                 Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
                 int maxLevel = connectContext.getSessionVariable().getNestedMvRewriteMaxLevel();
-                Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
-                String mvNames = Joiner.on(",").join(relatedMvs.stream()
+                Set<MaterializedViewWrapper> relatedMVWrappers = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
+                String mvNames = Joiner.on(",").join(relatedMVWrappers.stream()
+                        .map(mvWithLevel -> mvWithLevel.getMV())
                         .map(mv -> mv.getName()).collect(Collectors.toList()));
                 LOG.warn("Related MVs: {}", mvNames);
                 LOG.warn("Query Key: {}", ast);
-                List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMvs);
+                Set<MaterializedView> relatedMVs = relatedMVWrappers.stream()
+                        .map(mvWithLevel -> mvWithLevel.getMV()).collect(Collectors.toSet());
+                List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMVs);
                 for (CachingMvPlanContextBuilder.AstKey cacheKey : candidates) {
                     LOG.warn("Cached Key: {}", cacheKey);
                 }
@@ -248,7 +252,7 @@ public class TextMatchBasedRewriteRule extends Rule {
 
                 final Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
                 final MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                        mv, mvPlanContext, mvUpdateInfo, queryTables);
+                        mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
                 final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
                 final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 
@@ -277,7 +281,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                             MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
                     mvEntity.increaseQueryTextBasedMatchedCount(1L);
                     OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: {}", REWRITE_SUCCESS);
-                    context.getQueryMaterializationContext().markRewriteSuccess(true);
+                    context.getQueryMaterializationContext().addRewrittenSuccessMVContext(mvContext);
                     return rewritten;
                 }
             }

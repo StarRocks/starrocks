@@ -37,28 +37,18 @@ public:
     Status init(const CacheOptions& options);
 
     // Write data buffer to cache, the `offset` must be aligned by block size
-    Status write_buffer(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
-                        WriteCacheOptions* options = nullptr);
+    Status write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, WriteCacheOptions* options = nullptr);
 
-    Status write_buffer(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
-                        WriteCacheOptions* options = nullptr);
-
-    // Write object to cache, the `ptr` is the object pointer.
-    Status write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
-                        DataCacheHandle* handle, WriteCacheOptions* options = nullptr);
+    Status write(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
+                 WriteCacheOptions* options = nullptr);
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned. The offset and size must be aligned by block size.
-    Status read_buffer(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
-                       ReadCacheOptions* options = nullptr);
+    Status read(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
+                ReadCacheOptions* options = nullptr);
 
-    StatusOr<size_t> read_buffer(const CacheKey& cache_key, off_t offset, size_t size, char* data,
-                                 ReadCacheOptions* options = nullptr);
-
-    // Read object from cache, the `handle` wraps the object pointer.
-    // As long as the handle object is not destroyed and the user does not manully call the `handle->release()`
-    // function, the corresponding pointer will never be freed by the cache system.
-    Status read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options = nullptr);
+    StatusOr<size_t> read(const CacheKey& cache_key, off_t offset, size_t size, char* data,
+                          ReadCacheOptions* options = nullptr);
 
     bool exist(const CacheKey& cache_key, off_t offset, size_t size) const;
 

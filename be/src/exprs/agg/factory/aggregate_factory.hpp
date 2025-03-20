@@ -32,6 +32,7 @@
 #include "exprs/agg/covariance.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/ds_hll_count_distinct.h"
+#include "exprs/agg/ds_theta_count_distinct.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
@@ -193,9 +194,14 @@ public:
     static AggregateFunctionPtr MakeHllSketchAggregateFunction();
 
     template <LogicalType T>
+    static AggregateFunctionPtr MakeThetaSketchAggregateFunction();
+
+    template <LogicalType T>
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
+
+    static AggregateFunctionPtr MakePercentileApproxWeightedAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
@@ -398,6 +404,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
     return std::make_shared<HllSketchAggregateFunction<LT>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeThetaSketchAggregateFunction() {
+    return std::make_shared<ThetaSketchAggregateFunction<LT>>();
 }
 
 template <LogicalType LT>

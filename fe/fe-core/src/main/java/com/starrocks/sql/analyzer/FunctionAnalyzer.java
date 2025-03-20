@@ -344,6 +344,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
                 || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
@@ -428,7 +429,8 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX)) {
-            if (functionCallExpr.getChildren().size() != 2 && functionCallExpr.getChildren().size() != 3) {
+            List<Expr> children = functionCallExpr.getChildren();
+            if (children.size() != 2 && children.size() != 3) {
                 throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
                         functionCallExpr.getPos());
             }
@@ -439,11 +441,36 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.getChild(1).getType().isNumericType()) {
                 throw new SemanticException("percentile_approx requires the second parameter's type is numeric type");
             }
-
-            if (functionCallExpr.getChildren().size() == 3) {
+            if (children.size() == 3) {
                 if (!functionCallExpr.getChild(2).getType().isNumericType()) {
                     throw new SemanticException(
                             "percentile_approx requires the third parameter's type is numeric type");
+                }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX_WEIGHTED)) {
+            List<Expr> children = functionCallExpr.getChildren();
+            if (children.size() != 3 && children.size() != 4) {
+                throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
+                        functionCallExpr.getPos());
+            }
+            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
+                throw new SemanticException(
+                        "percentile_approx requires the first parameter's type is numeric type");
+            }
+            // 1th column cannot be constant
+            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
+                throw new SemanticException("percentile_approx requires the second parameter's type is bigint type column");
+            }
+            if (!functionCallExpr.getChild(2).getType().isNumericType()) {
+                throw new SemanticException(
+                        "percentile_approx requires the third parameter's type is numeric type");
+            }
+            if (children.size() == 4) {
+                if (!functionCallExpr.getChild(3).getType().isNumericType()) {
+                    throw new SemanticException(
+                            "percentile_approx requires the fourth parameter's type is numeric type");
                 }
             }
         }
@@ -537,7 +564,7 @@ public class FunctionAnalyzer {
             // check the second parameter: tgt_type
             if (argSize == 3) {
                 if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
-                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong ");
                 }
                 String tgtType = ((LiteralExpr) functionCallExpr.getChild(2)).getStringValue();
                 if (!SUPPORTED_TGT_TYPES.contains(tgtType)) {

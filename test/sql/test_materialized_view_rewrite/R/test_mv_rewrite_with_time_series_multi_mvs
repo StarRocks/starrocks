@@ -53,17 +53,23 @@ from t0 group by date_trunc('month', ts);
 refresh materialized view test_mv3 with sync mode;
 [UC]analyze table test_mv1 WITH SYNC MODE;
 -- result:
-test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv1	analyze	status	OK
+test_db_821db0e543014d6d8c356e450d1ab264.test_mv1	analyze	status	OK
 -- !result
 [UC]analyze table test_mv2 WITH SYNC MODE;
 -- result:
-test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv2	analyze	status	OK
+test_db_821db0e543014d6d8c356e450d1ab264.test_mv2	analyze	status	OK
 -- !result
 [UC]analyze table test_mv3 WITH SYNC MODE;
 -- result:
-test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv3	analyze	status	OK
+test_db_821db0e543014d6d8c356e450d1ab264.test_mv3	analyze	status	OK
 -- !result
 set enable_materialized_view_rewrite=true;
+-- result:
+-- !result
+set enable_materialized_view_timeseries_agg_pushdown_rewrite=true;
+-- result:
+-- !result
+set enable_materialized_view_multi_stages_rewrite=false;
 -- result:
 -- !result
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
@@ -178,15 +184,15 @@ from test_mv2 group by date_trunc('month', dt);
 refresh materialized view test_mv3 with sync mode;
 [UC]analyze table test_mv1 WITH SYNC MODE;
 -- result:
-test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv1	analyze	status	OK
+test_db_821db0e543014d6d8c356e450d1ab264.test_mv1	analyze	status	OK
 -- !result
 [UC]analyze table test_mv2 WITH SYNC MODE;
 -- result:
-test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv2	analyze	status	OK
+test_db_821db0e543014d6d8c356e450d1ab264.test_mv2	analyze	status	OK
 -- !result
 [UC]analyze table test_mv3 WITH SYNC MODE;
 -- result:
-test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv3	analyze	status	OK
+test_db_821db0e543014d6d8c356e450d1ab264.test_mv3	analyze	status	OK
 -- !result
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
 -- result:
