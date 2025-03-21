@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewri
 import com.starrocks.sql.optimizer.rule.transformation.HoistHeavyCostExprsUponTopnRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.InnerToSemiRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
@@ -348,6 +349,16 @@ public class QueryOptimizer extends Optimizer {
         }
     }
 
+    private void distinctJoinRewrite(TaskScheduler scheduler, OptExpression tree, TaskContext rootTaskContext) {
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+        deriveLogicalProperty(tree);
+        scheduler.rewriteOnce(tree, rootTaskContext, new InnerToSemiRule());
+        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+    }
+
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
         if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
             if (!Utils.hasPrunableJoin(tree)) {
@@ -547,6 +558,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
 
         pruneTables(tree, rootTaskContext, requiredColumns);
+        distinctJoinRewrite(scheduler, tree, rootTaskContext);
 
         scheduler.rewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());

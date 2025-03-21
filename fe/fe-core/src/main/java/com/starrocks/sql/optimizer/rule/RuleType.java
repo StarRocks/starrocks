@@ -214,6 +214,8 @@ public enum RuleType {
     TF_HOIST_HEAVY_COST_UPON_TOPN,
     TF_OR_TO_UNION_ALL_JOIN,
 
+    TF_INNER_TO_SEMI,
+
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
     IMP_OLAP_LSCAN_TO_PSCAN,
