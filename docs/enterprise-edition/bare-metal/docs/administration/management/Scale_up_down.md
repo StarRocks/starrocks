@@ -8,7 +8,7 @@
 
 After the node is added, it will be displayed in the **Add Host** section. 
 
-1. In the **BE node** section, click **Scale Out** and enter the required information in the **BE Setu**p dialog box. 
+1. In the **BE node** section, click **Scale Out** and enter the required information in the **BE Setup** dialog box. 
    ![img](../../_assets/manager/manager-006.png)
 2. Click **Confirm** to complete the scale-out. Load balancing will be automatically triggered after the scale-out is complete. 
 
