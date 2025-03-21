@@ -271,6 +271,67 @@ GROUP BY
   par_tbl3.k1;
 ```
 
+### Align multiple partition columns
+
+From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables. This enables Lakehouse integration and enhances the reuse of existing StarRocks internal table capabilities, providing a better Lakehouse solution:
+
+- **Simplified user experience**: Simplifies the process of transferring data from Data Lake to StarRocks.
+- **Accelerated query performance**: Reuses native table capabilities such as Colocate Group, Bitmap Index, Bloom Filter Index, Sort Key, and global dictionaries when creating materialized views. Queries directly referencing the base table will benefit from transparent query acceleration through automatic rewrite.
+
+#### Notes for multi-column partition expressions
+
+- Currently, multi-column partitions in materialized views can only be mapped one-to-one or in an N:1 relationship with the base table's partitions, not an M:N relationship. For example, if the base table has partition columns `(col1, col2, ..., coln)`, the materialized view partition expression can only be a single column partition, such as `col1`, `col2`, or `coln`, or a one-to-one mapping to the base table’s partition columns, that is, `(col1, col2, ..., coln)`. This limitation is designed to simplify the partition mapping logic between the base table and the materialized view, avoiding the complexity introduced by M:N relationships.
+- Because Iceberg partition expressions support the `transform` function, additional handling is required when mapping Iceberg partition expressions to StarRocks materialized view partition expressions. The mapping relationship is as follows:
+
+  | Iceberg Transform | Iceberg partition expression   | Materialized view partition expression   |
+  | ----------------- | ------------------------------ | ---------------------------------------- |
+  | Identity          | `<col>`                        | `<col>`                                  |
+  | hour              | `hour(<col>)`                  | `date_trunc('hour', <col>)`              |
+  | day               | `day(<col>)`                   | `date_trunc('day', <col>)`               |
+  | month             | `month(<col>)`                 | `date_trunc('month', <col>)`             |
+  | year              | `year(<col>)`                  | `date_trunc('year', <col>)`              |
+  | bucket            | `bucket(<col>, <n>)`           | Not supported                            |
+  | truncate          | `truncate(<col>)`              | Not supported                            |
+
+- For non-Iceberg partition columns, where partition expression computation is not involved, additional partition expression handling is not required. You can map them directly.
+
+The following example creates a partitioned materialized view with multi-column partition expression upon the base table from Iceberg Catalog (Spark).
+
+The definition of the base table in Spark:
+
+```SQL
+-- The partition expression of the base table contains multiple columns and a `days` transform.
+CREATE TABLE lineitem_days (
+      l_orderkey    BIGINT,
+      l_partkey     INT,
+      l_suppkey     INT,
+      l_linenumber  INT,
+      l_quantity    DECIMAL(15, 2),
+      l_extendedprice  DECIMAL(15, 2),
+      l_discount    DECIMAL(15, 2),
+      l_tax         DECIMAL(15, 2),
+      l_returnflag  VARCHAR(1),
+      l_linestatus  VARCHAR(1),
+      l_shipdate    TIMESTAMP,
+      l_commitdate  TIMESTAMP,
+      l_receiptdate TIMESTAMP,
+      l_shipinstruct VARCHAR(25),
+      l_shipmode     VARCHAR(10),
+      l_comment      VARCHAR(44)
+) USING ICEBERG
+PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
+```
+
+Create a materialized view with its partition columns mapped one-to-one with those of the base table:
+
+```SQL
+CREATE MATERIALIZED VIEW test_days
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+AS 
+SELECT * FROM iceberg_catalog.test_db.lineitem_days;
+```
+
 ### Achieve incremental refresh and transparent rewrite
 
 You can create a partitioned materialized view that refreshes by partitions to achieve incremental updates of the materialized view and transparent rewrite of queries with partial data materialization.
