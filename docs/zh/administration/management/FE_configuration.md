@@ -1118,6 +1118,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否为跨集群数据迁移开启旧版本兼容。新旧版本的集群间可能存在行为差异，从而导致跨集群数据迁移时出现问题。因此在数据迁移前，您需要为目标集群开启旧版本兼容，并在数据迁移完成后关闭。`true` 表示开启兼容。
 - 引入版本：v3.1.10, v3.2.6
 
+##### automated_cluster_snapshot_interval_seconds
+
+- 默认值：600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：自动化集群快照任务的触发间隔。
+- 引入版本：v3.4.2
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
