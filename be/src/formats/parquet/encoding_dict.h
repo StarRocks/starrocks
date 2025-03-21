@@ -20,10 +20,12 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "simd/simd.h"
 #include "util/coding.h"
+#include "util/cpu_info.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
 
@@ -81,9 +83,60 @@ private:
     faststring _buffer;
 };
 
+class CacheAwareDictDecoder : public Decoder {
+public:
+    CacheAwareDictDecoder() { _dict_size_threshold = CpuInfo::get_l2_cache_size(); }
+    ~CacheAwareDictDecoder() override = default;
+
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
+        switch (content_type) {
+        case DICT_CODE: {
+            FixedLengthColumn<int32_t>* data_column;
+            if (dst->is_nullable()) {
+                auto nullable_column = down_cast<NullableColumn*>(dst);
+                nullable_column->null_column()->append_default(count);
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
+            } else {
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
+            }
+            size_t cur_size = data_column->size();
+            data_column->resize_uninitialized(cur_size + count);
+            int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
+            auto decoded_num = _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
+            if (decoded_num < count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+            break;
+        }
+        case VALUE: {
+#ifdef BE_TEST
+            return _next_batch_value(count, dst, filter);
+#else
+            if (_get_dict_size() > _dict_size_threshold && config::parquet_cache_aware_dict_decoder_enable) {
+                return _next_batch_value(count, dst, filter);
+            } else {
+                return _next_batch_value(count, dst, nullptr);
+            }
+#endif // BE_TEST
+        }
+        default:
+            return Status::NotSupported("read type not supported");
+        }
+        return Status::OK();
+    }
+
+protected:
+    virtual size_t _get_dict_size() const = 0;
+    virtual Status _next_batch_value(size_t count, Column* dst, const FilterData* filter) = 0;
+    RleBatchDecoder<uint32_t> _rle_batch_reader;
+
+private:
+    size_t _dict_size_threshold = 0;
+};
+
 // TODO(zc): support read run later. however should add more interface to Column first
 template <typename T>
-class DictDecoder final : public Decoder {
+class DictDecoder final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
@@ -115,7 +168,10 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
+private:
+    size_t _get_dict_size() const override { return _dict.size() * SIZE_OF_TYPE; }
+
+    Status _next_batch_value(size_t count, Column* dst, const FilterData* filter) override {
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
@@ -129,24 +185,45 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
-        if (UNLIKELY(ret <= 0)) {
-            return Status::InternalError("DictDecoder GetBatchWithDict failed");
+        if (filter) {
+            _indexes.reserve(count);
+            auto decoded_num = _rle_batch_reader.GetBatch(&_indexes[0], count);
+            if (decoded_num < count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+
+            auto flag = 0;
+            size_t size = _dict.size();
+            for (int i = 0; i < count; i++) {
+                flag |= _indexes[i] >= size;
+            }
+            if (UNLIKELY(flag)) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+
+            for (int i = 0; i < count; i++) {
+                if (filter[i]) {
+                    data[i] = _dict[_indexes[i]];
+                }
+            }
+        } else {
+            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder GetBatchWithDict failed");
+            }
         }
 
         return Status::OK();
     }
 
-private:
     enum { SIZE_OF_TYPE = sizeof(T) };
 
-    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<T> _dict;
     std::vector<uint32_t> _indexes;
 };
 
 template <>
-class DictDecoder<Slice> final : public Decoder {
+class DictDecoder<Slice> final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
@@ -251,24 +328,36 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
-        switch (content_type) {
-        case DICT_CODE: {
-            FixedLengthColumn<int32_t>* data_column;
-            if (dst->is_nullable()) {
-                auto nullable_column = down_cast<NullableColumn*>(dst);
-                nullable_column->null_column()->append_default(count);
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
-            } else {
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
+private:
+    size_t _get_dict_size() const override { return _dict_data.size(); }
+
+    Status _next_batch_value(size_t count, Column* dst, const FilterData* filter) override {
+        if (filter) {
+            _indexes.reserve(count);
+            auto decoded_num = _rle_batch_reader.GetBatch(&_indexes[0], count);
+            if (decoded_num < count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
             }
-            size_t cur_size = data_column->size();
-            data_column->resize_uninitialized(cur_size + count);
-            int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
-            _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
-            break;
-        }
-        case VALUE: {
+            auto flag = 0;
+            size_t size = _dict.size();
+            for (int i = 0; i < count; i++) {
+                flag |= _indexes[i] >= size;
+            }
+            if (UNLIKELY(flag)) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+            if (dst->is_nullable()) {
+                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+            }
+            auto* binary_column = ColumnHelper::get_binary_column(dst);
+            for (int i = 0; i < count; ++i) {
+                if (filter[i]) {
+                    binary_column->append(_dict[_indexes[i]]);
+                } else {
+                    binary_column->append_default();
+                }
+            }
+        } else {
             raw::stl_vector_resize_uninitialized(&_slices, count);
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
             if (UNLIKELY(ret <= 0)) {
@@ -278,19 +367,12 @@ public:
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("DictDecoder append strings to column failed");
             }
-            break;
         }
-        default:
-            return Status::NotSupported("read type not supported");
-        }
-
         return Status::OK();
     }
 
-private:
     enum { SIZE_OF_DICT_CODE_TYPE = sizeof(int32_t) };
 
-    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<uint8_t> _dict_data;
     std::vector<Slice> _dict;
     std::vector<uint32_t> _indexes;

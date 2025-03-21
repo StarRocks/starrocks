@@ -97,6 +97,11 @@ public:
         return cache_sizes;
     }
 
+    static long get_l2_cache_size() {
+        const auto& cache_sizes = CpuInfo::get_cache_sizes();
+        return cache_sizes[CpuInfo::L2_CACHE] ? cache_sizes[CpuInfo::L2_CACHE] : DEFAULT_L2_CACHE_SIZE;
+    }
+
     static long get_l3_cache_size() {
         auto& cache_sizes = get_cache_sizes();
         return cache_sizes[CacheLevel::L3_CACHE] ? cache_sizes[CacheLevel::L3_CACHE]
@@ -120,6 +125,8 @@ public:
     static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
 
 private:
+    static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
+
     /// Initialize NUMA-related state - called from Init();
     static void _init_numa();
 
