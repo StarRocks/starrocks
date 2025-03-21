@@ -155,6 +155,17 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
 
+    auto txn_infos = std::vector<TxnInfoPB>();
+    if (request->txn_infos_size() == 0) {
+        txn_infos.reserve(request->txn_ids_size());
+        for (auto txn_id : request->txn_ids()) {
+            auto& txn_info = txn_infos.emplace_back();
+            txn_info.set_txn_id(txn_id);
+            txn_info.set_combined_txn_log(false);
+            txn_info.set_txn_type(TXN_NORMAL);
+        }
+    }
+
     auto timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForPublishVersion;
     auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
     auto start_ts = butil::gettimeofday_us();
@@ -166,7 +177,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
     TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3",
-             JoinInts(request->txn_ids(), ","), request->base_version(), request->new_version(),
+             JoinMapped(txn_infos, txn_info_string, ";"), request->base_version(), request->new_version(),
              request->tablet_ids_size());
 
     Status::OK().to_protobuf(response->mutable_status());
@@ -253,7 +264,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
-                         << " txn_ids=" << JoinInts(request->txn_ids(), ",");
+                         << " txn_ids=" << JoinMapped(txn_infos, txn_info_string, ",");
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             st.to_protobuf(response->mutable_status());
@@ -264,11 +275,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",") << ". cost=" << cost << "us\n"
+        LOG(INFO) << "Published txns=" << JoinMapped(txn_infos, txn_info_string, ",") << ". cost=" << cost << "us\n"
                   << trace->DumpToString();
     } else if (is_slow) {
-        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",")
-                  << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
+        LOG(INFO) << "Published txns=" << JoinMapped(txn_infos, txn_info_string, ",")
+                  << ". tablets=" << JoinMapped(txn_infos, txn_info_string, ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
