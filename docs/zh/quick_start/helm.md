@@ -617,4 +617,3 @@ helm delete starrocks
 
 [`starrocks-kubernetes-operator` 和 `kube-starrocks` Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)。
 
-=======
