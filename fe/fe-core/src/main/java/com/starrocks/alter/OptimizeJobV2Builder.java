@@ -41,11 +41,19 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
     @Override
     public AlterJobV2 build() throws StarRocksException {
         long tableId = table.getId();
+        if (optimizeClause.getPartitionDesc() != null) {
+            LOG.info("Merge partition job {} is created, table: {}", jobId, table.getName());
+            MergePartitionJob mergePartitionJob = new MergePartitionJob(jobId, dbId, tableId, table.getName(),
+                    timeoutMs, optimizeClause);
+            mergePartitionJob.setWarehouseId(warehouseId);
+            return mergePartitionJob;
+        }
         if (!Config.enable_online_optimize_table || optimizeClause.getKeysDesc() != null
                 || optimizeClause.getPartitionDesc() != null || optimizeClause.getSortKeys() != null
                 || table.getStorageType() == TStorageType.COLUMN_WITH_ROW
                 || !table.enableReplicatedStorage()
                 || table.isCloudNativeTableOrMaterializedView()) {
+            LOG.info("Optimize job {} is created, table: {}", jobId, table.getName());
             OptimizeJobV2 optimizeJob = new OptimizeJobV2(jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
             optimizeJob.setWarehouseId(warehouseId);
             return optimizeJob;

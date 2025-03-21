@@ -309,7 +309,7 @@ public abstract class AlterJobV2 implements Writable {
                 return false;
             } else {
                 // table is stable, set is to ROLLUP and begin altering.
-                LOG.info("table {} is stable, start job{}, type {}", tableId, jobId, type);
+                LOG.info("table {} is stable, start job {}, type {}", tableId, jobId, type);
                 if (type == JobType.ROLLUP) {
                     tbl.setState(OlapTableState.ROLLUP);
                 } else if (type == JobType.OPTIMIZE) {

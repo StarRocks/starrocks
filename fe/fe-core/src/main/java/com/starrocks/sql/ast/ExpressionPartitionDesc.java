@@ -68,6 +68,11 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         this.expr = expr;
     }
 
+    @Override
+    public String toString() {
+        return "PARTITION BY " + expr.toSql();
+    }
+
     public RangePartitionDesc getRangePartitionDesc() {
         return rangePartitionDesc;
     }

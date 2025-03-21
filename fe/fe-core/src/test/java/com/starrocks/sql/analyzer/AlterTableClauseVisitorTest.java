@@ -41,7 +41,7 @@ public class AlterTableClauseVisitorTest extends DDLTestBase {
         List<String> list = new ArrayList<>();
         list.add("id");
 
-        OptimizeClause optimizeClause = new OptimizeClause(null, null, hashDistributionDesc, list, null, nodePosition);
+        OptimizeClause optimizeClause = new OptimizeClause(null, null, hashDistributionDesc, list, null, null, nodePosition);
         OlapTable table = new OlapTable();
         AlterTableClauseAnalyzer visitor = new AlterTableClauseAnalyzer(table);
 
