@@ -144,7 +144,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 ]
 -- partition_expression
 [PARTITION BY 
-    {<date_column> | date_trunc(fmt, <date_column>)}
+  [ <partition_column> [,...] ] | [ <date_function_expr> ]
 ]
 -- order_by_expression
 [ORDER BY (<sort_key>)]
@@ -232,7 +232,36 @@ If this parameter is not specified, the default value `MANUAL` is used.
 
 **partition_expression** (optional)
 
-The partitioning strategy of the asynchronous materialized view. As for the current version of StarRocks, only one partition expression is supported when creating an asynchronous materialized view.
+The partitioning strategy of the asynchronous materialized view. If this parameter is not specified, no partitioning strategy is adopted by default.
+
+Valid values:
+
+- `partition_column`: The column(s) used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
+- `date_function_expr`: The complex expression with date functions used for partitioning.
+  - `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
+  - `str2date` function: The function used to transform string type partitions of the base table into date types. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a STRING date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
+  - `time_slice` function: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
+
+From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables.
+
+**Notes for multi-column partition expressions**:
+
+- Currently, multi-column partitions in materialized views can only be mapped one-to-one or in an N:1 relationship with the base table's partitions, not an M:N relationship. For example, if the base table has partition columns `(col1, col2, ..., coln)`, the materialized view partition expression can only be a single column partition, such as `col1`, `col2`, or `coln`, or a one-to-one mapping to the base table’s partition columns, that is, `(col1, col2, ..., coln)`. This limitation is designed to simplify the partition mapping logic between the base table and the materialized view, avoiding the complexity introduced by M:N relationships.
+- Because Iceberg partition expressions support the `transform` function, additional handling is required when mapping Iceberg partition expressions to StarRocks materialized view partition expressions. The mapping relationship is as follows:
+
+  | Iceberg Transform | Iceberg partition expression   | Materialized view partition expression   |
+  | ----------------- | ------------------------------ | ---------------------------------------- |
+  | Identity          | `<col>`                        | `<col>`                                  |
+  | hour              | `hour(<col>)`                  | `date_trunc('hour', <col>)`              |
+  | day               | `day(<col>)`                   | `date_trunc('day', <col>)`               |
+  | month             | `month(<col>)`                 | `date_trunc('month', <col>)`             |
+  | year              | `year(<col>)`                  | `date_trunc('year', <col>)`              |
+  | bucket            | `bucket(<col>, <n>)`           | Not supported                            |
+  | truncate          | `truncate(<col>)`              | Not supported                            |
+
+- For non-Iceberg partition columns, where partition expression computation is not involved, additional partition expression handling is not required. You can map them directly.
+
+See [Example -5](#examples) for detailed instructions on multi-column partition expressions.
 
 > **CAUTION**
 >
@@ -241,15 +270,6 @@ The partitioning strategy of the asynchronous materialized view. As for the curr
 > - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
 > - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
 > - The refresh behavior and query rewrite logic of materialized views with the List Partitioning strategy are consistent with those with the Range Partitioning strategy.
-
-Valid values:
-
-- `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
-- `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
-- `str2date` function: The function used to partition string type parititions of base table into materialized view's partition. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a string date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
-- `time_slice` function: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
-
-If this parameter is not specified, no partitioning strategy is adopted by default.
 
 **order_by_expression** (optional)
 
@@ -285,6 +305,18 @@ Properties of the asynchronous materialized view. You can modify the properties 
     - If `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables.
     - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last refresh is within the staleness time interval.
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
+  - `force_mv`: From v3.5.0 onwards, StarRocks materialized views support Common Partition Expression TTL. The `force_mv` semantic is specifically designed for this scenario. When this semantic is enabled:
+    - If the materialized view does not have the `partition_retention_condition` property, it will always force the use of the materialized view for query rewrite, regardless of whether the base table has been updated.
+    - If the materialized view has the `partition_retention_condition` property:
+      - For partitions within the TTL range, query rewrite based on the materialized view is always available, regardless of whether the base table has been updated.
+      - For partitions outside the TTL range, a Union compensation between the materialized view and the base table is required, regardless of whether the base table has been updated.
+
+    For example, if the materialized view has the `partition_retention_condition` property defined and the partition for `20241131` has expired, but the base table data for `20241203` has been updated while the materialized view data for `20241203` has not been refreshed, the following applies when the `query_rewrite_consistency` property is set to `force_mv`:
+    - The materialized view guarantees that queries against the partitions within the TTL range (for example, from `20241201` to `20241203`) defined in `partition_retention_condition` can always be transparently rewritten.
+    - For queries against partitions outside the `partition_retention_condition` range, compensation will occur automatically based on the Union of the materialized view and the base table.
+
+    See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
+
 - `storage_volume`: The name of the storage volume used to store the asynchronous materialized view you want to create if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
   - `true`(Default value since v3.3): Enable query rewrite for external catalog-based materialized views.
@@ -300,6 +332,13 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `true`: Queries directly against the materialized view will be rewritten and returned with the most updated data, which is consistent with the result of the materialized view definition query. Please note that when the materialized view is inactive or does not support transparent query rewrite, these queries will be executed as the materialized view definition query.
   - `transparent_or_error`: Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with an error.
   - `transparent_or_default` Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with the existing data in the materialized view.
+- `partition_retention_condition`: From v3.5.0 onwards, StarRocks materialized views support Common Partition Expression TTL. This property is the expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly. Example: `'partition_retention_condition' = 'dt >= CURRENT_DATE() - INTERVAL 3 MONTH'`.
+  - The expression can only contain partition columns and constants. Non-partition columns are not supported.
+  - Common Partition Expression applies to List partitions and Range partitions differently:
+    - For materialized views with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
+    - For materialized views with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
+
+  See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
 **query_statement** (required)
 
@@ -868,4 +907,54 @@ SELECT
    `d_datekey`
 FROM
  `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
+```
+
+Example 5: Create a partitioned materialized view with multi-column partition expression upon the base table from Iceberg Catalog (Spark).
+
+The definition of the base table in Spark:
+
+```SQL
+-- The partition expression of the base table contains multiple columns and a `days` transform.
+CREATE TABLE lineitem_days (
+      l_orderkey    BIGINT,
+      l_partkey     INT,
+      l_suppkey     INT,
+      l_linenumber  INT,
+      l_quantity    DECIMAL(15, 2),
+      l_extendedprice  DECIMAL(15, 2),
+      l_discount    DECIMAL(15, 2),
+      l_tax         DECIMAL(15, 2),
+      l_returnflag  VARCHAR(1),
+      l_linestatus  VARCHAR(1),
+      l_shipdate    TIMESTAMP,
+      l_commitdate  TIMESTAMP,
+      l_receiptdate TIMESTAMP,
+      l_shipinstruct VARCHAR(25),
+      l_shipmode     VARCHAR(10),
+      l_comment      VARCHAR(44)
+) USING ICEBERG
+PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
+```
+
+Create a materialized view with its partition columns mapped one-to-one with those of the base table:
+
+```SQL
+CREATE MATERIALIZED VIEW test_days
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+AS 
+SELECT * FROM iceberg_catalog.test_db.lineitem_days;
+```
+
+Example 6: Create a partitioned materialized view, define Common Partition Expression TTL for it, and enable the `force_mv` semantic for query rewrite.
+
+```SQL
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt, province)
+REFRESH MANUAL 
+PROPERTIES (
+    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH",
+    "query_rewrite_consistency" = "force_mv"
+)
+AS SELECT * from t1;
 ```
