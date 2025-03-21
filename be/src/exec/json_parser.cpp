@@ -22,10 +22,6 @@ namespace starrocks {
 
 const size_t MAX_RAW_JSON_LEN = 64;
 
-static inline Status json_parse_error(const std::string& err_msg) {
-    return Status::DataQualityError(format_json_parse_error_msg(err_msg));
-}
-
 JsonDocumentStreamParser::JsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonParser(parser) {
     _batch_size = (config::json_parse_many_batch_size > simdjson::dom::MINIMAL_BATCH_SIZE)
                           ? config::json_parse_many_batch_size
@@ -545,9 +541,9 @@ Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
     return Status::OK();
 }
 
-std::string format_json_parse_error_msg(const std::string& raw_error_msg) {
+Status json_parse_error(const std::string& err_msg) {
     // the keywords "parse error" will be used in FE to determine the error type.
-    return fmt::format("parse error. {}", raw_error_msg);
+    return Status::DataQualityError(fmt::format("parse error. {}", err_msg));
 }
 
 } // namespace starrocks
