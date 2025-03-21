@@ -63,6 +63,22 @@ bool check_equals(const RuntimeEmptyFilter<type>& left, const RuntimeEmptyFilter
                         static_cast<const RuntimeMembershipFilter&>(right));
 }
 
+template <LogicalType type>
+bool check_equals(const RuntimeBitsetFilter<type>& left, const RuntimeBitsetFilter<type>& right) {
+    if (!check_equals(static_cast<const RuntimeMembershipFilter&>(left),
+                      static_cast<const RuntimeMembershipFilter&>(right))) {
+        return false;
+    }
+
+    const auto& lhs_bitset = left.bitset();
+    const auto& rhs_bitset = right.bitset();
+    if (lhs_bitset.min_value() != rhs_bitset.min_value() || lhs_bitset.size() != rhs_bitset.size()) {
+        return false;
+    }
+
+    return std::memcmp(lhs_bitset.data(), rhs_bitset.data(), lhs_bitset.size()) == 0;
+}
+
 template <LogicalType type, DerivedFromMembershipFilter MembershipFilter>
 bool check_equals(ComposedRuntimeFilter<type, MembershipFilter>* left,
                   ComposedRuntimeFilter<type, MembershipFilter>* right) {
@@ -1366,6 +1382,76 @@ TEST_F(RuntimeMembershipFilterTest, TestEvaluateEmptyFilter) {
         rf.evaluate(nullable_col.get(), &ctx);
         // Only min-max filter effective.
         _check_equal(ctx.selection, {0, 1, 1, 1, 1, 1, 0, 1, 1});
+    }
+}
+
+TEST_F(RuntimeFilterTest, TestSerializeBitsetFilter) {
+    const int rf_version = RF_VERSION_V3;
+
+    ComposedRuntimeBitsetFilter<TYPE_INT> rf0;
+    rf0.membership_filter().set_min_max(0, 198);
+    rf0.membership_filter().init(100);
+    for (int i = 0; i < 200; i += 2) {
+        rf0.insert(i);
+    }
+
+    const size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, &rf0);
+    std::vector<uint8_t> buffer(max_size, 0);
+    const size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, &rf0, buffer.data());
+    buffer.resize(actual_size);
+
+    RuntimeFilter* rf1 = nullptr;
+    ObjectPool pool;
+    RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, buffer.data(), actual_size);
+    EXPECT_TRUE(check_equals(&rf0, down_cast<ComposedRuntimeBitsetFilter<TYPE_INT>*>(rf1)));
+}
+
+TEST_F(RuntimeMembershipFilterTest, TestEvaluateBitsetFilter) {
+    ComposedRuntimeBitsetFilter<TYPE_INT> rf;
+    rf.membership_filter().set_min_max(0, 198);
+    rf.membership_filter().init(100);
+    for (int i = 0; i < 200; i += 2) {
+        rf.insert(i);
+    }
+
+    const auto col = ColumnTestHelper::build_column<int32_t>({-1, 5, 10, 15, 20, 25, 200});
+    auto nullable_col = ColumnHelper::cast_to_nullable_column(col->clone()->get_ptr());
+    nullable_col->append_nulls(2);
+
+    // Non-null RF evaluates non-nullable column.
+    {
+        RuntimeFilter::RunningContext ctx;
+        ctx.use_merged_selection = false;
+        rf.evaluate(col.get(), &ctx);
+        _check_equal(ctx.selection, {0, 0, 1, 0, 1, 0, 0});
+    }
+
+    // Non-null RF evaluates nullable column.
+    {
+        RuntimeFilter::RunningContext ctx;
+        ctx.use_merged_selection = false;
+        rf.evaluate(nullable_col.get(), &ctx);
+        // Only min-max filter effective.
+        _check_equal(ctx.selection, {0, 0, 1, 0, 1, 0, 0, 0, 0});
+    }
+
+    rf.insert_null();
+    // Null RF evaluates non-nullable column.
+    {
+        RuntimeFilter::RunningContext ctx;
+        ctx.use_merged_selection = false;
+        rf.evaluate(col.get(), &ctx);
+        // Only min-max filter effective.
+        _check_equal(ctx.selection, {0, 0, 1, 0, 1, 0, 0});
+    }
+
+    // Null RF evaluates nullable column.
+    {
+        RuntimeFilter::RunningContext ctx;
+        ctx.use_merged_selection = false;
+        rf.evaluate(nullable_col.get(), &ctx);
+        // Only min-max filter effective.
+        _check_equal(ctx.selection, {0, 0, 1, 0, 1, 0, 0, 1, 1});
     }
 }
 

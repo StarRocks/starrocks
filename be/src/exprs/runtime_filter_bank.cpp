@@ -77,6 +77,21 @@ RuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool
     return create_runtime_filter_helper<ComposedRuntimeBloomFilter>(pool, type, join_mode);
 }
 
+RuntimeFilter* RuntimeFilterHelper::create_runtime_bitset_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter =
+            type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() {
+                RuntimeFilter* rf = new ComposedRuntimeBitsetFilter<LT>();
+                rf->get_membership_filter()->set_join_mode(join_mode);
+                return rf;
+            });
+
+    if (pool != nullptr && filter != nullptr) {
+        return pool->add(filter);
+    } else {
+        return filter;
+    }
+}
+
 RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, RuntimeFilterSerializeType rf_type,
                                                                LogicalType ltype, int8_t join_mode) {
     switch (rf_type) {
@@ -84,6 +99,8 @@ RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool,
         return create_runtime_empty_filter(pool, ltype, join_mode);
     case RuntimeFilterSerializeType::BLOOM_FILTER:
         return create_runtime_bloom_filter(pool, ltype, join_mode);
+    case RuntimeFilterSerializeType::BITSET_FILTER:
+        return create_runtime_bitset_filter(pool, ltype, join_mode);
     case RuntimeFilterSerializeType::NONE:
     default:
         return nullptr;
@@ -124,6 +141,64 @@ static std::pair<CppType, CppType> calc_min_max_from_columns(const Columns& colu
     return {min_value, max_value};
 }
 
+struct try_create_runtime_bitset_filter {
+    template <LogicalType LT>
+    RuntimeFilter* operator()(const pipeline::RuntimeMembershipFilterBuildParam& param, size_t column_offset,
+                              size_t row_count) {
+        static auto cache_sizes = [] {
+            static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
+            static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
+
+            const auto& cache_sizes = CpuInfo::get_cache_sizes();
+            const auto cur_l2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
+            const auto cur_l3_cache_size = cache_sizes[CpuInfo::L3_CACHE];
+            return std::pair{cur_l2_cache_size ? cur_l2_cache_size : DEFAULT_L2_CACHE_SIZE,
+                             cur_l3_cache_size ? cur_l3_cache_size : DEFAULT_L3_CACHE_SIZE};
+        }();
+        const auto& [l2_cache_size, l3_cache_size] = cache_sizes;
+
+        const auto [min_value, max_value] = calc_min_max_from_columns<LT>(param.columns, column_offset);
+        const size_t value_interval = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -
+                                      RuntimeBitsetFilter<LT>::to_numeric(min_value) + 1;
+
+        VLOG_FILE << "[BITSET] min_value=" << min_value << ", max_value=" << max_value
+                  << ", value_interval=" << value_interval;
+
+        if (min_value > max_value || value_interval == 0) { // Overflow.
+            return nullptr;
+        }
+
+        const size_t bitset_memory_usage = (value_interval + 7) / 8;
+        const size_t bloom_memory_usage = row_count;
+        if (bitset_memory_usage <= bloom_memory_usage ||
+            (bitset_memory_usage <= bloom_memory_usage * 4 && bitset_memory_usage <= l2_cache_size) ||
+            (bitset_memory_usage <= bloom_memory_usage * 2 && bitset_memory_usage <= l3_cache_size)) {
+            auto* rf = new ComposedRuntimeBitsetFilter<LT>();
+            rf->membership_filter().set_min_max(min_value, max_value);
+            return rf;
+        }
+
+        return nullptr;
+    }
+};
+
+RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
+                                                               const pipeline::RuntimeMembershipFilterBuildParam& param,
+                                                               size_t column_offset, size_t row_count) {
+    RuntimeFilter* filter =
+            type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), try_create_runtime_bitset_filter(),
+                                        param, column_offset, row_count);
+    if (filter == nullptr) { // Fall back to runtime bloom filter.
+        return create_runtime_bloom_filter(pool, type, join_mode);
+    } else {
+        if (pool != nullptr) {
+            return pool->add(filter);
+        } else {
+            return filter;
+        }
+    }
+}
+
 static uint8_t get_rf_version(const RuntimeState* state) {
     if (state->func_version() >= TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_3) {
         return RF_VERSION_V3;
@@ -160,7 +235,7 @@ size_t RuntimeFilterHelper::serialize_runtime_filter(int rf_version, const Runti
     // 2. rf_type
     if (rf_version >= RF_VERSION_V3) {
         const RuntimeFilterSerializeType type = rf->type();
-        memcpy(data + offset, &type, RF_VERSION_SZ);
+        memcpy(data + offset, &type, sizeof(type));
         offset += sizeof(type);
     }
 
@@ -197,7 +272,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
         memcpy(&rf_type, data + offset, sizeof(rf_type));
         offset += sizeof(rf_type);
     }
-    if (rf_type > RuntimeFilterSerializeType::BLOOM_FILTER) {
+    if (rf_type > RuntimeFilterSerializeType::BITSET_FILTER) {
         LOG(WARNING) << "unrecognized runtime filter type:" << static_cast<int>(rf_type);
         return 0;
     }
@@ -264,6 +339,12 @@ Status RuntimeFilterHelper::fill_runtime_filter(const ColumnPtr& column, Logical
     case RuntimeFilterSerializeType::BLOOM_FILTER:
         return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeBloomFilter>(), column,
                                     column_offset, filter, eq_null);
+    case RuntimeFilterSerializeType::BITSET_FILTER: {
+        const auto error_status = Status::NotSupported("runtime bitset filter do not support the logical type: " +
+                                                       std::string(logical_type_to_string(type)));
+        return type_dispatch_bitset_filter(type, error_status, FilterIniter<ComposedRuntimeBitsetFilter>(), column,
+                                           column_offset, filter, eq_null);
+    }
     case RuntimeFilterSerializeType::EMPTY_FILTER:
         return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeEmptyFilter>(), column,
                                     column_offset, filter, eq_null);

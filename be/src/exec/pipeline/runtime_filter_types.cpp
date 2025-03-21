@@ -121,7 +121,11 @@ Status PartialRuntimeFilterMerger::merge_singleton_local_bloom_filters() {
 
     const size_t row_count = std::accumulate(_ht_row_counts.begin(), _ht_row_counts.end(), size_t{0});
 
+    const auto join_mode = _bloom_filter_descriptors[0]->join_mode();
     const bool is_version_v3 = _func_version >= RF_VERSION_V3;
+    const bool maybe_use_bitset_filter =
+            _enable_join_runtime_bitset_filter && is_version_v3 && row_count <= _global_rf_limit &&
+            join_mode == TRuntimeFilterBuildJoinMode::BORADCAST && _partial_bloom_filter_build_params.size() == 1;
 
     const auto& num_bloom_filters = _bloom_filter_descriptors.size();
     // all params must have the same size as num_bloom_filters
@@ -139,7 +143,14 @@ Status PartialRuntimeFilterMerger::merge_singleton_local_bloom_filters() {
         if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
 
         const LogicalType build_type = desc->build_expr_type();
-        RuntimeFilter* rf = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type, desc->join_mode());
+        RuntimeFilter* rf = nullptr;
+        if (maybe_use_bitset_filter && _partial_bloom_filter_build_params[0][i].has_value()) {
+            const auto& param = _partial_bloom_filter_build_params[0][i].value();
+            rf = RuntimeFilterHelper::create_join_runtime_filter(_pool, build_type, desc->join_mode(), param,
+                                                                 kHashJoinKeyColumnOffset, row_count);
+        } else {
+            rf = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type, desc->join_mode());
+        }
         if (rf == nullptr) continue;
 
         // set BF paramaters
