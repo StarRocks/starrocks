@@ -687,7 +687,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         // eval predicate cardinality in scan node
         assertContains(plan, "4:OlapScanNode\n" +
-                "     table: nation, rollup: nation\n" +
+                "     TABLE: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
                 "     partitionsRatio=1/1, tabletsRatio=1/1");
