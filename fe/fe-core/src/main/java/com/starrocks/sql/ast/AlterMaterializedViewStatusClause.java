@@ -30,14 +30,20 @@ public class AlterMaterializedViewStatusClause extends AlterTableClause {
     }
 
     private final String status;
+    private final boolean retainVersionMap;
 
-    public AlterMaterializedViewStatusClause(String status, NodePosition pos) {
+    public AlterMaterializedViewStatusClause(String status, boolean retainVersionMap, NodePosition pos) {
         super(AlterOpType.ALTER_MV_STATUS, pos);
         this.status = status;
+        this.retainVersionMap = retainVersionMap;
     }
 
     public String getStatus() {
         return status;
+    }
+
+    public boolean isRetainVersionMap() {
+        return retainVersionMap;
     }
 
     @Override

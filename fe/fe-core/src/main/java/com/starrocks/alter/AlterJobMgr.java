@@ -199,9 +199,10 @@ public class AlterJobMgr {
         }
     }
 
-    public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
-        LOG.info("process change materialized view {} status to {}, isReplay: {}",
-                materializedView.getName(), status, isReplay);
+    public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay,
+                                            boolean retainVersionMap) {
+        LOG.info("process change materialized view {} status to {}, isReplay: {}, retainVersionMap: {}",
+                materializedView.getName(), status, isReplay, retainVersionMap);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
             ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -223,7 +224,9 @@ public class AlterJobMgr {
             List<BaseTableInfo> baseTableInfos =
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
-            materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+            if (!retainVersionMap) {
+                materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+            }
             materializedView.onReload();
             materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
@@ -345,7 +348,7 @@ public class AlterJobMgr {
         // To be compatible with the old version, if the reason is empty, use the default reason
         String reason = Strings.isEmpty(log.getReason()) ? MANUAL_INACTIVE_MV_REASON : log.getReason();
         try {
-            alterMaterializedViewStatus(mv, log.getStatus(), reason, true);
+            alterMaterializedViewStatus(mv, log.getStatus(), reason, true, false);
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
