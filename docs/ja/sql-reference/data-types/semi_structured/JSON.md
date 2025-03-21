@@ -68,7 +68,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
 | LIST                                                          | JSON Array               |
 | UNION, TIMESTAMP, その他の型                                   | サポートされていません   |
 
-- 方法 4: [Routine Load](../../../loading/RoutineLoad.md#導入-json-データ) を使用して、Kafka から JSON 形式のデータを継続的に消費し、StarRocks にインポートします。
+- 方法 4: [Routine Load](../../../loading/Loading_intro.md) を使用して、Kafka から JSON 形式のデータを継続的に消費し、StarRocks にインポートします。
 
 ### JSON 型データのクエリと処理
 
