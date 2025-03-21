@@ -565,17 +565,9 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
    1. 在 **fe.conf** 中添加以下配置：
 
-      - StarRocks v2.5、v3.0、v3.1.9 及之前小版本和 v3.2.4 及之前小版本：
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-    
-      - StarRocks v3.1.10 及之后小版本、v3.2.5 及之后小版本和 v3.3 及之后版本：
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    2. 启动该节点，并检查数据和元数据是否完整。
    3. 查看当前节点是否为 Leader 节点。
@@ -598,17 +590,9 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
    1. 在 **fe/meta/image/ROLE** 文件中将 FE 节点的角色从 `OBSERVER` 更改为 `FOLLOWER`。
    2. 在 **fe.conf** 中添加以下配置：
 
-      - StarRocks v2.5、v3.0、v3.1.9 及之前小版本和 v3.2.4 及之前小版本：
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - StarRocks v3.1.10 及之后小版本、v3.2.5 及之后小版本和 v3.3 及之后版本：
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    3. 启动该节点，并检查数据和元数据是否完整。
    4. 查看当前节点是否为 Leader 节点。
@@ -621,25 +605,13 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
    5. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置。**但不要重新启动该节点。**
-   6. 删除除当前节点之外的所有 FE 节点。当前节点将作为临时 Leader 节点。
-
-      ```SQL
-      -- 如需删除 Follower 节点，请将 <follower_host> 替换为 Follower 节点的 IP 地址（priority_networks），
-      -- 并将 <follower_edit_log_port>（默认值：9010）替换为 Follower 节点的 edit_log_port。
-      ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-      -- 如需删除 Observer 节点，请将 <observer_host> 替换为 Observer 节点的 IP 地址（priority_networks），
-      -- 并将 <observer_edit_log_port>（默认值：9010）替换为 Observer 节点的 edit_log_port。
-      ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-      ```
-
-   7. 向集群添加一个新的 Follower 节点（基于新的服务器）。
+   6. 向集群添加一个新的 Follower 节点（基于新的服务器）。
 
       ```SQL
       ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
       ```
 
-   8. 使用临时 Leader FE 节点作为 Helper，在新服务器上启动新 FE 节点。
+   7. 使用临时 Leader FE 节点作为 Helper，在新服务器上启动新 FE 节点。
 
       ```Bash
       # 将 <leader_ip> 替换为 Leader FE 节点的 IP 地址（priority_networks），
@@ -647,7 +619,7 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
       ```
 
-   9. 新的 FE 节点成功启动后，检查两个 FE 节点的状态和角色：
+   8. 新的 FE 节点成功启动后，检查两个 FE 节点的状态和角色：
 
       ```SQL
       SHOW FRONTENDS;
@@ -657,8 +629,8 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       - 如果字段 `Role` 为 `FOLLOWER`，说明该 FE 节点是 Follower FE 节点。
       - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
-   10. 如果新的 Follower 节点在集群中成功运行，就可以停止所有节点。
-   11. **仅在新的 Follower 节点的 fe.conf 中添加以下配置：**
+   9. 如果新的 Follower 节点在集群中成功运行，就可以停止所有节点。
+   10. **仅在新的 Follower 节点的 fe.conf 中添加以下配置：**
 
        - StarRocks v2.5、v3.0、v3.1.9 及之前小版本和 v3.2.4 及之前小版本：
 
@@ -672,8 +644,8 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
          bdbje_reset_election_group = true
          ```
 
-   12. 启动新的 Follower 节点，并检查数据和元数据是否完整。
-   13. 查看当前节点是否为 Leader 节点。
+   11. 启动新的 Follower 节点，并检查数据和元数据是否完整。
+   12. 查看当前节点是否为 Leader 节点。
 
        ```SQL
        SHOW FRONTENDS;
@@ -682,26 +654,14 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
        - 如果字段 `Alive` 为 `true`，说明该 FE 节点正常启动并加入集群。
        - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
-   14. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置并重新启动节点。
+   13. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置并重新启动节点。
 
     </TabItem>
 
   </Tabs>
 
-6. 存活的 Follower 节点是集群当前实质上的 Leader 节点。删除除了当前节点外所有 FE 节点。
-
-   ```SQL
-   -- 如需删除 Follower 节点，请将 <follower_host> 替换为 Follower 节点的 IP 地址（priority_networks），
-   -- 并将 <follower_edit_log_port>（默认值：9010）替换为 Follower 节点的 edit_log_port。
-   ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-   -- 如需删除 Observer 节点，请将 <observer_host> 替换为 Observer 节点的 IP 地址（priority_networks），
-   -- 并将 <observer_edit_log_port>（默认值：9010）替换为 Observer 节点的 edit_log_port。
-   ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-   ```
-
-7. 将需要重新添加回集群的 FE 节点的元数据目录 `meta_dir` 清除。
-8. 使用新 Leader FE 节点作为 Helper 启动 Follower 节点。
+5. 将需要重新添加回集群的 FE 节点的元数据目录 `meta_dir` 清除。
+6. 使用新 Leader FE 节点作为 Helper 启动 Follower 节点。
 
    ```Bash
    # 将 <leader_ip> 替换为 Leader FE 节点的 IP 地址（priority_networks），
@@ -709,7 +669,7 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
-9. 将 Follower 节点重新添加至集群。
+7. 将 Follower 节点重新添加至集群。
 
    ```SQL
    ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";

@@ -563,17 +563,9 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
    1. **fe.conf** に次の設定を追加します。
 
-      - StarRocks v2.5、v3.0、v3.1.9 以前のパッチバージョン、および v3.2.4 以前のパッチバージョンの場合:
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - StarRocks v3.1.10 以降のパッチバージョン、v3.2.5 以降のパッチバージョン、および v3.3 以降の場合:
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    2. ノードを再起動し、データとメタデータが完全であるか確認します。
    3. 現在の FE ノードが Leader FE ノードであるか確認します。
@@ -596,17 +588,9 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
    1. **fe/meta/image/ROLE** ファイルで FE ノードの役割を `OBSERVER` から `FOLLOWER` に変更します。
    2. **fe.conf** に次の設定を追加します。
 
-      - StarRocks v2.5、v3.0、v3.1.9 以前のパッチバージョン、および v3.2.4 以前のパッチバージョンの場合:
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - StarRocks v3.1.10 以降のパッチバージョン、v3.2.5 以降のパッチバージョン、および v3.3 以降の場合:
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    3. ノードを再起動し、データとメタデータが完全であるか確認します。
    4. 現在の FE ノードが Leader FE ノードであるか確認します。
@@ -619,25 +603,13 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
    5. データとメタデータが完全であり、ノードの役割が Leader である場合、以前に追加した設定を削除します。ただし、**ノードを再起動しないでください**。
-   6. 現在のノードを除くすべての FE ノードを削除します。これで一時的な Leader ノードとして機能します。
-
-      ```SQL
-      -- Follower ノードを削除するには、<follower_host> を Follower ノードの IP アドレス (priority_networks) に置き換え、
-      -- <follower_edit_log_port> (デフォルト: 9010) を Follower ノードの edit_log_port に置き換えます。
-      ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-      -- Observer ノードを削除するには、<observer_host> を Observer ノードの IP アドレス (priority_networks) に置き換え、
-      -- <observer_edit_log_port> (デフォルト: 9010) を Observer ノードの edit_log_port に置き換えます。
-      ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-      ```
-
-   7. クラスターに新しい Follower ノード (新しいサーバー上) を追加します。
+   6. クラスターに新しい Follower ノード (新しいサーバー上) を追加します。
 
       ```SQL
       ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
       ```
 
-   8. 一時的な Leader FE ノードをヘルパーとして使用して、新しいサーバー上で新しい FE ノードを起動します。
+   7. 一時的な Leader FE ノードをヘルパーとして使用して、新しいサーバー上で新しい FE ノードを起動します。
 
       ```Bash
       # <leader_ip> を Leader FE ノードの IP アドレス (priority_networks) に置き換え、
@@ -645,7 +617,7 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
       ```
 
-   9. 新しい FE ノードが正常に起動したら、両方の FE ノードの状態と役割を確認します。
+   8. 新しい FE ノードが正常に起動したら、両方の FE ノードの状態と役割を確認します。
 
       ```SQL
       SHOW FRONTENDS;
@@ -655,8 +627,8 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       - フィールド `Role` が `FOLLOWER` の場合、この FE ノードは Follower FE ノードです。
       - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
-   10. 新しい Follower がクラスター内で正常に動作している場合、すべてのノードを停止できます。
-   11. **新しい Follower のみの fe.conf** に次の設定を追加します。
+   9. 新しい Follower がクラスター内で正常に動作している場合、すべてのノードを停止できます。
+   10. **新しい Follower のみの fe.conf** に次の設定を追加します。
 
        - StarRocks v2.5、v3.0、v3.1.9 以前のパッチバージョン、および v3.2.4 以前のパッチバージョンの場合:
 
@@ -670,8 +642,8 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
          bdbje_reset_election_group = true
          ```
 
-   12. 新しい Follower ノードを再起動し、データとメタデータが完全であるか確認します。
-   13. 現在の FE ノードが Leader FE ノードであるか確認します。
+   11. 新しい Follower ノードを再起動し、データとメタデータが完全であるか確認します。
+   12. 現在の FE ノードが Leader FE ノードであるか確認します。
 
        ```SQL
        SHOW FRONTENDS;
@@ -680,26 +652,14 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
        - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動され、クラスターに追加されています。
        - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
-   14. データとメタデータが完全であり、ノードの役割が Leader である場合、以前に追加した設定を削除し、ノードを再起動できます。
+   13. データとメタデータが完全であり、ノードの役割が Leader である場合、以前に追加した設定を削除し、ノードを再起動できます。
 
     </TabItem>
 
   </Tabs>
 
-6. 生き残った Follower ノードは、実質的にクラスターの Leader ノードです。現在のノードを除くすべての FE ノードを削除します。
-
-   ```SQL
-   -- Follower ノードを削除するには、<follower_host> を Follower ノードの IP アドレス (priority_networks) に置き換え、
-   -- <follower_edit_log_port> (デフォルト: 9010) を Follower ノードの edit_log_port に置き換えます。
-   ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-   -- Observer ノードを削除するには、<observer_host> を Observer ノードの IP アドレス (priority_networks) に置き換え、
-   -- <observer_edit_log_port> (デフォルト: 9010) を Observer ノードの edit_log_port に置き換えます。
-   ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-   ```
-
-7. クラスターに再追加する FE ノードのメタデータディレクトリ `meta_dir` をクリアします。
-8. 新しい Leader FE ノードをヘルパーとして使用して、新しい Follower ノードを起動します。
+5. クラスターに再追加する FE ノードのメタデータディレクトリ `meta_dir` をクリアします。
+6. 新しい Leader FE ノードをヘルパーとして使用して、新しい Follower ノードを起動します。
 
    ```Bash
    # <leader_ip> を Leader FE ノードの IP アドレス (priority_networks) に置き換え、
@@ -707,7 +667,7 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
-9. Follower ノードをクラスターに再追加します。
+7. Follower ノードをクラスターに再追加します。
 
    ```SQL
    ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
