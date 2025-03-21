@@ -876,4 +876,4 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 - V2 Checkpoint（从 v3.3.0 起）
 - Timestamp without Timezone（从 v3.3.1 起）
 - 列映射（从 v3.3.6 起）
-- Deletion Vector（从 v3.4.0 起）
+- Deletion Vector（从 v3.4.1 起）
