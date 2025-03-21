@@ -33,6 +33,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -75,6 +76,7 @@ import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -388,7 +390,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize materialized view is not supported");
         }
 
-        if (olapTable.getAutomaticBucketSize() > 0) {
+        if (olapTable.getAutomaticBucketSize() > 0 && clause.getPartitionDesc() == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "Random distribution table already supports automatic scaling and does not require optimization");
         }
@@ -425,6 +427,39 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             throw new SemanticException("not support change keys type when optimize table");
         }
         KeysType targetKeysType = keysDesc == null ? originalKeysType : keysDesc.getKeysType();
+
+        // analyze partition desc
+        PartitionDesc partitionDesc = clause.getPartitionDesc();
+        if (partitionDesc != null) {
+            if (!(partitionDesc instanceof ExpressionPartitionDesc)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported partition type for merge partitions");
+            }
+            ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
+            String functionName = functionCallExpr.getFnName().getFunction();
+            if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported change to %s partition function when merge partitions", functionName);
+            }
+            if (clause.getDistributionDesc() != null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported change distribution type when merge partitions");
+            }
+            if (clause.getPartitionNames() != null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported specify partitions when merge partitions");
+            }
+            try {
+                expressionPartitionDesc.analyze(columnDefs, olapTable.getProperties());
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+            clause.setSourcePartitionIds(olapTable.getVisiblePartitions().stream()
+                    .map(Partition::getId).collect(Collectors.toList()));
+
+            return null;
+        }
 
         // analyze distribution
         DistributionDesc distributionDesc = clause.getDistributionDesc();
