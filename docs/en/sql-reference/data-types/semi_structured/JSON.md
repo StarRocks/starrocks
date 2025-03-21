@@ -68,7 +68,7 @@ Data type conversion is supported during import as follows:
 | LIST                                                          | JSON Array               |
 | UNION, TIMESTAMP, and other types                             | Not supported            |
 
-- Method 4: Use [Routine Load](../../../loading/RoutineLoad.md#导入-json-数据) to continuously consume JSON format data from Kafka and import it into StarRocks.
+- Method 4: Use [Routine Load](../../../loading/Loading_intro.md) to continuously consume JSON format data from Kafka and import it into StarRocks.
 
 ### Querying and Processing JSON-Type Data
 
