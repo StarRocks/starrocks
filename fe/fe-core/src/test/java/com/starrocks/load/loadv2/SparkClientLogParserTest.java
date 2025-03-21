@@ -32,8 +32,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
+
 package com.starrocks.load.loadv2;
 
+import com.starrocks.common.LoadException;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.junit.After;
 import org.junit.Assert;
@@ -44,7 +46,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 
-public class SparkLauncherMonitorTest {
+public class SparkClientLogParserTest {
     private String appId;
     private SparkLoadAppHandle.State state;
     private String queue;
@@ -57,34 +59,40 @@ public class SparkLauncherMonitorTest {
     @Before
     public void setUp() {
         appId = "application_1573630236805_6864759";
-        state = SparkLoadAppHandle.State.RUNNING;
+        state = SparkLoadAppHandle.State.FINISHED;
         queue = "spark-queue";
         startTime = 1597916263384L;
-        finalApplicationStatus = FinalApplicationStatus.UNDEFINED;
-        trackingUrl = "http://myhost:8388/proxy/application_1573630236805_6864759/";
+        finalApplicationStatus = FinalApplicationStatus.SUCCEEDED;
+        trackingUrl = "http://myhost:8388/proxy/application_1573630236805_6864759/A";
         user = "testugi";
         logPath = "./spark-launcher.log";
     }
 
+
     @Test
-    public void testLogMonitorNormal() {
+    public void testWriteSparkClientLogNormal() {
         URL log = getClass().getClassLoader().getResource("spark_launcher_monitor.log");
         String cmd = "cat " + log.getPath();
         SparkLoadAppHandle handle = null;
+        SparkClientLogParser parser = null;
         try {
             Process process = Runtime.getRuntime().exec(cmd);
             handle = new SparkLoadAppHandle(process);
             handle.setLogPath(logPath);
-            SparkLauncherMonitor.LogMonitor logMonitor = SparkLauncherMonitor.createLogMonitor(handle);
-            logMonitor.start();
+            parser = SparkClientLogParser.createLogParser(handle);
+            parser.start();
             try {
-                logMonitor.join();
+                parser.join();
             } catch (InterruptedException e) {
             }
         } catch (IOException e) {
             Assert.fail();
         }
-
+        try {
+            parser.readLog();
+        } catch (LoadException e) {
+            Assert.fail();
+        }
         // check values
         Assert.assertEquals(appId, handle.getAppId());
         Assert.assertEquals(state, handle.getState());
@@ -93,10 +101,6 @@ public class SparkLauncherMonitorTest {
         Assert.assertEquals(finalApplicationStatus, handle.getFinalStatus());
         Assert.assertEquals(trackingUrl, handle.getUrl());
         Assert.assertEquals(user, handle.getUser());
-
-        // check log
-        File file = new File(logPath);
-        Assert.assertTrue(file.exists());
     }
 
     @After
