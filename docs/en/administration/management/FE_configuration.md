@@ -1126,6 +1126,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
 - Introduced in: v3.1.10, v3.2.6
 
+##### automated_cluster_snapshot_interval_seconds
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
+- Introduced in: v3.4.2
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
