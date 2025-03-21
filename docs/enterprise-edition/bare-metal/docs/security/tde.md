@@ -1,6 +1,6 @@
 # Transparent Data Encryption
 
-This topic describes how to enable Transparent Data Encryption (TDE) to protect your data in your StarRocks shared-data clusters.
+Enable Transparent Data Encryption (TDE) to protect your data in your StarRocks shared-data clusters.
 
 The StarRocks Enterprise Edition supports Transparent Data Encryption from v3.3.4.
 
@@ -45,7 +45,7 @@ For more instructions on how to obtain a token, see the [Vault official document
 
 In the FE configuration file **fe.conf**, you must set the following items:
 
-```Properties
+```bash
 # The address of your Vault server, for example, http://127.0.0.1:8200.
 vault_addr=<vault_server_address>
 
@@ -59,7 +59,7 @@ default_master_key=<secret_path>
 
 In the CN configuration file **cn.conf**, you must set the following items:
 
-```Properties
+```bash
 # The address of your Vault server, for example, http://127.0.0.1:8200.
 vault_addr=<vault_server_address>
 
@@ -85,7 +85,7 @@ To enable Transparent Data Encryption with AWS KMS, you must provide your key ID
 
 In the FE configuration file **fe.conf**, you must set the following items:
 
-```Properties
+```bash
 # The key ID in AWS KMS. It must be prefixed with `kms:`.
 # Key ID example: kms:a1b2c3d4e5-f6g7-h8i9-j0k1-l2m3n4o5p6q7
 #                 kms:mrk-12ab3c45d6789ef0gh12ijkl345678mn
@@ -98,14 +98,14 @@ For more instructions on how to obtain the key ID, see the [AWS KMS official doc
 
 In the CN configuration file **cn.conf**, you must set the following item:
 
-```Properties
+```bash
 # Whether to enable TDE. Set this value to true.
 enable_transparent_data_encryption=true
 ```
 
 If you use credentials other than Instance Profile to access AWS, you will need to add these items to both FE and CN configuration files:
 
-```Properties
+```bash
 # If you use IAM user-based credentials, add these items:
 aws_kms_access_key=<aws_kms_access_key_id>
 aws_kms_secret_key=<aws_kms_secret_access_key>
@@ -130,31 +130,31 @@ export AWS_SECRET_ACCESS_KEY=<aws_kms_secret_access_key>
 
 StarRocks provides a variety of metrics for monitoring the Transparent Data Encryption feature.
 
-#### encryption_keys_created
+### encryption_keys_created
 
 - Unit: -
 - Type: Cumulative
 - Description: Number of file encryption keys created for file encryption.
 
-#### encryption_keys_unwrapped
+### encryption_keys_unwrapped
 
 - Unit: -
 - Type: Cumulative
 - Description: This metric records the total number of decryption operations.
 
-#### encryption_keys_in_cache
+### encryption_keys_in_cache
 
 - Unit: -
 - Type: Instantaneous
 - Description: Number of encryption keys currently in the key cache.
 
-#### encryption_bytes
+### encryption_bytes
 
 - Unit: Byte
 - Type: Cumulative
 - Description: Total number of bytes encrypted.
 
-#### decryption_bytes
+### decryption_bytes
 
 - Unit: Byte
 - Type: Cumulative
