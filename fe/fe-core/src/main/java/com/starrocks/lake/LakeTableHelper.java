@@ -161,13 +161,12 @@ public class LakeTableHelper {
                 ret = false;
             }
         }
-        if (ret) {
-            // try to remove shard group meta (shards meta included)
-            deleteShardGroupMeta(partition);
-        }
         return ret;
     }
 
+    /**
+     * delete `partition`'s all shard group meta (shards meta included) from starmanager
+     */
     static void deleteShardGroupMeta(Partition partition)  {
         // use Set to avoid duplicate shard group id
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
