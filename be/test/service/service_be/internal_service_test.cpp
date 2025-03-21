@@ -158,4 +158,22 @@ TEST_F(InternalServiceTest, test_load_diagnose) {
     ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
 }
 
+TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    {
+        PFetchDataCacheRequest request;
+        PFetchDataCacheResponse response;
+        request.set_request_id(0);
+        request.set_cache_key("not_exist_key");
+        request.set_offset(0);
+        request.set_size(100);
+
+        brpc::Controller cntl;
+        MockClosure closure;
+        service._fetch_datacache(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+    }
+}
+
 } // namespace starrocks

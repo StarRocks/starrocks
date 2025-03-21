@@ -101,4 +101,6 @@ public interface WorkerProvider {
      * @return -1, no available backup worker
      */
     long selectBackupWorker(long workerId);
+
+    long getWarehouseId();
 }

@@ -881,6 +881,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
 
+    public static final String ENABLE_DATACACHE_SHARING = "enable_datacache_sharing";
+    public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
+    public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1733,6 +1737,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int backPressureMaxRounds = 3;
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
     private long backPressureThrottleTimeUpperBound = 300;
+
+    @VarAttr(name = ENABLE_DATACACHE_SHARING)
+    private boolean enableDataCacheSharing = true;
+
+    @VarAttr(name = DATACACHE_SHARING_WORK_PERIOD)
+    private int datacacheSharingWorkPeriod = 600;
+
+    @VarAttr(name = HISTORICAL_NODES_MIN_UPDATE_INTERVAL)
+    private int historicalNodesMinUpdateInterval = 600;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4734,6 +4747,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.backPressureThrottleTimeUpperBound = value;
     }
 
+    public boolean isEnableDataCacheSharing() {
+        return enableDataCacheSharing;
+    }
+
+    public void setEnableDataCacheSharing(boolean enableDataCacheSharing) {
+        this.enableDataCacheSharing = enableDataCacheSharing;
+    }
+
+    public int getDataCacheSharingWorkPeriod() {
+        return datacacheSharingWorkPeriod;
+    }
+
+    public void setDataCacheSharingWorkPeriod(int datacacheSharingWorkPeriod) {
+        this.datacacheSharingWorkPeriod = datacacheSharingWorkPeriod;
+    }
+
+    public int getHistoricalNodesMinUpdateInterval() {
+        return historicalNodesMinUpdateInterval;
+    }
+
+    public void setHistoricalNodesMinUpdateInterval(int historicalNodesMinUpdateInterval) {
+        this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -4857,6 +4894,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setDatacache_evict_probability(datacacheEvictProbability);
         tResult.setDatacache_priority(datacachePriority);
         tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
+        tResult.setDatacache_sharing_work_period(datacacheSharingWorkPeriod);
         tResult.setEnable_cache_select(enableCacheSelect);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);

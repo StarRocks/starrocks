@@ -300,6 +300,16 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
                 ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheSkipReadBytes", TUnit::BYTES, prefix);
         RuntimeProfile::Counter* datacache_read_timer =
                 ADD_CHILD_TIMER(parent_profile, "MOR_DataCacheReadTimer", prefix);
+        RuntimeProfile::Counter* datacache_read_peer_counter =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheReadPeerCounter", TUnit::UNIT, prefix);
+        RuntimeProfile::Counter* datacache_read_peer_bytes =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheReadPeerBytes", TUnit::BYTES, prefix);
+        RuntimeProfile::Counter* datacache_read_peer_timer =
+                ADD_CHILD_TIMER(parent_profile, "MOR_DataCacheReadPeerTimer", prefix);
+        RuntimeProfile::Counter* datacache_skip_read_peer_counter =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheSkipReadPeerCounter", TUnit::UNIT, prefix);
+        RuntimeProfile::Counter* datacache_skip_read_peer_bytes =
+                ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheSkipReadPeerBytes", TUnit::BYTES, prefix);
         RuntimeProfile::Counter* datacache_write_counter =
                 ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheWriteCounter", TUnit::UNIT, prefix);
         RuntimeProfile::Counter* datacache_write_bytes =
