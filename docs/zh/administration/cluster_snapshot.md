@@ -48,7 +48,7 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 `storage_volume_name`: 指定用于存储快照的存储卷。如果未指定此参数，将使用默认存储卷。
 
-每次 FE 在完成元数据 CheckPoint 后创建新的元数据 Image 时，会自动创建一个快照。快照的名称由系统生成，格式为 `automated_snapshot_{timestamp}`。
+每次 FE 在完成元数据 CheckPoint 后创建新的元数据 Image 时，会自动创建一个快照。快照的名称由系统生成，格式为 `automated_cluster_snapshot_{timestamp}`。
 
 元数据快照存储在 `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` 下。数据快照存储在与原始数据相同的位置。
 
@@ -109,7 +109,7 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 
 按照以下步骤使用集群快照恢复集群。
 
-1. **（可选）** 如果存储集群快照的存储位置（存储卷）发生了变化，必须将原始存储路径下的所有文件复制到新路径。为此，您必须在所有 FE 节点的 **fe/conf** 目录下放置配置文件 **cluster_snapshot.yaml**。有关 **cluster_snapshot.yaml** 的模板，请参见[附录](#附录)。
+1. **（可选）** 如果存储集群快照的存储位置（存储卷）发生了变化，必须将原始存储路径下的所有文件复制到新路径。为此，您必须修改 Leader FE 节点的 `fe/conf` 目录下的配置文件 **cluster_snapshot.yaml**。有关 **cluster_snapshot.yaml** 的模板，请参见[附录](#附录)。
 
 2. 启动 Leader FE 节点。
 
@@ -117,19 +117,19 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
    ./fe/bin/start_fe.sh --cluster_snapshot --daemon
    ```
 
-3. 启动其他 FE 节点。
+3. **清空 `meta` 目录后**，启动其他 FE 节点。
 
    ```Bash
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
-4. **清除本地缓存后** 启动 CN 节点。
+4. **清空 `storage_root_path` 目录后**，启动 CN 节点。
 
    ```Bash
    ./be/bin/start_cn.sh --daemon
    ```
 
-如果您在步骤 1 中添加了 **cluster_snapshot.yaml**，节点和存储卷将在新集群中根据文件中的信息重新配置。原始集群的信息将被自动删除或替换。
+如果您在步骤 1 中修改了 **cluster_snapshot.yaml**，节点和存储卷将在新集群中根据文件中的信息重新配置。
 
 ## 附录
 
@@ -139,14 +139,15 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 # 要下载的用于恢复的集群快照的信息。
 cluster_snapshot:
     # 快照的 URI。
-    # 示例：s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image/automated_cluster_snapshot_1704038400000
+    # 示例一：s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image/automated_cluster_snapshot_1704038400000
+    # 示例二：s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta
     cluster_snapshot_path: <cluster_snapshot_uri>
     # 用于存储快照的存储卷名称。您必须在 `storage_volumes` 部分中定义它。
     # 注意：它必须与原始集群中的名称相同。
     storage_volume_name: my_s3_volume
 
 # [可选] 要恢复快照的新集群的节点信息。
-# 如果未指定此部分，恢复后将保留原始集群的节点信息。
+# 如果未指定此部分，恢复后的集群将只有 Leader FE 节点，CN 节点将保留原始集群的信息。
 # 注意：请勿在此部分中指定 Leader FE 节点。
 
 frontends:

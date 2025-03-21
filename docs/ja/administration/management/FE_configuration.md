@@ -760,7 +760,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### automated_cluster_snapshot_interval_seconds
 
-- デフォルト: 1800
+- デフォルト: 600
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい

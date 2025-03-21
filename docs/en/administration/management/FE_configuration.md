@@ -1128,7 +1128,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### automated_cluster_snapshot_interval_seconds
 
-- Default: 1800
+- Default: 600
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes

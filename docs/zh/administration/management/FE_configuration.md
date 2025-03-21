@@ -1120,7 +1120,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### automated_cluster_snapshot_interval_seconds
 
-- 默认值：1800
+- 默认值：600
 - 类型：Int
 - 单位：秒
 - 是否动态：是
