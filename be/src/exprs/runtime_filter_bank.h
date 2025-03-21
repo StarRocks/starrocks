@@ -137,7 +137,7 @@ public:
     // only use when layout type == local colocate
     size_t num_colocate_partition() const { return _num_colocate_partition; }
     void set_num_colocate_partition(size_t num) { _num_colocate_partition = num; }
-    bool is_broad_cast_in_skew() { return _is_broad_cast_in_skew; }
+    bool is_broad_cast_in_skew() const { return _is_broad_cast_in_skew; }
 
 private:
     friend class HashJoinNode;

@@ -526,8 +526,8 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.broadcast_grf_destinations) {
         _broadcast_grf_destinations = desc.broadcast_grf_destinations;
     }
-    if (desc.__isset.is_borad_cast_join_in_skew) {
-        _is_broad_cast_in_skew = desc.is_borad_cast_join_in_skew;
+    if (desc.__isset.is_broad_cast_join_in_skew) {
+        _is_broad_cast_in_skew = desc.is_broad_cast_join_in_skew;
     }
     if (desc.__isset.skew_shuffle_filter_id) {
         _skew_shuffle_filter_id = desc.skew_shuffle_filter_id;
