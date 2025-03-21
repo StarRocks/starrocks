@@ -24,7 +24,7 @@ All the installations are performed in the user environment and will not affect 
 
 1. Click **Next**. In the displayed dialog box, select **Deploy a new Cluster** or **Migrate from an existing Cluster**. 
 
-- If you have deployed FE and BE, but not CelerData Manager, click **Migrate from an existing Cluster**.
+- If you have deployed FEs and BEs, but not CelerData Manager, click **Migrate from an existing Cluster**.
 - If this is your first-time deployment, that is, no FE/BE programs are running on your machine, click **Deploy a new Cluster**.
 
 ## Migrate an existing cluster
