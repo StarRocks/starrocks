@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "mem_hook.h"
+
 #include <iostream>
 
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
@@ -27,6 +30,12 @@
 #endif
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
+
+#ifdef ADDRESS_SANITIZER
+#define __NOASAN __attribute__((no_sanitize("address")))
+#else
+#define __NOASAN /**/
+#endif
 
 #define STARROCKS_MALLOC_SIZE(ptr) je_malloc_usable_size(ptr)
 #define STARROCKS_NALLOX(size, flags) je_nallocx(size, flags)
@@ -92,8 +101,21 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
+static int64_t g_large_memory_alloc_failure_threshold = 0;
+
+namespace starrocks {
+// thread-safety is not a concern here since this is a really rare op
+__NOASAN
+int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
+    int64_t old_val = g_large_memory_alloc_failure_threshold;
+    g_large_memory_alloc_failure_threshold = val;
+    return old_val;
+}
+} // namespace starrocks
 const size_t large_memory_alloc_report_threshold = 1073741824;
 inline thread_local bool skip_report = false;
+
+__NOASAN
 inline void report_large_memory_alloc(size_t size) {
     if (size > large_memory_alloc_report_threshold && !skip_report) {
         skip_report = true; // to avoid recursive output log
@@ -101,7 +123,8 @@ inline void report_large_memory_alloc(size_t size) {
             auto qid = starrocks::CurrentThread::current().query_id();
             auto fid = starrocks::CurrentThread::current().fragment_instance_id();
             LOG(WARNING) << "large memory alloc, query_id:" << print_id(qid) << " instance: " << print_id(fid)
-                         << " acquire:" << size << " bytes, stack:\n"
+                         << " acquire:" << size << " bytes, is_bad_alloc_caught: " << IS_BAD_ALLOC_CATCHED()
+                         << ", stack:\n"
                          << starrocks::get_stack_trace();
         } catch (...) {
             // do nothing
@@ -110,6 +133,19 @@ inline void report_large_memory_alloc(size_t size) {
     }
 }
 #define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) report_large_memory_alloc(size)
+
+__NOASAN
+inline bool block_large_memory_alloc(size_t size) {
+    if (UNLIKELY(g_large_memory_alloc_failure_threshold > 0 && size > g_large_memory_alloc_failure_threshold)) {
+        // DON'T try to allocate the memory at all
+        if (starrocks::config::abort_on_large_memory_allocation) {
+            std::abort();
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
 
 DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 
@@ -125,6 +161,7 @@ DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 
 extern "C" {
 // malloc
+__NOASAN
 void* my_malloc(size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     int64_t alloc_size = STARROCKS_NALLOX(size, 0);
@@ -142,6 +179,10 @@ void* my_malloc(size_t size) __THROW {
         }
         return ptr;
     } else {
+        if (UNLIKELY(block_large_memory_alloc(size))) {
+            return nullptr;
+        }
+
         void* ptr = STARROCKS_MALLOC(size);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
@@ -155,6 +196,7 @@ void* my_malloc(size_t size) __THROW {
 }
 
 // free
+__NOASAN
 void my_free(void* p) __THROW {
     if (UNLIKELY(p == nullptr)) {
         RESET_DELTA_MEMORY();
@@ -167,6 +209,7 @@ void my_free(void* p) __THROW {
 }
 
 // realloc
+__NOASAN
 void* my_realloc(void* p, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
@@ -204,6 +247,7 @@ void* my_realloc(void* p, size_t size) __THROW {
 }
 
 // calloc
+__NOASAN
 void* my_calloc(size_t n, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(n * size);
     // If size is zero, the behavior is implementation defined (null pointer may be returned
@@ -228,6 +272,9 @@ void* my_calloc(size_t n, size_t size) __THROW {
         }
         return ptr;
     } else {
+        if (UNLIKELY(block_large_memory_alloc(n * size))) {
+            return nullptr;
+        }
         void* ptr = STARROCKS_CALLOC(n, size);
         int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
         MEMORY_CONSUME_SIZE(alloc_size);
@@ -236,6 +283,7 @@ void* my_calloc(size_t n, size_t size) __THROW {
     }
 }
 
+__NOASAN
 void my_cfree(void* ptr) __THROW {
     if (UNLIKELY(ptr == nullptr)) {
         RESET_DELTA_MEMORY();
@@ -248,6 +296,7 @@ void my_cfree(void* ptr) __THROW {
 }
 
 // memalign
+__NOASAN
 void* my_memalign(size_t align, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
@@ -274,6 +323,7 @@ void* my_memalign(size_t align, size_t size) __THROW {
 }
 
 // aligned_alloc
+__NOASAN
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
@@ -300,6 +350,7 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 }
 
 // valloc
+__NOASAN
 void* my_valloc(size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
@@ -326,6 +377,7 @@ void* my_valloc(size_t size) __THROW {
 }
 
 // pvalloc
+__NOASAN
 void* my_pvalloc(size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
@@ -352,6 +404,7 @@ void* my_pvalloc(size_t size) __THROW {
 }
 
 // posix_memalign
+__NOASAN
 int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
@@ -381,6 +434,7 @@ int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
     }
 }
 
+__NOASAN
 size_t my_malloc_usebale_size(void* ptr) __THROW {
     size_t ret = STARROCKS_MALLOC_SIZE(ptr);
     return ret;
@@ -403,6 +457,7 @@ size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
 // If we use jemalloc, the tls memory will be allocated by __libc_memalign and
 // then released by memalign(hooked by je_aligned_alloc), so it will crash.
 // so we will hook the __libc_memalign to avoid this BUG.
+__NOASAN
 void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
