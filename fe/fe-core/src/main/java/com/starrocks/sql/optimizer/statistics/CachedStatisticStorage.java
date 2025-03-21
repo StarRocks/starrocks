@@ -414,10 +414,6 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             return null;
         }
 
-        long tableId = table.getId();
-        List<ColumnStatsCacheKey> cacheKeys = columns.stream()
-                .map(x -> new ColumnStatsCacheKey(tableId, x))
-                .collect(Collectors.toList());
         List<ColumnStatistic> columnStatistics = getColumnStatistics(table, columns);
         Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, partitions, columns);
         if (MapUtils.isEmpty(columnNDVForPartitions)) {
