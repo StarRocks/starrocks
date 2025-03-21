@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
@@ -71,7 +70,8 @@ public class CacheRelaxDictManagerTest {
     }
 
     @After
-    public void tearDown() {}
+    public void tearDown() {
+    }
 
     private TResultBatch generateDictResult(int size) throws TException {
         TStatisticData sd = new TStatisticData();
@@ -103,11 +103,11 @@ public class CacheRelaxDictManagerTest {
     }
 
     @Test
-    public void  testLoader() throws ExecutionException, InterruptedException {
+    public void testLoader() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
@@ -123,11 +123,11 @@ public class CacheRelaxDictManagerTest {
     }
 
     @Test
-    public void  testLoaderError() throws ExecutionException, InterruptedException {
+    public void testLoaderError() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
@@ -143,12 +143,12 @@ public class CacheRelaxDictManagerTest {
     }
 
     @Test
-    public void  testLoaderDeserialize() throws ExecutionException, InterruptedException {
+    public void testLoaderDeserialize() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .refreshAfterWrite(1, TimeUnit.SECONDS)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
@@ -169,11 +169,11 @@ public class CacheRelaxDictManagerTest {
     }
 
     @Test
-    public void  testLoaderOversize() throws ExecutionException, InterruptedException {
+    public void testLoaderOversize() throws ExecutionException, InterruptedException {
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
                 .maximumSize(Config.statistic_dict_columns)
                 .buildAsync(new CacheRelaxDictManager.DictLoader());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
@@ -192,7 +192,7 @@ public class CacheRelaxDictManagerTest {
 
     @Test
     public void testHasGlobalDict() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         // clear
@@ -206,7 +206,7 @@ public class CacheRelaxDictManagerTest {
 
     @Test
     public void testGlobalDict() throws InterruptedException, TException {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "tpch", "part");
         String tableUUID = table.getUUID();
         // clear

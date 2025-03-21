@@ -270,7 +270,8 @@ public class BackupRestoreAnalyzer {
             if (mvPartsMap.containsKey(tableName)) {
                 MaterializedView mv = mvPartsMap.get(tableName);
                 for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-                    Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+                    Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getDatabase(new ConnectContext(), baseTableInfo);
                     if (dbOpt.isEmpty()) {
                         LOG.warn("database {} do not exist when collect table info for table: {}",
                                 baseTableInfo.getDbInfoStr(), tableName);

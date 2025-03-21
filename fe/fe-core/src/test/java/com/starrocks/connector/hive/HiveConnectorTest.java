@@ -25,6 +25,7 @@ import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.qe.ConnectContext;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -104,7 +105,7 @@ public class HiveConnectorTest {
         HiveConnector hiveConnector = new HiveConnector(new ConnectorContext("hive_catalog", "hive", properties));
         ConnectorMetadata metadata = hiveConnector.getMetadata();
         Assert.assertTrue(metadata instanceof HiveMetadata);
-        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
+        com.starrocks.catalog.Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("db1", hiveTable.getCatalogDBName());
         Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());

@@ -115,7 +115,8 @@ public final class ExternalTableCompensation extends TableCompensation {
             String catalogName = cachedIcebergTable.getCatalogName();
             String dbName = cachedIcebergTable.getCatalogDBName();
             TableName refTableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-            Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(refTableName).orElse(null);
+            Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(new ConnectContext(), refTableName).orElse(null);
             if (currentTable == null) {
                 return null;
             }

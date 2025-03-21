@@ -1221,7 +1221,7 @@ public class ConnectContext {
             dbName = parts[1];
         }
 
-        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
             LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
