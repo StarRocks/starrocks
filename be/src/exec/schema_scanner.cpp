@@ -19,7 +19,6 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/schema_scanner/schema_analyze_status.h"
 #include "exec/schema_scanner/schema_applicable_roles_scanner.h"
 #include "exec/schema_scanner/schema_be_bvars_scanner.h"
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
