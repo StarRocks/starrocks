@@ -18,6 +18,7 @@ package com.starrocks.mysql.security;
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -97,7 +98,8 @@ public class LdapSecurity {
             ctx = new InitialDirContext(env);
             SearchControls sc = new SearchControls();
             sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
-            String searchFilter = "(" + Config.authentication_ldap_simple_user_search_attr + "=" + user + ")";
+            String safeUser = StringEscapeUtils.escapeJava(user);
+            String searchFilter = "(" + Config.authentication_ldap_simple_user_search_attr + "=" + safeUser + ")";
             NamingEnumeration<SearchResult> results = ctx.search(baseDN, searchFilter, sc);
 
             String userDN = null;
