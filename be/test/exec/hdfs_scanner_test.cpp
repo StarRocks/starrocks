@@ -1688,7 +1688,7 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
         c->append(tc.max_value);
         c->append(tc.min_value);
-        ASSERT_OK(RuntimeFilterHelper::fill_runtime_bloom_filter(column, LogicalType::TYPE_BIGINT, f, 0, false));
+        ASSERT_OK(RuntimeFilterHelper::fill_runtime_bloom_filter(column, LogicalType::TYPE_BIGINT, f, 0, false, false));
 
         ASSERT_OK(rf_probe_desc.init(0, &probe_expr_ctx));
         rf_probe_desc.set_runtime_filter(f);

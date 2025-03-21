@@ -207,6 +207,21 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
+        // if this is skew join's broadcast join and corresponding shuffle join decide not to generate grf
+        // this join node should not generate grf either
+        if (this instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) this;
+            if (hashJoinNode.isSkewBroadJoin()) {
+                if (hashJoinNode.getSkewJoinFriend() != null) {
+                    HashJoinNode skewShuffleJoin = hashJoinNode.getSkewJoinFriend();
+                    if (skewShuffleJoin.getBuildRuntimeFilters() == null ||
+                            skewShuffleJoin.getBuildRuntimeFilters().isEmpty()) {
+                        return;
+                    }
+                }
+            }
+        }
+
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
@@ -214,6 +229,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
             RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
             rf.setBuildPlanNodeId(this.id.asInt());
+            rf.setBuildPlanNode(this);
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
             rf.setEqualCount(eqJoinConjuncts.size());
@@ -239,6 +255,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
                 if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, right, probePartitionByExprs)) {
                     buildRuntimeFilters.add(rf);
+                    // record i->rf in eqJoinConjunctsIndexToRf for skew shuffle join
+                    if (this instanceof HashJoinNode) {
+                        HashJoinNode hashJoinNode = (HashJoinNode) this;
+                        if (hashJoinNode.isSkewShuffleJoin()) {
+                            hashJoinNode.getEqJoinConjunctsIndexToRfId().put(i, rf.getFilterId());
+                        }
+                    }
                 }
             } else {
                 // For cross-join, the filter could only be pushed down to left side when
