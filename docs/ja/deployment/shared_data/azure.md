@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# 共有データに Azure Blob Storage を使用する
+# 共有データに Azure Storage を使用する
 
 import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
@@ -27,9 +27,11 @@ import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 
 クラスタを開始する前に、FEs と CNs を設定します。以下に例として設定を示し、その後各パラメータの詳細を提供します。
 
-### Azure Blob Storage 用の FE 設定例
+### Azure Storage 用の FE 設定例
 
 `fe.conf` に対する共有データの追加は、各 FE ノードの `fe.conf` ファイルに追加できます。
+
+**Azure Blob Storage**
 
 - Azure Blob Storage にアクセスするために共有キーを使用する場合、次の設定項目を追加します。
 
@@ -67,7 +69,45 @@ import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 >
 > Azure Blob Storage アカウントを作成する際、階層的な名前空間は無効にする必要があります。
 
-### Azure Blob Storage に関連する共有ストレージのすべての FE パラメータ
+**Azure Data Lake Storage Gen2**
+
+- Azure Data Lake Storage Gen2 にアクセスするために共有キーを使用する場合、次の設定項目を追加します。
+
+  ```Properties
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = ADLS2
+
+  # For example, testfilesystem/starrocks
+  azure_adls2_path = <file_system_name>/<dir_name>
+
+  # For example, https://test.dfs.core.windows.net
+  azure_adls2_endpoint = <endpoint_url>
+
+  azure_adls2_shared_key = <shared_key>
+  ```
+
+- Azure Data Lake Storage Gen2 にアクセスするために共有アクセス署名 (SAS) を使用する場合、次の設定項目を追加します。
+
+  ```Properties
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = ADLS2
+
+  # For example, testfilesystem/starrocks
+  azure_adls2_path = <file_system_name>/<dir_name>
+
+  # For example, https://test.dfs.core.windows.net
+  azure_adls2_endpoint = <endpoint_url>
+
+  azure_adls2_sas_token = <sas_token>
+  ```
+
+> **注意**
+>
+> Azure Data Lake Storage Gen1 はサポートされていません。
+
+### Azure Storage に関連する共有ストレージのすべての FE パラメータ
 
 #### run_mode
 
@@ -130,6 +170,22 @@ Azure Blob Storage のリクエストを承認するために使用する共有�
 
 Azure Blob Storage のリクエストを承認するために使用する共有アクセス署名 (SAS) です。
 
+#### azure_adls2_path
+
+データを保存するために使用する Azure Data Lake Storage Gen2 のパスです。ストレージアカウント内のコンテナの名前と、コンテナ内のサブパス (存在する場合) で構成されます。例: `testcontainer/subpath`。
+
+#### azure_adls2_endpoint
+
+Azure Data Lake Storage Gen2 アカウントのエンドポイントです。例: `https://test.dfs.core.windows.net`。
+
+#### azure_adls2_shared_key
+
+Azure Data Lake Storage Gen2 のリクエストを承認するために使用する共有キーです。
+
+#### azure_adls2_sas_token
+
+Azure Data Lake Storage Gen2 のリクエストを承認するために使用する共有アクセス署名 (SAS) です。
+
 > **注意**
 >
 > 共有データ StarRocks クラスタが作成された後、資格情報に関連する設定項目のみを変更できます。元のストレージパスに関連する設定項目を変更した場合、変更前に作成したデータベースとテーブルが読み取り専用になり、それらにデータをロードできなくなります。
@@ -163,6 +219,19 @@ PROPERTIES
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;
+```
+
+次の例では、Azure Data Lake Storage Gen2 ファイルシステム `testfilesystem` に対して SAS クセスを使用してストレージボリューム `adls2` を作成し、ストレージボリュームを無効にして設定します。
+
+```SQL
+CREATE STORAGE VOLUME adls2
+    TYPE = ADLS2
+    LOCATIONS = ("adls2://testfilesystem/starrocks")
+    PROPERTIES (
+        "enabled" = "false",
+        "azure.adls2.endpoint" = "<endpoint_url>",
+        "azure.adls2.sas_token" = "<sas_token>"
+    );
 ```
 
 <SharedDataUse />

@@ -31,8 +31,8 @@ PROPERTIES
 | **参数**            | **说明**                                                     |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。有关 storage volume 的命名要求，参见[系统限制](../../../System_limit.md)。 |
-| TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 和 `HDFS`。`S3` 代表AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage（自 v3.1.1 起支持）。`HDFS` 代表 HDFS 集群。 |
-| LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。请注意，如果要为存储卷启用 [分区前缀](#分区前缀) 功能，您只能指定存储桶名称，不允许指定子路径。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>HDFS：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS：`webhdfs://<host>:<http_port>/<hdfs_path>`，其中 `<http_port>` 为 NameNode 的 HTTP 端口。`<hdfs_path>` 必须为绝对路径，如 `webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`，其中 `<ViewFS_cluster>` 为 ViewFS 集群名。`<viewfs_path>` 必须为绝对路径，如 `viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
+| TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 、 `ADLS2` 和 `HDFS`。`S3` 代表 AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage（自 v3.1.1 起支持）。`ADLS2` 代表 Azure Data Lake Storage Gen2（自 v3.4.1 起支持）。`HDFS` 代表 HDFS 集群。 |
+| LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。请注意，如果要为存储卷启用 [分区前缀](#分区前缀) 功能，您只能指定存储桶名称，不允许指定子路径。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>Azure Data Lake Storage Gen2: `adls2://<file_system_name>/<dir_name>`。示例：`adls2://testfilesystem/starrocks`。</li><li>HDFS：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS：`webhdfs://<host>:<http_port>/<hdfs_path>`，其中 `<http_port>` 为 NameNode 的 HTTP 端口。`<hdfs_path>` 必须为绝对路径，如 `webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`，其中 `<ViewFS_cluster>` 为 ViewFS 集群名。`<viewfs_path>` 必须为绝对路径，如 `viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
 | COMMENT             | 存储卷的注释。                                               |
 | PROPERTIES          | `"key" = "value"` 形式的参数对，用以指定访问远程存储系统的属性和认证信息。有关详细信息，请参阅 [PROPERTIES](#properties)。 |
 
@@ -54,6 +54,9 @@ PROPERTIES
 | azure.blob.endpoint   | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
 | azure.blob.shared_key | 访问 Azure Blob Storage 的共享密钥（Shared Key）。           |
 | azure.blob.sas_token  | 访问 Azure Blob Storage 的共享访问签名（SAS）。              |
+| azure.adls2.endpoint   | Azure Data Lake Storage Gen2 的链接地址，如 `https://test.dfs.core.windows.net`。 |
+| azure.adls2.shared_key | 访问 Azure Data Lake Storage Gen2 的共享密钥（Shared Key）。           |
+| azure.adls2.sas_token  | 访问 Azure Data Lake Storage Gen2 的共享访问签名（SAS）。              |
 | hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即 Username。`kerberos` 表示 Kerberos 认证。 |
 | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                      |
 | hadoop.security.kerberos.ticket.cache.path            | 用于指定 kinit 生成的 Ticket Cache 文件的路径。                   |
@@ -281,6 +284,30 @@ StarRocks 自 v3.1.1 起支持基于 Azure Blob Storage 创建存储卷。
 >
 > 创建 Azure Blob Storage Account 时必须禁用分层命名空间。
 
+##### Azure Data Lake Storage Gen2
+
+StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储卷。
+
+- 如果您使用共享密钥（Shared Key）认证，请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.shared_key" = "<shared_key>"
+  ```
+
+- 如果您使用共享访问签名（SAS）认证，请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.sas_token" = "<sas_token>"
+  ```
+
+:::note
+不支持 Azure Data Lake Storage Gen1。
+:::
+
 ##### HDFS
 
 - 如果您不使用认证接入 HDFS，请设置以下属性：
@@ -454,6 +481,18 @@ PROPERTIES(
     "fs.viewfs.mounttable.clusterX.link./data" = "hdfs://nn1-clusterx.example.com:8020/data",
     "fs.viewfs.mounttable.clusterX.link./project" = "hdfs://nn2-clusterx.example.com:8020/project"
 );
+```
+
+示例八：使用 SAS 基于 Azure Data Lake Storage Gen2 创建存储卷 `adls2`。
+
+```SQL
+CREATE STORAGE VOLUME adls2
+    TYPE = ADLS2
+    LOCATIONS = ("adls2://testfilesystem/starrocks")
+    PROPERTIES (
+        "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
+        "azure.adls2.sas_token" = "xxx"
+    );
 ```
 
 ## 相关 SQL

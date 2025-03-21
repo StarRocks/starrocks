@@ -84,6 +84,7 @@ StarRocks supports the following object storage services for storage volumes:
   - AWS S3
   - GCS, OSS, OBS, COS, TOS, KS3, MinIO, and Ceph S3
 - Azure Blob Storage (Supported from v3.1.1): `azblob://<azblob_path>`
+- Azure Data Lake Storage Gen2 (Supported from v3.4.1): `adls2://<file_system_name>/<dir_name>`
 
 #### Authentication
 
@@ -97,6 +98,9 @@ StarRocks supports the following authentication methods for different object sto
 - GCS, OSS, OBS, COS, TOS, KS3, MinIO, and Ceph S3
   - Access Key pair
 - Azure Blob Storage
+  - Shared Key
+  - Shared Access Signatures (SAS)
+- Azure Data Lake Storage Gen2
   - Shared Key
   - Shared Access Signatures (SAS)
 
