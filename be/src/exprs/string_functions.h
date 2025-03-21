@@ -647,6 +647,13 @@ private:
                                                  ColumnBuilder<TYPE_VARCHAR>* result);
 };
 
+template <bool to_upper>
+struct StringCaseToggleFunction {
+public:
+    template <LogicalType Type, LogicalType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1);
+};
+
 template <LogicalType Type, bool scale_up, bool check_overflow>
 void StringFunctions::money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                 size_t num_rows, int adjust_scale,

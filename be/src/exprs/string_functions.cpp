@@ -2020,25 +2020,22 @@ void utf8_case_toggle(const Bytes& src_bytes, const Offsets& src_offsets, Bytes*
 }
 
 template <bool to_upper>
-struct StringCaseToggleFunction {
-public:
-    template <LogicalType Type, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1) {
-        const auto* src = down_cast<const BinaryColumn*>(v1.get());
-        const Bytes& src_bytes = src->get_bytes();
-        const Offsets& src_offsets = src->get_offset();
-        auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
-        auto& dst_offsets = dst->get_offset();
-        auto& dst_bytes = dst->get_bytes();
-        dst_offsets.assign(src_offsets.begin(), src_offsets.end());
-        if constexpr (to_upper) {
-            vectorized_toggle_case<'a', 'z'>(&src_bytes, &dst_bytes);
-        } else {
-            vectorized_toggle_case<'A', 'Z'>(&src_bytes, &dst_bytes);
-        }
-        return dst;
+template <LogicalType Type, LogicalType ResultType>
+ColumnPtr StringCaseToggleFunction<to_upper>::evaluate(const ColumnPtr& v1) {
+    const auto* src = down_cast<const BinaryColumn*>(v1.get());
+    const Bytes& src_bytes = src->get_bytes();
+    const Offsets& src_offsets = src->get_offset();
+    auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
+    auto& dst_offsets = dst->get_offset();
+    auto& dst_bytes = dst->get_bytes();
+    dst_offsets.assign(src_offsets.begin(), src_offsets.end());
+    if constexpr (to_upper) {
+        vectorized_toggle_case<'a', 'z'>(&src_bytes, &dst_bytes);
+    } else {
+        vectorized_toggle_case<'A', 'Z'>(&src_bytes, &dst_bytes);
     }
-};
+    return dst;
+}
 
 template <bool to_upper>
 struct UTF8StringCaseToggleFunction {
