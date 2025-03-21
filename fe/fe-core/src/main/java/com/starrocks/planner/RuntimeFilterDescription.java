@@ -622,8 +622,8 @@ public class RuntimeFilterDescription {
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
         }
-        
-        t.setIs_borad_cast_join_in_skew(isBroadCastInSkew);
+
+        t.setIs_broad_cast_join_in_skew(isBroadCastInSkew);
         if (isBroadCastInSkew) {
             t.setSkew_shuffle_filter_id(skew_shuffle_filter_id);
         }
