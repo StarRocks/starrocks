@@ -1,6 +1,6 @@
 # Manage compute resources using warehouses
 
-This topic describes how to manage compute resources in a share-data StarRocks cluster using the Multi-Warehouse feature. This feature is supported in the StarRocks Enterprise Edition from v3.2.0 onwards.
+Manage compute resources in a shared-data StarRocks cluster using the Multi-Warehouse feature. This feature is supported in the StarRocks Enterprise Edition from v3.2.0 onwards.
 
 ## Overview
 
