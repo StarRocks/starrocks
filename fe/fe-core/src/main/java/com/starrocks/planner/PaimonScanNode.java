@@ -124,9 +124,15 @@ public class PaimonScanNode extends ScanNode {
         return rowCount * rowSize;
     }
 
-    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+<<<<<<< HEAD
+=======
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit)
+                        .build();
+>>>>>>> 7d7613bc88 ([Enhancement] Paimon limit push down when only has partition predicate (#57006))
         List<RemoteFileInfo> fileInfos;
         try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getTableName() + ".getPaimonRemoteFileInfos")) {
             fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
