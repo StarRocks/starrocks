@@ -84,6 +84,7 @@ StarRocks は、ストレージボリュームのために以下のオブジェ�
   - AWS S3
   - GCS, OSS, OBS, COS, TOS, KS3, MinIO, および Ceph S3
 - Azure Blob Storage (v3.1.1 からサポート): `azblob://<azblob_path>`
+- Azure Data Lake Storage Gen2 (v3.4.1 からサポート): `adls2://<file_system_name>/<dir_name>`
 
 #### 認証
 
@@ -97,6 +98,9 @@ StarRocks は、異なるオブジェクトストレージサービスのため�
 - GCS, OSS, OBS, COS, TOS, KS3, MinIO, および Ceph S3
   - アクセスキーのペア
 - Azure Blob Storage
+  - 共有キー
+  - 共有アクセス署名 (SAS)
+- Azure Data Lake Storage Gen2
   - 共有キー
   - 共有アクセス署名 (SAS)
 
