@@ -2930,6 +2930,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
     }
 
+    public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
+        this.bigQueryProfileThreshold = bigQueryProfileThreshold;
+    }
+
+
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
