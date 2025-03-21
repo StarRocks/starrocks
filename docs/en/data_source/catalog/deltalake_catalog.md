@@ -866,4 +866,4 @@ Currently, Delta Lake catalogs support the following table features:
 - V2 Checkpoint (From v3.3.0 onwards)
 - Timestamp without Timezone (From v3.3.1 onwards)
 - Column mapping (From v3.3.6 onwards)
-- Deletion Vector (From v3.4.0 onwards)
+- Deletion Vector (From v3.4.1 onwards)
