@@ -1,0 +1,78 @@
+-- name: test_mv_with_multi_partition_columns_iceberg1_nulls
+
+set new_planner_optimize_timeout=10000;
+
+-- create mv
+create database db_${uuid0};
+use db_${uuid0};
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+
+CREATE TABLE t1 (
+      id BIGINT,
+      province VARCHAR(64),
+      age SMALLINT,
+      dt datetime
+) DUPLICATE KEY(id)
+PARTITION BY province, date_trunc('day', dt)
+DISTRIBUTED BY RANDOM;
+
+INSERT INTO t1 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02'), (4, NULL, NULL, NULL),
+                      (1, 'beijing1', 20, '2024-01-01'), (2, 'guangdong1', 20, '2024-01-01'), (3, 'guangdong1', 20, '2024-01-02'), (4, 'beijing', NULL, NULL),
+                      (1, 'beijing2', 20, '2024-01-01'), (2, 'guangdong2', 20, '2024-01-01'), (3, 'guangdong2', 20, '2024-01-02'), (4, 'nanjing', NULL, NULL);
+
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY (province, date_trunc('day', dt))
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+	"replication_num" = "1"
+)
+AS SELECT * FROM t1;
+REFRESH MATERIALIZED VIEW test_mv1 with SYNC MODE;
+
+function: print_hit_materialized_views("SELECT count(*) FROM t1;")
+function: print_hit_materialized_views("SELECT * FROM t1 order by id, province, dt limit 3;")
+function: print_hit_materialized_views("SELECT * FROM t1 where province = 'beijing' order by id, province, dt limit 3;")
+function: print_hit_materialized_views("SELECT * FROM t1 where province = 'nanjing' order by id, province, dt limit 3;")
+SELECT count(1) FROM t1;
+SELECT * FROM t1 order by id, province, dt limit 3;
+SELECT * FROM t1 where province = 'beijing' order by id, province, dt limit 3;
+SELECT * FROM t1 where province = 'nanjing' order by id, province, dt limit 3;
+select count(*) from test_mv1;
+select * from test_mv1 order by id, province, dt limit 1;
+
+INSERT INTO t1 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02'), (4, NULL, NULL, NULL);
+function: print_hit_materialized_views("SELECT count(*) FROM t1;")
+function: print_hit_materialized_views("SELECT * FROM t1 order by id, province, dt limit 3;")
+function: print_hit_materialized_views("SELECT * FROM t1 where province = 'beijing' order by id, province, dt limit 3;")
+function: print_hit_materialized_views("SELECT * FROM t1 where province = 'nanjing' order by id, province, dt limit 3;")
+SELECT count(1) FROM t1;
+SELECT * FROM t1 order by id, province, dt limit 3;
+SELECT * FROM t1 where province = 'beijing' order by id, province, dt limit 3;
+SELECT * FROM t1 where province = 'nanjing' order by id, province, dt limit 3;
+select count(*) from test_mv1;
+select * from test_mv1 order by id, province, dt limit 1;
+
+CREATE MATERIALIZED VIEW test_datetime_partitioned_table_with_null_mv
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+	"replication_num" = "1"
+)
+AS
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.test_datetime_partitioned_table_with_null;
+REFRESH MATERIALIZED VIEW test_datetime_partitioned_table_with_null_mv with SYNC MODE;
+
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.test_datetime_partitioned_table_with_null;")
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.test_datetime_partitioned_table_with_null order by l_orderkey, l_returnflag, l_linestatus, l_shipdate limit 3;
+select count(*) from test_datetime_partitioned_table_with_null_mv;
+select * from test_datetime_partitioned_table_with_null_mv order by l_orderkey, l_returnflag, l_linestatus, l_shipdate limit 1;
+
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

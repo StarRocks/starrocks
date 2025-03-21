@@ -110,7 +110,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
         }
 
         try {
@@ -166,7 +166,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
 
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
@@ -210,7 +210,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
             // set visible version
             updateVisibleVersion(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
@@ -420,6 +420,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return watershedTxnId;
     }
 
+    // Only for reducing data writing after the first log, so we don't do deep copy
+    protected abstract LakeTableAlterMetaJobBase getShadowCopy();
+
     @Override
     protected boolean cancelImpl(String errMsg) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
@@ -516,6 +519,25 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
+    }
+
+    protected void copyOnlyForNonFirstLog(LakeTableAlterMetaJobBase copied) {
+        copied.watershedTxnId = this.watershedTxnId;
+        copied.watershedGtid = this.watershedGtid;
+        copied.physicalPartitionIndexMap = this.physicalPartitionIndexMap;
+        copied.commitVersionMap = this.commitVersionMap;
+
+        copied.type = this.type;
+        copied.jobId = this.jobId;
+        copied.jobState = this.jobState;
+        copied.dbId = this.dbId;
+        copied.tableId = this.tableId;
+        copied.tableName = this.tableName;
+        copied.errMsg = this.errMsg;
+        copied.createTimeMs = this.createTimeMs;
+        copied.finishedTimeMs = this.finishedTimeMs;
+        copied.timeoutMs = this.timeoutMs;
+        copied.warehouseId = this.warehouseId;
     }
 
     // for test
