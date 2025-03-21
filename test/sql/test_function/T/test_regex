@@ -62,3 +62,29 @@ SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3);
 SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 3) from tsr;
 SELECT regexp_extract_all(str, regex, 3) from tsr;
 
+
+-- name: test_regexp_count
+
+CREATE TABLE `tsc` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+insert into tsc values ('abc123def456', '[0-9]'), ('test.com test.net test.org', '\\.'), ('a b  c   d', '\\s+'), ('ababababab', 'ab'), ('', '.'), (NULL, '.');
+
+select regexp_count('abc123def456', '[0-9]');
+select regexp_count('test.com test.net test.org', '\\.');
+select regexp_count('a b  c   d', '\\s+');
+select regexp_count('ababababab', 'ab');
+select regexp_count('', '.');
+select regexp_count(NULL, '.');
+select regexp_count('abc', NULL);
+select regexp_count('abc中文def', '[\\p{Han}]+');
+select regexp_count('AbCdExCeF', 'C');
+select regexp_count('1a 2b 14m', '\\d+');
+
+select str, regex, regexp_count(str, regex) from tsc order by str, regex;
+
