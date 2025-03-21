@@ -111,17 +111,22 @@ protected:
 
     void TearDown() override { config::avro_ignore_union_type_tag = false; }
 
-    void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {
+    void init_avro_value(const std::string& schema_path, AvroHelper& avro_helper) {
         std::ifstream infile_schema;
         infile_schema.open(schema_path);
         std::stringstream ss;
         ss << infile_schema.rdbuf();
-        std::string schema_str(ss.str());
+        std::string schema = ss.str();
+        return init_avro_value(schema.data(), schema.size(), avro_helper);
+    }
+
+    // init the AvroHelper directly by a C-style string
+    void init_avro_value(const char* schema, size_t len, AvroHelper& avro_helper) {
         avro_schema_error_t error;
-        avro_helper.schema_text = schema_str;
-        int result = avro_schema_from_json(schema_str.c_str(), schema_str.size(), &avro_helper.schema, &error);
+        avro_helper.schema_text = std::string(schema, len);
+        int result = avro_schema_from_json(schema, len, &avro_helper.schema, &error);
         if (result != 0) {
-            std::cout << "parse schema from json error: " << avro_strerror() << std::endl;
+            std::cerr << "parse schema from json error: " << avro_strerror() << std::endl;
         }
         EXPECT_EQ(0, result);
         avro_helper.iface = avro_generic_class_from_schema(avro_helper.schema);
@@ -132,14 +137,16 @@ protected:
         avro_file_writer_t db;
         int rval = avro_file_writer_create(data_path.c_str(), avro_helper.schema, &db);
         if (rval) {
-            auto err_msg =
-                    strings::Substitute("There was an error creating $0 error message: $1", data_path, avro_strerror());
+            auto err_msg = strings::Substitute("There was an error creating $0, error message: $1", data_path,
+                                               avro_strerror());
             return Status::InternalError(err_msg);
         }
 
-        if (avro_file_writer_append_value(db, &avro_helper.avro_val)) {
-            auto err_msg =
-                    strings::Substitute("Unable to write Person value to memory buffer\nMessage: $0", avro_strerror());
+        rval = avro_file_writer_append_value(db, &avro_helper.avro_val);
+        if (rval) {
+            avro_file_writer_close(db);
+            auto err_msg = strings::Substitute("Unable to write avro value to memory buffer. errcode: $0, Message: $1",
+                                               rval, avro_strerror());
             return Status::InternalError(err_msg);
         }
         avro_file_writer_flush(db);
@@ -1273,7 +1280,7 @@ TEST_F(AvroScannerTest, test_map_to_json) {
         auto scanner = create_avro_scanner(types, ranges, {"booleantype", "longtype", "doubletype", "maptype"},
                                            avro_helper.schema_text);
         Status st = scanner->open();
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st;
 
         auto st2 = scanner->get_next();
         ASSERT_TRUE(st2.ok());
@@ -1308,6 +1315,215 @@ TEST_F(AvroScannerTest, test_map_to_json) {
         const JsonValue* json = chunk->get(0)[3].get_json();
         EXPECT_EQ("{\"ele1\": 4294967297, \"ele2\": 4294967298}", json->to_string_uncheck());
     }
+
+    { // parse map type with json path
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TYPE_BOOLEAN); // booleantype
+        types.emplace_back(TYPE_BIGINT);  // longtype
+        types.emplace_back(TYPE_DOUBLE);  // doubletype
+        types.emplace_back(TYPE_JSON);    // maptype
+        types.emplace_back(TYPE_BIGINT);  // map_ele1
+        types.emplace_back(TYPE_BIGINT);  // map_ele2
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_AVRO;
+        range.__set_path(data_path);
+        range.__isset.jsonpaths = true;
+        range.jsonpaths =
+                R"(["$.booleantype", "$.longtype", "$.doubletype", "$.maptype", "$.maptype.ele1", "$.maptype.ele2"])";
+        ranges.emplace_back(range);
+
+        auto scanner = create_avro_scanner(types, ranges,
+                                           {"booleantype", "longtype", "doubletype", "maptype", "map_ele1", "map_ele2"},
+                                           avro_helper.schema_text);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok());
+
+        auto st2 = scanner->get_next();
+        ASSERT_TRUE(st2.ok());
+
+        ChunkPtr chunk = st2.value();
+        EXPECT_EQ(6, chunk->num_columns());
+        EXPECT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(1, chunk->get(0)[0].get_int8());
+        EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
+        EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
+        const JsonValue* json = chunk->get(0)[3].get_json();
+        EXPECT_EQ("{\"ele1\": 4294967297, \"ele2\": 4294967298}", json->to_string_uncheck());
+        // two more fields parsed separately from maptype
+        EXPECT_EQ(4294967297, chunk->get(0)[4].get_int64());
+        EXPECT_EQ(4294967298, chunk->get(0)[5].get_int64());
+    }
+}
+
+TEST_F(AvroScannerTest, test_map_nested_struct) {
+    // protocol request {
+    //     record cookie {
+    //         string name;
+    //         union { null, string } value;
+    //     }
+    //     record httprequest {
+    //         map<array<string>> headers;
+    //         map<array<Cookie>> cookies;
+    //     }
+    // }
+    std::string schema_json =
+            R"({"type":"record","name":"request","fields":[{"name":"headers","type":{"type":"map","values":{"type":"array","items":"string"},"defalut":{}}},{"name":"cookies","type":{"type":"map","values":{"type":"array","items":{"type":"record","name":"cookie","fields":[{"name":"name","type":"string"},{"name":"value","type":["null","string"]}]}},"defalut":{}}}]})";
+    AvroHelper avro_helper;
+    init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    std::string json_str =
+            R"%({"headers":{"User-Agent":["Mozilla/5.0 (Linux; Android 6.0.1)","curl/7.81.0"], "X-Forwarded-For":["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4"]},
+                 "cookies":{"session":[{"name":"key1","value":{"string":"value1"}},{"name":"key2","value":null}]}})%";
+    std::vector<std::string> user_agents = {"Mozilla/5.0 (Linux; Android 6.0.1)", "curl/7.81.0"};
+    std::vector<std::string> xfwd_for = {"10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"};
+    std::vector<std::map<std::string, std::string>> cookies = {{{"key1", "value1"}}, {{"key2", "null"}}};
+
+    avro_value_t headers_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "headers", &headers_value, NULL) == 0) {
+        { // set user agent array
+            avro_value_t ua_arr;
+            avro_value_add(&headers_value, "User-Agent", &ua_arr, NULL, NULL);
+
+            for (auto& val : user_agents) {
+                avro_value_t ua_value;
+                avro_value_append(&ua_arr, &ua_value, NULL);
+                avro_value_set_string(&ua_value, val.c_str());
+            }
+        }
+        { // set x-forward-for array value
+            avro_value_t xfwd_arr;
+            avro_value_add(&headers_value, "X-Forwarded-For", &xfwd_arr, NULL, NULL);
+
+            for (auto& val : xfwd_for) {
+                avro_value_t fwd_value;
+                avro_value_append(&xfwd_arr, &fwd_value, NULL);
+                avro_value_set_string(&fwd_value, val.c_str());
+            }
+        }
+    }
+
+    avro_value_t cookies_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "cookies", &cookies_value, NULL));
+    { // set cookies
+        avro_value_t cookies_arr;
+        ASSERT_EQ(0, avro_value_add(&cookies_value, "session", &cookies_arr, NULL, NULL));
+
+        for (auto& val : cookies) {
+            avro_value_t cookie_pairs;
+            ASSERT_EQ(0, avro_value_append(&cookies_arr, &cookie_pairs, NULL));
+            for (auto& [k, v] : val) {
+                avro_value_t cookie_pair_name;
+                ASSERT_EQ(0, avro_value_get_by_name(&cookie_pairs, "name", &cookie_pair_name, NULL));
+                avro_value_set_string(&cookie_pair_name, k.c_str());
+
+                avro_value_t union_value;
+                ASSERT_EQ(0, avro_value_get_by_name(&cookie_pairs, "value", &union_value, NULL));
+                avro_value_t cookie_pair_val;
+                if (v == "null") {
+                    avro_value_set_branch(&union_value, 0, &cookie_pair_val);
+                    avro_value_set_null(&cookie_pair_val);
+                } else {
+                    avro_value_set_branch(&union_value, 1, &cookie_pair_val);
+                    avro_value_set_string(&cookie_pair_val, v.c_str());
+                }
+            }
+        }
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_map_array_data.avro";
+    auto w_st = write_avro_data(avro_helper, data_path);
+    ASSERT_TRUE(w_st.ok()) << w_st;
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.user-agent
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.user-agent[1]
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.x-forwarded-for
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.x-forwoarded-for[0]
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.x-forwoarded-for[3]
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session[0]
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session[0].value
+    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session[1].value
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__set_path(data_path);
+    range.__isset.jsonpaths = true;
+    range.jsonpaths =
+            R"(["$.headers",
+                "$.headers.User-Agent",
+                "$.headers.User-Agent[1]",
+                "$.headers.X-Forwarded-For",
+                "$.headers.X-Forwarded-For[0]",
+                "$.headers.X-Forwarded-For[3]",
+                "$.cookies",
+                "$.cookies.session",
+                "$.cookies.session[0]",
+                "$.cookies.session[0].value",
+                "$.cookies.session[1].value"])";
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges,
+                                       {"headers", "useragents", "useragent_1", "xfwdfor", "xfwdfor_0", "xfwdfor_3",
+                                        "cookies", "session", "session_0", "session_0_value", "session_1_value"},
+                                       avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st;
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok()) << st2;
+
+    ChunkPtr chunk = st2.value();
+
+    auto js_or = JsonValue::parse_json_or_string(Slice(json_str));
+    ASSERT_TRUE(js_or.ok());
+    JsonValue js_root = std::move(js_or.value());
+    auto header_or = js_root.get_obj("headers");
+    ASSERT_TRUE(header_or.ok());
+    // {"User-Agent":["Mozilla/5.0 (Linux; Android 6.0.1)","curl/7.81.0"], "X-Forwarded-For":["10.0.0.1","10.0.0.2","10.0.0.3","10.0.0.4"]}
+    auto header_js = std::move(header_or.value());
+
+    EXPECT_EQ(11, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    // $.headers
+    EXPECT_EQ(header_js.to_string_uncheck(), chunk->get(0)[0].get_slice());
+    // $.headers.User-Agent
+    EXPECT_EQ(R"%(["Mozilla/5.0 (Linux; Android 6.0.1)", "curl/7.81.0"])%", chunk->get(0)[1].get_slice());
+    // $.headers.User-Agent[1]
+    EXPECT_EQ(user_agents[1], chunk->get(0)[2].get_slice());
+    // $.headers.X-Forwarded-For
+    EXPECT_EQ(R"(["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"])", chunk->get(0)[3].get_slice());
+    // $.headers.X-Forwarded-For[0]
+    EXPECT_EQ(xfwd_for[0], chunk->get(0)[4].get_slice());
+    // $.headers.X-Forwarded-For[3]
+    EXPECT_EQ(xfwd_for[3], chunk->get(0)[5].get_slice());
+
+    auto cookies_or = js_root.get_obj("cookies");
+    ASSERT_TRUE(cookies_or.ok());
+    // {"session":[{"name":"key1","value":{"string":"value1"}},{"name":"key2","value":null}]}}
+    auto cookies_js = std::move(cookies_or.value());
+    // $.cookies
+    EXPECT_EQ(cookies_js.to_string_uncheck(), chunk->get(0)[6].get_slice());
+    // $.cookies.session
+    EXPECT_EQ(R"([{"name": "key1", "value": {"string": "value1"}}, {"name": "key2", "value": null}])",
+              chunk->get(0)[7].get_slice());
+    // $.cookies.session[0]
+    EXPECT_EQ(R"({"name": "key1", "value": {"string": "value1"}})", chunk->get(0)[8].get_slice());
+    // $.cookies.session[0].value
+    EXPECT_EQ(cookies[0]["key1"], chunk->get(0)[9].get_slice());
+    EXPECT_EQ("null", cookies[1]["key2"]);
+    // $.cookies.session[1].value
+    EXPECT_TRUE(chunk->get(0)[10].is_null());
 }
 
 TEST_F(AvroScannerTest, test_root_array) {
