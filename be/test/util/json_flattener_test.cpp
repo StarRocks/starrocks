@@ -261,6 +261,25 @@ TEST_F(JsonFlattenerTest, testDeepJson3) {
     EXPECT_EQ("NULL", result[2]->debug_item(1));
 }
 
+TEST_F(JsonFlattenerTest, testLargeJson) {
+    std::vector<std::string> json;
+    for (int k = 0; k < 10; k++) {
+        json.emplace_back(R"({"k1": 1)");
+        for (int i = 2; i <= 2000; i++) {
+            json[k] += fmt::format(", \"k{0}\": {1}", i, i);
+        }
+        json[k] += "}";
+    }
+
+    std::vector<std::string> paths = {"k1", "k2", "k1000"};
+    std::vector<LogicalType> types = {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT};
+    auto result = test_json(json, paths, types, false);
+    EXPECT_EQ(3, result.size());
+    EXPECT_EQ("1", result[0]->debug_item(0));
+    EXPECT_EQ("2", result[1]->debug_item(0));
+    EXPECT_EQ("1000", result[2]->debug_item(0));
+}
+
 TEST_F(JsonFlattenerTest, testMiddleJson) {
     std::vector<std::string> json = {R"( {"k1": {"c1": {"d1":  123 }}, "k2": {"j1": "def", "j2": {"g1": [1,2,3]}}} )",
                                      R"( {"k1": {"c1": {"d1": "abc"}}, "k2": {"j1": "abc", "j2": {"g1": 123}}} )"};

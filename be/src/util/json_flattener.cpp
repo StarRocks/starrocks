@@ -473,7 +473,18 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
     }
 }
 
+// TODO: incrementally find the top-k, rather than visit all nodes first
+// recursively visit all JSON items to remember common paths
 void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row) {
+    const size_t COMMON_PATH_STATE_FACTOR = 10;
+    size_t state_limit = config::json_flat_column_max > 0 ? COMMON_PATH_STATE_FACTOR * config::json_flat_column_max
+                                                          : std::numeric_limits<size_t>::max();
+
+    // Optimize memory usage by limiting the number of paths to prevent excessive memory consumption
+    if (_derived_maps.size() >= state_limit) {
+        return;
+    }
+
     vpack::ObjectIterator it(value, false);
 
     for (; it.valid(); it.next()) {
