@@ -20,6 +20,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
+import com.starrocks.connector.share.iceberg.UnmodifiableCollectionsSerializer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ConfigurableSerDesFactory;

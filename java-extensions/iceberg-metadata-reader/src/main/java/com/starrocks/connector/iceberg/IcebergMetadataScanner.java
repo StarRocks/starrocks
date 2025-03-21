@@ -20,7 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
 import com.starrocks.jni.connector.ColumnValue;
-import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
+import com.starrocks.connector.share.iceberg.UnmodifiableCollectionsSerializer;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
