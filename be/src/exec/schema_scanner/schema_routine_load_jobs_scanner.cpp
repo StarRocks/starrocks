@@ -194,7 +194,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 16: {
-                // timestamp_progress.
+                // timestamp_progress
                 Slice timestamp_progress = Slice(info.timestamp_progress);
                 JsonValue json_value;
                 JsonValue* json_value_ptr = &json_value;
