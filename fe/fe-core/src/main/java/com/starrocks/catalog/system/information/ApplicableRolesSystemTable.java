@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.ScalarType;
@@ -21,23 +22,24 @@ import com.starrocks.thrift.TSchemaTableType;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
-public class TableConstraintsSystemTable {
-    private static final String NAME = "table_constraints";
+public class ApplicableRolesSystemTable {
+    public static final String NAME = "applicable_roles";
 
-    public static SystemTable create(String catalogName) {
-        return new SystemTable(
-                catalogName,
-                SystemId.TABLE_CONSTRAINTS_ID,
+    public static SystemTable create() {
+        return new SystemTable(SystemId.APPLICABLE_ROLES_ID,
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(512))
-                        .column("CONSTRAINT_SCHEMA", ScalarType.createVarchar(64))
-                        .column("CONSTRAINT_NAME", ScalarType.createVarchar(64))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(64))
-                        .column("TABLE_NAME", ScalarType.createVarchar(64))
-                        .column("CONSTRAINT_TYPE", ScalarType.createVarchar(64))
-                        .column("ENFORCED", ScalarType.createVarcharType(3))
-                        .build(), TSchemaTableType.SCH_TABLE_CONSTRAINTS);
+                        .column("USER", ScalarType.createVarchar(97))
+                        .column("HOST", ScalarType.createVarchar(256))
+                        .column("GRANTEE", ScalarType.createVarchar(97))
+                        .column("GRANTEE_HOST", ScalarType.createVarchar(256))
+                        .column("ROLE_NAME", ScalarType.createVarchar(255))
+                        .column("ROLE_HOST", ScalarType.createVarchar(256))
+                        .column("IS_GRANTABLE", ScalarType.createVarchar(3))
+                        .column("IS_DEFAULT", ScalarType.createVarchar(3))
+                        .column("IS_MANDATORY", ScalarType.createVarchar(3))
+                        .build(),
+                TSchemaTableType.SCH_APPLICABLE_ROLES);
     }
 }
