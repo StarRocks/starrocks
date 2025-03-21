@@ -820,6 +820,29 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
+#### 指定通用分区表达式 TTL
+
+从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+
+`partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
+- 表达式只能包含分区列和常量。不支持非分区列。
+- 通用分区表达式处理 List 分区和 Range 分区的方式不同：
+  - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+  - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+示例：
+
+```SQL
+-- 保留最近三个月的数据。dt 列为分区列。
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+如需禁用此功能，可以使用 ALTER TABLE 语句将此属性设置为空字符串：
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
+```
+
 ## 示例
 
 ### 创建 Hash 分桶表并根据 key 列对数据进行聚合
