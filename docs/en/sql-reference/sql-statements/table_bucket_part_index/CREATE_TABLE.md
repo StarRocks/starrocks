@@ -712,6 +712,29 @@ Example:
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
+#### Specify Common Partition Expression TTL
+
+From v3.4.1 onwards, StarRocks native tables support Common Partition Expression TTL.
+
+`partition_retention_condition`: The expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly.
+- The expression can only contain partition columns and constants. Non-partition columns are not supported.
+- Common Partition Expression applies to List partitions and Range partitions differently:
+  - For tables with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
+  - For tables with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
+
+Example:
+
+```SQL
+-- Retain the data from the last three months. Column `dt` is the partition column of the table.
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+To disable this feature, you can use the ALTER TABLE statement to set this property as an empty string:
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
+```
+
 ## Examples
 
 ### Create an Aggregate table that uses Hash bucketing and columnar storage
