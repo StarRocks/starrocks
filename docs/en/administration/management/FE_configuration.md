@@ -2941,19 +2941,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.
+- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, and `ADLS2`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
-<!--
 ##### cloud_native_hdfs_url
 
 - Default: Empty string
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The URL of the HDFS storage, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks/`.
 - Introduced in: -
--->
 
 ##### aws_s3_path
 
@@ -3075,6 +3073,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
 - Introduced in: v3.1
+
+##### azure_adls2_endpoint
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
+- Introduced in: v3.4.1
+
+##### azure_adls2_path
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Azure Data Lake Storage Gen2 path used to store data. It consists of the file system name and the directory name, for example, `testfilesystem/starrocks`.
+- Introduced in: v3.4.1
+
+##### azure_adls2_shared_key
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Shared Key used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.1
+
+##### azure_adls2_sas_token
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.1
 
 <!--
 ##### starmgr_grpc_timeout_seconds
