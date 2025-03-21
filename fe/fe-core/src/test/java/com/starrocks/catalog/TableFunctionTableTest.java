@@ -279,7 +279,6 @@ public class TableFunctionTableTest {
         properties.put("path", "file://test_dir");
         properties.put("format", "csv");
 
-
         {
             // normal case: default
             Assertions.assertDoesNotThrow(() -> {
