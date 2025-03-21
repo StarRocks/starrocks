@@ -142,8 +142,8 @@ struct TRuntimeFilterDescription {
   17: optional TRuntimeFilterLayout layout;
 
   18: optional bool build_from_group_execution;
-  19: optional bool is_borad_cast_join_in_skew;
-  // only set when is_borad_cast_join_in_skew is true
+  19: optional bool is_broad_cast_join_in_skew;
+  // only set when is_broad_cast_join_in_skew is true
   20: optional i32 skew_shuffle_filter_id;
 }
 

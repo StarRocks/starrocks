@@ -195,7 +195,7 @@ public class RuntimeFilterDescription {
         isBroadCastInSkew = false;
     }
 
-    public boolean isBoradCastJoinInSkew() {
+    public boolean isBroadCastJoinInSkew() {
         return isBroadCastInSkew;
     }
 
