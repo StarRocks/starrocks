@@ -4250,4 +4250,48 @@ TEST_F(FileReaderTest, plain_string_decode) {
     EXPECT_EQ(2, total_row_nums);
 }
 
+TEST_F(FileReaderTest, test_filter_to_dict_decoder) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string file_path = "./be/test/formats/parquet/test_data/big_string_dict_with_plain_code.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC},
+                                    {"c1", TYPE_INT_DESC},
+                                    {"c2", TYPE_VARCHAR_DESC},
+                                    {"c3", TYPE_VARCHAR_ARRAY_DESC},
+                                    {""}};
+
+    std::set<int32_t> in_oprands{1, 100};
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
+    std::vector<ExprContext*> expr_ctxs;
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+    auto ctx = _create_file_random_read_context(file_path, slot_descs);
+    ctx->conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(file_path);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 2) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 100000, '0000000001', ['1','','0']]");
+            ASSERT_EQ(chunk->debug_row(1), "[100, 99901, '', []]");
+        }
+    }
+
+    EXPECT_EQ(2, total_row_nums);
+}
+
 } // namespace starrocks::parquet
