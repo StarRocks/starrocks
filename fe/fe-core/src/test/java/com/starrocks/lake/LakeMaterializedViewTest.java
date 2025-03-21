@@ -459,7 +459,7 @@ public class LakeMaterializedViewTest {
         long dbId = 1L;
         long mvId = 2L;
         long partitionId = 3L;
-        Partition partition = new Partition(partitionId, null, null);
+        Partition partition = new Partition(partitionId, "p0", null, null);
 
         // range partition
         PartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList());

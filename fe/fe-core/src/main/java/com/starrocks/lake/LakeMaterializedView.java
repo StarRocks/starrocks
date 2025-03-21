@@ -26,11 +26,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
->>>>>>> 5d389cccd3 ([BugFix] Fix recycle bin missing to delete lake mv's expired partitions after mv refreshed (#56613))
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
