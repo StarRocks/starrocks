@@ -29,6 +29,7 @@ public class OptimizeClause extends AlterTableClause {
     private PartitionDesc partitionDesc;
     private DistributionDesc distributionDesc;
     private PartitionNames partitionNames;
+    private OptimizeRange range;
 
     @SerializedName(value = "sourcePartitionIds")
     private List<Long> sourcePartitionIds = Lists.newArrayList();
@@ -39,25 +40,37 @@ public class OptimizeClause extends AlterTableClause {
     private List<String> sortKeys = null;
 
     public OptimizeClause(KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           List<String> sortKeys,
-                           PartitionNames partitionNames) {
-        this(keysDesc, partitionDesc, distributionDesc, sortKeys, partitionNames, NodePosition.ZERO);
+                          PartitionDesc partitionDesc,
+                          DistributionDesc distributionDesc,
+                          List<String> sortKeys,
+                          PartitionNames partitionNames,
+                          OptimizeRange range) {
+        this(keysDesc, partitionDesc, distributionDesc, sortKeys, partitionNames, range, NodePosition.ZERO);
     }
 
     public OptimizeClause(KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           List<String> sortKeys,
-                           PartitionNames partitionNames,
-                           NodePosition pos) {
+                          PartitionDesc partitionDesc,
+                          DistributionDesc distributionDesc,
+                          List<String> sortKeys,
+                          PartitionNames partitionNames,
+                          OptimizeRange range,
+                          NodePosition pos) {
         super(AlterOpType.OPTIMIZE, pos);
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.partitionNames = partitionNames;
+        this.range = range;
+    }
+
+    // Add getter and setter for OptimizeRange
+    public OptimizeRange getRange() {
+        return range;
+    }
+
+    public void setRange(OptimizeRange range) {
+        this.range = range;
     }
 
     public KeysDesc getKeysDesc() {
@@ -123,6 +136,9 @@ public class OptimizeClause extends AlterTableClause {
         }
         if (sortKeys != null && !sortKeys.isEmpty()) {
             sb.append(String.join(",", sortKeys));
+        }
+        if (range != null) {
+            sb.append(range.toString());
         }
         return sb.toString();
     }

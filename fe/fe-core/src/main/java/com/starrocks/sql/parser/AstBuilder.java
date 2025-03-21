@@ -314,6 +314,7 @@ import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.OptimizeRange;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -4682,9 +4683,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitOptimizeClause(StarRocksParser.OptimizeClauseContext context) {
-        if (context.partitionDesc() != null) {
-            throw new ParsingException("Partition clause is not supported in optimize statement", createPos(context));
-        }
         return new OptimizeClause(
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
@@ -4693,7 +4691,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
                                 .stream().map(Identifier::getValue).collect(toList()),
                 context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
+                context.optimizeRange() == null ? null : (OptimizeRange) visit(context.optimizeRange()),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitOptimizeRange(StarRocksParser.OptimizeRangeContext context) {
+        StringLiteral start = null;
+        StringLiteral end = null;
+        
+        // Extract start value if present
+        if (context.start != null) {
+            start = (StringLiteral) visit(context.start);
+        }
+        
+        // Extract end value if present
+        if (context.end != null) {
+            end = (StringLiteral) visit(context.end);
+        }
+        
+        // Create and return OptimizeRange object with position information
+        return new OptimizeRange(start, end, createPos(context));
     }
 
     @Override

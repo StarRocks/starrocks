@@ -1,0 +1,26 @@
+-- name: test_merge_partitions
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k);
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+select * from t;
+show partitions from t;
+alter table t partition by date_trunc('month',k);
+function: wait_optimize_table_finish()
+show partitions from t;
+select * from t;
+
+-- name: test_merge_partitions_range
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k);
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+select * from t;
+show partitions from t;
+alter table t partition by date_trunc('month',k) between '2020-02-01' and '2020-02-28';
+function: wait_optimize_table_finish()
+show partitions from t;
+select * from t;
+
+-- name: test_merge_partitions_range_fail
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k);
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+alter table t partition by date_trunc('month',k) between '2020-02-01 12:00:00' and '2020-02-28';
+function: wait_optimize_table_finish(expect_status="CANCELLED")
+show partitions from t;
