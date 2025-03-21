@@ -9,7 +9,7 @@ CREATE TABLE partitions_multi_column_1 (
     c2 int NOT NULL,
     c3 int
 )
-PARTITION BY (c1, c2);
+PARTITION BY (c1, c2) properties("replication_num"="1");
 
 INSERT INTO partitions_multi_column_1 SELECT 0, 0, generate_series FROM TABLE(generate_series(1, 1000));
 INSERT INTO partitions_multi_column_1 SELECT 0, 1, generate_series FROM TABLE(generate_series(1, 100));
@@ -46,17 +46,15 @@ function: assert_explain_costs_contains('SELECT c2, c3 FROM partitions_multi_col
 
 CREATE TABLE partitions_multi_column_2 (
     c1 int,
-    c2 int,
-    c3 int,
     p1 int
 )
-PARTITION BY (p1);
+PARTITION BY (p1) properties("replication_num"="1");
 
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(1, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(2, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(3, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(4, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(5, 1000000));
-
+insert into partitions_multi_column_2 select 1,1;
+insert into partitions_multi_column_2 select 2,1;
+insert into partitions_multi_column_2 select 1,2;
+insert into partitions_multi_column_2 select null,2;
+insert into partitions_multi_column_2 select null, generate_series from table(generate_series(3,10));
 ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
-function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 AND c2=1 AND c3=1 AND p1=1', 'cardinality: 1000')
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1=1 ', 'c1-->[1.0, 2.0, 0.0, 1.0, 2.0]')
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1<3 ', 'c1-->[1.0, 2.0, 0.75, 1.0, 2.0]')
