@@ -2527,6 +2527,120 @@ StatusOr<ColumnPtr> TimeFunctions::datetime_to_iso8601(FunctionContext* context,
     return date_format_func<to_iso8601Impl, TYPE_DATETIME>(columns, 26);
 }
 
+StatusOr<ColumnPtr> TimeFunctions::from_iso8601_date(FunctionContext* context, const Columns& columns) {
+    if (columns.empty() || columns[0]->empty()) {
+        return ColumnHelper::create_const_null_column(1);
+    }
+
+    size_t num_rows = columns[0]->size();
+    auto result_column = DateColumn::create();
+    result_column->reserve(num_rows);
+
+    auto null_column = NullColumn::create();
+    null_column->reserve(num_rows);
+
+    bool has_null = false;
+
+    if (columns[0]->is_constant()) {
+        const ConstColumn* const_column = down_cast<const ConstColumn*>(columns[0].get());
+        const Column* data_column = const_column->data_column().get();
+
+        bool is_null = false;
+
+        if (data_column->is_nullable()) {
+            const NullableColumn* nullable = down_cast<const NullableColumn*>(data_column);
+            is_null = nullable->is_null(0);
+            if (!is_null) {
+                data_column = nullable->data_column().get();
+            }
+        }
+
+        if (is_null) {
+            for (size_t i = 0; i < num_rows; i++) {
+                result_column->append_default();
+                null_column->append(DATUM_NULL);
+            }
+            has_null = true;
+        } else {
+            std::string str_value = data_column->debug_item(0);
+
+            if (str_value.size() >= 2 && str_value.front() == '\'' && str_value.back() == '\'') {
+                str_value = str_value.substr(1, str_value.size() - 2);
+            }
+
+            DateValue date_value;
+            if (date_value.from_iso8601_string(str_value.c_str(), str_value.size())) {
+                for (size_t i = 0; i < num_rows; i++) {
+                    result_column->append(date_value);
+                    null_column->append(DATUM_NOT_NULL);
+                }
+            } else {
+                for (size_t i = 0; i < num_rows; i++) {
+                    result_column->append_default();
+                    null_column->append(DATUM_NULL);
+                }
+                has_null = true;
+            }
+        }
+    } else {
+        const Column* data_column = columns[0].get();
+        
+        if (data_column->is_nullable()) {
+            const NullableColumn* nullable = down_cast<const NullableColumn*>(data_column);
+            data_column = nullable->data_column().get();
+            
+            for (size_t i = 0; i < num_rows; i++) {
+                if (nullable->is_null(i)) {
+                    result_column->append_default();
+                    null_column->append(DATUM_NULL);
+                    has_null = true;
+                    continue;
+                }
+                
+                std::string str_value = data_column->debug_item(i);
+                
+                if (str_value.size() >= 2 && str_value.front() == '\'' && str_value.back() == '\'') {
+                    str_value = str_value.substr(1, str_value.size() - 2);
+                }
+                
+                DateValue date_value;
+                if (date_value.from_iso8601_string(str_value.c_str(), str_value.size())) {
+                    result_column->append(date_value);
+                    null_column->append(DATUM_NOT_NULL);
+                } else {
+                    result_column->append_default();
+                    null_column->append(DATUM_NULL);
+                    has_null = true;
+                }
+            }
+        } else {
+            for (size_t i = 0; i < num_rows; i++) {
+                std::string str_value = data_column->debug_item(i);
+                
+                if (str_value.size() >= 2 && str_value.front() == '\'' && str_value.back() == '\'') {
+                    str_value = str_value.substr(1, str_value.size() - 2);
+                }
+                
+                DateValue date_value;
+                if (date_value.from_iso8601_string(str_value.c_str(), str_value.size())) {
+                    result_column->append(date_value);
+                    null_column->append(DATUM_NOT_NULL);
+                } else {
+                    result_column->append_default();
+                    null_column->append(DATUM_NULL);
+                    has_null = true;
+                }
+            }
+        }
+    }
+
+    if (has_null) {
+        return NullableColumn::create(std::move(result_column), std::move(null_column));
+    } else {
+        return result_column;
+    }
+}
+
 Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
