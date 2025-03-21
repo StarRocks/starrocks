@@ -604,12 +604,13 @@ struct TRoutineLoadJobInfo {
     13: optional string custom_properties
     14: optional string statistic
     15: optional string progress
-    16: optional string reasons_of_state_changed
-    17: optional string error_log_urls
-    18: optional string tracking_sql
-    19: optional string other_msg
-    20: optional string latest_source_position
-    21: optional string offset_lag
+    16: optional string timestamp_progress
+    17: optional string reasons_of_state_changed
+    18: optional string error_log_urls
+    19: optional string tracking_sql
+    20: optional string other_msg
+    21: optional string latest_source_position
+    22: optional string offset_lag
 }
 
 struct TGetRoutineLoadJobsResult {
