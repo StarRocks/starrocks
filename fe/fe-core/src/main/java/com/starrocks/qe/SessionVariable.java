@@ -1135,7 +1135,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableAsyncProfile = true;
 
     @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_THRESHOLD)
-    private String bigQueryProfileThreshold = "0s";
+    private String bigQueryProfileThreshold = "30s";
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -2738,6 +2738,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
         this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
     }
+
+    public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
+        this.bigQueryProfileThreshold = bigQueryProfileThreshold;
+    }
+
 
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
