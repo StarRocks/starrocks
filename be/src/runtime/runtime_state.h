@@ -517,6 +517,11 @@ public:
                _query_options.enable_join_runtime_filter_pushdown;
     }
 
+    bool enable_join_runtime_bitset_filter() const {
+        return _query_options.__isset.enable_join_runtime_bitset_filter &&
+               _query_options.enable_join_runtime_bitset_filter;
+    }
+
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
 private:

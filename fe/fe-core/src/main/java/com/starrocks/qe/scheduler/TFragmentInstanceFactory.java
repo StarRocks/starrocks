@@ -120,7 +120,7 @@ public class TFragmentInstanceFactory {
         result.setProtocol_version(InternalServiceVersion.V1);
         result.setFragment(fragment.toThrift());
         result.setDesc_tbl(descTable);
-        result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_2.getValue());
+        result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
         result.setCoord(coordAddress);
 
         result.setParams(new TPlanFragmentExecParams());
