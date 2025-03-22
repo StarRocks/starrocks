@@ -379,7 +379,7 @@ void Bitset<LT>::contains_batch(uint8_t* __restrict selection, const CppType* __
         selection[i] = contains<CheckRange>(values[i], selection[i]);
     }
 
-    if constexpr (!NullIsTrue) {
+    if constexpr (NullIsTrue) {
         for (int i = from; i < to; i++) {
             selection[i] |= is_nulls[i] != 0;
         }
