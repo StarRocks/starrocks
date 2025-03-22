@@ -366,10 +366,11 @@ template <LogicalType LT>
 template <bool CheckRange, bool NullIsTrue>
 void Bitset<LT>::contains_batch(uint8_t* __restrict selection, const CppType* __restrict values,
                                 const uint8_t* __restrict is_nulls, size_t from, size_t to) const {
-    // If min-max is evaluated by min-max-filter, CheckRange will be false and selection[i] represents whether
-    // values[i] is in the range.
-    // However, min-max-filter will also set selection[i] to true, if NullIsTrue and is_nulls[i] is true.
-    // Therefore, we need to set selection [i] to false temporarily if NullIsTrue and is_nulls[i] is true.
+    // `contains<false/*CheckRange*/>` considers the values[i] with true `selection[i]` is in the range, which is set
+    // by the min-max-filter, and doesn't check range again.
+    // However, min-max-filter will also set `selection[i]` to true, if NullIsTrue and `is_nulls[i]` is true regardless
+    // of the value of `values[i]`.
+    // Therefore, we need to set selection [i] to false temporarily if NullIsTrue and `is_nulls[i]` is true.
     for (int i = from; i < to; i++) {
         selection[i] &= is_nulls[i] == 0;
     }
