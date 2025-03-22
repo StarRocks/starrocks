@@ -370,7 +370,8 @@ void Bitset<LT>::contains_batch(uint8_t* __restrict selection, const CppType* __
     // by the min-max-filter, and doesn't check range again.
     // However, min-max-filter will also set `selection[i]` to true, if NullIsTrue and `is_nulls[i]` is true regardless
     // of the value of `values[i]`.
-    // Therefore, we need to set selection [i] to false temporarily if NullIsTrue and `is_nulls[i]` is true.
+    // Therefore, we need to temporarily set `selection[i]` to false and re-consider `is_nulls[i]` later, if NullIsTrue
+    // and `is_nulls[i]` is true.
     for (int i = from; i < to; i++) {
         selection[i] &= is_nulls[i] == 0;
     }
