@@ -243,12 +243,19 @@ public class RestoreClusterSnapshotMgr {
             return;
         }
 
-        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        for (ClusterSnapshotConfig.StorageVolume storageVolume : storageVolumes) {
-            LOG.info("Update storage volume {}", storageVolume.getName());
-            storageVolumeMgr.updateStorageVolume(storageVolume.getName(), storageVolume.getType(),
-                    Collections.singletonList(storageVolume.getLocation()), storageVolume.getProperties(),
-                    storageVolume.getComment());
+        boolean oldValue = com.staros.util.Config.STARMGR_REPLACE_FILESTORE_ENABLED;
+        com.staros.util.Config.STARMGR_REPLACE_FILESTORE_ENABLED = true;
+        try {
+            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            for (ClusterSnapshotConfig.StorageVolume storageVolume : storageVolumes) {
+                LOG.info("Update storage volume {}", storageVolume.getName());
+                List<String> locations = storageVolume.getLocation() == null ? null
+                        : Collections.singletonList(storageVolume.getLocation());
+                storageVolumeMgr.replaceStorageVolume(storageVolume.getName(), storageVolume.getType(),
+                        locations, storageVolume.getProperties(), storageVolume.getComment());
+            }
+        } finally {
+            com.staros.util.Config.STARMGR_REPLACE_FILESTORE_ENABLED = oldValue;
         }
     }
 }
