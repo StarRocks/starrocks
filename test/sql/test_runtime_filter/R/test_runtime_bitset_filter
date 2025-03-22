@@ -812,7 +812,7 @@ with w1 as (
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] w1 using(c_bool_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+6400000
 -- !result
 with w1 as (
    select * from t2 order by k1 limit 10
@@ -820,97 +820,97 @@ with w1 as (
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] w1 using(c_bool_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+6450000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_tinyint_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+1000000000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_tinyint_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+1108593760
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_smallint_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+3907840
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_smallint_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+4338192
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_int_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+100000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_int_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+120000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_bigint_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+100000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_bigint_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+120000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_date_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+100000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_date_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+120000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_decimal64_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+100000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_decimal64_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+120000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_str_1_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+100000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_str_2_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+120000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_str_3_low_null);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+500000000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_str_4_low_notnull);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+554296880
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_datetime_1_seq);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+100000
 -- !result
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_datetime_2_seq);
 -- result:
-E: (1193, "Unknown system variable 'enable_join_runtime_bitset_filter', the most similar variables are {'enable_topn_runtime_filter', 'enable_global_runtime_filter', 'enable_prune_iceberg_manifest'}")
+120000
 -- !result
 with w1 as (
     select * from t3 order by k1 limit 10
