@@ -412,9 +412,9 @@ template <LogicalType LT>
 void RuntimeBitsetFilter<LT>::evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values,
                                        uint8_t* selection, uint16_t from, uint16_t to) const {
     if (_has_null) {
-        _evaluate_vectorized<false>(input_column, selection, from, to);
-    } else {
         _evaluate_vectorized<true>(input_column, selection, from, to);
+    } else {
+        _evaluate_vectorized<false>(input_column, selection, from, to);
     }
 }
 
