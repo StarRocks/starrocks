@@ -275,22 +275,22 @@ void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashT
         if (nullable_column->has_null()) {
             const auto& null_array = nullable_column->null_column()->get_data();
 
-            // static constexpr uint32_t W = 8;
-            // uint32_t buffer[W];
+            static constexpr uint32_t W = 8;
+            uint32_t buffer[W];
             size_t i = 0;
-            // for (; i + W <= probe_row_count; i += W) {
-            //     for (uint32_t j = 0; j < W; j++) {
-            //         if (null_array[i + j] == 0) {
-            //             buffer[j] = firsts[buckets[i + j]];
-            //         } else {
-            //             buffer[j] = 0;
-            //         }
-            //     }
+            for (; i + W <= probe_row_count; i += W) {
+                for (uint32_t j = 0; j < W; j++) {
+                    if (null_array[i + j] == 0) {
+                        buffer[j] = firsts[buckets[i + j]];
+                    } else {
+                        buffer[j] = 0;
+                    }
+                }
 
-            //     for (uint32_t j = 0; j < W; j++) {
-            //         nexts[i + j] = buffer[j];
-            //     }
-            // }
+                for (uint32_t j = 0; j < W; j++) {
+                    nexts[i + j] = buffer[j];
+                }
+            }
 
             for (; i < probe_row_count; i++) {
                 if (null_array[i] == 0) {
@@ -306,18 +306,18 @@ void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashT
         }
     }
 
-    // static constexpr uint32_t W = 8;
-    // uint32_t buffer[W];
+    static constexpr uint32_t W = 8;
+    uint32_t buffer[W];
     size_t i = 0;
-    // for (; i + W <= probe_row_count; i += W) {
-    //     for (uint32_t j = 0; j < W; j++) {
-    //         buffer[j] = firsts[buckets[i + j]];
-    //     }
+    for (; i + W <= probe_row_count; i += W) {
+        for (uint32_t j = 0; j < W; j++) {
+            buffer[j] = firsts[buckets[i + j]];
+        }
 
-    //     for (uint32_t j = 0; j < W; j++) {
-    //         nexts[i + j] = buffer[j];
-    //     }
-    // }
+        for (uint32_t j = 0; j < W; j++) {
+            nexts[i + j] = buffer[j];
+        }
+    }
     for (; i < probe_row_count; i++) {
         nexts[i] = firsts[buckets[i]];
     }
