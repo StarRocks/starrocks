@@ -50,6 +50,8 @@ import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder;
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder$;
+import org.apache.spark.sql.catalyst.encoders.RowEncoder$;
 import org.apache.spark.sql.execution.datasources.parquet.ParquetWriteSupport;
 import org.apache.spark.sql.functions;
 import org.apache.spark.sql.types.DataTypes;
@@ -63,6 +65,8 @@ import scala.Tuple2;
 import scala.collection.JavaConverters;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
@@ -211,6 +215,33 @@ public final class SparkDpp implements java.io.Serializable {
         }
     }
 
+    private ExpressionEncoder createExpressionEncoder(StructType schema) {
+        ExpressionEncoder<Row> rowExpressionEncoder;
+        Object instance;
+        Method applyMethod;
+
+        // before 3.5, we use RowEncoder.apply to create ExpressionEncoder
+        // 3.5, we use ExpressionEncoder.apply to create it.
+        try {
+            applyMethod = RowEncoder$.MODULE$.getClass().getMethod("apply", StructType.class);
+            instance = RowEncoder$.MODULE$;
+        } catch (NoSuchMethodException e1) {
+            try {
+                applyMethod = ExpressionEncoder$.MODULE$.getClass().getMethod("apply", StructType.class);
+                instance = ExpressionEncoder$.MODULE$;
+            } catch (NoSuchMethodException e2) {
+                throw new RuntimeException("No method to create InternalRowToRowFunction");
+            }
+        }
+
+        try {
+            rowExpressionEncoder = (ExpressionEncoder<Row>) applyMethod.invoke(instance, schema);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new RuntimeException("Fail to call `apply` method to create InternalRowToRowFunction");
+        }
+        return rowExpressionEncoder;
+    }
+
     // write data to parquet file by using writing the parquet scheme of spark.
     private void writeRepartitionAndSortedRDDToParquet(JavaPairRDD<List<Object>, Object[]> resultRDD,
                                                        String pathPattern,
@@ -218,10 +249,10 @@ public final class SparkDpp implements java.io.Serializable {
                                                        EtlJobConfig.EtlIndex indexMeta,
                                                        SparkRDDAggregator[] sparkRDDAggregators)
             throws SparkDppException {
-        // TODO(wb) should deal largint as BigInteger instead of string when using biginteger as key,
+        // TODO(wb) should deal large int as BigInteger instead of string when using biginteger as key,
         // data type may affect sorting logic
         StructType dstSchema = DppUtils.createDstTableSchema(indexMeta.columns, false, true);
-        ExpressionEncoder encoder = ExpressionEncoder.apply(dstSchema);
+        ExpressionEncoder encoder = createExpressionEncoder(dstSchema);
         ExpressionEncoderHelper encoderHelper = new ExpressionEncoderHelper(encoder);
 
         resultRDD.repartitionAndSortWithinPartitions(new BucketPartitioner(bucketKeyMap), new BucketComparator())
@@ -707,7 +738,8 @@ public final class SparkDpp implements java.io.Serializable {
         // TODO: data quality check for orc/parquet load
         // Check process is roughly the same as the hive load, but there are some bugs to fix.
         // Uncomment below when method checkDataFromHiveWithStrictMode is ready.
-        // checkDataFromHiveWithStrictMode(sourceData, baseIndex, fileGroup.columnMappings.keySet(), etlJobConfig.properties.strictMode,
+        // checkDataFromHiveWithStrictMode(sourceData, baseIndex, fileGroup.columnMappings.keySet(), etlJobConfig.properties
+        // .strictMode,
         //        dstTableSchema, dictBitmapColumnSet);
         return sourceData;
     }
@@ -1062,22 +1094,26 @@ public final class SparkDpp implements java.io.Serializable {
         }
 
         Dataset<Row> dataframe = spark.sql(sql.toString());
-        // Note(wb): in current spark load implementation, spark load can't be consistent with starrocks BE; The reason is as follows
+        // Note(wb): in current spark load implementation, spark load can't be consistent with starrocks BE; The reason is as
+        // follows
         // For stream load in starrocks BE, it runs as follow steps:
         // step 1: type check
         // step 2: expression calculation
         // step 3: strict mode check
         // step 4: nullable column check
         // BE can do the four steps row by row
-        // but spark load relies on spark to do step2, so it can only do step 1 for whole dataset and then do step 2 for whole dataset and so on;
+        // but spark load relies on spark to do step2, so it can only do step 1 for whole dataset and then do step 2 for whole
+        // dataset and so on;
         // So in spark load, we first do step 1,3,4,and then do step 2.
         // TODO(wyb): fix bugs in checkDataFromHiveWithStrictMode
         // 1. Datetime type check fail with wrong format
         // 2. Should not use baseIndex.columns to check data, because fileFieldNames are already not same as baseIndex.columns
-        //dataframe = checkDataFromHiveWithStrictMode(dataframe, baseIndex, fileGroup.columnMappings.keySet(), etlJobConfig.properties.strictMode,
+        //dataframe = checkDataFromHiveWithStrictMode(dataframe, baseIndex, fileGroup.columnMappings.keySet(), etlJobConfig
+        // .properties.strictMode,
         //                                            dstTableSchema, dictBitmapColumnSet);
         dataframe = convertSrcDataframeToDstDataframe(baseIndex, dataframe, dstTableSchema, fileGroup);
-        // TODO: `scannedRowsAcc(hive-load)` has the same meaning with `scannedRowsAcc - unselectedRows (file-load)`, while this has to be fixed later.
+        // TODO: `scannedRowsAcc(hive-load)` has the same meaning with `scannedRowsAcc - unselectedRows (file-load)`, while
+        //  this has to be fixed later.
         scannedRowsAcc.add(dataframe.count());
         return dataframe;
     }
@@ -1134,7 +1170,8 @@ public final class SparkDpp implements java.io.Serializable {
                             validRow = false;
                             LOG.warn(String.format("row parsed failed in strict mode, column name %s, src row %s",
                                     column.columnName, row.toString()));
-                            // a column parsed failed would be filled null, but if starrocks column is not allowed null, we should skip this row
+                            // a column parsed failed would be filled null, but if starrocks column is not allowed null, we
+                            // should skip this row
                         } else if (!column.isAllowNull) {
                             validRow = false;
                             LOG.warn("column:" + i + " can not be null. row:" + row.toString());
