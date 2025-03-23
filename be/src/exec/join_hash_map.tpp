@@ -25,6 +25,7 @@ namespace starrocks {
 template <LogicalType LT>
 void JoinBuildFunc<LT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
 }
@@ -55,23 +56,34 @@ template <LogicalType LT>
 void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                              HashTableProbeState* probe_state) {
     auto& data = get_key_data(*table_items);
-    if (table_items->key_columns[0]->is_nullable()) {
+    if (table_items->key_columns[0]->is_nullable() && table_items->key_columns[0]->has_null()) {
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]);
-        auto& null_array = nullable_column->null_column()->get_data();
+        const auto& null_array = nullable_column->null_column()->get_data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             if (null_array[i] == 0) {
-                uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size);
+                const uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(
+                        data[i], table_items->bucket_size, table_items->log_bucket_size);
                 table_items->next[i] = table_items->first[bucket_num];
                 table_items->first[bucket_num] = i;
             }
         }
     } else {
+        auto* __restrict next = table_items->next.data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
-            uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size);
-            table_items->next[i] = table_items->first[bucket_num];
-            table_items->first[bucket_num] = i;
+            const uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size,
+                                                                                    table_items->log_bucket_size);
+            // Use `next` stores `bucket_num` temporarily.
+            next[i] = bucket_num;
+        }
+
+        auto* __restrict first = table_items->first.data();
+        for (size_t i = 1; i < table_items->row_count + 1; i++) {
+            const uint32_t bucket_num = next[i];
+            next[i] = first[bucket_num];
+            first[bucket_num] = i;
         }
     }
+
     table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }
 
@@ -80,6 +92,7 @@ void DirectMappingJoinBuildFunc<LT>::prepare(RuntimeState* runtime, JoinHashTabl
     static constexpr size_t BUCKET_SIZE =
             (int64_t)(RunTimeTypeLimits<LT>::max_value()) - (int64_t)(RunTimeTypeLimits<LT>::min_value()) + 1L;
     table_items->bucket_size = BUCKET_SIZE;
+    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
 }
@@ -124,6 +137,7 @@ void DirectMappingJoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, J
 template <LogicalType LT>
 void FixedSizeJoinBuildFunc<LT>::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     table_items->build_key_column = ColumnType::create(table_items->row_count + 1);
@@ -178,7 +192,8 @@ void FixedSizeJoinBuildFunc<LT>::_build_columns(JoinHashTableItems* table_items,
                                                            count);
 
     const auto& data = get_key_data(*table_items);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, &probe_state->buckets, start, count);
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, table_items->log_bucket_size,
+                                                 &probe_state->buckets, start, count);
 
     for (uint32_t i = 0; i < count; i++) {
         table_items->next[start + i] = table_items->first[probe_state->buckets[i]];
@@ -203,7 +218,8 @@ void FixedSizeJoinBuildFunc<LT>::_build_nullable_columns(JoinHashTableItems* tab
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, table_items->build_key_column.get(), start,
                                                            count);
     const auto& data = get_key_data(*table_items);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, &probe_state->buckets, start, count);
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, table_items->log_bucket_size,
+                                                 &probe_state->buckets, start, count);
 
     for (size_t i = 0; i < count; i++) {
         if (probe_state->is_nulls[i] == 0) {
@@ -264,7 +280,8 @@ template <LogicalType LT>
 void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
     const size_t probe_row_count = probe_state->probe_row_count;
     auto& data = get_key_data(*probe_state);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, data.size());
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, table_items.log_bucket_size,
+                                                 &probe_state->buckets, 0, data.size());
 
     const auto* firsts = table_items.first.data();
     const auto* buckets = probe_state->buckets.data();
@@ -380,7 +397,8 @@ void FixedSizeJoinProbeFunc<LT>::_probe_column(const JoinHashTableItems& table_i
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
                                                            row_count);
     const auto& data = get_key_data(*probe_state);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, row_count);
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, table_items.log_bucket_size,
+                                                 &probe_state->buckets, 0, row_count);
     probe_state->null_array = nullptr;
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];
@@ -406,7 +424,8 @@ void FixedSizeJoinProbeFunc<LT>::_probe_nullable_column(const JoinHashTableItems
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
                                                            row_count);
     const auto& data = get_key_data(*probe_state);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, row_count);
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, table_items.log_bucket_size,
+                                                 &probe_state->buckets, 0, row_count);
 
     for (uint32_t i = 0; i < row_count; i++) {
         if (probe_state->is_nulls[i] == 0) {

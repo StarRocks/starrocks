@@ -116,6 +116,7 @@ struct JoinHashTableItems {
     Buffer<Slice> build_slice;
     ColumnPtr build_key_column = nullptr;
     uint32_t bucket_size = 0;
+    uint32_t log_bucket_size = 0;
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
     size_t output_build_column_count = 0;
@@ -301,38 +302,44 @@ struct HashTableParam {
     bool mor_reader_mode = false;
 };
 
-template <class T>
+template <class T, size_t Size = sizeof(T)>
 struct JoinKeyHash {
-    static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const T& value) const { return crc_hash_32(&value, sizeof(T), CRC_SEED); }
+    static constexpr uint32_t CRC_SEED = 0x811C9DC5;
+    uint32_t operator()(const T& value, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        const size_t hash = crc_hash_32(&value, sizeof(T), CRC_SEED);
+        return hash & (num_buckets - 1);
+    }
 };
 
-// The hash func used by the bucketing of the colocate table is crc,
-// and the hash func used by HashJoin is also crc,
-// which leads to a high conflict rate of HashJoin and affects performance.
-// Therefore, there is no theoretical basis for adding an integer to the source value.
-// The current test shows that the +2, +4 pair does not change the conflict rate,
-// which may be related to the implementation of CRC or mod.
-template <>
-struct JoinKeyHash<int32_t> {
-    static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const int32_t& value) const {
-#if defined(__x86_64__) && defined(__SSE4_2__)
-        size_t hash = _mm_crc32_u32(CRC_SEED, value + 2);
-#elif defined(__x86_64__)
-        size_t hash = crc_hash_32(&value, sizeof(value), CRC_SEED);
-#else
-        size_t hash = __crc32cw(CRC_SEED, value + 2);
-#endif
-        hash = (hash << 16u) | (hash >> 16u);
-        return hash;
+template <typename T>
+struct JoinKeyHash<T, 4> {
+    uint32_t operator()(T value, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        static constexpr uint32_t a = 2654435761u;
+        uint32_t v = *reinterpret_cast<uint32_t*>(&value);
+        v ^= v >> (32 - num_log_buckets);
+        const uint32_t fraction = v * a;
+        return fraction >> (32 - num_log_buckets);
+    }
+};
+
+template <typename T>
+struct JoinKeyHash<T, 8> {
+    uint32_t operator()(T value, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        static constexpr uint64_t a = 11400714819323198485ull;
+        uint64_t v = *reinterpret_cast<uint64_t*>(&value);
+        v ^= v >> (64 - num_log_buckets);
+        const uint64_t fraction = v * a;
+        return fraction >> (64 - num_log_buckets);
     }
 };
 
 template <>
 struct JoinKeyHash<Slice> {
     static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const Slice& slice) const { return crc_hash_32(slice.data, slice.size, CRC_SEED); }
+    uint32_t operator()(const Slice& slice, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        const size_t hash = crc_hash_32(slice.data, slice.size, CRC_SEED);
+        return hash & (num_buckets - 1);
+    }
 };
 
 class JoinHashMapHelper {
@@ -350,18 +357,18 @@ public:
     }
 
     template <typename CppType>
-    static uint32_t calc_bucket_num(const CppType& value, uint32_t bucket_size) {
+    static uint32_t calc_bucket_num(const CppType& value, uint32_t bucket_size, uint32_t num_log_buckets) {
         using HashFunc = JoinKeyHash<CppType>;
 
-        return HashFunc()(value) & (bucket_size - 1);
+        return HashFunc()(value, bucket_size, num_log_buckets);
     }
 
     template <typename CppType>
-    static void calc_bucket_nums(const Buffer<CppType>& data, uint32_t bucket_size, Buffer<uint32_t>* buckets,
-                                 uint32_t start, uint32_t count) {
+    static void calc_bucket_nums(const Buffer<CppType>& data, uint32_t bucket_size, uint32_t num_log_buckets,
+                                 Buffer<uint32_t>* buckets, uint32_t start, uint32_t count) {
         DCHECK(count <= buckets->size());
         for (size_t i = 0; i < count; i++) {
-            (*buckets)[i] = calc_bucket_num<CppType>(data[start + i], bucket_size);
+            (*buckets)[i] = calc_bucket_num<CppType>(data[start + i], bucket_size, num_log_buckets);
         }
     }
 
