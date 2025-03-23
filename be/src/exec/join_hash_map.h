@@ -132,6 +132,7 @@ struct JoinHashTableItems {
     bool cache_miss_serious = false;
     bool mor_reader_mode = false;
     bool enable_late_materialization = false;
+    bool no_conflicts = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -149,6 +150,8 @@ struct JoinHashTableItems {
                                   (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
             VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
                        << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
+
+            no_conflicts = used_buckets == row_count;
         }
     }
 
@@ -708,6 +711,8 @@ private:
     // for one key inner join
     template <bool first_probe>
     void _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
+    template <bool first_probe, bool no_conflicts>
+    void _do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     HashTableProbeState::ProbeCoroutine _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                        const Buffer<CppType>& probe_data);
