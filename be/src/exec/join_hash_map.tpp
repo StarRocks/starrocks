@@ -715,19 +715,26 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk,
                                                                         const SlotDescriptor* slot) {
+    const uint32_t num_rows = _probe_state->count;
+    const auto* build_index = _probe_state->build_index.data();
+
+    const auto num_new_nulls = SIMD::count_zero(build_index, num_rows);
     ColumnPtr dest_column = src_column->clone_empty();
-
-    dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
-
-    // When left outer join is executed,
-    // build_index[i] Equal to 0 means it is not found in the hash table,
-    // but append_selective() has set item of NullColumn to not null
-    // so NullColumn needs to be set back to null
-    auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
-    size_t end = _probe_state->count;
-    for (size_t i = 0; i < end; i++) {
-        if (_probe_state->build_index[i] == 0) {
-            null_column->set_null(i);
+    if (num_new_nulls == num_rows) {
+        dest_column->append_nulls(num_rows);
+    } else {
+        dest_column->append_selective(*src_column, build_index, 0, num_rows);
+        // When left outer join is executed,
+        // build_index[i] Equal to 0 means it is not found in the hash table,
+        // but append_selective() has set item of NullColumn to not null
+        // so NullColumn needs to be set back to null
+        if (num_new_nulls > 0) {
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
+            auto* is_nulls = nullable_column->null_column_data().data();
+            for (uint32_t i = 0; i < num_rows; i++) {
+                is_nulls[i] |= build_index[i] == 0;
+            }
+            nullable_column->set_has_null(true);
         }
     }
 
