@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -93,6 +94,25 @@ public class PredicateStatisticsCalculator {
             return StatisticsEstimateUtils.adjustStatisticsByRowCount(
                     Statistics.buildFrom(statistics).setOutputRowCount(outputRowCount).build(),
                     outputRowCount);
+        }
+
+        @Override
+        public Statistics visitVariableReference(ColumnRefOperator variable, Void context) {
+            if (!checkNeedEvalEstimate(variable)) {
+                return statistics;
+            }
+
+            if (!variable.getType().isBoolean()) {
+                return visit(variable, context);
+            }
+
+            try {
+                BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
+                        BinaryType.EQ, variable, ConstantOperator.createBoolean(true));
+                return visitBinaryPredicate(binaryPredicateOperator, context);
+            } catch (Exception e) {
+                return visit(variable, context);
+            }
         }
 
         @Override

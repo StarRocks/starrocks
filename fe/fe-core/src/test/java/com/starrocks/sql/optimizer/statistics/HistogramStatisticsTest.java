@@ -265,5 +265,21 @@ public class HistogramStatisticsTest {
                 Optional.of(columnRefOperator),
                 columnStatistic, eq10, Optional.of(ConstantOperator.createBoolean(false)), statistics);
         Assert.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
+
+
+        mcv = Maps.newHashMap();
+        mcv.put("0", 500L);
+        mcv.put("1", 500L);
+        histogram = new Histogram(new ArrayList<>(), mcv);
+        columnRefOperator = new ColumnRefOperator(0, Type.BOOLEAN, "b1", true);
+        columnStatistic = new ColumnStatistic(0, 1, 0, 4, 2, histogram, ColumnStatistic.StatisticType.ESTIMATE);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100000);
+        builder.addColumnStatistic(columnRefOperator, columnStatistic);
+        statistics = builder.build();
+
+        estimated = PredicateStatisticsCalculator.statisticsCalculate(columnRefOperator, statistics);
+        Assert.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
     }
+
 }
