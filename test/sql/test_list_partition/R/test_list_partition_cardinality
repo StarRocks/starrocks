@@ -111,8 +111,6 @@ function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2
 -- result:
 None
 -- !result
-<<<<<<< HEAD
-=======
 set cbo_use_histogram_evaluate_list_partition=true;
 -- result:
 -- !result
@@ -156,4 +154,3 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi
 -- result:
 None
 -- !result
->>>>>>> 83088c8033 ([Enhancement] use histogram to evaluate list partition (#57147))
