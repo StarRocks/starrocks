@@ -484,14 +484,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         this.tableToStorageVolume = data.tableToStorageVolume;
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-=======
->>>>>>> 0a7434d2b8 ([Enhancement] Support modification of storage volume type and location in cluster snapshot restoration (#57110))
     public abstract StorageVolume getStorageVolumeByName(String svName);
 
     public abstract StorageVolume getStorageVolume(String svId);

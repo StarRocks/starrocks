@@ -14,19 +14,14 @@
 
 package com.starrocks.lake.snapshot;
 
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-import com.starrocks.fs.hdfs.HdfsFsManager;
-=======
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.StarRocksException;
+import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
->>>>>>> 0a7434d2b8 ([Enhancement] Support modification of storage volume type and location in cluster snapshot restoration (#57110))
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.qe.ConnectContext;
@@ -107,19 +102,15 @@ public class RestoreClusterSnapshotMgrTest {
 
     @Test
     public void testDownloadSnapshotFailed() throws Exception {
-<<<<<<< HEAD
-        Assert.assertThrows(UserException.class, () -> {
-=======
         new MockUp<HdfsUtil>() {
             @Mock
             public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
-                    throws StarRocksException {
-                throw new StarRocksException("Copy failed");
+                    throws UserException {
+                throw new UserException("Copy failed");
             }
         };
 
-        Assert.assertThrows(StarRocksException.class, () -> {
->>>>>>> 0a7434d2b8 ([Enhancement] Support modification of storage volume type and location in cluster snapshot restoration (#57110))
+        Assert.assertThrows(UserException.class, () -> {
             RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
                     new String[] { "-cluster_snapshot" });
         });
@@ -134,7 +125,7 @@ public class RestoreClusterSnapshotMgrTest {
         new MockUp<HdfsUtil>() {
             @Mock
             public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
-                    throws StarRocksException {
+                    throws UserException {
                 return;
             }
         };
@@ -155,8 +146,11 @@ public class RestoreClusterSnapshotMgrTest {
                     tableStorageInfos.write(out);
                     try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(byteOut.toByteArray()))) {
                         TableStorageInfos newTableStorageInfos = TableStorageInfos.read(in);
+                        JournalEntity journalEntity = new JournalEntity();
+                        journalEntity.setOpCode(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS);
+                        journalEntity.setData(newTableStorageInfos);
                         GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(),
-                                new JournalEntity(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, newTableStorageInfos));
+                                journalEntity);
                     }
                 } catch (Exception e) {
                     throw new RuntimeException(e);
