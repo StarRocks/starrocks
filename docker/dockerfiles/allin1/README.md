@@ -22,3 +22,5 @@ DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOC
 ```shell
 DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f allin1-ubuntu.Dockerfile -t allin1-ubuntu:main ../../../
 ```
+
+### [Allin1 HOWTO](allin1-HOWTO.md)
