@@ -38,15 +38,9 @@ public interface StatisticStorage {
     default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
-<<<<<<< HEAD
-=======
-    default void refreshMultiColumnStatistics(Long tableId) {
-    }
-
     default void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
->>>>>>> b524d1d593 ([Enhancement] modify histogram_statistic cache expire-update logical (#57238))
     /**
      * Overwrite the statistics of `targetPartition` with `sourcePartition`
      */
