@@ -1750,7 +1750,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(2, status_sel_size.value());
         sel.resize(2);
-        ASSERT_EQ("1,3", to_string(buff));
+        ASSERT_EQ("1,3", to_string(sel));
     }
     {
         std::vector<uint16_t> sel{0, 2, 3, 5, 6, 7};
@@ -1758,7 +1758,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(1, status_sel_size.value());
         sel.resize(1);
-        ASSERT_EQ("3", to_string(buff));
+        ASSERT_EQ("3", to_string(sel));
     }
     {
         std::vector<uint16_t> sel{0, 1, 2, 3, 5, 6, 7};
@@ -1766,7 +1766,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(2, status_sel_size.value());
         sel.resize(2);
-        ASSERT_EQ("1,3", to_string(buff));
+        ASSERT_EQ("1,3", to_string(sel));
     }
     {
         std::vector<uint16_t> sel{0, 2, 3, 5, 6, 7};
@@ -1774,7 +1774,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(1, status_sel_size.value());
         sel.resize(1);
-        ASSERT_EQ("3", to_string(buff));
+        ASSERT_EQ("3", to_string(sel));
     }
 }
 
