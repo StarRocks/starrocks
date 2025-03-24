@@ -525,7 +525,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " as db_id, " + t0StatsTableId +
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` sample" +
                 "('percent'='10') " +
-                "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"), normalize.apply(sql));
+                "where `v2` is not null group by `v2` order by count(`v2`), `v2` desc limit 100 ) t"), normalize.apply(sql));
     }
 
     @Test
