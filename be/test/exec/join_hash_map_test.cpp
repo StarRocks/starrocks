@@ -996,7 +996,7 @@ TEST_F(JoinHashMapTest, JoinKeyHash) {
     }
 
     auto v3 = JoinKeyHash<Slice>()(Slice{"abcd", 4}, num_buckets, log_num_buckets);
-    ASSERT_EQ(v3, 2777932099l);
+    ASSERT_EQ(v3, 2777932099l % num_buckets);
 }
 
 // NOLINTNEXTLINE
