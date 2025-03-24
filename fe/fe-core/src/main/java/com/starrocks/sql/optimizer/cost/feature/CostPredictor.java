@@ -55,7 +55,7 @@ public abstract class CostPredictor {
         private static final Logger LOG = LogManager.getLogger(ServiceBasedCostPredictor.class);
 
         private static final ScheduledExecutorService DAEMON;
-        private static final Duration HEALTH_CHECK_INTERVAL = Duration.ofSeconds(30);
+        private static final Duration HEALTH_CHECK_INTERVAL = Duration.ofSeconds(Config.query_cost_predictor_healthchk_interval);
         private volatile int lastHealthCheckStatusCode = HttpStatus.SC_OK;
 
         static {
