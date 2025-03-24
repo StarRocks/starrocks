@@ -139,13 +139,6 @@ public class CreateReplicaTask extends AgentTask {
         }
     }
 
-    public void failForLeaderTransfer() {
-        if (this.latch != null) {
-            latch.countDownToZero(Status.LEADER_TRANSFERRED);
-            LOG.debug("CreateReplicaTask count down to zero because of leader transferred.");
-        }
-    }
-
     public void setLatch(MarkedCountDownLatch<Long, Long> latch) {
         this.latch = latch;
     }

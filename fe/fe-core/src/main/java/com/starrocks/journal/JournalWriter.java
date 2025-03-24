@@ -308,6 +308,7 @@ public class JournalWriter {
         while (!stopped.get()) {
             Thread.sleep(100L);
         }
+        journal.close();
     }
 
     public void setLeaderTransferred() {

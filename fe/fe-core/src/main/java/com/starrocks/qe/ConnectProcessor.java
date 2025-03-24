@@ -939,6 +939,7 @@ public class ConnectProcessor {
         finalizeCommand();
 
         ctx.setCommand(MysqlCommand.COM_SLEEP);
+        ctx.setEndTime();
     }
 
     protected void loopForTest() {
@@ -956,5 +957,9 @@ public class ConnectProcessor {
                 break;
             }
         }
+    }
+
+    public StmtExecutor getExecutor() {
+        return executor;
     }
 }
