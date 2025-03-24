@@ -43,20 +43,3 @@ function: assert_explain_costs_contains('SELECT c2, c3 FROM partitions_multi_col
 function: assert_explain_costs_contains('SELECT c2, c3 FROM partitions_multi_column_1 WHERE c1 IN (3,4) AND c2=0 ', 'cardinality: 200', 'c3-->[1.0, 1000.0, 0.0, 4.0, 100.0]')
 function: assert_explain_costs_contains('SELECT c2, c3 FROM partitions_multi_column_1 WHERE c1 IN (2,4) AND c2=0 ', 'cardinality: 200', 'c3-->[1.0, 1000.0, 0.0, 4.0, 100.0]')
 function: assert_explain_costs_contains('SELECT c2, c3 FROM partitions_multi_column_1 WHERE c1 IN (2,4) ', 'cardinality: 200', 'c3-->[1.0, 1000.0, 0.0, 4.0, 100.0]')
-
-CREATE TABLE partitions_multi_column_2 (
-    c1 int,
-    c2 int,
-    c3 int,
-    p1 int
-)
-PARTITION BY (p1);
-
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(1, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(2, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(3, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(4, 1000000));
-insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(5, 1000000));
-
-ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
-function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 AND c2=1 AND c3=1 AND p1=1', 'cardinality: 1000')

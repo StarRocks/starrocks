@@ -79,8 +79,6 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi
 -- result:
 None
 -- !result
-<<<<<<< HEAD
-=======
 CREATE TABLE partitions_multi_column_2 (
     c1 int,
     c2 int,
@@ -113,4 +111,3 @@ function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2
 -- result:
 None
 -- !result
->>>>>>> ed04d6291c ([BugFix] fix list partition duplicate cardinality estimation (#57124))

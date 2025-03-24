@@ -39,8 +39,6 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=2', 'cardinality: 3')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=3', 'cardinality: 1')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=7', 'cardinality: 1000')
-<<<<<<< HEAD
-=======
 
 CREATE TABLE partitions_multi_column_2 (
     c1 int,
@@ -58,4 +56,3 @@ insert into partitions_multi_column_2 select generate_series % 10, generate_seri
 
 ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
 function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 AND c2=1 AND c3=1 AND p1=1', 'cardinality: 1000')
->>>>>>> ed04d6291c ([BugFix] fix list partition duplicate cardinality estimation (#57124))
