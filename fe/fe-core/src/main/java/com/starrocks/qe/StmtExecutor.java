@@ -2764,11 +2764,7 @@ public class StmtExecutor {
                         "",
                         coord.getTrackingUrl());
             }
-<<<<<<< HEAD
-        } catch (MetaNotFoundException e) {
-=======
         } catch (Exception e) {
->>>>>>> 584a3a72d2 ([Enhancement] Optimize graceful-exit for jdbc driver (#57080))
             LOG.warn("Record info of insert load with error {}", e.getMessage(), e);
             errMsg = "Record info of insert load with error " + e.getMessage();
         }
