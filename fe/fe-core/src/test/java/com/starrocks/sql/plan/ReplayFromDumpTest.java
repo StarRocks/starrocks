@@ -151,7 +151,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  column statistics: \n" +
                 "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 18262.25] ESTIMATE\n" +
                 "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
-                "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n"));
+                "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.135726072607262] ESTIMATE\n"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----18:EXCHANGE\n" +
                 "  |       distribution type: SHUFFLE\n" +
                 "  |       partition exprs: [70: cs_bill_customer_sk, INT, true]\n" +
