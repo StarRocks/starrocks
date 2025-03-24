@@ -22,12 +22,13 @@
 
 namespace starrocks::pipeline {
 
-LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs,
+LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_nullable_key,
                                                      const std::vector<ExprContext*>& sort_exprs,
                                                      std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
                                                      std::string sort_keys, int64_t offset, int64_t partition_limit,
                                                      const TTopNType::type topn_type)
         : _t_partition_exprs(t_partition_exprs),
+          _has_nullable_key(has_nullable_key),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
           _is_null_first(std::move(is_null_first)),
@@ -143,7 +144,7 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         RuntimeState*, const TTopNType::type topn_type, bool is_merging, const std::vector<ExprContext*>& sort_exprs,
         std::vector<bool> is_asc_order, std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
         int64_t offset, int64_t limit, std::string sort_keys, const std::vector<OrderByType>& order_by_types,
-        const std::vector<RuntimeFilterBuildDescriptor*>&)
+        bool has_outer_join_child, const std::vector<RuntimeFilterBuildDescriptor*>&)
         : _topn_type(topn_type),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
@@ -151,16 +152,17 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
           _t_partition_exprs(t_partition_exprs),
           _offset(offset),
           _partition_limit(limit),
-          _sort_keys(std::move(sort_keys)) {}
+          _sort_keys(std::move(sort_keys)),
+          _has_outer_join_child(has_outer_join_child) {}
 
 LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driver_sequence) {
     if (auto it = _ctxs.find(driver_sequence); it != _ctxs.end()) {
         return it->second.get();
     }
 
-    auto ctx =
-            std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _sort_exprs, _is_asc_order, _is_null_first,
-                                                        _sort_keys, _offset, _partition_limit, _topn_type);
+    auto ctx = std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _has_outer_join_child, _sort_exprs,
+                                                           _is_asc_order, _is_null_first, _sort_keys, _offset,
+                                                           _partition_limit, _topn_type);
     auto* ctx_raw_ptr = ctx.get();
     _ctxs.emplace(driver_sequence, std::move(ctx));
     return ctx_raw_ptr;

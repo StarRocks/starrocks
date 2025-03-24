@@ -44,9 +44,10 @@ using LocalPartitionTopnContextFactoryPtr = std::shared_ptr<LocalPartitionTopnCo
 //                                   └────► topn ────┘
 class LocalPartitionTopnContext {
 public:
-    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
-                              std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys,
-                              int64_t offset, int64_t partition_limit, const TTopNType::type topn_type);
+    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_nullable_key,
+                              const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
+                              std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
+                              int64_t partition_limit, const TTopNType::type topn_type);
 
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
@@ -114,7 +115,7 @@ public:
                                      const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
                                      std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
                                      int64_t offset, int64_t limit, std::string sort_keys,
-                                     const std::vector<OrderByType>& order_by_types,
+                                     const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
                                      const std::vector<RuntimeFilterBuildDescriptor*>& rfs);
 
     [[nodiscard]] Status prepare(RuntimeState* state);
@@ -133,5 +134,6 @@ private:
     int64_t _offset;
     int64_t _partition_limit;
     const std::string _sort_keys;
+    bool _has_outer_join_child;
 };
 } // namespace starrocks::pipeline
