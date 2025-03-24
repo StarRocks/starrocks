@@ -1724,20 +1724,20 @@ TEST(ColumnPredicateTest, test_in_bitset) {
     // ---------------------------------------------
     buff.assign(7, 0);
 
-    bitset_pred->evaluate_and(nullable_col.get(), buff.data(), 0, 7);
+    bitset_pred->evaluate_or(nullable_col.get(), buff.data(), 0, 7);
     ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
-    bitset_pred->evaluate_and(nullable_col.get(), buff.data(), 1, 6);
+    bitset_pred->evaluate_or(nullable_col.get(), buff.data(), 1, 6);
     ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
-    bitset_pred->evaluate_and(col.get(), buff.data(), 0, 5);
+    bitset_pred->evaluate_or(col.get(), buff.data(), 0, 5);
     ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
-    bitset_pred->evaluate_and(nullable_col.get(), buff.data(), 1, 4);
+    bitset_pred->evaluate_or(nullable_col.get(), buff.data(), 1, 4);
     ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
     buff.assign(7, 1);
-    bitset_pred->evaluate_and(nullable_col.get(), buff.data(), 0, 7);
+    bitset_pred->evaluate_or(nullable_col.get(), buff.data(), 0, 7);
     ASSERT_EQ("1,1,1,1,1,1,1", to_string(buff));
 
     // ---------------------------------------------
