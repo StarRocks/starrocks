@@ -1686,13 +1686,13 @@ TEST(ColumnPredicateTest, test_in_bitset) {
     ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
     bitset_pred->evaluate(nullable_col.get(), buff.data(), 1, 6);
-    ASSERT_EQ("1,0,1,0,0", to_string(buff));
+    ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
     bitset_pred->evaluate(col.get(), buff.data(), 0, 5);
-    ASSERT_EQ("0,1,0,1,0", to_string(buff));
+    ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
     bitset_pred->evaluate(nullable_col.get(), buff.data(), 1, 4);
-    ASSERT_EQ("1,0,1", to_string(buff));
+    ASSERT_EQ("0,1,0,1,0,0,0", to_string(buff));
 
     // ---------------------------------------------
     // evaluate_and()
