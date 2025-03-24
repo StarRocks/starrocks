@@ -126,14 +126,6 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
         {
             InsertOverwriteJobStats stats = new InsertOverwriteJobStats(
                     List.of(sourceId), List.of(targetId), 1000, 1001);
-<<<<<<< HEAD
-            StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
-            Partition targetPartition = new Partition(targetId, "p1", null, null);
-            Map<Long, Optional<Long>> tableStats =
-                    storage.getTableStatistics(table.getId(), List.of(targetPartition));
-            Assert.assertEquals(Map.of(targetId, Optional.of(1000L)), tableStats);
-=======
->>>>>>> 8ba5f483fa ([BugFix] collect statistics after insert overwrite skip shadow partition (#56956))
 
             List<String> insertOverwriteSQLs = FullStatisticsCollectJob.buildOverwritePartitionSQL(
                     table.getId(), sourceId, targetId);

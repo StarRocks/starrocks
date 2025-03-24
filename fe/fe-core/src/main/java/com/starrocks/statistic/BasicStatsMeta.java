@@ -149,14 +149,8 @@ public class BasicStatsMeta implements Writable {
      * Return a number within [0,1] to indicate the health of table stats, 1 means all good.
      */
     public double getHealthy() {
-<<<<<<< HEAD
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-        OlapTable table = (OlapTable) database.getTable(tableId);
-        long totalPartitionCount = table.getPartitions().size();
-=======
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
->>>>>>> 8ba5f483fa ([BugFix] collect statistics after insert overwrite skip shadow partition (#56956))
 
         long tableRowCount = 1L;
         long cachedTableRowCount = 1L;
