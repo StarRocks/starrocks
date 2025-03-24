@@ -26,6 +26,7 @@ import com.starrocks.epack.authorization.RowAccessPolicyContext;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.authorization.TableUID;
 import com.starrocks.epack.catalog.system.SystemIdEPack;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TGetPolicyReferenceItem;
@@ -72,8 +73,8 @@ public class PolicyReferences {
             if (tableName == null) {
                 continue;
             }
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
-                    tableName.getDb(), tableName.getTbl());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(),
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", tableName);
             }

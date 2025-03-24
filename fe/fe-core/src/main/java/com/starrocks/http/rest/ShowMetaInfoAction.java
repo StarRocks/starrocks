@@ -185,11 +185,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
     public Map<String, Long> getDataSize(boolean singleReplica) {
         Map<String, Long> result = new HashMap<String, Long>();
-        List<String> dbNames = GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames();
 
-        for (int i = 0; i < dbNames.size(); i++) {
-            String dbName = dbNames.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        for (Map.Entry<String, Database> dbs : GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb()
+                .entrySet()) {
+            String dbName = dbs.getKey();
+            Database db = dbs.getValue();
 
             long totalSize = 0;
             List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());

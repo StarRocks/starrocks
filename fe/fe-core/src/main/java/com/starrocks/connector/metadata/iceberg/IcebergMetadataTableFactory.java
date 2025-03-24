@@ -18,6 +18,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.AbstractMetadataTableFactory;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,7 +27,8 @@ public class IcebergMetadataTableFactory implements AbstractMetadataTableFactory
     public static final IcebergMetadataTableFactory INSTANCE = new IcebergMetadataTableFactory();
 
     @Override
-    public Table createTable(String catalogName, String dbName, String tableName, MetadataTableType tableType) {
+    public Table createTable(ConnectContext context, String catalogName, String dbName, String tableName,
+                             MetadataTableType tableType) {
         switch (tableType) {
             case LOGICAL_ICEBERG_METADATA:
                 return LogicalIcebergMetadataTable.create(catalogName, dbName, tableName);
@@ -43,7 +45,7 @@ public class IcebergMetadataTableFactory implements AbstractMetadataTableFactory
             case FILES:
                 return IcebergFilesTable.create(catalogName, dbName, tableName);
             case PARTITIONS:
-                return IcebergPartitionsTable.create(catalogName, dbName, tableName);
+                return IcebergPartitionsTable.create(context, catalogName, dbName, tableName);
             default:
                 LOG.error("Unrecognized iceberg metadata table type {}", tableType);
                 throw new StarRocksConnectorException("Unrecognized iceberg metadata table type %s", tableType);

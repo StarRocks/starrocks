@@ -69,7 +69,7 @@ public class MetaUtil {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         return Result.wrap(() -> {
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db = metadataMgr.getDb(new ConnectContext(), catalogName, dbName);
             if (db == null) {
                 throw new RuntimeException(String.format("Database %s.%s is absent", catalogName, dbName));
             }
@@ -151,7 +151,7 @@ public class MetaUtil {
 
     public static List<MaterializedViewPlus> listLegacyMVs(String catalogName, String dbName) {
         catalogName = Optional.ofNullable(catalogName).orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), catalogName, dbName);
         if (db == null) {
             LOG.error("Database '{}.{}' is absent", catalogName, dbName);
             return Collections.emptyList();

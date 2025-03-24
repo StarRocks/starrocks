@@ -436,18 +436,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
-        LOG.debug("get db names: {}", dbNames);
 
         ConnectContext context = new ConnectContext();
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             context.setAuthInfoFromThrift(params.current_user_ident);
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
             context.setCurrentUserIdentity(currentUser);
             context.setCurrentRoleIds(currentUser);
         }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
+        LOG.debug("get db names: {}", dbNames);
 
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
@@ -491,9 +493,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(catalogName, params.db);
-
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
             context.setAuthInfoFromThrift(params.current_user_ident);
@@ -503,12 +502,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             context.setCurrentRoleIds(currentUser);
         }
 
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(context, catalogName, params.db);
+
         if (db != null) {
-            for (String tableName : metadataMgr.listTableNames(catalogName, params.db)) {
+            for (String tableName : metadataMgr.listTableNames(context, catalogName, params.db)) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 Table tbl = null;
                 try {
-                    tbl = metadataMgr.getTable(catalogName, params.db, tableName);
+                    tbl = metadataMgr.getTable(context, catalogName, params.db, tableName);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }
@@ -996,7 +998,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             context.setCurrentRoleIds(currentUser);
         }
 
-
         long limit = params.isSetLimit() ? params.getLimit() : -1;
 
         // if user query schema meta such as "select * from information_schema.columns limit 10;",
@@ -1014,13 +1015,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(catalogName, params.db);
+        Database db = metadataMgr.getDb(context, catalogName, params.db);
 
         if (db != null) {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
-                Table table = metadataMgr.getTable(catalogName, params.db, params.table_name);
+                Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
                 if (table == null) {
                     return result;
                 }
@@ -1041,11 +1042,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // dbs and tables, when reach limit, we break;
     private void describeWithoutDbAndTable(ConnectContext context, List<TColumnDef> columns, long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(context);
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context,
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -1843,7 +1846,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String table = request.getTable_name();
             List<String> partitions = request.getPartitions() == null ? new ArrayList<>() : request.getPartitions();
             LOG.info("Start to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
-            GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(catalog, db, table), partitions);
+            GlobalStateMgr.getCurrentState().refreshExternalTable(new ConnectContext(),
+                    new TableName(catalog, db, table), partitions);
             LOG.info("Finish to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (Exception e) {

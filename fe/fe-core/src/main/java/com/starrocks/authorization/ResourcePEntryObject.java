@@ -29,7 +29,7 @@ public class ResourcePEntryObject implements PEntryObject {
         return name;
     }
 
-    public static ResourcePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
+    public static ResourcePEntryObject generate(List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens, should have one: " + tokens);
         }
@@ -37,7 +37,7 @@ public class ResourcePEntryObject implements PEntryObject {
         if (name.equals("*")) {
             return new ResourcePEntryObject(null);
         } else {
-            if (!mgr.getResourceMgr().containsResource(name)) {
+            if (!GlobalStateMgr.getCurrentState().getResourceMgr().containsResource(name)) {
                 throw new PrivObjNotFoundException("cannot find resource: " + tokens.get(0));
             }
             return new ResourcePEntryObject(name);
@@ -73,8 +73,8 @@ public class ResourcePEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getResourceMgr().containsResource(name);
+    public boolean validate() {
+        return GlobalStateMgr.getCurrentState().getResourceMgr().containsResource(name);
     }
 
     @Override

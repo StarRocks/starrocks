@@ -117,7 +117,7 @@ public class AnalyzeInsertTest {
 
         new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
         };
@@ -139,7 +139,7 @@ public class AnalyzeInsertTest {
         };
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -153,7 +153,7 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -185,7 +185,7 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -261,7 +261,7 @@ public class AnalyzeInsertTest {
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
         new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
         };

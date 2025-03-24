@@ -112,21 +112,21 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return hmsOps.getAllDatabaseNames();
     }
 
     @Override
     public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
-        if (dbExists(dbName)) {
+        if (dbExists(new ConnectContext(), dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
         hmsOps.createDb(dbName, properties);
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
-        if (listTableNames(dbName).size() != 0) {
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        if (listTableNames(context, dbName).size() != 0) {
             throw new StarRocksConnectorException("Database %s not empty", dbName);
         }
 
@@ -134,7 +134,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         Database database;
         try {
             database = hmsOps.getDb(dbName);
@@ -147,7 +147,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return hmsOps.getAllTableNames(dbName);
     }
 
@@ -175,7 +175,7 @@ public class HiveMetadata implements ConnectorMetadata {
         } else {
             HiveTable hiveTable = null;
             try {
-                hiveTable = (HiveTable) getTable(dbName, tableName);
+                hiveTable = (HiveTable) getTable(new ConnectContext(), dbName, tableName);
             } catch (Exception e) {
                 // ignore not found exception
             }
@@ -195,7 +195,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         Table table;
         try {
             table = hmsOps.getTable(dbName, tblName);
@@ -211,7 +211,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         return hmsOps.tableExists(dbName, tblName);
     }
 
@@ -358,7 +358,7 @@ public class HiveMetadata implements ConnectorMetadata {
             LOG.warn("No commit info on {}.{} after hive sink", dbName, tableName);
             return;
         }
-        HiveTable table = (HiveTable) getTable(dbName, tableName);
+        HiveTable table = (HiveTable) getTable(new ConnectContext(), dbName, tableName);
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
 
@@ -426,7 +426,7 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
-        Table table = getTable(stmt.getDbName(), stmt.getTableName());
+        Table table = getTable(context, stmt.getDbName(), stmt.getTableName());
         if (table == null) {
             throw new StarRocksConnectorException(
                     "Failed to load hive table: " + stmt.getTbl().toString());

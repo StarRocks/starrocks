@@ -77,7 +77,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
             table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                    analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+                    context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
             }

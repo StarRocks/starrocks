@@ -310,12 +310,12 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         }
 
         @Override
-        public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
+        public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
             return MOCK_TABLE_MAP.get(tblName);
         }
 
         @Override
-        public Database getDb(String dbName) {
+        public Database getDb(ConnectContext context, String dbName) {
             return new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
         }
     }

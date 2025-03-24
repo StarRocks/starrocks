@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -63,7 +64,7 @@ public class HiveViewTest extends PlanTestBase {
         assertContains(sqlPlan, "1:HdfsScanNode\n" +
                         "     TABLE: customer",
                 "0:HdfsScanNode\n" +
-                "     TABLE: nation");
+                        "     TABLE: nation");
     }
 
     @Test
@@ -72,9 +73,9 @@ public class HiveViewTest extends PlanTestBase {
                 "on orders.o_custkey = customer_nation_view.c_custkey";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "4:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 11: c_custkey = 2: O_CUSTKEY",
+                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 11: c_custkey = 2: O_CUSTKEY",
                 " 7:HASH JOIN\n" +
                         "  |  join op: INNER JOIN (BROADCAST)\n" +
                         "  |  colocate: false, reason: \n" +
@@ -85,10 +86,10 @@ public class HiveViewTest extends PlanTestBase {
     public void testHiveViewParseFail() throws Exception {
         HiveView hiveView = new HiveView(1, "hive0", "testDb", "test", null,
                 "select\n" +
-                 "    t1b,t1a\n" +
-                 "from\n" +
-                 "    test_all_type\n" +
-                 "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
+                        "    t1b,t1a\n" +
+                        "from\n" +
+                        "    test_all_type\n" +
+                        "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Failed to parse view-definition statement of view");
         hiveView.getQueryStatement();
@@ -132,7 +133,8 @@ public class HiveViewTest extends PlanTestBase {
                 Optional.of(hiveCacheUpdateProcessor), null, null,
                 new ConnectorProperties(ConnectorType.HIVE));
 
-        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
+        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(new ConnectContext(), "hive0", "tpch", "customer_view");
         new Expectations() {
             {
                 hiveMetastore.refreshView(anyString, anyString);
@@ -150,7 +152,8 @@ public class HiveViewTest extends PlanTestBase {
         HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0", MetastoreType.HMS);
         Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
 
-        Table table  = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(new ConnectContext(), "hive0", "tpch", "customer");
 
         new Expectations() {
             {

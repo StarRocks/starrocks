@@ -32,7 +32,7 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
         return functionSig;
     }
 
-    public static GlobalFunctionPEntryObject generate(GlobalStateMgr mgr, List<String> tokens)
+    public static GlobalFunctionPEntryObject generate(List<String> tokens)
             throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens: " + tokens);
@@ -46,7 +46,7 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
         } else {
             String funcSig = tokens.get(0);
             GlobalFunctionPEntryObject pEntryObject = new GlobalFunctionPEntryObject(funcSig);
-            if (!pEntryObject.validate(mgr)) {
+            if (!pEntryObject.validate()) {
                 throw new PrivObjNotFoundException("cannot find function: " + funcSig);
             }
             return pEntryObject;
@@ -75,9 +75,9 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
+    public boolean validate() {
         Function targetFunc = null;
-        for (Function f : globalStateMgr.getGlobalFunctionMgr().getFunctions()) {
+        for (Function f : GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunctions()) {
             if (f.signatureString().equals(this.functionSig)) {
                 targetFunc = f;
                 break;

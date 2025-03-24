@@ -7,6 +7,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -43,7 +44,7 @@ public class DbUID {
             catalogId = catalog.getId();
         }
 
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), catalogName, dbName);
         if (database == null) {
             throw new SemanticException("cannot find db: " + dbName);
         }
@@ -72,7 +73,8 @@ public class DbUID {
                 return null;
             }
             String dbName = ExternalCatalog.getDbNameFromUUID(uuid);
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog.get().getName(), dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(new ConnectContext(), catalog.get().getName(), dbName);
             if (db == null) {
                 return null;
             }
@@ -90,7 +92,8 @@ public class DbUID {
                 return false;
             }
             String dbName = ExternalCatalog.getDbNameFromUUID(uuid);
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog.get().getName(), dbName) != null;
+            return GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(new ConnectContext(), catalog.get().getName(), dbName) != null;
         }
     }
 

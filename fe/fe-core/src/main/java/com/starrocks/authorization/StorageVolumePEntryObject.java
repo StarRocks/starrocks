@@ -30,7 +30,7 @@ public class StorageVolumePEntryObject implements PEntryObject {
         this.id = id;
     }
 
-    public static PEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
+    public static PEntryObject generate(List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens, should have one: " + tokens);
         }
@@ -39,7 +39,7 @@ public class StorageVolumePEntryObject implements PEntryObject {
             return new StorageVolumePEntryObject(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID);
         } else {
             StorageVolume sv = null;
-            sv = mgr.getStorageVolumeMgr().getStorageVolumeByName(name);
+            sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(name);
             // TODO: Change it to MetaNotFoundException
             if (sv == null) {
                 throw new PrivObjNotFoundException("cannot find storage volume: " + tokens.get(0));
@@ -70,8 +70,8 @@ public class StorageVolumePEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getStorageVolumeMgr().getStorageVolume(id) != null;
+    public boolean validate() {
+        return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolume(id) != null;
     }
 
     @Override

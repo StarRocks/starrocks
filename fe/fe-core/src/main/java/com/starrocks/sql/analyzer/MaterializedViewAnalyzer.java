@@ -239,7 +239,7 @@ public class MaterializedViewAnalyzer {
 
     private static BaseTableInfo fromTableName(TableName name, Table table) {
         if (isInternalCatalog(name.getCatalog())) {
-            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(name.getDb());
             return new BaseTableInfo(database.getId(), database.getFullName(), table.getName(), table.getId());
         } else {
             return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
@@ -799,7 +799,7 @@ public class MaterializedViewAnalyzer {
                 String catalog = tableName.getCatalog() == null ?
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
                 table = connectContext.getGlobalStateMgr()
-                        .getMetadataMgr().getTable(catalog, tableName.getDb(), tableName.getTbl());
+                        .getMetadataMgr().getTable(connectContext, catalog, tableName.getDb(), tableName.getTbl());
             }
             return table;
         }
@@ -1446,7 +1446,7 @@ public class MaterializedViewAnalyzer {
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
             TableName mvName = statement.getMvName();
             mvName.normalization(context);
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(statement.getMvName().getCatalog(),
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, statement.getMvName().getCatalog(),
                     statement.getMvName().getDb(), statement.getMvName().getTbl());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", mvName);

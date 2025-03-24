@@ -39,6 +39,7 @@ import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -120,12 +121,12 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return paimonNativeCatalog.listDatabases();
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         try {
             return paimonNativeCatalog.listTables(dbName);
         } catch (Catalog.DatabaseNotExistException e) {
@@ -215,7 +216,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         if (databases.containsKey(dbName)) {
             return databases.get(dbName);
         }
@@ -232,7 +233,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         Identifier identifier = new Identifier(dbName, tblName);
         if (tables.containsKey(identifier)) {
             return tables.get(identifier);
@@ -265,7 +266,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tableName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tableName) {
         try {
             paimonNativeCatalog.getTable(Identifier.create(dbName, tableName));
             return true;

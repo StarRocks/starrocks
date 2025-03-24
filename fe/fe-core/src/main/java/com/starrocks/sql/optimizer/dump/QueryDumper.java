@@ -63,7 +63,7 @@ public class QueryDumper {
             }
 
             if (!StringUtils.isEmpty(dbName)) {
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
                 if (db == null) {
                     return Pair.create(HttpResponseStatus.NOT_FOUND,
                             String.format("Database [%s.%s] does not exists", catalogName, dbName));

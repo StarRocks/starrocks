@@ -672,7 +672,7 @@ public class MvRewritePreprocessor {
                     continue;
                 }
                 Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-                if (!checkMvPartitionNamesToRefresh(mv, partitionNamesToRefresh, mvPlanContext)) {
+                if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
                     continue;
                 }
                 logMVPrepare(mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
@@ -709,7 +709,8 @@ public class MvRewritePreprocessor {
      * @param mvPlanContext: the associated materialized view context
      * @return partition names to refresh if the mv is valid for rewrite, otherwise null
      */
-    public static boolean checkMvPartitionNamesToRefresh(MaterializedView mv,
+    public static boolean checkMvPartitionNamesToRefresh(ConnectContext context,
+                                                         MaterializedView mv,
                                                          Set<String> partitionNamesToRefresh,
                                                          MvPlanContext mvPlanContext) {
         Preconditions.checkState(mvPlanContext != null);
@@ -720,7 +721,7 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    Optional<Table> baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(base);
+                    Optional<Table> baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, base);
                     if (!baseTable.isPresent() || baseTable.get().isView()) {
                         continue;
                     }

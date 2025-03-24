@@ -5,6 +5,7 @@ package com.starrocks.epack.failover.job;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.epack.failover.FailoverGroup;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,7 +37,8 @@ public class DropReplicatedDatabaseJob extends FailoverGroupJob {
         LOG.info("Droping database {} in failover group {}", localDatabase.getFullName(), failoverGroup.getName());
 
         try {
-            GlobalStateMgr.getServingState().getLocalMetastore().dropDb(localDatabase.getFullName(), isDropForce);
+            GlobalStateMgr.getServingState().getLocalMetastore()
+                    .dropDb(new ConnectContext(), localDatabase.getFullName(), isDropForce);
         } catch (Exception e) {
             failoverGroup.addErrorMessage("Failed to drop database " +
                     localDatabase.getFullName() + ", error: " + e.getMessage());

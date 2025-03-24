@@ -182,7 +182,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetHiveColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "region");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
@@ -255,9 +255,9 @@ public class CachedStatisticStorageTest {
 
         new MockUp<StatisticsUtils>() {
             @Mock
-            public Table getTableByUUID(String tableUUID) {
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
                 return connectContext.getGlobalStateMgr().getMetadataMgr().
-                        getTable("hive0", "partitioned_db", "t1");
+                        getTable(connectContext, "hive0", "partitioned_db", "t1");
             }
 
         };
@@ -272,13 +272,13 @@ public class CachedStatisticStorageTest {
 
         Assert.assertEquals(3, result.size());
         Assert.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
-                        "c1")).get().getRowCount());
+                "c1")).get().getRowCount());
         Assert.assertEquals(20, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
-                        "c1")).get().getColumnStatistic().getAverageRowSize(), 0.0001);
+                "c1")).get().getColumnStatistic().getAverageRowSize(), 0.0001);
         Assert.assertEquals(10, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
-                        "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
+                "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
         Assert.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
-                        "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
+                "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
     }
 
     @Test
@@ -287,7 +287,8 @@ public class CachedStatisticStorageTest {
                     Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics,
             @Mocked LoadingCache<ConnectorTableColumnKey,
                     Optional<ConnectorTableColumnStats>> connectorTableTableSyncCachedStatistics) {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
         List<ConnectorTableColumnKey> cacheKeys =
                 ImmutableList.of(new ConnectorTableColumnKey(table.getUUID(), "c1"),
                         new ConnectorTableColumnKey(table.getUUID(), "c2"));
@@ -327,7 +328,8 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testExpireConnectorTableColumnStatistics() {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         try {
             cachedStatisticStorage.expireConnectorTableColumnStatistics(table, ImmutableList.of("c1", "c2"));
@@ -338,8 +340,9 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetConnectorHistogramStatistics(@Mocked AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>>
-                                                    histogramCache) {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+                                                            histogramCache) {
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
         ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c1");
         new Expectations() {
             {
@@ -356,7 +359,8 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testExpireConnectorHistogramStatistics() {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         try {
             cachedStatisticStorage.expireConnectorHistogramStatistics(table, ImmutableList.of("c1", "c2"));

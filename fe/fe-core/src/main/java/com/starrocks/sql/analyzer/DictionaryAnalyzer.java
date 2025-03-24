@@ -48,13 +48,13 @@ public class DictionaryAnalyzer {
             }
 
             String queryableObject = statement.getQueryableObject();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, context.getDatabase());
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, context.getDatabase());
             if (db == null) {
                 throw new SemanticException("USE a Database before CREATE DICTIONARY");
             }
             
             Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                                getTable(catalogName, context.getDatabase(), queryableObject);
+                                getTable(context, catalogName, context.getDatabase(), queryableObject);
             if (tbl == null) {
                 throw new SemanticException(queryableObject + " does not exist");
             }

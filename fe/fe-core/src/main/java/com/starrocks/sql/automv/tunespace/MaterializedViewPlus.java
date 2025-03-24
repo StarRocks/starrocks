@@ -36,6 +36,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.automv.pieces.FQTable;
@@ -95,8 +96,8 @@ public class MaterializedViewPlus {
         TableName tableName =
                 new TableName(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Optional<Database> database = metadataMgr.getDatabase(baseTableInfo);
-        Optional<Table> table = metadataMgr.getTable(baseTableInfo);
+        Optional<Database> database = metadataMgr.getDatabase(new ConnectContext(), baseTableInfo);
+        Optional<Table> table = metadataMgr.getTable(new ConnectContext(), baseTableInfo);
         if (database.isEmpty()) {
             throw new RuntimeException(
                     String.format("Database %s.%s is absent", baseTableInfo.getCatalogName(),

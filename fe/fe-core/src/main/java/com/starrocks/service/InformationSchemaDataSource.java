@@ -116,12 +116,18 @@ public class InformationSchemaDataSource {
             catalogName = authInfo.getCatalog_name();
         }
 
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
-        LOG.debug("get db names: {}", dbNames);
-
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(authInfo);
+        if (authInfo.isSetCurrent_user_ident()) {
+            context.setAuthInfoFromThrift(authInfo.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
+        LOG.debug("get db names: {}", dbNames);
 
         for (String fullName : dbNames) {
             try {
@@ -488,6 +494,7 @@ public class InformationSchemaDataSource {
 
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+        ConnectContext context = result.context;
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -497,7 +504,7 @@ public class InformationSchemaDataSource {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         for (String dbName : result.authorizedDbs) {
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db == null) {
                 continue;
             }
@@ -506,7 +513,7 @@ public class InformationSchemaDataSource {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
-                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
                 for (String tableName : tableNames) {
                     if (request.isSetTable_name()) {
                         if (!tableName.equals(request.getTable_name())) {
@@ -516,7 +523,7 @@ public class InformationSchemaDataSource {
 
                     BasicTable table = null;
                     try {
-                        table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
+                        table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
                     } catch (Exception e) {
                         LOG.warn(e.getMessage(), e);
                     }
@@ -651,6 +658,7 @@ public class InformationSchemaDataSource {
         TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+        ConnectContext context = result.context;
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -661,7 +669,7 @@ public class InformationSchemaDataSource {
 
         Set<Long> requiredDbIds = new HashSet<>();
         for (String dbName : result.authorizedDbs) {
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db != null) {
                 requiredDbIds.add(db.getId());
             }

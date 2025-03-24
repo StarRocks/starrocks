@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -162,22 +163,24 @@ public class StatisticsCollectJobFactory {
     }
 
     public static List<StatisticsCollectJob> buildExternalStatisticsCollectJob(ExternalAnalyzeJob externalAnalyzeJob) {
+        ConnectContext context = new ConnectContext();
+
         List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
         if (externalAnalyzeJob.isAnalyzeAllDb()) {
             List<String> dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    listDbNames(externalAnalyzeJob.getCatalogName());
+                    listDbNames(context, externalAnalyzeJob.getCatalogName());
             for (String dbName : dbNames) {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getDb(externalAnalyzeJob.getCatalogName(), dbName);
+                        getDb(context, externalAnalyzeJob.getCatalogName(), dbName);
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
 
                 List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        listTableNames(externalAnalyzeJob.getCatalogName(), dbName);
+                        listTableNames(context, externalAnalyzeJob.getCatalogName(), dbName);
                 for (String tableName : tableNames) {
                     Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                            getTable(externalAnalyzeJob.getCatalogName(), dbName, tableName);
+                            getTable(context, externalAnalyzeJob.getCatalogName(), dbName, tableName);
                     if (null == table) {
                         continue;
                     }
@@ -187,16 +190,16 @@ public class StatisticsCollectJobFactory {
             }
         } else if (externalAnalyzeJob.isAnalyzeAllTable()) {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+                    getDb(context, externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
             if (null == db) {
                 return Collections.emptyList();
             }
 
             List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    listTableNames(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+                    listTableNames(context, externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
             for (String tableName : tableNames) {
                 Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getTable(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(), tableName);
+                        getTable(context, externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(), tableName);
                 if (null == table) {
                     continue;
                 }
@@ -205,13 +208,13 @@ public class StatisticsCollectJobFactory {
             }
         } else {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+                    getDb(context, externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
             if (null == db) {
                 return Collections.emptyList();
             }
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getTable(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(),
+                    getTable(context, externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(),
                             externalAnalyzeJob.getTableName());
             if (null == table) {
                 return Collections.emptyList();

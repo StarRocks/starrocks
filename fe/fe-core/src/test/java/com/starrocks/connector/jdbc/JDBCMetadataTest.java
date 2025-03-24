@@ -23,6 +23,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -120,7 +121,7 @@ public class JDBCMetadataTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
-            List<String> result = jdbcMetadata.listDbNames();
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("test");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -133,7 +134,7 @@ public class JDBCMetadataTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
-            Database db = jdbcMetadata.getDb("test");
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
             Assert.fail();
@@ -144,7 +145,7 @@ public class JDBCMetadataTest {
     public void testListTableNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> result = jdbcMetadata.listTableNames("test");
+            List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -163,7 +164,7 @@ public class JDBCMetadataTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table = jdbcMetadata.getTable("test", "tbl1");
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertTrue(table.getPartitionColumns().isEmpty());
         } catch (Exception e) {
@@ -189,7 +190,7 @@ public class JDBCMetadataTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table = jdbcMetadata.getTable("test", "tbl1");
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertFalse(table.getPartitionColumns().isEmpty());
         } catch (Exception e) {
@@ -201,7 +202,7 @@ public class JDBCMetadataTest {
     @Test
     public void testColumnTypes() {
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTable("test", "tbl1");
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
         List<Column> columns = table.getColumns();
         Assert.assertEquals(columns.size(), columnResult.getRowCount());
         Assert.assertTrue(columns.get(0).getType().equals(ScalarType.createType(PrimitiveType.INT)));
@@ -227,7 +228,7 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.USER, "");
         properties.put(JDBCResource.PASSWORD, "");
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTable("test", "tbl1");
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
         Assert.assertNotNull(table);
     }
 
@@ -235,9 +236,9 @@ public class JDBCMetadataTest {
     public void testCacheTableId() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table1 = jdbcMetadata.getTable("test", "tbl1");
+            Table table1 = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
             columnResult.beforeFirst();
-            Table table2 = jdbcMetadata.getTable("test", "tbl1");
+            Table table2 = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
             Assert.assertTrue(table1.getId() == table2.getId());
         } catch (Exception e) {
             System.out.println(e.getMessage());

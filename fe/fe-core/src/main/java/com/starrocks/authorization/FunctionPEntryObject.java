@@ -44,10 +44,10 @@ public class FunctionPEntryObject implements PEntryObject {
         this.functionId = functionId;
     }
 
-    public static FunctionPEntryObject generate(GlobalStateMgr mgr, Long databaseId, Long functionId) throws PrivilegeException {
+    public static FunctionPEntryObject generate(Long databaseId, Long functionId) throws PrivilegeException {
         FunctionPEntryObject functionPEntryObject = new FunctionPEntryObject(databaseId, functionId);
         if (functionId != PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID) {
-            if (!functionPEntryObject.validate(mgr)) {
+            if (!functionPEntryObject.validate()) {
                 throw new PrivObjNotFoundException("cannot find function: " + functionId);
             }
         }
@@ -78,12 +78,12 @@ public class FunctionPEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
+    public boolean validate() {
         List<Function> allFunctions;
         if (databaseId == PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID) {
-            allFunctions = globalStateMgr.getGlobalFunctionMgr().getFunctions();
+            allFunctions = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunctions();
         } else {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(this.databaseId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(this.databaseId);
             if (db == null) {
                 return false;
             }

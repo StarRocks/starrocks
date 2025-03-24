@@ -16,7 +16,6 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.IOException;
@@ -28,8 +27,8 @@ import java.util.Set;
 
 public class AuthorizationMgrEPack extends AuthorizationMgr {
 
-    public AuthorizationMgrEPack(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
-        super(globalStateMgr, provider);
+    public AuthorizationMgrEPack(AuthorizationProvider provider) {
+        super(provider);
         initBuiltinRolesAndUsersEPack();
     }
 
@@ -82,10 +81,10 @@ public class AuthorizationMgrEPack extends AuthorizationMgr {
         try {
             List<PEntryObject> allWarehousePriv = new ArrayList<>();
             allWarehousePriv.add(provider.generateObject(ObjectTypeEPack.WAREHOUSE,
-                    Lists.newArrayList("*"), globalStateMgr));
+                    Lists.newArrayList("*")));
             List<PEntryObject> allFailoverGroupPriv = new ArrayList<>();
             allFailoverGroupPriv.add(provider.generateObject(ObjectTypeEPack.FAILOVER_GROUP,
-                    Lists.newArrayList("*"), globalStateMgr));
+                    Lists.newArrayList("*")));
 
             RolePrivilegeCollectionV2 rootPrivCollection = getRolePrivilegeCollection(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
             rootPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.WAREHOUSE,

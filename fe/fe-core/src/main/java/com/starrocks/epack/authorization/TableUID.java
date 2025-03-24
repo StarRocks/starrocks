@@ -56,12 +56,13 @@ public class TableUID {
             }
             String dbName = ExternalCatalog.getDbNameFromUUID(databaseUUID);
             String tblName = ExternalCatalog.getTableNameFromUUID(tableUUID);
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog.get().getName(), dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(new ConnectContext(), catalog.get().getName(), dbName);
             if (db == null) {
                 return null;
             }
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(catalog.get().getName(), dbName, tblName);
+                    .getTable(new ConnectContext(), catalog.get().getName(), dbName, tblName);
             if (table == null) {
                 return null;
             }
@@ -86,7 +87,7 @@ public class TableUID {
             catalogId = catalog.getId();
         }
 
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(ctx, catalogName, dbName);
         if (database == null) {
             throw new SemanticException("cannot find db: " + dbName);
         }
@@ -126,12 +127,12 @@ public class TableUID {
             }
             String dbName = ExternalCatalog.getDbNameFromUUID(databaseUUID);
             String tblName = ExternalCatalog.getTableNameFromUUID(tableUUID);
-            db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog.get().getName(), dbName);
+            db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), catalog.get().getName(), dbName);
             if (db == null) {
                 return false;
             }
             return GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(catalog.get().getName(), dbName, tblName) != null;
+                    .getTable(new ConnectContext(), catalog.get().getName(), dbName, tblName) != null;
         }
     }
 

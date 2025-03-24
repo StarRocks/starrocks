@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authorization;
-
-import com.starrocks.server.GlobalStateMgr;
 
 /**
  * This class is existed for forward compatibility so that when we add a new type of {@link PEntryObject}
@@ -37,7 +34,7 @@ public class ForwardCompatiblePEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
+    public boolean validate() {
         throw new UnsupportedOperationException();
     }
 

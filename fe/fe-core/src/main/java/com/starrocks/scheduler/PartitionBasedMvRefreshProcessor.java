@@ -730,7 +730,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ConnectContext connectContext = context.getCtx();
         List<Pair<Table, BaseTableInfo>> toRepairTables = new ArrayList<>();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+            Optional<Database> dbOpt =
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(connectContext, baseTableInfo);
             if (dbOpt.isEmpty()) {
                 logger.warn("database {} do not exist in refreshing materialized view", baseTableInfo.getDbInfoStr());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
@@ -1171,7 +1172,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private LockParams collectDatabases(MaterializedView mv) {
         LockParams lockParams = new LockParams();
         for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+            Optional<Database> dbOpt =
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(new ConnectContext(), baseTableInfo);
             if (dbOpt.isEmpty()) {
                 logger.warn("database {} do not exist", baseTableInfo.getDbInfoStr());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");

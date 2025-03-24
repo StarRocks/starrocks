@@ -88,7 +88,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     private Table.TableType getTableType(String dbName, String tblName) {
-        Table table = hiveMetadata.getTable(dbName, tblName);
+        Table table = hiveMetadata.getTable(new ConnectContext(), dbName, tblName);
         if (table == null || table.isHiveView()) {
             return HIVE; // use hive metadata by default
         }
@@ -141,13 +141,13 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
-        return hiveMetadata.listDbNames();
+    public List<String> listDbNames(ConnectContext context) {
+        return hiveMetadata.listDbNames(context);
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
-        return hiveMetadata.listTableNames(dbName);
+    public List<String> listTableNames(ConnectContext context, String dbName) {
+        return hiveMetadata.listTableNames(context, dbName);
     }
 
     @Override
@@ -164,14 +164,14 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.getTable(dbName, tblName);
+        return metadata.getTable(context, dbName, tblName);
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
-        return hiveMetadata.tableExists(dbName, tblName);
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
+        return hiveMetadata.tableExists(context, dbName, tblName);
     }
 
     @Override
@@ -230,8 +230,8 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean dbExists(String dbName) {
-        return hiveMetadata.dbExists(dbName);
+    public boolean dbExists(ConnectContext context, String dbName) {
+        return hiveMetadata.dbExists(context, dbName);
     }
 
     @Override
@@ -240,13 +240,13 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
-        hiveMetadata.dropDb(dbName, isForceDrop);
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+        hiveMetadata.dropDb(context, dbName, isForceDrop);
     }
 
     @Override
-    public Database getDb(String name) {
-        return hiveMetadata.getDb(name);
+    public Database getDb(ConnectContext context, String name) {
+        return hiveMetadata.getDb(context, name);
     }
 
     @Override

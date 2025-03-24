@@ -21,6 +21,7 @@ import com.starrocks.connector.delta.DeltaLakeMetastore;
 import com.starrocks.connector.delta.DeltaLakeSnapshot;
 import com.starrocks.connector.delta.DeltaMetastoreOperations;
 import com.starrocks.connector.delta.DeltaUtils;
+import com.starrocks.qe.ConnectContext;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.ColumnVector;
@@ -85,21 +86,21 @@ public class DeltaUnityMetadataTest {
 
     @Test
     public void testListDbNames() {
-        List<String> databaseNames = deltaLakeUnityMetadata.listDbNames();
+        List<String> databaseNames = deltaLakeUnityMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(2, databaseNames.size());
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
     }
 
     @Test
     public void testListTableNames() {
-        List<String> tableNames = deltaLakeUnityMetadata.listTableNames("db1");
+        List<String> tableNames = deltaLakeUnityMetadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(2, tableNames.size());
         Assert.assertEquals(Lists.newArrayList("table1", "table2"), tableNames);
     }
 
     @Test
     public void testGetDb() {
-        Database db = deltaLakeUnityMetadata.getDb("db1");
+        Database db = deltaLakeUnityMetadata.getDb(new ConnectContext(), "db1");
         Assert.assertEquals("db1", db.getFullName());
         Assert.assertEquals("s3://bucket/path/to/db1", db.getLocation());
     }
@@ -123,7 +124,7 @@ public class DeltaUnityMetadataTest {
             }
         };
 
-        Table table = deltaLakeUnityMetadata.getTable("db1", "table1");
+        Table table = deltaLakeUnityMetadata.getTable(new ConnectContext(), "db1", "table1");
         Assert.assertEquals("table1", table.getName());
         Assert.assertEquals("databricks0", table.getCatalogName());
         Assert.assertTrue(table.isDeltalakeTable());
@@ -131,7 +132,7 @@ public class DeltaUnityMetadataTest {
 
     @Test
     public void testTableExist() {
-        Assert.assertTrue(deltaLakeUnityMetadata.tableExists("db1", "table1"));
+        Assert.assertTrue(deltaLakeUnityMetadata.tableExists(new ConnectContext(), "db1", "table1"));
     }
 
     @Test

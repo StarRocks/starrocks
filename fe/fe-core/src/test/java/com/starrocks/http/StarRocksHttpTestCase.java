@@ -385,15 +385,15 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb("default_catalog", "testDb");
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "testDb");
                 minTimes = 0;
                 result = db;
 
-                metadataMgr.getTable("default_catalog", "testDb", "testTbl");
+                metadataMgr.getTable((ConnectContext) any, "default_catalog", "testDb", "testTbl");
                 minTimes = 0;
                 result = table;
 
-                metadataMgr.getTable("default_catalog", "testDb", "test_empty_table");
+                metadataMgr.getTable((ConnectContext) any, "default_catalog", "testDb", "test_empty_table");
                 minTimes = 0;
                 result = newEmptyTable;
             }

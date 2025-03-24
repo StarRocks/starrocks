@@ -102,13 +102,16 @@ public class AuthorizationMgrTest {
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        MockedLocalMetaStore localMetastore = new MockedLocalMetaStore(globalStateMgr, globalStateMgr.getRecycleBin(), null);
+        localMetastore.init();
+        globalStateMgr.setLocalMetastore(localMetastore);
+
         RBACMockedMetadataMgr metadataMgr =
-                new RBACMockedMetadataMgr(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
-        metadataMgr.init();
+                new RBACMockedMetadataMgr(localMetastore, globalStateMgr.getConnectorMgr());
         globalStateMgr.setMetadataMgr(metadataMgr);
 
         globalStateMgr.setAuthenticationMgr(new AuthenticationMgr());
-        globalStateMgr.setAuthorizationMgr(new AuthorizationMgrEPack(globalStateMgr, new AuthorizationProviderEPack()));
+        globalStateMgr.setAuthorizationMgr(new AuthorizationMgrEPack(new AuthorizationProviderEPack()));
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
@@ -1653,12 +1656,12 @@ public class AuthorizationMgrTest {
         new MockUp<LocalMetastore>() {
             @Mock
             public Table getTable(String dbName, String tblName) {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, new TableName("db", "tbl1")).get();
             }
 
             @Mock
             public Table getTable(Long dbId, Long tableId) {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, new TableName("db", "tbl1")).get();
             }
         };
 

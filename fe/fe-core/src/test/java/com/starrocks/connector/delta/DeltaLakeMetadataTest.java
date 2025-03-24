@@ -28,6 +28,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.qe.ConnectContext;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.ColumnVector;
@@ -81,7 +82,7 @@ public class DeltaLakeMetadataTest {
 
     @Test
     public void testListDbNames() {
-        List<String> dbNames = deltaLakeMetadata.listDbNames();
+        List<String> dbNames = deltaLakeMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(2, dbNames.size());
         Assert.assertEquals("db1", dbNames.get(0));
         Assert.assertEquals("db2", dbNames.get(1));
@@ -89,7 +90,7 @@ public class DeltaLakeMetadataTest {
 
     @Test
     public void testListTableNames() {
-        List<String> tableNames = deltaLakeMetadata.listTableNames("db1");
+        List<String> tableNames = deltaLakeMetadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(2, tableNames.size());
         Assert.assertEquals("table1", tableNames.get(0));
         Assert.assertEquals("table2", tableNames.get(1));
@@ -188,7 +189,7 @@ public class DeltaLakeMetadataTest {
 
     @Test
     public void testTableExists() {
-        Assert.assertTrue(deltaLakeMetadata.tableExists("db1", "table1"));
+        Assert.assertTrue(deltaLakeMetadata.tableExists(new ConnectContext(), "db1", "table1"));
     }
 
     @Test
@@ -208,7 +209,7 @@ public class DeltaLakeMetadataTest {
                         Lists.newArrayList("col1"), null, "path/to/table", null, 0);
             }
         };
-        DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable("db1", "table1");
+        DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");
         Assert.assertNotNull(deltaTable);
         Assert.assertEquals("table1", deltaTable.getName());
         Assert.assertEquals(Table.TableType.DELTALAKE, deltaTable.getType());

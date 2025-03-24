@@ -34,7 +34,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
         List<String> objectTokens = Lists.newArrayList(catalogName, db, policy);
         ObjectType objectType = policyType.equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
                 ObjectTypeEPack.ROW_ACCESS_POLICY;
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, objectType,
+        checkObjectTypeAction(context, privilegeType, objectType,
                 objectTokens);
     }
 
@@ -44,7 +44,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
         List<String> objectTokens = Lists.newArrayList(catalogName, db, policy);
         ObjectType objectType = policyType.equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
                 ObjectTypeEPack.ROW_ACCESS_POLICY;
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), objectType, objectTokens);
+        checkAnyActionOnObject(context, objectType, objectTokens);
     }
 
     @Override
@@ -56,7 +56,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
     @Override
     public void checkFailoverGroupAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType,
+        checkObjectTypeAction(context, privilegeType,
                 ObjectTypeEPack.FAILOVER_GROUP,
                 Collections.singletonList(name));
     }
@@ -64,7 +64,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
     @Override
     public void checkAnyActionOnFailoverGroup(ConnectContext context, String name)
             throws AccessDeniedException {
-        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectTypeEPack.FAILOVER_GROUP,
+        checkAnyActionOnObject(context, ObjectTypeEPack.FAILOVER_GROUP,
                 Collections.singletonList(name));
     }
 
@@ -117,8 +117,8 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
         PolicyAppliedContext tableAppliedPolicyInfo = policyManager.getTableAppliedPolicyInfo(tableUID);
 
         Expr rewriteExpr = null;
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

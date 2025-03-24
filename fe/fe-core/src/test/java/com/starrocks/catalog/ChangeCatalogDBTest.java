@@ -73,10 +73,10 @@ public class ChangeCatalogDBTest {
     void testChangeDB(@Mocked MetadataMgr metadataMgr) throws DdlException {
         new Expectations() {
             {
-                metadataMgr.getDb("default_catalog", "db");
+                metadataMgr.getDb(ctx, "default_catalog", "db");
                 result = new Database(101, "db");
 
-                metadataMgr.getDb("default_catalog", "nonexistent_db");
+                metadataMgr.getDb(ctx, "default_catalog", "nonexistent_db");
                 result = null;
             }
         };
@@ -101,16 +101,16 @@ public class ChangeCatalogDBTest {
             }
 
             {
-                metadataMgr.getDb("default_catalog", "db");
+                metadataMgr.getDb(ctx, "default_catalog", "db");
                 result = new Database(101, "db");
 
-                metadataMgr.getDb("default_catalog", "nonexistent_db");
+                metadataMgr.getDb(ctx, "default_catalog", "nonexistent_db");
                 result = null;
 
-                metadataMgr.getDb("hive_catalog", "db");
+                metadataMgr.getDb(ctx, "hive_catalog", "db");
                 result = new Database(101, "db");
 
-                metadataMgr.getDb("hive_catalog", "nonexistent_db");
+                metadataMgr.getDb(ctx, "hive_catalog", "nonexistent_db");
                 result = null;
             }
         };

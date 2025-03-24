@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
@@ -90,7 +91,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
             // first check table exist
             if (!tableExist) {
                 try {
-                    tableTriple = StatisticsUtils.getTableTripleByUUID(columnKey.tableUUID);
+                    tableTriple = StatisticsUtils.getTableTripleByUUID(new ConnectContext(), columnKey.tableUUID);
                     // check table could run analyze
                     if (!tableTriple.getRight().isAnalyzableExternalTable()) {
                         return;

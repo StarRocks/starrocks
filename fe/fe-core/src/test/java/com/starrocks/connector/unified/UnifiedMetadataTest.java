@@ -41,6 +41,7 @@ import com.starrocks.connector.kudu.KuduMetadata;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -103,13 +104,13 @@ public class UnifiedMetadataTest {
     public void testAlwaysRouteToHiveConnector() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         new Expectations() {
             {
-                hiveMetadata.listDbNames();
+                hiveMetadata.listDbNames((ConnectContext) any);
                 result = ImmutableList.of("test_db1", "test_db2");
                 times = 1;
             }
 
             {
-                hiveMetadata.listTableNames("test_db");
+                hiveMetadata.listTableNames((ConnectContext) any, "test_db");
                 result = ImmutableList.of("test_tbl1", "test_tbl2");
             }
 
@@ -124,13 +125,13 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hiveMetadata.dbExists("test_db");
+                hiveMetadata.dbExists((ConnectContext) any, "test_db");
                 result = true;
                 times = 1;
             }
 
             {
-                hiveMetadata.dropDb("test_db", false);
+                hiveMetadata.dropDb((ConnectContext) any, "test_db", false);
                 times = 1;
             }
 
@@ -141,14 +142,14 @@ public class UnifiedMetadataTest {
             }
         };
 
-        List<String> dbNames = unifiedMetadata.listDbNames();
+        List<String> dbNames = unifiedMetadata.listDbNames(new ConnectContext());
         assertEquals(ImmutableList.of("test_db1", "test_db2"), dbNames);
-        List<String> tblNames = unifiedMetadata.listTableNames("test_db");
+        List<String> tblNames = unifiedMetadata.listTableNames(new ConnectContext(), "test_db");
         assertEquals(ImmutableList.of("test_tbl1", "test_tbl2"), tblNames);
         unifiedMetadata.createDb("test_db");
         unifiedMetadata.createDb("test_db", ImmutableMap.of("key", "value"));
-        assertTrue(unifiedMetadata.dbExists("test_db"));
-        unifiedMetadata.dropDb("test_db", false);
+        assertTrue(unifiedMetadata.dbExists(new ConnectContext(), "test_db"));
+        unifiedMetadata.dropDb(new ConnectContext(), "test_db", false);
         CloudConfiguration cloudConfiguration = unifiedMetadata.getCloudConfiguration();
         assertEquals(CloudType.DEFAULT, cloudConfiguration.getCloudType());
     }
@@ -159,7 +160,7 @@ public class UnifiedMetadataTest {
 
         new Expectations() {
             {
-                hiveMetadata.getTable("test_db", "test_tbl");
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = hiveTable;
                 minTimes = 1;
             }
@@ -205,7 +206,7 @@ public class UnifiedMetadataTest {
             }
         };
 
-        Table table = unifiedMetadata.getTable("test_db", "test_tbl");
+        Table table = unifiedMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertTrue(table instanceof HiveTable);
         List<String> partitionNames =
                 unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
@@ -235,13 +236,13 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hiveMetadata.getTable("test_db", "test_tbl");
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = hiveTable;
                 minTimes = 1;
             }
 
             {
-                icebergMetadata.getTable("test_db", "test_tbl");
+                icebergMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = icebergTable;
                 times = 1;
             }
@@ -299,7 +300,7 @@ public class UnifiedMetadataTest {
             }
         };
 
-        Table table = unifiedMetadata.getTable("test_db", "test_tbl");
+        Table table = unifiedMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertTrue(table instanceof IcebergTable);
         List<String> partitionNames =
                 unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
@@ -325,13 +326,13 @@ public class UnifiedMetadataTest {
 
         new Expectations() {
             {
-                hiveMetadata.getTable("test_db", "test_tbl");
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = hudiTable;
                 minTimes = 1;
             }
 
             {
-                hudiMetadata.getTable("test_db", "test_tbl");
+                hudiMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = hudiTable;
                 times = 1;
             }
@@ -377,7 +378,7 @@ public class UnifiedMetadataTest {
             }
         };
 
-        Table table = unifiedMetadata.getTable("test_db", "test_tbl");
+        Table table = unifiedMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertTrue(table instanceof HudiTable);
         List<String> partitionNames =
                 unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
@@ -406,13 +407,13 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hiveMetadata.getTable("test_db", "test_tbl");
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = hiveTable;
                 minTimes = 1;
             }
 
             {
-                deltaLakeMetadata.getTable("test_db", "test_tbl");
+                deltaLakeMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = deltaLakeTable;
                 times = 1;
             }
@@ -458,7 +459,7 @@ public class UnifiedMetadataTest {
             }
         };
 
-        Table table = unifiedMetadata.getTable("test_db", "test_tbl");
+        Table table = unifiedMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertTrue(table instanceof DeltaLakeTable);
         List<String> partitionNames =
                 unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
@@ -481,13 +482,13 @@ public class UnifiedMetadataTest {
 
         new Expectations() {
             {
-                hiveMetadata.getTable("test_db", "test_tbl");
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = kuduTable;
                 minTimes = 1;
             }
 
             {
-                kuduMetadata.getTable("test_db", "test_tbl");
+                kuduMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
                 result = kuduTable;
                 minTimes = 1;
             }
@@ -517,7 +518,7 @@ public class UnifiedMetadataTest {
             }
         };
 
-        Table table = unifiedMetadata.getTable("test_db", "test_tbl");
+        Table table = unifiedMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertTrue(table instanceof KuduTable);
         List<String> partitionNames =
                 unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
@@ -534,12 +535,12 @@ public class UnifiedMetadataTest {
     public void testTableExists(@Mocked HiveTable hiveTable) {
         new Expectations() {
             {
-                hiveMetadata.tableExists("test_db", "test_tbl");
+                hiveMetadata.tableExists((ConnectContext) any, "test_db", "test_tbl");
                 result = true;
                 minTimes = 1;
             }
         };
-        boolean exists = unifiedMetadata.tableExists("test_db", "test_tbl");
+        boolean exists = unifiedMetadata.tableExists(new ConnectContext(), "test_db", "test_tbl");
         Assert.assertTrue(exists);
     }
 }

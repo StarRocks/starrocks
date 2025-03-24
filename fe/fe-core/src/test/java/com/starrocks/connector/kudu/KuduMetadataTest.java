@@ -22,6 +22,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -96,7 +97,7 @@ public class KuduMetadataTest {
                 result = EMPTY_PARTITION_SCHEMA;
             }
         };
-        Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         Assert.assertEquals("test_kudu_catalog", kuduTable.getCatalogName());
         Assert.assertEquals("db1", kuduTable.getCatalogDBName());
@@ -121,7 +122,7 @@ public class KuduMetadataTest {
                 result = tableNames;
             }
         };
-        List<String> tables = metadata.listTableNames("db1");
+        List<String> tables = metadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(1, tables.size());
         Assert.assertEquals("tbl1", tables.get(0));
     }
@@ -143,7 +144,7 @@ public class KuduMetadataTest {
                 result = tokens;
             }
         };
-        Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build();
         List<RemoteFileInfo> remoteFileInfos = metadata.getRemoteFiles(kuduTable, params);
@@ -170,7 +171,7 @@ public class KuduMetadataTest {
                 result = exception;
             }
         };
-        Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         Statistics statistics = metadata.getTableStatistics(
                 null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1, TableVersionRange.empty());

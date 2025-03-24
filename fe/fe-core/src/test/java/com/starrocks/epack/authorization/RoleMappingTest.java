@@ -232,8 +232,7 @@ public class RoleMappingTest {
 
     @Test
     public void testRoleMappingDdlPersist() throws Exception {
-        AuthorizationMgr masterManager = new AuthorizationMgrEPack(GlobalStateMgr.getCurrentState(),
-                new AuthorizationProviderEPack());
+        AuthorizationMgr masterManager = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
         masterManager.saveV2(emptyImage.getImageWriter());
@@ -327,8 +326,7 @@ public class RoleMappingTest {
         Assert.assertTrue(mappedRoleIds.contains(22L));
 
         // test replay OP_CREATE_ROLE_MAPPING edit log
-        AuthorizationMgr followerManager = new AuthorizationMgrEPack(GlobalStateMgr.getCurrentState(),
-                new AuthorizationProviderEPack());
+        AuthorizationMgr followerManager = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
         followerManager.loadV2(emptyImage.getMetaBlockReader());
         Assert.assertNull(followerManager.getRoleMappingMetaMgr().getRoleMapping("rm3"));
         RoleMappingPersistInfo info = (RoleMappingPersistInfo)
@@ -360,8 +358,7 @@ public class RoleMappingTest {
         Assert.assertNull(followerManager.getRoleMappingMetaMgr().getRoleMapping("rm5"));
 
         // simulate restart (load from image)
-        AuthorizationMgr imageManager = new AuthorizationMgrEPack(GlobalStateMgr.getCurrentState(),
-                new AuthorizationProviderEPack());
+        AuthorizationMgr imageManager = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
         imageManager.loadV2(finalImage.getMetaBlockReader());
         Assert.assertNotNull(imageManager.getRoleMappingMetaMgr().getRoleMapping("rm4"));
         Assert.assertNull(imageManager.getRoleMappingMetaMgr().getRoleMapping("rm5"));

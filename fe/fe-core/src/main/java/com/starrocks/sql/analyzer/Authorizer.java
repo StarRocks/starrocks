@@ -102,7 +102,7 @@ public class Authorizer {
     public static void checkTableAction(ConnectContext context, String db, String table,
                                         PrivilegeType privilegeType) throws AccessDeniedException {
         TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table);
-        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
         if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
             return;
         }
@@ -114,7 +114,7 @@ public class Authorizer {
     public static void checkTableAction(ConnectContext context, String catalog, String db,
                                         String table, PrivilegeType privilegeType) throws AccessDeniedException {
         TableName tableName = new TableName(catalog, db, table);
-        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
         if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
             return;
         }
@@ -124,7 +124,7 @@ public class Authorizer {
 
     public static void checkTableAction(ConnectContext context, TableName tableName,
                                         PrivilegeType privilegeType) throws AccessDeniedException {
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
         if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
             return;
         }
@@ -172,7 +172,7 @@ public class Authorizer {
 
     public static void checkActionOnTableLikeObject(ConnectContext context, TableName tableName,
                                                     PrivilegeType privilegeType) throws AccessDeniedException {
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
         if (table.isPresent()) {
             doCheckTableLikeObject(context, tableName.getDb(), table.get(), privilegeType);
         }
@@ -247,7 +247,7 @@ public class Authorizer {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
         if (table.isPresent() && table.get().isTable()) {
             try {
                 Authorizer.checkActionOnTableLikeObject(context, tableName, PrivilegeType.INSERT);

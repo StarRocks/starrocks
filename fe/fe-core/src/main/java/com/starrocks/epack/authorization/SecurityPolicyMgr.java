@@ -448,7 +448,7 @@ public class SecurityPolicyMgr {
                                           WithColumnMaskingPolicy withColumnMaskingPolicy) {
         TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
 
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
@@ -503,7 +503,7 @@ public class SecurityPolicyMgr {
 
     public void revokeMaskingPolicyContext(ConnectContext ctx, String catalog, String dbName, String tblName, String columnName) {
         TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalog, dbName, tblName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, catalog, dbName, tblName);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tblName);
         }
@@ -526,7 +526,7 @@ public class SecurityPolicyMgr {
 
     public void applyRowAccessPolicyContext(ConnectContext ctx, TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
         TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);

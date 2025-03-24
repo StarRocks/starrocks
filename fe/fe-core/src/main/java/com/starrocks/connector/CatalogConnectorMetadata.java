@@ -18,14 +18,12 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
@@ -116,17 +114,17 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return ImmutableList.<String>builder()
-                .addAll(this.normal.listDbNames())
-                .addAll(this.informationSchema.listDbNames())
+                .addAll(this.normal.listDbNames(context))
+                .addAll(this.informationSchema.listDbNames(context))
                 .build();
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
-        return metadata.listTableNames(dbName);
+        return metadata.listTableNames(context, dbName);
     }
 
     @Override
@@ -141,13 +139,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfTable(tblName);
         if (metadata == null) {
             metadata = metadataOfDb(dbName);
         }
 
-        return metadata.getTable(dbName, tblName);
+        return metadata.getTable(context, dbName, tblName);
     }
 
     @Override
@@ -163,14 +161,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
-        return metadata.tableExists(dbName, tblName);
-    }
-
-    @Override
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
-        return normal.getMaterializedViewIndex(dbName, tblName);
+        return metadata.tableExists(context, dbName, tblName);
     }
 
     @Override
@@ -232,9 +225,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean dbExists(String dbName) {
+    public boolean dbExists(ConnectContext context, String dbName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
-        return metadata.dbExists(dbName);
+        return metadata.dbExists(context, dbName);
     }
 
     @Override
@@ -243,14 +236,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
-        normal.dropDb(dbName, isForceDrop);
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+        normal.dropDb(context, dbName, isForceDrop);
     }
 
     @Override
-    public Database getDb(String name) {
+    public Database getDb(ConnectContext context, String name) {
         ConnectorMetadata metadata = metadataOfDb(name);
-        return metadata.getDb(name);
+        return metadata.getDb(context, name);
     }
 
     @Override

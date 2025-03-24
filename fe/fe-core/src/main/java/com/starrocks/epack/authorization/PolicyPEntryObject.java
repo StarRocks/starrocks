@@ -51,7 +51,7 @@ public class PolicyPEntryObject implements PEntryObject {
         return catalogId;
     }
 
-    public static PolicyPEntryObject generate(GlobalStateMgr mgr, PolicyType policyType, List<String> tokens)
+    public static PolicyPEntryObject generate(PolicyType policyType, List<String> tokens)
             throws PrivilegeException {
         String catalogName = null;
         long catalogId;
@@ -86,7 +86,7 @@ public class PolicyPEntryObject implements PEntryObject {
             catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
             catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
         } else {
-            Catalog catalog = mgr.getCatalogMgr().getCatalogByName(catalogName);
+            Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
             if (catalog == null) {
                 throw new PrivObjNotFoundException("cannot find catalog: " + catalogName);
             }
@@ -100,12 +100,12 @@ public class PolicyPEntryObject implements PEntryObject {
             dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
             policyId = PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID;
         } else {
-            dbUUID = DbPEntryObject.getDatabaseUUID(mgr, catalogName, tokens.get(0));
+            dbUUID = DbPEntryObject.getDatabaseUUID(catalogName, tokens.get(0));
 
             if (tokens.get(1).equals("*")) {
                 policyId = PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID;
             } else {
-                Policy policy = mgr.getSecurityPolicyManager().getPolicyByName(policyType,
+                Policy policy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getPolicyByName(policyType,
                         new PolicyName(catalogName, tokens.get(0), tokens.get(1), NodePosition.ZERO));
                 if (policy == null) {
                     throw new PrivObjNotFoundException("cannot find policy : " + tokens.get(1));
@@ -157,8 +157,8 @@ public class PolicyPEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getSecurityPolicyManager().getPolicyById(this.policyId) != null;
+    public boolean validate() {
+        return GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getPolicyById(this.policyId) != null;
     }
 
     @Override

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.elasticsearch;
 
+import com.starrocks.qe.ConnectContext;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -25,7 +26,7 @@ public class ElasticsearchMetadataTest {
     @Test
     public void testGetTable(@Mocked EsRestClient client) {
         ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>(), "catalog");
-        Assert.assertNull(metadata.getTable("default_db", "not_exist_index"));
-        Assert.assertNull(metadata.getTable("aaaa", "tbl"));
+        Assert.assertNull(metadata.getTable(new ConnectContext(), "default_db", "not_exist_index"));
+        Assert.assertNull(metadata.getTable(new ConnectContext(), "aaaa", "tbl"));
     }
 }

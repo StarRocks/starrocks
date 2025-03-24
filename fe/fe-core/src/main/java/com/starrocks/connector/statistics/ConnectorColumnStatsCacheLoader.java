@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
@@ -44,6 +43,7 @@ public class ConnectorColumnStatsCacheLoader implements
         AsyncCacheLoader<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> {
     private static final Logger LOG = LogManager.getLogger(ConnectorColumnStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
+
     @Override
     public @NonNull CompletableFuture<Optional<ConnectorTableColumnStats>> asyncLoad(@NonNull ConnectorTableColumnKey cacheKey,
                                                                                      @NonNull Executor executor) {
@@ -54,7 +54,7 @@ public class ConnectorColumnStatsCacheLoader implements
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableUUID, cacheKey.column);
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
                 if (!statisticData.isEmpty()) {
-                    return Optional.of(convert2ColumnStatistics(cacheKey.tableUUID, statisticData.get(0)));
+                    return Optional.of(convert2ColumnStatistics(connectContext, cacheKey.tableUUID, statisticData.get(0)));
                 } else {
                     return Optional.empty();
                 }
@@ -93,7 +93,7 @@ public class ConnectorColumnStatsCacheLoader implements
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableUUID, columns);
 
                 for (TStatisticData data : statisticData) {
-                    ConnectorTableColumnStats columnStatistic = convert2ColumnStatistics(tableUUID, data);
+                    ConnectorTableColumnStats columnStatistic = convert2ColumnStatistics(statsConnectCtx, tableUUID, data);
                     result.put(new ConnectorTableColumnKey(tableUUID, data.columnName),
                             Optional.of(columnStatistic));
                 }
@@ -121,12 +121,13 @@ public class ConnectorColumnStatsCacheLoader implements
     }
 
     public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, List<String> columns) {
-        Table table = getTableByUUID(tableUUID);
+        Table table = getTableByUUID(context, tableUUID);
         return statisticExecutor.queryStatisticSync(context, tableUUID, table, columns);
     }
 
-    private ConnectorTableColumnStats convert2ColumnStatistics(String tableUUID, TStatisticData statisticData) {
-        Table table = getTableByUUID(tableUUID);
+    private ConnectorTableColumnStats convert2ColumnStatistics(ConnectContext context, String tableUUID,
+                                                               TStatisticData statisticData) {
+        Table table = getTableByUUID(context, tableUUID);
         Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
 
         String[] splits = tableUUID.split("\\.");

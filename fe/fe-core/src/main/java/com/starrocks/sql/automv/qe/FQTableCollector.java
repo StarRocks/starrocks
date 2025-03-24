@@ -22,6 +22,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -44,8 +45,8 @@ public final class FQTableCollector implements AopAstHandler {
         }
         TableName tableName = tableRel.getName();
         Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(tableName.getCatalog());
-        Database database =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(new ConnectContext(), tableName.getCatalog(), tableName.getDb());
         if (database == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }

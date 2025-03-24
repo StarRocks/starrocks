@@ -52,6 +52,7 @@ import com.starrocks.epack.authorization.PolicyPEntryObject;
 import com.starrocks.epack.authorization.PrivilegeBuiltinConstantsEPack;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -145,6 +146,8 @@ public class GrantsTo {
             AuthorizationMgr authorizationManager, String grantee,
             Map<ObjectType, List<PrivilegeEntry>> privileges) {
 
+        ConnectContext context = new ConnectContext();
+
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Set<TGetGrantsToRolesOrUserItem> items = new HashSet<>();
         for (Map.Entry<ObjectType, List<PrivilegeEntry>> privEntry : privileges.entrySet()) {
@@ -190,7 +193,7 @@ public class GrantsTo {
                         }
 
                         for (String catalogName : catalogs) {
-                            objects.addAll(expandAllDatabases(metadataMgr, catalogName));
+                            objects.addAll(expandAllDatabases(context, metadataMgr, catalogName));
                         }
                     } else {
                         String catalogName = getCatalogName(dbPEntryObject.getCatalogId());
@@ -203,7 +206,7 @@ public class GrantsTo {
                         }
 
                         if (dbPEntryObject.getUUID().equalsIgnoreCase(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-                            objects.addAll(expandAllDatabases(metadataMgr, catalogName));
+                            objects.addAll(expandAllDatabases(context, metadataMgr, catalogName));
                         } else {
                             Database database;
                             if (CatalogMgr.isInternalCatalog(catalogName)) {
@@ -211,7 +214,7 @@ public class GrantsTo {
                                         .getDb(Long.parseLong(dbPEntryObject.getUUID()));
                             } else {
                                 String dbName = ExternalCatalog.getDbNameFromUUID(dbPEntryObject.getUUID());
-                                database = metadataMgr.getDb(catalogName, dbName);
+                                database = metadataMgr.getDb(context, catalogName, dbName);
                             }
                             if (database == null) {
                                 continue;
@@ -238,7 +241,7 @@ public class GrantsTo {
                         }
 
                         for (String catalogName : catalogs) {
-                            objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
+                            objects.addAll(expandAllDatabaseAndTables(context, metadataMgr, catalogName, privEntry.getKey()));
                         }
                     } else {
                         String catalogName = getCatalogName(tablePEntryObject.getCatalogId());
@@ -252,7 +255,7 @@ public class GrantsTo {
 
                         if (tablePEntryObject.getDatabaseUUID().equalsIgnoreCase(
                                 PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-                            objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
+                            objects.addAll(expandAllDatabaseAndTables(context, metadataMgr, catalogName, privEntry.getKey()));
                         } else {
                             Database database;
                             if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
@@ -260,7 +263,7 @@ public class GrantsTo {
                                         .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
                             } else {
                                 String dbName = ExternalCatalog.getDbNameFromUUID(tablePEntryObject.getDatabaseUUID());
-                                database = metadataMgr.getDb(catalogName, dbName);
+                                database = metadataMgr.getDb(context, catalogName, dbName);
                             }
                             if (database == null) {
                                 continue;
@@ -273,7 +276,7 @@ public class GrantsTo {
                             String dbName = database.getFullName();
                             if (tablePEntryObject.getTableUUID().equalsIgnoreCase(
                                     PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
-                                objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
+                                objects.addAll(expandAllTables(context, metadataMgr, catalogName, dbName, privEntry.getKey()));
                             } else {
                                 if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
                                     Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -367,7 +370,7 @@ public class GrantsTo {
                     FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) privilegeEntry.getObject();
                     long databaseId = functionPEntryObject.getDatabaseId();
                     if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
-                        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                        List<String> dbNames = metadataMgr.listDbNames(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                         for (String dbName : dbNames) {
                             Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
                             if (database == null) {
@@ -469,7 +472,7 @@ public class GrantsTo {
                                         .getDb(Long.parseLong(policyPEntryObject.getDatabaseUUID()));
                             } else {
                                 String dbName = ExternalCatalog.getDbNameFromUUID(policyPEntryObject.getDatabaseUUID());
-                                database = metadataMgr.getDb(catalogName, dbName);
+                                database = metadataMgr.getDb(new ConnectContext(), catalogName, dbName);
                             }
                             if (database == null) {
                                 continue;
@@ -549,16 +552,16 @@ public class GrantsTo {
         return catalogName;
     }
 
-    private static Set<List<String>> expandAllDatabases(MetadataMgr metadataMgr, String catalogName) {
+    private static Set<List<String>> expandAllDatabases(ConnectContext context, MetadataMgr metadataMgr, String catalogName) {
         Set<List<String>> objects = new HashSet<>();
         if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 && !Config.enable_show_external_catalog_privilege) {
             return objects;
         }
 
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
         for (String dbName : dbNames) {
-            Database database = metadataMgr.getDb(catalogName, dbName);
+            Database database = metadataMgr.getDb(context, catalogName, dbName);
             if (database == null) {
                 continue;
             }
@@ -570,14 +573,15 @@ public class GrantsTo {
         return objects;
     }
 
-    private static Set<List<String>> expandAllTables(MetadataMgr metadataMgr, String catalogName, String dbName,
+    private static Set<List<String>> expandAllTables(ConnectContext context, MetadataMgr metadataMgr, String catalogName,
+                                                     String dbName,
                                                      ObjectType objectType) {
         Set<List<String>> objects = new HashSet<>();
 
-        List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+        List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             for (String tableName : tableNames) {
-                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                Table table = metadataMgr.getTable(context, catalogName, dbName, tableName);
                 if (table == null) {
                     continue;
                 }
@@ -606,7 +610,8 @@ public class GrantsTo {
         return objects;
     }
 
-    private static Set<List<String>> expandAllDatabaseAndTables(MetadataMgr metadataMgr, String catalogName,
+    private static Set<List<String>> expandAllDatabaseAndTables(ConnectContext context, MetadataMgr metadataMgr,
+                                                                String catalogName,
                                                                 ObjectType objectType) {
         Set<List<String>> objects = new HashSet<>();
         if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
@@ -614,9 +619,9 @@ public class GrantsTo {
             return objects;
         }
 
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
         for (String dbName : dbNames) {
-            Database database = metadataMgr.getDb(catalogName, dbName);
+            Database database = metadataMgr.getDb(context, catalogName, dbName);
             if (database == null) {
                 continue;
             }
@@ -624,7 +629,7 @@ public class GrantsTo {
                 continue;
             }
 
-            objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, objectType));
+            objects.addAll(expandAllTables(context, metadataMgr, catalogName, dbName, objectType));
         }
 
         return objects;
@@ -650,10 +655,11 @@ public class GrantsTo {
 
     private static Set<List<String>> expandAllDatabaseAndPolicies(MetadataMgr metadataMgr, String catalogName,
                                                                   ObjectType objectType) {
+        ConnectContext context = new ConnectContext();
         Set<List<String>> objects = new HashSet<>();
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
         for (String dbName : dbNames) {
-            Database database = metadataMgr.getDb(catalogName, dbName);
+            Database database = metadataMgr.getDb(context, catalogName, dbName);
             if (database == null) {
                 continue;
             }

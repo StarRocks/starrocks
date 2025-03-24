@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ProcResultUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 
@@ -52,11 +53,11 @@ public class ExternalTablesProcDir implements ProcDirInterface {
             throw new AnalysisException("name is null");
         }
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(catalogName, dbName);
+        Database db = metadataMgr.getDb(new ConnectContext(), catalogName, dbName);
         if (db == null) {
             throw new AnalysisException("db: " + dbName + " not exists");
         }
-        Table tbl = metadataMgr.getTable(catalogName, dbName, name);
+        Table tbl = metadataMgr.getTable(new ConnectContext(), catalogName, dbName, name);
         if (tbl == null) {
             throw new AnalysisException("table : " + name + " not exists");
         }
@@ -68,7 +69,7 @@ public class ExternalTablesProcDir implements ProcDirInterface {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Preconditions.checkNotNull(metadataMgr);
         List<String> tables = null;
-        tables = metadataMgr.listTableNames(catalogName, dbName);
+        tables = metadataMgr.listTableNames(new ConnectContext(), catalogName, dbName);
 
         // get info
         List<List<Comparable>> tableInfos = new ArrayList<List<Comparable>>();

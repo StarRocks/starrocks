@@ -22,8 +22,7 @@ public class FailoverGroupPEntryObject implements PEntryObject {
         return id;
     }
 
-    public static FailoverGroupPEntryObject generate(GlobalStateMgr mgr,
-            List<String> tokens) throws PrivilegeException {
+    public static FailoverGroupPEntryObject generate(List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens, should have only one, token: " + tokens);
         }
@@ -31,7 +30,7 @@ public class FailoverGroupPEntryObject implements PEntryObject {
         if (name.equals("*")) {
             return new FailoverGroupPEntryObject(PrivilegeBuiltinConstantsEPack.ALL_FAILOVER_GROUPS_ID);
         } else {
-            FailoverGroup failoverGroup = mgr.getFailoverGroupMgr().getFailoverGroup(name);
+            FailoverGroup failoverGroup = GlobalStateMgr.getCurrentState().getFailoverGroupMgr().getFailoverGroup(name);
             if (failoverGroup == null) {
                 throw new PrivObjNotFoundException("cannot find failoverGroup: " + name);
             }
@@ -68,8 +67,8 @@ public class FailoverGroupPEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getFailoverGroupMgr().getFailoverGroup(id) != null;
+    public boolean validate() {
+        return GlobalStateMgr.getCurrentState().getFailoverGroupMgr().getFailoverGroup(id) != null;
     }
 
     @Override

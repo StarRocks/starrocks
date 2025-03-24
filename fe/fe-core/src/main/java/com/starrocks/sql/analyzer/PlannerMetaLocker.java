@@ -158,12 +158,12 @@ public class PlannerMetaLocker {
             return null;
         }
 
-        Database db = metadataMgr.getDb(catalogName, dbName);
+        Database db = metadataMgr.getDb(session, catalogName, dbName);
         if (db == null) {
             return null;
         }
 
-        Table table = metadataMgr.getTable(catalogName, dbName, tbName);
+        Table table = metadataMgr.getTable(session, catalogName, dbName, tbName);
         if (table == null) {
             return null;
         }

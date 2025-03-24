@@ -27,6 +27,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.collections.CollectionUtils;
@@ -116,7 +117,8 @@ public class ForeignKeyConstraint extends Constraint {
             return table;
         } else {
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(), parentTableInfo.getTableName());
+                    .getTable(new ConnectContext(), parentTableInfo.getCatalogName(), parentTableInfo.getDbName(),
+                            parentTableInfo.getTableName());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", parentTableInfo.getTableName());
             }
@@ -134,7 +136,8 @@ public class ForeignKeyConstraint extends Constraint {
             return table;
         } else {
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(), childTableInfo.getTableName());
+                    .getTable(new ConnectContext(), childTableInfo.getCatalogName(), childTableInfo.getDbName(),
+                            childTableInfo.getTableName());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", childTableInfo.getTableName());
             }

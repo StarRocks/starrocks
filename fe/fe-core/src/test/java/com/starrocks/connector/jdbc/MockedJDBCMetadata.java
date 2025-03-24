@@ -23,6 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -142,7 +143,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
+    public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
         readLock();
         try {
             return getJDBCTable(tblName);
@@ -152,7 +153,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         readLock();
         try {
             return new Database(idGen.getAndIncrement(), dbName);
@@ -179,7 +180,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         readLock();
         try {
             return Arrays.asList(MOCKED_PARTITIONED_TABLE_NAME0, MOCKED_PARTITIONED_TABLE_NAME1,
@@ -192,7 +193,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         readLock();
         try {
             return Arrays.asList(MOCKED_PARTITIONED_DB_NAME);
