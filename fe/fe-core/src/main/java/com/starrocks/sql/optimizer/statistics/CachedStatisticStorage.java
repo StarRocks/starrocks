@@ -392,8 +392,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     /**
      *
      */
-    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<Long> partitions,
-                                                                  List<String> columns) {
+    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
 
         List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
         long tableId = table.getId();
@@ -435,12 +434,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             return null;
         }
 
-        long tableId = table.getId();
-        List<ColumnStatsCacheKey> cacheKeys = columns.stream()
-                .map(x -> new ColumnStatsCacheKey(tableId, x))
-                .collect(Collectors.toList());
         List<ColumnStatistic> columnStatistics = getColumnStatistics(table, columns);
-        Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, partitions, columns);
+        Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, columns);
         if (MapUtils.isEmpty(columnNDVForPartitions)) {
             return null;
         }
@@ -460,8 +455,10 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     return null;
                 }
                 double distinctCount = partitionStats.getDistinctCount().get(partition);
+                double nullFraction = partitionStats.getNullFraction().get(partition);
                 ColumnStatistic newStats = ColumnStatistic.buildFrom(columnStatistic)
-                                .setDistinctValuesCount(distinctCount).build();
+                        .setDistinctValuesCount(distinctCount)
+                        .setNullsFraction(nullFraction).build();
                 newStatistics.add(newStats);
             }
             result.put(partition, newStatistics);
