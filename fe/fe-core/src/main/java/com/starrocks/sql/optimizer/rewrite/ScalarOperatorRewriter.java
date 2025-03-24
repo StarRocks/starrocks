@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceScalarOperatorRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
-import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedDateColumnPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
@@ -52,7 +51,6 @@ public class ScalarOperatorRewriter {
             new NormalizePredicateRule(),
             new FoldConstantsRule(),
             new SimplifiedPredicateRule(),
-            new SimplifiedDateColumnPredicateRule(),
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule(),
             ConsolidateLikesRule.INSTANCE
@@ -75,7 +73,6 @@ public class ScalarOperatorRewriter {
             new FoldConstantsRule(),
             new SimplifiedScanColumnRule(),
             new SimplifiedPredicateRule(),
-            new SimplifiedDateColumnPredicateRule(),
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule(),
             ConsolidateLikesRule.INSTANCE
