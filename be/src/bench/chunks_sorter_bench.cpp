@@ -257,8 +257,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         }
         case MergeSort: {
             sorter = std::make_unique<ChunksSorterTopn>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
-                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER,
-                                                        params.max_buffered_chunks);
+                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER, max_buffered_rows,
+                                                        max_buffered_bytes params.max_buffered_chunks);
             expected_rows = limit_rows;
             break;
         }

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <deque>
+#include <memory>
 #include <utility>
 
 #include "column/chunk.h"
@@ -535,6 +537,50 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
         return Status::OK();
     };
     return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer);
+}
+
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs, MergedRuns& left,
+                           ChunkUniquePtr&& right, size_t limit, MergedRuns* output) {
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
+    cursors.resize(2);
+    cursors[0] = std::make_unique<SimpleChunkSortCursor>(
+            [&left](ChunkUniquePtr* output, bool* eos) -> bool {
+                if (output == nullptr || eos == nullptr) {
+                    return true;
+                }
+                if (left.empty()) {
+                    *eos = true;
+                    return false;
+                }
+                DCHECK_EQ(left.front().start_index(), 0);
+                DCHECK_EQ(left.front().end_index(), left.front().num_rows());
+                *output = std::move(left.front().chunk);
+                left.pop_front();
+                return true;
+            },
+            sort_exprs);
+    cursors[1] = std::make_unique<SimpleChunkSortCursor>(
+            [&right](ChunkUniquePtr* output, bool* eos) -> bool {
+                if (output == nullptr || eos == nullptr) {
+                    return true;
+                }
+                *eos = true;
+                if (right == nullptr) {
+                    return false;
+                }
+                *output = std::move(right);
+                right.reset();
+                return true;
+            },
+            sort_exprs);
+
+    ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
+        ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(chunk), *sort_exprs));
+        output->push_back(std::move(run));
+        return Status::OK();
+    };
+
+    return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer, limit);
 }
 
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,

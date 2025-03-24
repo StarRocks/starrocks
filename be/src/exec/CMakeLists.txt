@@ -162,6 +162,7 @@ set(EXEC_FILES
     schema_scanner/schema_temp_tables_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
+    sorting/merge.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
     sorting/merge_cascade.cpp
