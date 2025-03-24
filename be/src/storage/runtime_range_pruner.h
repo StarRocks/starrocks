@@ -28,7 +28,7 @@ class SlotDescriptor;
 class RuntimeFilterProbeDescriptor;
 class PredicateParser;
 class ColumnPredicate;
-class RuntimeBloomFilterEvalContext;
+class RuntimeMembershipFilterEvalContext;
 
 struct UnarrivedRuntimeFilterList {
     std::vector<const RuntimeFilterProbeDescriptor*> unarrived_runtime_filters;

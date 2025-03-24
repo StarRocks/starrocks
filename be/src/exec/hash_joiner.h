@@ -217,8 +217,8 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
-    pipeline::RuntimeBloomFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
-    pipeline::OptRuntimeBloomFilterBuildParams& get_runtime_bloom_filter_build_params() {
+    pipeline::RuntimeMembershipFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
+    pipeline::OpTRuntimeBloomFilterBuildParams& get_runtime_bloom_filter_build_params() {
         return _runtime_bloom_filter_build_params;
     }
 
@@ -440,8 +440,8 @@ private:
     const std::set<SlotId>& _probe_output_slots;
 
     pipeline::RuntimeInFilters _runtime_in_filters;
-    pipeline::RuntimeBloomFilters _build_runtime_filters;
-    pipeline::OptRuntimeBloomFilterBuildParams _runtime_bloom_filter_build_params;
+    pipeline::RuntimeMembershipFilters _build_runtime_filters;
+    pipeline::OpTRuntimeBloomFilterBuildParams _runtime_bloom_filter_build_params;
     bool _build_runtime_filters_from_planner;
 
     bool _is_push_down = false;

@@ -195,7 +195,7 @@ protected:
 
     void _init_topn_runtime_filter_counters() {
         if (_topn_filter_eval_context.join_runtime_filter_timer == nullptr) {
-            _topn_filter_eval_context.mode = RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN;
+            _topn_filter_eval_context.mode = RuntimeMembershipFilterEvalContext::Mode::M_ONLY_TOPN;
             _topn_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "TopnRuntimeFilterTime");
             _topn_filter_eval_context.join_runtime_filter_hash_timer =
                     ADD_TIMER(_common_metrics, "TopnRuntimeFilterHashTime");
@@ -217,7 +217,7 @@ protected:
         if (auto* bloom_filters = runtime_bloom_filters()) {
             _init_rf_counters(true);
             if (_topn_filter_back_pressure) {
-                _bloom_filter_eval_context.mode = RuntimeBloomFilterEvalContext::Mode::M_WITHOUT_TOPN;
+                _bloom_filter_eval_context.mode = RuntimeMembershipFilterEvalContext::Mode::M_WITHOUT_TOPN;
             }
             bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
         }
@@ -287,7 +287,7 @@ private:
     RuntimeProfile::Counter* _prepare_chunk_source_timer = nullptr;
     RuntimeProfile::Counter* _submit_io_task_timer = nullptr;
 
-    RuntimeBloomFilterEvalContext _topn_filter_eval_context;
+    RuntimeMembershipFilterEvalContext _topn_filter_eval_context;
     std::unique_ptr<TopnRfBackPressure> _topn_filter_back_pressure = nullptr;
 
     DECLARE_RACE_DETECTOR(race_pull_chunk)
