@@ -32,6 +32,9 @@ public class StatsConstants {
     public static final int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
     public static final int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
     public static final int STATISTIC_PARTITION_VERSION = 11;
+    public static final int STATISTIC_PARTITION_VERSION_V2 = 20;
+
+
 
     public static final ImmutableSet<Integer> STATISTIC_SUPPORTED_VERSION =
             ImmutableSet.<Integer>builder()
@@ -44,6 +47,7 @@ public class StatsConstants {
                     .add(STATISTIC_EXTERNAL_QUERY_VERSION)
                     .add(STATISTIC_EXTERNAL_HISTOGRAM_VERSION)
                     .add(STATISTIC_PARTITION_VERSION)
+                    .add(STATISTIC_PARTITION_VERSION_V2)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
