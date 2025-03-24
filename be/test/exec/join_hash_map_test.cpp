@@ -1001,17 +1001,22 @@ TEST_F(JoinHashMapTest, JoinKeyHash) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNum) {
-    uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num(1, 4);
+    const uint32_t num_buckets = 1 << 2;
+    const uint32_t log_num_buckets = 2;
+    uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num(1, num_buckets, log_num_buckets);
     ASSERT_EQ(2, bucket_num);
 }
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNums) {
+    const uint32_t num_buckets = 1 << 2;
+    const uint32_t log_num_buckets = 2;
+
     Buffer<int32_t> data{1, 2, 3, 4};
     Buffer<uint32_t> buckets{0, 0, 0, 0};
-    Buffer<uint32_t> check_buckets{2, 2, 3, 1};
+    Buffer<uint32_t> check_buckets{2, 0, 3, 1};
 
-    JoinHashMapHelper::calc_bucket_nums<int32_t>(data, 4, &buckets, 0, 4);
+    JoinHashMapHelper::calc_bucket_nums<int32_t>(data, num_buckets, log_num_buckets, &buckets, 0, 4);
     for (size_t i = 0; i < buckets.size(); i++) {
         ASSERT_EQ(buckets[i], check_buckets[i]);
     }
