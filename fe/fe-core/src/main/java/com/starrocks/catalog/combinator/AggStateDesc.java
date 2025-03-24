@@ -145,7 +145,7 @@ public class AggStateDesc {
             tAggStateDesc.addToArg_types(tTypeDesc);
         }
         tAggStateDesc.setResult_nullable(resultNullable);
-        tAggStateDesc.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_2.getValue());
+        tAggStateDesc.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
 
         // ret type
         TTypeDesc tTypeDesc = new TTypeDesc();

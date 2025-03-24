@@ -51,6 +51,7 @@ include "CloudConfiguration.thrift"
 // constants for function version
 enum TFunctionVersion {
     RUNTIME_FILTER_SERIALIZE_VERSION_2 = 7,
+    RUNTIME_FILTER_SERIALIZE_VERSION_3 = 8,
 }
 
 enum TQueryType {

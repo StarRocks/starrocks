@@ -89,7 +89,7 @@ StatusOr<RuntimeFilterProbeDescriptor*> ChunkPredicateBuilderTest::_gen_runtime_
 
 StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_runtime_filter_collector(SlotId slot_id,
                                                                                                 bool has_null) {
-    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_INT>());
+    auto* rf = _pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
     rf->insert(10);
     rf->insert(20);
     if (has_null) {
@@ -107,7 +107,7 @@ StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_runtime_f
 
 StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_varchar_runtime_filter_collector(SlotId slot_id,
                                                                                                         bool has_null) {
-    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_VARCHAR>());
+    auto* rf = _pool.add(new ComposedRuntimeBloomFilter<TYPE_VARCHAR>());
     rf->insert(Slice("111"));
     rf->insert(Slice("222"));
     if (has_null) {

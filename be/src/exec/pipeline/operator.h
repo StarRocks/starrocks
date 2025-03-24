@@ -299,7 +299,7 @@ protected:
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
-    RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+    RuntimeMembershipFilterEvalContext _bloom_filter_eval_context;
 
     spill::OperatorMemoryResourceManager _mem_resource_manager;
 

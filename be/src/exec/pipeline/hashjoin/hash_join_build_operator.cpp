@@ -132,7 +132,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 }
             }
         }
-        RuntimeBloomFilterList bloom_filters(partial_bloom_filters.begin(), partial_bloom_filters.end());
+        RuntimeMembershipFilterList bloom_filters(partial_bloom_filters.begin(), partial_bloom_filters.end());
         runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
                                             std::make_unique<RuntimeFilterCollector>(in_filter_lists));
         state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
@@ -160,7 +160,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                                             if (desc->runtime_filter() == nullptr) {
                                                 return total;
                                             }
-                                            return desc->runtime_filter()->get_bloom_filter()->bf_alloc_size();
+                                            return desc->runtime_filter()->get_membership_filter()->bf_alloc_size();
                                         });
                 COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
             }
