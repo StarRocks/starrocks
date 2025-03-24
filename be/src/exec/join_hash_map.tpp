@@ -1083,7 +1083,7 @@ template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                            const Buffer<CppType>& probe_data) {
-    if (_table_items->is_collision_free) {
+    if (_table_items->is_collision_free_and_unique) {
         _do_probe_from_ht<first_probe, true>(state, build_data, probe_data);
     } else {
         _do_probe_from_ht<first_probe, false>(state, build_data, probe_data);
@@ -1091,7 +1091,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-template <bool first_probe, bool is_collision_free>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                               const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
@@ -1117,6 +1117,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* stat
 
     const size_t probe_row_count = _probe_state->probe_row_count;
     const auto* probe_buckets = _probe_state->next.data();
+    // Only `!is_collision_free_and_unique` needs to record and check `cur_row_match_count`.
     uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
 
     for (; i < probe_row_count; i++) {
@@ -1133,18 +1134,18 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* stat
                 match_count++;
 
                 if constexpr (first_probe) {
-                    if constexpr (!is_collision_free) {
+                    if constexpr (!is_collision_free_and_unique) {
                         cur_row_match_count++;
                     }
                     _probe_state->probe_match_filter[i] = 1;
                 }
 
-                if constexpr (!is_collision_free) {
+                if constexpr (!is_collision_free_and_unique) {
                     RETURN_IF_CHUNK_FULL2()
                 }
             }
 
-            if constexpr (is_collision_free) {
+            if constexpr (is_collision_free_and_unique) {
                 break;
             }
 
@@ -1152,7 +1153,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* stat
             build_index = _table_items->next[build_index];
         } while (build_index != 0);
 
-        if constexpr (first_probe && !is_collision_free) {
+        if constexpr (first_probe && !is_collision_free_and_unique) {
             if (cur_row_match_count > 1) {
                 one_to_many = true;
             }
@@ -1161,6 +1162,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* stat
     }
 
     // COUNTER_UPDATE(_probe_state->probe_counter, probe_cont);
+
+    _probe_state->cur_row_match_count = cur_row_match_count;
 
     if constexpr (first_probe) {
         CHECK_MATCH()
