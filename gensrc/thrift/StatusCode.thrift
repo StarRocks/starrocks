@@ -115,5 +115,10 @@ enum TStatusCode {
 
     BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED = 60,
     BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED = 61,
+<<<<<<< HEAD
+=======
+    GLOBAL_DICT_NOT_MATCH = 62,
+    LEADER_TRANSFERRED = 63,
+>>>>>>> 584a3a72d2 ([Enhancement] Optimize graceful-exit for jdbc driver (#57080))
 }
 
