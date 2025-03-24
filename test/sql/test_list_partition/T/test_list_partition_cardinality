@@ -56,3 +56,21 @@ insert into partitions_multi_column_2 select generate_series % 10, generate_seri
 
 ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
 function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 AND c2=1 AND c3=1 AND p1=1', 'cardinality: 1000')
+
+-- with histogram
+set cbo_use_histogram_evaluate_list_partition=true;
+CREATE TABLE partitions_multi_column_3 (
+    c1 int NOT NULL,
+    p1 int
+)
+PARTITION BY (p1) properties("replication_num"="1");
+insert into partitions_multi_column_3 select 1, 1 from table(generate_series(1, 90));
+insert into partitions_multi_column_3 select 2, 1 from table(generate_series(1, 10));
+insert into partitions_multi_column_3 select 3, 2 from table(generate_series(1, 100));
+insert into partitions_multi_column_3 select 3, 3 from table(generate_series(1, 100));
+insert into partitions_multi_column_3 select 3, 4 from table(generate_series(1, 100));
+insert into partitions_multi_column_3 select 3, 5 from table(generate_series(1, 100));
+drop stats partitions_multi_column_3;
+ANALYZE FULL TABLE partitions_multi_column_3 WITH SYNC MODE;
+ANALYZE TABLE partitions_multi_column_3 UPDATE HISTOGRAM ON c1;
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_3 WHERE c1=2 and p1 =1 ', 'cardinality: 2')
