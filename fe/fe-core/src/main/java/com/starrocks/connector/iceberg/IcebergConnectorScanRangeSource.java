@@ -329,14 +329,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             Class<?> javaClass = type.typeId().javaClass();
 
             String partitionValue;
-            partitionValue = field.transform().toHumanString(type,
-                    PartitionUtil.getPartitionValue(partition, index, javaClass));
 
             // currently starrocks date literal only support local datetime
             if (type.equals(Types.TimestampType.withZone())) {
-                partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
-                        PartitionUtil.getPartitionValue(partition, index, javaClass)).toLocalDateTime().toString();
+                Long value = PartitionUtil.getPartitionValue(partition, index, javaClass);
+                if (value == null) {
+                    partitionValue = "null";
+                } else {
+                    partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(
+                            TimeUtils.getTimeZone().toZoneId()), value).toLocalDateTime().toString();
+                }
+            } else {
+                partitionValue = field.transform().toHumanString(type, PartitionUtil.getPartitionValue(
+                        partition, index, javaClass));
             }
+
             partitionValues.add(partitionValue);
 
             cols.add(table.getColumn(field.name()));
