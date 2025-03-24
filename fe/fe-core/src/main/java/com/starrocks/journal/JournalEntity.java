@@ -126,6 +126,7 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
+import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.persist.TransactionIdInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
@@ -718,6 +719,10 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_STORAGE_VOLUME:
             case OperationType.OP_UPDATE_STORAGE_VOLUME: {
                 data = StorageVolume.read(in);
+                break;
+            }
+            case OperationType.OP_UPDATE_TABLE_STORAGE_INFOS: {
+                data = TableStorageInfos.read(in);
                 break;
             }
             case OperationType.OP_PIPE: {

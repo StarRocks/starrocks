@@ -1039,7 +1039,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_UPDATE_TABLE_STORAGE_INFOS: {
-                    TableStorageInfos tableStorageInfos = (TableStorageInfos) journal.data();
+                    TableStorageInfos tableStorageInfos = (TableStorageInfos) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replayUpdateTableStorageInfos(tableStorageInfos);
                     break;
                 }
