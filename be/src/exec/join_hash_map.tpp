@@ -1083,7 +1083,7 @@ template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                            const Buffer<CppType>& probe_data) {
-    if (_table_items->no_conflicts) {
+    if (_table_items->is_collision_free) {
         _do_probe_from_ht<first_probe, true>(state, build_data, probe_data);
     } else {
         _do_probe_from_ht<first_probe, false>(state, build_data, probe_data);
@@ -1091,7 +1091,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-template <bool first_probe, bool no_conflicts>
+template <bool first_probe, bool is_collision_free>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                               const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
@@ -1133,18 +1133,18 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* stat
                 match_count++;
 
                 if constexpr (first_probe) {
-                    if constexpr (!no_conflicts) {
+                    if constexpr (!is_collision_free) {
                         cur_row_match_count++;
                     }
                     _probe_state->probe_match_filter[i] = 1;
                 }
 
-                if constexpr (!no_conflicts) {
+                if constexpr (!is_collision_free) {
                     RETURN_IF_CHUNK_FULL2()
                 }
             }
 
-            if constexpr (no_conflicts) {
+            if constexpr (is_collision_free) {
                 break;
             }
 
@@ -1152,7 +1152,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* stat
             build_index = _table_items->next[build_index];
         } while (build_index != 0);
 
-        if constexpr (first_probe && !no_conflicts) {
+        if constexpr (first_probe && !is_collision_free) {
             if (cur_row_match_count > 1) {
                 one_to_many = true;
             }

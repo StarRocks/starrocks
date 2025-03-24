@@ -133,7 +133,7 @@ struct JoinHashTableItems {
     bool cache_miss_serious = false;
     bool mor_reader_mode = false;
     bool enable_late_materialization = false;
-    bool no_conflicts = false;
+    bool is_collision_free = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -152,7 +152,7 @@ struct JoinHashTableItems {
             VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
                        << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
 
-            no_conflicts = used_buckets == row_count;
+            is_collision_free = used_buckets == row_count;
         }
     }
 
@@ -311,6 +311,8 @@ struct JoinKeyHash {
     }
 };
 
+/// Apply multiplicative hashing for 4-byte or 8-byte keys.
+/// It only needs to perform arithmetic operations on the key as a whole, so the compiler can automatically vectorize it.
 template <typename T>
 struct JoinKeyHash<T, 4> {
     uint32_t operator()(T value, uint32_t num_buckets, uint32_t num_log_buckets) const {
@@ -718,7 +720,7 @@ private:
     // for one key inner join
     template <bool first_probe>
     void _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
-    template <bool first_probe, bool no_conflicts>
+    template <bool first_probe, bool is_collision_free>
     void _do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     HashTableProbeState::ProbeCoroutine _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
