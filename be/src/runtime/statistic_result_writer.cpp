@@ -34,13 +34,7 @@ const int STATISTIC_EXTERNAL_VERSION = 5;
 const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 const int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
 const int STATISTIC_EXTERNAL_QUERY_VERSION_V2 = 8;
-<<<<<<< HEAD
-=======
-const int STATISTIC_BATCH_V5_VERSION = 9;
-const int STATISTIC_MULTI_COLUMN_VERSION = 12;
-const int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
 const int STATISTIC_PARTITION_VERSION_V2 = 20;
->>>>>>> e7d7a017f4 ([Enhancement] use partition level null fraction to estimate list partition cardinality (#57170))
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
