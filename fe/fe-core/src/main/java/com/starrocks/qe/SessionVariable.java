@@ -1609,8 +1609,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPruneJsonSubfieldDepth = cboPruneJsonSubfieldDepth;
     }
 
-<<<<<<< HEAD
-=======
     public boolean isCboUseHistogramEvaluateListPartition() {
         return cboUseHistogramEvaluateListPartition;
     }
@@ -1619,11 +1617,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboUseHistogramEvaluateListPartition = cboUseHistogramEvaluateListPartition;
     }
 
-    public boolean isEnableExecutionOnly() {
-        return enableExecutionOnly;
-    }
-
->>>>>>> 83088c8033 ([Enhancement] use histogram to evaluate list partition (#57147))
     public boolean isCboPruneJsonSubfield() {
         return cboPruneJsonSubfield;
     }
