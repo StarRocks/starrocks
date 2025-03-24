@@ -40,7 +40,7 @@ Each object has a set of privilege items that can be granted. These privileges d
 
 ### User identity
 
-In StarRocks, each user is identified by a unique user ID. It consists of the IP address (user host) and username, in the format of `username @'userhost'`. StarRocks identifies users with the same username but from different IP addresses as different user identities. For example, `user1@'starrocks.com'` and `user1@'mirrorship.com'` are two user identities.
+In StarRocks, each user is identified by a unique user ID. It consists of the IP address (user host) and username, in the format of `username @'userhost'`. StarRocks identifies users with the same username but from different IP addresses as different user identities. For example, `user1@'172.65.xx.1'` and `172.65.xx.2'` are two user identities.
 
 Another representation of user identity is `username @['domain']`, where `domain` is a domain name that can be resolved by DNS as a set of IP addresses. `username @['domain']` is finally represented as a set of `username@'userhost'`. You can use `%` for the `userhost` part for fuzzy match. If `userhost` is not specified, it defaults to `'%'`, which means users of the same name logged in from any host.
 
