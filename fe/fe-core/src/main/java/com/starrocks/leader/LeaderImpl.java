@@ -178,9 +178,16 @@ public class LeaderImpl {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            TStatus status;
+            if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
+                status = new TStatus(TStatusCode.LEADER_TRANSFERRED);
+            } else {
+                status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            }
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
+            LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
+                    request.getTask_type(), request.getSignature());
             return result;
         }
         TStatus tStatus = new TStatus(TStatusCode.OK);
