@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.pieces;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
@@ -264,6 +265,7 @@ public abstract class PlanPiece {
         List<TablePiece> tablePieces = PlanPiece.collect(this, TablePiece.class, true);
         Preconditions.checkArgument(!tablePieces.isEmpty());
         return tablePieces.stream()
+                .filter(tablePiece -> ConnectorPartitionTraits.isSupported(tablePiece.getTable().getTable().getType()))
                 .map(tablePiece -> PartitionPlus.of(tablePiece, partitionExtractor))
                 .collect(Collectors.toList());
     }

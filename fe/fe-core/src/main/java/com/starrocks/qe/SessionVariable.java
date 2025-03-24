@@ -883,6 +883,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String AUTOMV_DECAY_ACCELERATED_QUERIES = "automv_decay_accelerated_queries";
 
+    public static final String AUTOMV_ENABLE_VIEW_INLINE = "automv_enable_view_inline";
+
     // A group of like predicates with the same column and concatenated by OR, can be consolidated into
     // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
     // would be consolidated, since when the number of like predicates is too small, its corresponding
@@ -2514,6 +2516,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = AUTOMV_DECAY_ACCELERATED_QUERIES, flag = VariableMgr.INVISIBLE)
     private boolean autoMVDecayAcceleratedQueries = false;
+
+    @VarAttr(name = AUTOMV_ENABLE_VIEW_INLINE)
+    private boolean autoMVEnableViewInline = true;
 
     private boolean autoMVRectifyTableName = false;
     public void setChooseExecuteInstancesMode(String mode) {
@@ -4859,6 +4864,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setAutoMVDecayAcceleratedQueries(boolean flag) {
         autoMVDecayAcceleratedQueries = flag;
+    }
+
+    public void setAutoMVEnableViewInline(boolean flag) {
+        autoMVEnableViewInline = flag;
+    }
+
+    public boolean isAutoMVEnableViewInline() {
+        return autoMVEnableViewInline;
     }
 
     public boolean isAutoMVDecayAcceleratedQueries() {

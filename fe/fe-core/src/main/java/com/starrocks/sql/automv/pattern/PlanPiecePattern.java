@@ -63,7 +63,8 @@ public abstract class PlanPiecePattern {
                     Table table = node.getTable();
                     desc.attributes.put("tableName", ConstantOperator.createVarchar(table.getName()));
                     desc.attributes.put("tableType", ConstantOperator.createVarchar(table.getType().toString()));
-                    desc.attributes.put("tableEngine", ConstantOperator.createVarchar(table.getEngine()));
+                    String tableEngine = Optional.ofNullable(table.getEngine()).orElse(table.getType().toString());
+                    desc.attributes.put("tableEngine", ConstantOperator.createVarchar(tableEngine));
                     desc.attributes.put("catalog", ConstantOperator.createVarchar(table.getCatalogName()));
                     /*
                     boolean isPartitioned = table.isPartitioned() || !table.isUnPartitioned();
