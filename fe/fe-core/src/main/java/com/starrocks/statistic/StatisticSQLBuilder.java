@@ -37,12 +37,7 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
-<<<<<<< HEAD
-import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION;
-=======
 import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION_V2;
-import static com.starrocks.statistic.StatsConstants.STATISTIC_QUERY_MULTI_COLUMN_VERSION;
->>>>>>> e7d7a017f4 ([Enhancement] use partition level null fraction to estimate list partition cardinality (#57170))
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
 
 public class StatisticSQLBuilder {
