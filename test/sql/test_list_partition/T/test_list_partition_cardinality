@@ -9,7 +9,7 @@ CREATE TABLE partitions_multi_column_1 (
     c2 int NOT NULL,
     c3 int
 )
-PARTITION BY (c1, c2);
+PARTITION BY (c1, c2) properties("replication_num" = "1");
 
 INSERT INTO partitions_multi_column_1 VALUES
     (1,1,1),
@@ -39,3 +39,20 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=2', 'cardinality: 3')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=3', 'cardinality: 1')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=7', 'cardinality: 1000')
+
+CREATE TABLE partitions_multi_column_2 (
+    c1 int,
+    c2 int,
+    c3 int,
+    p1 int
+)
+PARTITION BY (p1) properties("replication_num" = "1");
+
+insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 1 from table(generate_series(1, 1000000));
+insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 2 from table(generate_series(1, 1000000));
+insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 3 from table(generate_series(1, 1000000));
+insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 4 from table(generate_series(1, 1000000));
+insert into partitions_multi_column_2 select generate_series % 10, generate_series % 10, generate_series % 10, 5 from table(generate_series(1, 1000000));
+
+ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 AND c2=1 AND c3=1 AND p1=1', 'cardinality: 1000')
