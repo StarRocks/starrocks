@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -146,7 +147,8 @@ public class StatisticsCalcUtils {
      * Only return the statistics if all columns and all partitions have the required statistics, otherwise return null
      */
     public static Map<Long, Statistics> getPartitionStatistics(Operator node, OlapTable table,
-                                                               Map<ColumnRefOperator, Column> columns) {
+                                                               Map<ColumnRefOperator, Column> columns,
+                                                               Statistics.Builder statistics) {
 
         // 1. only FULL statistics has partition-level info
         BasicStatsMeta basicStatsMeta =
@@ -182,6 +184,16 @@ public class StatisticsCalcUtils {
                 String columnName = columnNames.get(i);
                 ColumnStatistic columnStatistic = entry.getValue().get(i);
                 ColumnRefOperator ref = columnNameMap.get(columnName);
+                if (ConnectContext.get().getSessionVariable().isCboUseHistogramEvaluateListPartition()) {
+                    // fill histogram if exists
+                    ColumnStatistic originColStats = statistics.getColumnStatistics(ref);
+                    if (originColStats != null) {
+                        Histogram histogram = originColStats.getHistogram();
+                        if (histogram != null) {
+                            columnStatistic = ColumnStatistic.buildFrom(columnStatistic).setHistogram(histogram).build();
+                        }
+                    }   
+                }
                 builder.addColumnStatistic(ref, columnStatistic);
             }
             long partitionRow = partitionRows.get(entry.getKey());
