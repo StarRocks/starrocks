@@ -381,12 +381,7 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(table.getId(), columns);
-        if (async) {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
-        } else {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatisticsSync(table, columns);
-        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshHistogramStatistics(table, columns, !async);
     }
 
     public void replayRemoveHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
