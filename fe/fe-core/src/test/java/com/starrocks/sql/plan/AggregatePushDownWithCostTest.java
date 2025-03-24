@@ -87,17 +87,6 @@ public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
                 ss.getColumnStatistic(t3, "v12");
                 result = new ColumnStatistic(1, 200000, 0, 4, t3Rows / 20000.0);
                 minTimes = 0;
-
-                // for multi-column statistics
-                ss.getMultiColumnCombinedStatistics(t0.getId());
-                result = new MultiColumnCombinedStatistics(Sets.newHashSet(t0.getColumn("v1").getUniqueId(),
-                        t0.getColumn("v3").getUniqueId()), 5555555);
-                minTimes = 0;
-
-                ss.getMultiColumnCombinedStatistics(t3.getId());
-                result = new MultiColumnCombinedStatistics(Sets.newHashSet(t3.getColumn("v10").getUniqueId(),
-                        t3.getColumn("v11").getUniqueId()), 1);
-                minTimes = 0;
             }
         };
 
@@ -352,6 +341,26 @@ public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
 
     @Test
     public void testAggWithMultiColumnStats() throws Exception {
+        StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t3 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t3");
+
+        new Expectations(ss) {
+            {
+                // for multi-column statistics
+                ss.getMultiColumnCombinedStatistics(t0.getId());
+                result = new MultiColumnCombinedStatistics(Sets.newHashSet(t0.getColumn("v1").getUniqueId(),
+                        t0.getColumn("v3").getUniqueId()), 5555555);
+                minTimes = 0;
+
+                ss.getMultiColumnCombinedStatistics(t3.getId());
+                result = new MultiColumnCombinedStatistics(Sets.newHashSet(t3.getColumn("v10").getUniqueId(),
+                        t3.getColumn("v11").getUniqueId()), 100_000);
+                minTimes = 0;
+
+            }
+        };
+
         String sql = "select count(1) from t0 group by v1, v3";
         String plan = getCostExplain(sql);
         assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
@@ -375,6 +384,33 @@ public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
         assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(1); args: TINYINT; result: BIGINT; args nullable: false; result nullable: false]\n" +
                 "  |  group by: [1: v10, BIGINT, true], [2: v11, BIGINT, true], [3: v12, BIGINT, true]\n" +
-                "  |  cardinality: 3750");
+                "  |  cardinality: 100000000");
+
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
+        sql = "select sum(t3.v12) from t3 join t1 on t3.v10=t1.v4 group by t3.v11";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v12)\n" +
+                "  |  group by: 1: v10, 2: v11\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t3");
+
+        sql = "select sum(t3.v12) from t3 join t1 on t3.v10=t1.v4 group by t3.v11, t3.v12";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v12)\n" +
+                "  |  group by: 1: v10, 2: v11, 3: v12\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t3");
+        plan = getCostExplain(sql);
+        assertCContains(plan, "column statistics: \n" +
+                "     * v10-->[1.0, 2.0, 0.0, 4.0, 1.0E7] ESTIMATE\n" +
+                "     * v11-->[1.0, 100000.0, 0.0, 4.0, 500000.0] ESTIMATE\n" +
+                "     * v12-->[1.0, 200000.0, 0.0, 4.0, 5000.0] ESTIMATE\n" +
+                "     multi-column statistics: \n" +
+                "     * [v10, v11]-->[ndv=100000]");
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
     }
 }

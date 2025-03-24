@@ -722,9 +722,9 @@ public class AnalyzeMgr implements Writable {
             MultiColumnStatsMeta value = entry.getValue();
 
             StatisticExecutor statisticExecutor = new StatisticExecutor();
-            statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, key.tableId);
 
             if (tableIdHasDeleted.contains(key.tableId)) {
+                statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, key.tableId);
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveMultiColumnStatsMeta(value);
                 keysToRemove.add(key);
             }

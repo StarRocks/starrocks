@@ -29,7 +29,7 @@ public class MultiColumnCombinedStats {
 
     @Override
     public String toString() {
-        return new StringJoiner(", ", MultiColumnCombinedStats.class.getSimpleName() + "[", "]")
+        return new StringJoiner(", ", "[", "]")
                 .add("ndv=" + ndv)
                 .toString();
     }
