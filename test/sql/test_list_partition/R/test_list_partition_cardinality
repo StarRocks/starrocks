@@ -111,3 +111,46 @@ function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2
 -- result:
 None
 -- !result
+set cbo_use_histogram_evaluate_list_partition=true;
+-- result:
+-- !result
+CREATE TABLE partitions_multi_column_3 (
+    c1 int NOT NULL,
+    p1 int
+)
+PARTITION BY (p1) properties("replication_num"="1");
+-- result:
+-- !result
+insert into partitions_multi_column_3 select 1, 1 from table(generate_series(1, 90));
+-- result:
+-- !result
+insert into partitions_multi_column_3 select 2, 1 from table(generate_series(1, 10));
+-- result:
+-- !result
+insert into partitions_multi_column_3 select 3, 2 from table(generate_series(1, 100));
+-- result:
+-- !result
+insert into partitions_multi_column_3 select 3, 3 from table(generate_series(1, 100));
+-- result:
+-- !result
+insert into partitions_multi_column_3 select 3, 4 from table(generate_series(1, 100));
+-- result:
+-- !result
+insert into partitions_multi_column_3 select 3, 5 from table(generate_series(1, 100));
+-- result:
+-- !result
+drop stats partitions_multi_column_3;
+-- result:
+-- !result
+ANALYZE FULL TABLE partitions_multi_column_3 WITH SYNC MODE;
+-- result:
+test_list_partition_cardinality.partitions_multi_column_3	analyze	status	OK
+-- !result
+ANALYZE TABLE partitions_multi_column_3 UPDATE HISTOGRAM ON c1;
+-- result:
+test_list_partition_cardinality.partitions_multi_column_3	histogram	status	OK
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_3 WHERE c1=2 and p1 =1 ', 'cardinality: 2')
+-- result:
+None
+-- !result
