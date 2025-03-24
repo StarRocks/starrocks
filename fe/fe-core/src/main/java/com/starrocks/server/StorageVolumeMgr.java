@@ -29,6 +29,7 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
+import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -115,7 +116,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     }
 
     public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                      Optional<Boolean> enabled, String comment)
+            Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             validateParams(svType, params);
@@ -205,6 +206,65 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             }
 
             updateInternalNoLock(copied);
+        }
+    }
+
+    public void replaceStorageVolume(String name, String svType, List<String> locations,
+            Map<String, String> properties, String comment) throws DdlException {
+        Map<String, String> params = new HashMap<>();
+        Optional<Boolean> enabled = parseProperties(properties, params);
+        validateParams(svType, params);
+
+        String locationChangedStorageVolumeId = null;
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume oldStorageVolume = getStorageVolumeByName(name);
+            Preconditions.checkState(oldStorageVolume != null, "Storage volume '%s' does not exist", name);
+            if (enabled.isPresent()) {
+                if (!enabled.get()) {
+                    Preconditions.checkState(!oldStorageVolume.getId().equals(defaultStorageVolumeId),
+                            "Default volume can not be disabled");
+                }
+            }
+
+            StorageVolume newStorageVolume = null;
+            if (oldStorageVolume.getType().equalsIgnoreCase(svType)) {
+                newStorageVolume = new StorageVolume(oldStorageVolume);
+                if (enabled.isPresent()) {
+                    newStorageVolume.setEnabled(enabled.get());
+                }
+
+                if (!Strings.isNullOrEmpty(svType)) {
+                    newStorageVolume.setType(svType);
+                }
+
+                if (locations != null) {
+                    if (!oldStorageVolume.getLocations().equals(locations)) {
+                        validateLocations(svType, locations);
+                        newStorageVolume.setLocations(locations);
+                        locationChangedStorageVolumeId = newStorageVolume.getId();
+                    }
+                }
+
+                if (!Strings.isNullOrEmpty(comment)) {
+                    newStorageVolume.setComment(comment);
+                }
+
+                if (!params.isEmpty()) {
+                    newStorageVolume.setCloudConfiguration(params);
+                }
+            } else {
+                Preconditions.checkState(locations != null, "Location is null");
+                validateLocations(svType, locations);
+                newStorageVolume = new StorageVolume(oldStorageVolume.getId(), name, svType, locations, params,
+                        enabled.orElse(oldStorageVolume.getEnabled()), comment);
+                locationChangedStorageVolumeId = newStorageVolume.getId();
+            }
+
+            replaceInternalNoLock(newStorageVolume);
+        }
+
+        if (locationChangedStorageVolumeId != null) {
+            updateTableStorageInfo(locationChangedStorageVolumeId);
         }
     }
 
@@ -303,6 +363,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     }
 
     public void replayDropStorageVolume(DropStorageVolumeLog log) {
+    }
+
+    public void replayUpdateTableStorageInfos(TableStorageInfos tableStorageInfos) {
+        throw new RuntimeException("Not implemented");
     }
 
     protected void validateParams(String svType, Map<String, String> params) throws DdlException {
@@ -419,8 +483,6 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         this.tableToStorageVolume = data.tableToStorageVolume;
     }
 
-
-
     public abstract StorageVolume getStorageVolumeByName(String svName);
 
     public abstract StorageVolume getStorageVolume(String svId);
@@ -428,10 +490,12 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public abstract List<String> listStorageVolumeNames() throws DdlException;
 
     protected abstract String createInternalNoLock(String name, String svType, List<String> locations,
-                                                   Map<String, String> params, Optional<Boolean> enabled, String comment)
+            Map<String, String> params, Optional<Boolean> enabled, String comment)
             throws DdlException;
 
     protected abstract void updateInternalNoLock(StorageVolume sv) throws DdlException;
+
+    protected abstract void replaceInternalNoLock(StorageVolume sv) throws DdlException;
 
     protected abstract void removeInternalNoLock(StorageVolume sv) throws DdlException;
 
@@ -452,4 +516,6 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public abstract void validateStorageVolumeConfig() throws InvalidConfException;
 
     protected abstract List<List<Long>> getBindingsOfBuiltinStorageVolume();
+
+    protected abstract void updateTableStorageInfo(String storageVolumeId) throws DdlException;
 }

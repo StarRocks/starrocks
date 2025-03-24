@@ -230,6 +230,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_STORAGE_VOLUME, DropStorageVolumeLog.class)
             .put(OperationType.OP_CREATE_STORAGE_VOLUME, StorageVolume.class)
             .put(OperationType.OP_UPDATE_STORAGE_VOLUME, StorageVolume.class)
+            .put(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, TableStorageInfos.class)
             .put(OperationType.OP_PIPE, PipeOpEntry.class)
             .put(OperationType.OP_CREATE_DICTIONARY, Dictionary.class)
             .put(OperationType.OP_DROP_DICTIONARY, DropDictionaryInfo.class)
