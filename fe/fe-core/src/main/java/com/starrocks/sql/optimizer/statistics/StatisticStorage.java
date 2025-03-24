@@ -38,6 +38,15 @@ public interface StatisticStorage {
     default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
+<<<<<<< HEAD
+=======
+    default void refreshMultiColumnStatistics(Long tableId) {
+    }
+
+    default void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {
+    }
+
+>>>>>>> b524d1d593 ([Enhancement] modify histogram_statistic cache expire-update logical (#57238))
     /**
      * Overwrite the statistics of `targetPartition` with `sourcePartition`
      */
@@ -71,11 +80,7 @@ public interface StatisticStorage {
     default Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
     }
-
-    default Map<String, Histogram> getHistogramStatisticsSync(Table table, List<String> columns) {
-        return getHistogramStatistics(table, columns);
-    }
-
+    
     default Map<String, Histogram> getConnectorHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
     }
