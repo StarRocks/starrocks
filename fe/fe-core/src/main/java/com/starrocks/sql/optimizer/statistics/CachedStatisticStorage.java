@@ -635,6 +635,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .put("HistogramStats", histogramCache.synchronous().estimatedSize())
                 .put("ConnectorTableStats", connectorTableCachedStatistics.synchronous().estimatedSize())
                 .put("ConnectorHistogramStats", connectorHistogramCache.synchronous().estimatedSize())
+                .put("MultiColumnCombinedStats", multiColumnStats.synchronous().estimatedSize())
                 .build();
     }
 
