@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # bitmap_hash64
 
+对任意类型的输入计算 64 位的哈希值，返回包含该哈希值的 bitmap。
 
-
-Calculates a 64-bit hash value for any type of input and return the bitmap containing the hash value. It is mainly used for the stream load task to import non integer fields into the bitmap field of the StarRocks table. For example:
+主要用于 stream load 导入中将非整型字段导入到 StarRocks 表中的 bitmap 字段，如下例:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
@@ -14,13 +14,21 @@ cat data | curl --location-trusted -u user:passwd -T - \
     http://host:8410/api/test/testDb/_stream_load
 ```
 
-## Syntax
+## 语法
 
 ```Haskell
-BITMAP BITMAP_HASH64(expr)
+BITMAP_HASH64(expr)
 ```
 
-## Examples
+## 参数说明
+
+`expr`: 可以是任意数据类型。
+
+## 返回值说明
+
+返回值的数据类型为 BITMAP。
+
+## 示例
 
 ```Plain Text
 MySQL > select bitmap_count(bitmap_hash64('hello'));
@@ -37,7 +45,3 @@ select bitmap_to_string(bitmap_hash64('hello'));
 | 10760762337991515389                     |
 +------------------------------------------+
 ```
-
-## keyword
-
-BITMAP_HASH64,BITMAP
