@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -41,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
+import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStats;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -56,6 +58,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT;
 
 /*
@@ -475,22 +478,54 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         List<ColumnStatistic>[] cards = new List[] {lower, medium, high};
 
-        Set<ColumnStatistic> columnStatistics = groupBys.getStream()
+        Set<ColumnRefOperator> columnRefOperators = groupBys.getStream()
                 .map(factory::getColumnRef)
-                .map(s -> ExpressionStatisticCalculator.calculate(s, statistics))
                 .collect(Collectors.toSet());
-        columnStatistics.forEach(s -> cards[groupByCardinality(s, statistics.getOutputRowCount())].add(s));
 
-        double lowerCartesian = lower.stream().map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b)
-                .orElse(Double.MAX_VALUE);
+        double maxSingleColumnDistinct = 0.0;
+        double maxMultiColumnDistinct = 0.0;
+        Set<ColumnStatistic> columnStatistics = new HashSet<>();
 
-        // target is the immediate child of a small broadcast join
-        // and the ndv of all columns is less than SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT
+        Pair<Set<ColumnRefOperator>, MultiColumnCombinedStats> mcStats = statistics.getLargestSubsetMCStats(columnRefOperators);
+
+        if (sessionVariable.isCboPushDownAggWithMultiColumnStats() && mcStats != null && !mcStats.first.isEmpty()) {
+            double ndv = Math.max(1, mcStats.second.getNdv());
+            ColumnStatistic multiColumnStat = ColumnStatistic.builder().setDistinctValuesCount(ndv).build();
+            columnStatistics.add(multiColumnStat);
+            maxMultiColumnDistinct = ndv;
+
+            Set<ColumnRefOperator> remainedColumns = new HashSet<>(columnRefOperators);
+            remainedColumns.removeAll(mcStats.first);
+
+            for (ColumnRefOperator col : remainedColumns) {
+                ColumnStatistic stat = ExpressionStatisticCalculator.calculate(col, statistics);
+                columnStatistics.add(stat);
+                maxSingleColumnDistinct = Math.max(maxSingleColumnDistinct, stat.getDistinctValuesCount());
+            }
+        } else {
+            for (ColumnRefOperator col : columnRefOperators) {
+                ColumnStatistic stat = ExpressionStatisticCalculator.calculate(col, statistics);
+                columnStatistics.add(stat);
+                maxSingleColumnDistinct = Math.max(maxSingleColumnDistinct, stat.getDistinctValuesCount());
+            }
+        }
+
+        double outputRowCount = statistics.getOutputRowCount();
+        for (ColumnStatistic stat : columnStatistics) {
+            cards[groupByCardinality(stat, outputRowCount)].add(stat);
+        }
+
         if (pushDownMode == PUSH_DOWN_AGG_AUTO && context.immediateChildOfSmallBroadcastJoin) {
-            if (columnStatistics.stream().anyMatch(x -> x.getDistinctValuesCount() > SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT)) {
+            if (maxSingleColumnDistinct > SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT) {
+                return false;
+            }
+            if (maxMultiColumnDistinct > SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT) {
                 return false;
             }
         }
+
+        double lowerCartesian = lower.stream().map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b)
+                .orElse(Double.MAX_VALUE);
 
         // pow(row_count/20, a half of lower column size)
         double lowerUpper = Math.max(statistics.getOutputRowCount() / 20, 1);
@@ -527,6 +562,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
                 return pushDownMode >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG;
             }
         }
+
 
         // 2.1 high cardinality >= 2
         // 2.2 medium cardinality > 2
