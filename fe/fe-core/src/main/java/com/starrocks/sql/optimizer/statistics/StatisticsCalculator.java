@@ -446,6 +446,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 statistics.addColumnStatistic(column, newStats);
             }
         }
+
+        if (partitionStatistics.size() == 1) {
+            Statistics partitionStats =  partitionStatistics.values().iterator().next();
+            columnMap.keySet().forEach(column ->
+                    statistics.addColumnStatistic(column, partitionStats.getColumnStatistic(column)));
+        }
     }
 
     private boolean withinDelta(double a, double b, double ratio) {

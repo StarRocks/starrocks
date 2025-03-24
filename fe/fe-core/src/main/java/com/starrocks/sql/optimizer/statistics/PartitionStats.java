@@ -23,16 +23,18 @@ import java.util.Map;
  */
 public class PartitionStats {
     public final Map<Long, Double> distinctCount;
+    public final Map<Long, Double> nullFraction;
 
     public PartitionStats() {
         this.distinctCount = Maps.newHashMap();
-    }
-
-    public PartitionStats(Map<Long, Double> distinctCount) {
-        this.distinctCount = distinctCount;
+        this.nullFraction = Maps.newHashMap();
     }
 
     public Map<Long, Double> getDistinctCount() {
         return distinctCount;
+    }
+
+    public Map<Long, Double> getNullFraction() {
+        return nullFraction;
     }
 }
