@@ -170,6 +170,15 @@ public class StarOSAgent {
         }
     }
 
+    public void replaceFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
+        try {
+            client.replaceFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to update file store, error: " + e.getMessage());
+        }
+    }
+
     public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
         prepare();
         try {

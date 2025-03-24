@@ -1119,6 +1119,11 @@ public class EditLog {
                     globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
                 }
+                case OperationType.OP_UPDATE_TABLE_STORAGE_INFOS: {
+                    TableStorageInfos tableStorageInfos = (TableStorageInfos) journal.data();
+                    globalStateMgr.getStorageVolumeMgr().replayUpdateTableStorageInfos(tableStorageInfos);
+                    break;
+                }
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.data();
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
@@ -2163,6 +2168,10 @@ public class EditLog {
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
+
+    public void logUpdateTableStorageInfos(TableStorageInfos tableStorageInfos) {
+        logEdit(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos);
     }
 
     public void logReplicationJob(ReplicationJob replicationJob) {

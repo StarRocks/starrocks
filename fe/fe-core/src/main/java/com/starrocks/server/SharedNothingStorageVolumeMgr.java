@@ -82,6 +82,12 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
+    protected void replaceInternalNoLock(StorageVolume sv) {
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv);
+        idToSV.put(sv.getId(), sv);
+    }
+
+    @Override
     protected void removeInternalNoLock(StorageVolume sv) {
         DropStorageVolumeLog log = new DropStorageVolumeLog(sv.getId());
         GlobalStateMgr.getCurrentState().getEditLog().logDropStorageVolume(log);
@@ -162,5 +168,10 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected List<List<Long>> getBindingsOfBuiltinStorageVolume() {
         return new ArrayList<>(Arrays.asList(new ArrayList<Long>(), new ArrayList<Long>()));
+    }
+
+    @Override
+    protected void updateTableStorageInfo(String storageVolumeId) throws DdlException {
+
     }
 }
