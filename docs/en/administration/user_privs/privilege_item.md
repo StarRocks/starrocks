@@ -69,7 +69,7 @@ This section describes privileges that are available on different objects.
 | CATALOG (internal catalog) | USAGE                                                 | Uses the internal catalog (default_catalog).   |
 | CATALOG (internal catalog)             | CREATE DATABASE           |        Creates databases in the internal catalog.                                   |
 | CATALOG (internal catalog)                        | ALL  |               Has all the above privileges on the internal catalog.                           |
-| CATALOG (external catalog)  | USAGE                                                 | Uses an external catalog to view tables in it. |
+| CATALOG (external catalog)  | USAGE                                                 | Uses an external catalog. |
 | CATALOG (external catalog)                        |   DROP                       |    Deletes an external catalog.                                   |
 | CATALOG (external catalog)                         |  ALL   |              Has all the above privileges on the external catalog.                                |
 
