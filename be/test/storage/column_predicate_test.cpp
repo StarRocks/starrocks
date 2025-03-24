@@ -37,7 +37,7 @@ static inline std::string to_string(const std::vector<uint8_t>& v) {
 }
 static inline std::string to_string(const std::vector<uint16_t>& values) {
     std::stringstream ss;
-    for (uint8_t value : values) {
+    for (uint16_t value : values) {
         ss << value << ",";
     }
     std::string s = ss.str();
