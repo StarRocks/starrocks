@@ -881,6 +881,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
 
+    public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1733,6 +1735,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int backPressureMaxRounds = 3;
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
     private long backPressureThrottleTimeUpperBound = 300;
+
+    // Determines whether the upper/lower function supports utf8,
+    // introduced by https://github.com/StarRocks/starrocks/pull/56192
+    // Before this, the upper/lower function only supports ascii characters, and SR has made special optimizations in performance.
+    // After this change, the upper/lower function is able to handle utf8 characters,
+    // but the performance will be slightly reduced in the scenario of only ascii characters.
+    // This variable is added to give the user the right to choose. 
+    // If the user does not use utf8 characters, turning off the switch can avoid performance degradation.
+    // In order to be compatible with the previous behavior, the default value is false.
+    @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
+    private boolean lowerUpperSupportUTF8 = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4829,6 +4842,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setRuntime_filter_rpc_http_min_size(globalRuntimeFilterRpcHttpMinSize);
         tResult.setEnable_join_runtime_filter_pushdown(enableJoinRuntimeFilterPushDown);
+        tResult.setLower_upper_support_utf8(lowerUpperSupportUTF8);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
             tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);

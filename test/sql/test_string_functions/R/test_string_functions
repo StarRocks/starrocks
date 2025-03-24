@@ -559,3 +559,45 @@ select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from le
 -- result:
 1
 -- !result
+-- name: test_lower_upper_utf8
+create table t (
+  id int,
+  name string
+) duplicate key(id)
+distributed by random buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+set lower_upper_support_utf8 = true;
+-- result:
+-- !result
+insert into t values(1, 'теКст'), (2, 'ТЕкСТ'), (3, 'теКст hello'), (4, 'ТЕкСТ world'),
+(5, 'München'), (6, 'München Tum'), (7, 'hello WOrld'), (8, ''),
+(9, 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'), (10, 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'),
+(11, 'abcdefghijklmnopqrstuvwxyzäöüß'), (12, 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ'),
+(13, 'abcçdefgğhıijklmnoöprsştuüvyz'), (14, 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ'),
+(15, 'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ'), (16, 'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ');
+-- result:
+-- !result
+select id, name, lower(name), upper(name) from t order by id;
+-- result:
+1	теКст	текст	ТЕКСТ
+2	ТЕкСТ	текст	ТЕКСТ
+3	теКст hello	текст hello	ТЕКСТ HELLO
+4	ТЕкСТ world	текст world	ТЕКСТ WORLD
+5	München	münchen	MÜNCHEN
+6	München Tum	münchen tum	MÜNCHEN TUM
+7	hello WOrld	hello world	HELLO WORLD
+8			
+9	абвгдеёжзийклмнопрстуфхцчшщъыьэюя	абвгдеёжзийклмнопрстуфхцчшщъыьэюя	АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ
+10	АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ	абвгдеёжзийклмнопрстуфхцчшщъыьэюя	АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ
+11	abcdefghijklmnopqrstuvwxyzäöüß	abcdefghijklmnopqrstuvwxyzäöüß	ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜSS
+12	ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ	abcdefghijklmnopqrstuvwxyzäöüß	ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ
+13	abcçdefgğhıijklmnoöprsştuüvyz	abcçdefgğhıijklmnoöprsştuüvyz	ABCÇDEFGĞHIIJKLMNOÖPRSŞTUÜVYZ
+14	ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ	abcçdefgğhii̇jklmnoöprsştuüvyz	ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ
+15	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ
+16	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ
+-- !result
