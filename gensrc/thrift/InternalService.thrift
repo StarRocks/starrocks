@@ -332,6 +332,8 @@ struct TQueryOptions {
 
   170: optional bool enable_parquet_reader_bloom_filter;
   171: optional bool enable_parquet_reader_page_index;
+  
+  180: optional bool lower_upper_support_utf8;
 }
 
 // A scan range plus the parameters needed to execute that scan.
