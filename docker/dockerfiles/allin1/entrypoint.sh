@@ -87,10 +87,10 @@ if [ -f $SR_HOME/../banner.txt ] ; then
 fi
 
 # setup log directories
-mkdir -p $SR_HOME/{supervisor,fe,be,apache_hdfs_broker,feproxy}/log
+mkdir -p $SR_HOME/{supervisor,fe,be,feproxy}/log
 
 update_feproxy_config
-# use 127.0.0.1 for all the services, include fe/be/broker
+# use 127.0.0.1 for all the services, include fe/be
 setup_priority_networks
 update_fe_conf_if_run_in_shared_data_mode
 
