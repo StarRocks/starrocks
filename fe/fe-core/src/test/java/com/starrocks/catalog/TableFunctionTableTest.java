@@ -20,6 +20,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -44,7 +45,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 public class TableFunctionTableTest {
 
     Map<String, String> newProperties() {
@@ -271,5 +271,51 @@ public class TableFunctionTableTest {
                 "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/yyy\") SELECT *\n" +
                 "FROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
                 "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")", desensitizationSql);
+    }
+
+    @Test
+    public void testCSVDelimiterConverterForUnload() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file://test_dir");
+        properties.put("format", "csv");
+
+        {
+            // normal case: default
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+                Assert.assertEquals("\t", table.getCsvColumnSeparator());
+                Assert.assertEquals("\n", table.getCsvRowDelimiter());
+            });
+        }
+
+        {
+            // normal case: support hexadecimal representations of ASCII control character
+            properties.put("csv.column_separator", "\\x01");
+            properties.put("csv.row_delimiter", "0x02");
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+                Assert.assertEquals("\1", table.getCsvColumnSeparator());
+                Assert.assertEquals("\2", table.getCsvRowDelimiter());
+            });
+        }
+
+        // abnormal case 1
+        properties.put("csv.column_separator", "0123456789012345678901234567890123456789012345678901234567890");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "The valid bytes length for 'csv.column_separator' is [1, 50]",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+
+        // abnormal case 2
+        properties.put("csv.column_separator", "0x11");
+        properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+
+        // abnormal case 3
+        properties.put("csv.column_separator", "");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Delimiter cannot be empty or null",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
     }
 }
