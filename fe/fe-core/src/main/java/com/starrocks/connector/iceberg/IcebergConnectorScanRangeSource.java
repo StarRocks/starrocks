@@ -334,7 +334,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (type.equals(Types.TimestampType.withZone())) {
                 Long value = PartitionUtil.getPartitionValue(partition, index, javaClass);
                 if (value == null) {
-                    partitionValue = null;
+                    partitionValue = "null";
                 } else {
                     partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(
                             TimeUtils.getTimeZone().toZoneId()), value).toLocalDateTime().toString();
