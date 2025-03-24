@@ -42,7 +42,6 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
@@ -280,7 +279,7 @@ public class ConnectScheduler {
     public void closeAllIdleConnection() {
         try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
             connectionMap.values().forEach(context -> {
-                if (context.getCommand() == MysqlCommand.COM_SLEEP) {
+                if (context.isIdleLastFor(1000)) {
                     context.cleanup();
                 }
             });

@@ -41,9 +41,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
+import com.starrocks.http.rest.ActionStatus;
+import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
@@ -66,7 +70,6 @@ import com.starrocks.service.GroovyUDSServer;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
-import com.starrocks.task.AgentTaskQueue;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -83,6 +86,7 @@ import java.lang.management.ManagementFactory;
 import java.net.InetSocketAddress;
 import java.nio.channels.FileLock;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class StarRocksFE {
     private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
@@ -235,18 +239,10 @@ public class StarRocksFE {
 
                     // Wait for queries to complete
                     try {
-                        waitForDraining();
+                        waitForDraining(startTime);
                     } catch (Exception e) {
                         LOG.warn("handle graceful exit failed", e);
                         System.exit(-1);
-                    }
-
-                    long usedTimeMs = (System.nanoTime() - startTime) / 1000000L;
-                    if (usedTimeMs < Config.min_graceful_exit_time_second * 1000L) {
-                        try {
-                            Thread.sleep(Config.min_graceful_exit_time_second * 1000L - usedTimeMs);
-                        } catch (InterruptedException ignored) {
-                        }
                     }
 
                     LOG.info("handle graceful exit successfully");
@@ -275,6 +271,7 @@ public class StarRocksFE {
 
     private static void transferLeader() throws InterruptedException {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
+            LOG.info("start to transfer leader");
             JournalWriter journalWriter = GlobalStateMgr.getCurrentState().getJournalWriter();
             // stop journal writer
             journalWriter.stopAndWait();
@@ -290,34 +287,54 @@ public class StarRocksFE {
                     while (true) {
                         try {
                             InetSocketAddress address = GlobalStateMgr.getCurrentState().getHaProtocol().getLeader();
-                            LOG.info("leader is transferred to {}", address);
-                            break;
+                            // wait for new leader to be ready
+                            if (isNewLeaderReady(address.getHostString())) {
+                                LOG.info("leader is transferred to {}", address);
+                                break;
+                            }
                         } catch (Exception e) {
-                            Thread.sleep(100L);
+                            Thread.sleep(300L);
                         }
                     }
                 }
 
                 GlobalStateMgr.getCurrentState().markLeaderTransferred();
             }
-
-            AgentTaskQueue.failForLeaderTransfer();
         }
     }
 
-    private static void waitForDraining() throws InterruptedException {
+    private static boolean isNewLeaderReady(String leaderHost) {
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(leaderHost, Config.http_port);
+        String url = "http://" + accessibleHostPort
+                + "/api/bootstrap"
+                + "?cluster_id=" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
+                + "&token=" +  GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        try {
+            String resultStr = Util.getResultForUrl(url, null,
+                    Config.heartbeat_timeout_second * 1000,
+                    Config.heartbeat_timeout_second * 1000);
+            BootstrapFinishAction.BootstrapResult result = BootstrapFinishAction.BootstrapResult.fromJson(resultStr);
+            return result.getStatus() == ActionStatus.OK;
+        } catch (Exception e) {
+            LOG.warn("call leader bootstrap api failed", e);
+        }
+        return false;
+    }
+
+    private static void waitForDraining(long startTimeNano) throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-        ProxyContextManager proxyContextManager = ProxyContextManager.getInstance();
-        final long printLogInterval = 1000L;
-        long lastPrintTimeMs = -1L;
-        while (connectScheduler.getTotalConnCount() + proxyContextManager.getTotalConnCount() > 0) {
+        final long waitInterval = 1000L;
+        while (true) {
             connectScheduler.closeAllIdleConnection();
-            if (System.currentTimeMillis() - lastPrintTimeMs > printLogInterval) {
-                LOG.info("waiting for {} connections to drain",
-                        connectScheduler.getTotalConnCount() + proxyContextManager.getTotalConnCount());
-                lastPrintTimeMs = System.currentTimeMillis();
+            int totalConns = connectScheduler.getTotalConnCount()
+                    + ProxyContextManager.getInstance().getTotalConnCount();
+            if (totalConns > 0) {
+                LOG.info("waiting for {} connections to drain", totalConns);
+            } else if (System.nanoTime() - startTimeNano
+                    > TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second)) {
+                break;
             }
-            Thread.sleep(100L);
+            Thread.sleep(waitInterval);
         }
     }
 
