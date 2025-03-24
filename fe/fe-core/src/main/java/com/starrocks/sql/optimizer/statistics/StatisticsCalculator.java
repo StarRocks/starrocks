@@ -401,7 +401,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         ScalarOperator predicate = node.getPredicate();
         Map<Long, Statistics> partitionStatistics =
-                StatisticsCalcUtils.getPartitionStatistics(node, table, columnMap);
+                StatisticsCalcUtils.getPartitionStatistics(node, table, columnMap, statistics);
         if (MapUtils.isEmpty(partitionStatistics)) {
             return;
         }
