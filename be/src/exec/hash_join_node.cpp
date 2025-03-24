@@ -499,8 +499,9 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
         runtime_join_filter_pushdown_limit = _runtime_join_filter_pushdown_limit * num_right_partitions;
     }
 
-    std::unique_ptr<PartialRuntimeFilterMerger> partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(
-            pool, runtime_join_filter_pushdown_limit, global_runtime_filter_build_max_size);
+    auto partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(pool, runtime_join_filter_pushdown_limit,
+                                                                          global_runtime_filter_build_max_size,
+                                                                          runtime_state()->func_version());
 
     auto build_op = std::make_shared<HashJoinBuilderFactory>(context->next_operator_id(), id(), hash_joiner_factory,
                                                              std::move(partial_rf_merger), _distribution_mode,
@@ -959,15 +960,15 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) continue;
         LogicalType build_type = rf_desc->build_expr_type();
         RuntimeFilter* filter =
-                RuntimeFilterHelper::create_join_runtime_filter(_pool, build_type, rf_desc->join_mode());
+                RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type, rf_desc->join_mode());
         if (filter == nullptr) continue;
-        filter->get_bloom_filter()->init(_ht.get_row_count());
+        filter->get_membership_filter()->init(_ht.get_row_count());
 
         int expr_order = rf_desc->build_expr_order();
         ColumnPtr column = _ht.get_key_columns()[expr_order];
         bool eq_null = _is_null_safes[expr_order];
-        RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter,
-                                                                       kHashJoinKeyColumnOffset, eq_null));
+        RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_filter(column, build_type, filter, kHashJoinKeyColumnOffset,
+                                                                 eq_null));
         rf_desc->set_runtime_filter(filter);
     }
 
