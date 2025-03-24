@@ -406,6 +406,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return;
         }
         long tableRows = 0;
+
+        // This block is reentrant. This is the first cardinality estimation of the scan node.
+        // we need to ensure that the state of each predicate is reset before each entry.
+        Utils.extractConjuncts(predicate).forEach(op -> op.setNotEvalEstimate(false));
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         for (var entry : partitionStatistics.entrySet()) {
             Statistics partitionStat = estimateStatistics(ImmutableList.of(predicate), entry.getValue());
@@ -415,8 +419,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             tableRows += partitionSelectedRows;
         }
+        // For scan node, there is no need to evaluate the predicate later.
+        Utils.extractConjuncts(predicate).forEach(op -> op.setNotEvalEstimate(true));
         // adjust output rows
-        predicate.setNotEvalEstimate(true);
         statistics.setOutputRowCount(tableRows);
 
         // adjust output column statistics if possible
