@@ -81,6 +81,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -1209,7 +1210,29 @@ public class MvUtils {
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
             OptExpression viewPlan = viewScanOperator.getOriginalPlanEvaluator();
-            parent.setChild(index, viewPlan);
+            if (viewScanOperator.getPredicate() != null) {
+                // If viewScanOperator contains predicate, we need to rewrite them,
+                // otherwise predicate will be lost.
+                Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap =
+                        viewScanOperator.getProjection().getColumnRefMap().entrySet().stream()
+                                .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
+                Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
+                builder.withOperator(viewPlan.getOp());
+                // rewrite predicate
+                builder.setPredicate(rewriter.rewrite(viewScanOperator.getPredicate()));
+                // rewrite projection
+                Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator.getProjection().getColumnRefMap()
+                        .entrySet()
+                        .stream()
+                        .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                builder.setProjection(new Projection(newColumnRefMap));
+                Operator newViewPlanOp = builder.build();
+                parent.setChild(index, OptExpression.create(newViewPlanOp, viewPlan.getInputs()));
+            } else {
+                parent.setChild(index, viewPlan);
+            }
             return;
         }
         for (int i = 0; i < queryExpression.getInputs().size(); i++) {
