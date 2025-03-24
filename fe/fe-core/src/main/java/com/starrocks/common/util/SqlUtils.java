@@ -69,15 +69,18 @@ public class SqlUtils {
      * @return true/false
      */
     public static boolean isPreQuerySQL(StatementBase parsedStmt) {
-        if (parsedStmt instanceof QueryStatement queryStatement) {
+        if (parsedStmt instanceof QueryStatement) {
+            QueryStatement queryStatement = (QueryStatement) parsedStmt;
             if (queryStatement.getQueryRelation() != null
-                    && (queryStatement.getQueryRelation() instanceof SelectRelation selectRelation)) {
+                    && (queryStatement.getQueryRelation() instanceof SelectRelation)) {
+                SelectRelation selectRelation = (SelectRelation) (queryStatement.getQueryRelation());
                 if (selectRelation.getSelectList() != null && !selectRelation.getSelectList().getItems().isEmpty()) {
                     Expr itemExpr = selectRelation.getSelectList().getItems().get(0).getExpr();
                     if (itemExpr != null) {
                         if (itemExpr instanceof VariableExpr) {
                             return true;
-                        } else if (itemExpr instanceof InformationFunction informationFunction) {
+                        } else if (itemExpr instanceof InformationFunction) {
+                            InformationFunction informationFunction = (InformationFunction) itemExpr;
                             return informationFunction.getFuncType().equalsIgnoreCase("connection_id")
                                     || informationFunction.getFuncType().equalsIgnoreCase("session_id");
                         }
@@ -86,7 +89,8 @@ public class SqlUtils {
             }
         }
 
-        if (parsedStmt instanceof SetStmt setStmt) {
+        if (parsedStmt instanceof SetStmt) {
+            SetStmt setStmt = (SetStmt) parsedStmt;
             return setStmt.getSetListItems().stream().anyMatch(item ->
                     (item instanceof SetNamesVar
                             || item instanceof SetTransaction
