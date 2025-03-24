@@ -13,7 +13,7 @@ CREATE TABLE partitions_multi_column_1 (
     c2 int NOT NULL,
     c3 int
 )
-PARTITION BY (c1, c2);
+PARTITION BY (c1, c2) properties("replication_num"="1");
 -- result:
 -- !result
 INSERT INTO partitions_multi_column_1 SELECT 0, 0, generate_series FROM TABLE(generate_series(1, 1000));
@@ -101,6 +101,40 @@ function: assert_explain_costs_contains('SELECT c2, c3 FROM partitions_multi_col
 None
 -- !result
 function: assert_explain_costs_contains('SELECT c2, c3 FROM partitions_multi_column_1 WHERE c1 IN (2,4) ', 'cardinality: 200', 'c3-->[1.0, 1000.0, 0.0, 4.0, 100.0]')
+-- result:
+None
+-- !result
+CREATE TABLE partitions_multi_column_2 (
+    c1 int,
+    p1 int
+)
+PARTITION BY (p1) properties("replication_num"="1");
+-- result:
+-- !result
+insert into partitions_multi_column_2 select 1,1;
+-- result:
+-- !result
+insert into partitions_multi_column_2 select 2,1;
+-- result:
+-- !result
+insert into partitions_multi_column_2 select 1,2;
+-- result:
+-- !result
+insert into partitions_multi_column_2 select null,2;
+-- result:
+-- !result
+insert into partitions_multi_column_2 select null, generate_series from table(generate_series(3,10));
+-- result:
+-- !result
+ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
+-- result:
+test_list_partition_selectivity.partitions_multi_column_2	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1=1 ', 'c1-->[1.0, 2.0, 0.0, 1.0, 2.0]')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1<3 ', 'c1-->[1.0, 2.0, 0.75, 1.0, 2.0]')
 -- result:
 None
 -- !result
