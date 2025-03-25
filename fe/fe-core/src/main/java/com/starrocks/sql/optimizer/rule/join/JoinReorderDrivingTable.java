@@ -13,24 +13,38 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
- * 基于driving table的join重排序算法
- * driving table是包含查询输出列的表，会被放在最左边
- * 其他表优先通过与driving table的join条件来join
+ * for distinct(t1.c1) from( t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c1 = t3.c1)
+ * t1 is the driving table, t2 and t3 is used to filter t1
+ * so we can rewrite it into t1 join t3 on t1.c1 = t2.c1 join t3 on t1.c1 = t3.c1
  */
 public class JoinReorderDrivingTable extends JoinOrder {
     private Optional<OptExpression> bestPlanRoot = Optional.empty();
+    // for t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c1 = t3.c1
+    // if t1 is driving table, then expressionMap will be: {t2.c1: t1.c1} after handle t1 join t2
+    // when t3 join (t1 join t2), we will rewrite t2.c1 = t3.c1 into t1.c1 = t3.c1 using expressionMap
+    // then expressionMap will be: {t3:c1: t1.c1}, {t2.c1: t1:c1}
+    private Map<ColumnRefOperator, ScalarOperator> expressionMap;
 
     public JoinReorderDrivingTable(OptimizerContext context) {
         super(context);
@@ -75,7 +89,7 @@ public class JoinReorderDrivingTable extends JoinOrder {
     protected void enumerate() {
         List<GroupInfo> atoms = joinLevels.get(1).groups;
 
-        // 1. 找到driving table（包含输出列的表）
+        // 1. find the driving table（包含输出列的表）
         GroupInfo drivingTable = null;
         int drivingTableIndex = -1;
         for (int i = 0; i < atoms.size(); i++) {
@@ -87,22 +101,22 @@ public class JoinReorderDrivingTable extends JoinOrder {
         }
 
         if (drivingTable == null) {
-            // 如果没有找到driving table，返回空结果
             return;
         }
 
-        // 2. 将driving table移到第一位
+        // 2.move driving table to the first place
         atoms.remove(drivingTableIndex);
         atoms.add(0, drivingTable);
 
-        // 3. 其他表按照代价排序
+        // 3. order other atmos based on srot
         atoms.subList(1, atoms.size()).sort((a, b) -> {
             double diff = b.bestExprInfo.cost - a.bestExprInfo.cost;
             return (diff < 0 ? -1 : (diff > 0 ? 1 : 0));
         });
 
-        // 4. 开始构建join树
+        // 4. construct join tree
         boolean[] used = new boolean[atomSize];
+        int usedNum = 1;
         GroupInfo leftGroup = atoms.get(0); // driving table
         used[0] = true;
         int next = 1;
@@ -113,7 +127,6 @@ public class JoinReorderDrivingTable extends JoinOrder {
                 continue;
             }
 
-            // 优先选择可以直接与driving table join的表
             int bestIndex = -1;
             for (int i = next; i < atomSize; i++) {
                 if (!used[i] && canJoinWithDrivingTable(leftGroup, atoms.get(i))) {
@@ -122,31 +135,88 @@ public class JoinReorderDrivingTable extends JoinOrder {
                 }
             }
 
-            // 如果没有找到可以直接join的表，就使用下一个可用的表
             if (bestIndex == -1) {
-                bestIndex = next;
+                break;
             }
 
             used[bestIndex] = true;
             GroupInfo rightGroup = atoms.get(bestIndex);
 
-            // 避免同表join
-            if (next == 1 && isSameTableJoin(leftGroup, rightGroup)) {
+            // avoid same table join
+            if (isSameTableJoin(leftGroup, rightGroup)) {
                 continue;
             }
 
-            // 构建join表达式
+            // if right table output more then one column, like t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c2= t3.c2
+            // right table is t2, it will output 2 columns, we can't do this optimization
+            if (rightGroup.bestExprInfo.expr.getOutputColumns().size() != 1) {
+                return;
+            }
+
+            // construct join expr
             Optional<ExpressionInfo> joinExpr = buildJoinExpr(leftGroup, rightGroup);
             if (!joinExpr.isPresent()) {
                 return;
             }
 
-            // 计算统计信息和代价
+            LogicalJoinOperator newJoinOperator = (LogicalJoinOperator) joinExpr.get().expr.getOp();
+            if (newJoinOperator.getJoinType() == JoinOperator.CROSS_JOIN) {
+                return;
+            }
+
+            List<BinaryPredicateOperator> onPredicate =
+                    JoinHelper.getEqualsPredicate(leftGroup.bestExprInfo.expr.getOutputColumns(),
+                            rightGroup.bestExprInfo.expr.getOutputColumns(),
+                            Utils.extractConjuncts(newJoinOperator.getOnPredicate()));
+            if (onPredicate.size() != 1) {
+                return;
+            }
+
+            ColumnRefOperator left = null;
+            ColumnRefOperator right = null;
+            for (ScalarOperator child : onPredicate.get(0).getChildren()) {
+                if (!(child instanceof ColumnRefOperator colRef)) {
+                    return;
+                }
+                // if col is replaced already, use replaced column
+                if (expressionMap.containsKey(colRef)) {
+                    colRef = (ColumnRefOperator) expressionMap.get(colRef);
+                }
+
+                if (leftGroup.bestExprInfo.expr.getOutputColumns().contains(colRef)) {
+                    left = colRef;
+                } else {
+                    right = colRef;
+                }
+            }
+            // replace right table's column with left table's column
+            expressionMap.put(right, left);
+
+            // remove right table's output column from new join's output, because we don't need it anymore
+            Projection projection = joinExpr.get().expr.getOp().getProjection();
+            if (projection != null) {
+                rightGroup.bestExprInfo.expr.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory())
+                        .forEach(col -> {
+                            projection.getColumnRefMap().remove(col);
+
+                        });
+            }
+
+            // add left table's on predicate column into new join's projection
+            projection.getColumnRefMap().values().stream().forEach(col -> {
+                projection.getColumnRefMap().putIfAbsent((ColumnRefOperator) col, col);
+            });
+
+            // rewrite on predicate
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionMap, false);
+            rewriter.rewrite(newJoinOperator.getOnPredicate());
+
+            // calculate logical property, statistic, cost
             joinExpr.get().expr.deriveLogicalPropertyItself();
             calculateStatistics(joinExpr.get().expr);
             computeCost(joinExpr.get());
 
-            // 更新左子树为新的join结果
+            // let new join as leftGroup
             BitSet joinBitSet = new BitSet();
             joinBitSet.or(leftGroup.atoms);
             joinBitSet.or(rightGroup.atoms);
@@ -154,9 +224,14 @@ public class JoinReorderDrivingTable extends JoinOrder {
             leftGroup = new GroupInfo(joinBitSet);
             leftGroup.bestExprInfo = joinExpr.get();
             leftGroup.lowestExprCost = joinExpr.get().cost;
+
+            usedNum++;
+            next = 1;
         }
 
-        bestPlanRoot = Optional.of(leftGroup.bestExprInfo.expr);
+        if (usedNum == atoms.size()) {
+            bestPlanRoot = Optional.of(leftGroup.bestExprInfo.expr);
+        }
     }
 
     @Override

@@ -35,6 +35,7 @@ public class InnerToSemiRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator logicalAggregationOperator = (LogicalAggregationOperator) input.getOp();
+        // support distinct on multi join node
         if (logicalAggregationOperator.getAggregations() != null &&
                 !logicalAggregationOperator.getAggregations().isEmpty()) {
             return Lists.newArrayList(input);
