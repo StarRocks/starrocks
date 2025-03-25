@@ -115,6 +115,7 @@ private:
     HdfsScanner* _scanner = nullptr;
     DataCacheOptions _datacache_options{};
     bool _use_file_metacache = false;
+    bool _use_file_pagecache = false;
     bool _enable_dynamic_prune_scan_range = true;
     bool _enable_split_tasks = false;
 
