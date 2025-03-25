@@ -233,6 +233,16 @@ set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/li
 add_library(fiu STATIC IMPORTED)
 set_target_properties(fiu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libfiu.a)
 
+add_library(icuuc STATIC IMPORTED)
+set_target_properties(icuuc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicuuc.a)
+
+add_library(icui18n STATIC IMPORTED)
+set_target_properties(icui18n PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicui18n.a)
+
+add_library(icudata STATIC IMPORTED)
+set_target_properties(icudata PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicudata.a)
+
+
 # Allow FindOpenSSL() to find correct static libraries
 set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
 message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
@@ -939,6 +949,9 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    icuuc
+    icui18n
+    icudata
     ${WL_END_GROUP}
 )
 
