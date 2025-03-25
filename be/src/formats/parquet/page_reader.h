@@ -23,16 +23,22 @@
 #include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
+#include "util/slice.h"
 
 namespace starrocks {
-class HdfsScanStats;
+class ObjectCache;
+class BlockCompressionCodec;
 }
+
 namespace starrocks::parquet {
+
+struct ColumnReaderOptions;
 
 // Used to parse page header of column chunk. This class don't parse page's type.
 class PageReader {
 public:
-    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values, HdfsScanStats* stats);
+    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values,
+               const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec);
 
     ~PageReader() = default;
 
@@ -43,14 +49,6 @@ public:
     Status next_header();
 
     const tparquet::PageHeader* current_header() const { return &_cur_header; }
-
-    // Must call this function ater next_header called. The total read size
-    // after one next_header can not exceede the page's compressed_page_size.
-    Status read_bytes(void* buffer, size_t size);
-
-    StatusOr<std::string_view> peek(size_t size);
-
-    Status skip_bytes(size_t size);
 
     // seek to read position, this position must be a start of a page header.
     Status seek_to_offset(uint64_t offset) {
@@ -63,7 +61,7 @@ public:
 
     uint64_t get_offset() const { return _offset; }
 
-    Status next_page() { return seek_to_offset(_next_header_pos); }
+    Status next_page();
 
     bool is_last_page() { return _num_values_read >= _num_values_total || _next_read_page_idx >= _page_num; }
 
@@ -71,7 +69,21 @@ public:
 
     void set_next_read_page_idx(size_t cur_page_idx) { _next_read_page_idx = cur_page_idx; }
 
+    StatusOr<Slice> read_and_decompress_page_data();
+
 private:
+    // Must call this function ater next_header called. The total read size
+    // after one next_header can not exceede the page's compressed_page_size.
+    Status _read_bytes(void* buffer, size_t size);
+
+    Status _skip_bytes(size_t size);
+
+    StatusOr<std::string_view> _peek(size_t size);
+
+    void _init_page_cache_key();
+    std::string& _current_page_cache_key();
+    StatusOr<Slice> _read_and_decompress_internal(bool need_fill_buf);
+
     io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;
 
@@ -81,10 +93,20 @@ private:
 
     uint64_t _num_values_read = 0;
     const uint64_t _num_values_total = 0;
-    HdfsScanStats* _stats;
+    const ColumnReaderOptions& _opts;
 
     size_t _page_num = 0xffffffff;
     size_t _next_read_page_idx = 0;
+
+    ObjectCache* _cache = nullptr;
+    std::string _page_cache_key;
+
+    const tparquet::CompressionCodec::type _codec;
+    const BlockCompressionCodec* _compress_codec = nullptr;
+
+    using BufferPtr = std::shared_ptr<std::vector<uint8_t>>;
+    BufferPtr _compressed_buf;
+    BufferPtr _uncompressed_buf;
 };
 
 } // namespace starrocks::parquet
