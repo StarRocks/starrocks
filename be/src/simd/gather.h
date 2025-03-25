@@ -65,5 +65,74 @@ struct SIMDGather {
             c++;
         }
     }
+
+    static constexpr uint32_t simd_register_bitwidth() {
+#ifdef __AVX2__
+        return 256;
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        return 128;
+#else
+        return 128;
+#endif
+    }
+
+    /// dest[i] = src[indexes[i]]
+    template <typename DataType, typename IndexType>
+    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
+        static_assert(std::is_integral_v<IndexType>);
+
+        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
+        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
+        DataType buffer[NUM_BATCH_VALUES];
+
+        size_t i = 0;
+        for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
+            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                buffer[j] = src[indexes[i + j]];
+            }
+
+            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                dest[i + j] = buffer[j];
+            }
+        }
+
+        for (; i < num_rows; i++) {
+            dest[i] = src[indexes[i]];
+        }
+    }
+
+    /// dest[i] = is_filtered[i] == 0 ? src[indexes[i]] : 0
+    template <typename DataType, typename IndexType, typename CondType>
+    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, const CondType* is_filtered,
+                       size_t num_rows) {
+        static_assert(std::is_integral_v<IndexType>);
+
+        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
+        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
+        DataType buffer[NUM_BATCH_VALUES];
+
+        size_t i = 0;
+        for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
+            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                if (is_filtered[i + j] == 0) {
+                    buffer[j] = src[indexes[i + j]];
+                } else {
+                    buffer[j] = 0;
+                }
+            }
+
+            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                dest[i + j] = buffer[j];
+            }
+        }
+
+        for (; i < num_rows; i++) {
+            if (is_filtered[i] == 0) {
+                dest[i] = src[indexes[i]];
+            } else {
+                dest[i] = 0;
+            }
+        }
+    }
 };
 } // namespace starrocks
