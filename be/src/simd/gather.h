@@ -66,7 +66,7 @@ struct SIMDGather {
         }
     }
 
-    static uint32_t simd_register_bitwidth() {
+    static constexpr uint32_t simd_register_bitwidth() {
 #ifdef __AVX2__
         return 256;
 #elif defined(__ARM_NEON) && defined(__aarch64__)
