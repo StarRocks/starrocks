@@ -226,7 +226,12 @@ void JVMFunctionHelper::_init() {
     // init immutable map meta
     auto immutable_map_clazz = JNI_FIND_CLASS("com/starrocks/udf/ImmutableMap");
     DCHECK(immutable_map_clazz != nullptr);
-    _map_meta.immutable_map_class = new JVMClass(immutable_map_clazz);
+    _map_meta.immutable_map_class = new JVMClass(std::move(immutable_map_clazz));
+    auto map_clazz = JNI_FIND_CLASS("java/util/Map");
+    DCHECK(map_clazz);
+    _map_meta.map_class = new JVMClass(map_clazz);
+    _map_meta.immutable_map_constructor =
+            _env->GetMethodID(_map_meta.immutable_map_class->clazz(), "<init>", "(Ljava/util/List;Ljava/util/List;)V");
 
     name = JVMFunctionHelper::to_jni_class_name(UDAFStateList::clazz_name);
     jclass loaded_clazz = JNI_FIND_CLASS(name.c_str());
