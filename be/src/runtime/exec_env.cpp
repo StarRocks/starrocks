@@ -509,13 +509,11 @@ void CacheEnv::try_release_resource_before_core_dump() {
 
     if (_page_cache != nullptr && need_release("data_cache")) {
         _page_cache->set_capacity(0);
-        LOG(INFO) << "release storage page cache memory";
     }
     if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
         // TODO: Currently, block cache don't support shutdown now,
         //  so here will temporary use update_mem_quota instead to release memory.
         (void)_block_cache->update_mem_quota(0, false);
-        LOG(INFO) << "release block cache";
     }
 }
 
@@ -1032,35 +1030,27 @@ void ExecEnv::try_release_resource_before_core_dump() {
 
     if (_workgroup_manager != nullptr && need_release("connector_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
-        LOG(INFO) << "close connector scan executor";
     }
     if (_workgroup_manager != nullptr && need_release("olap_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
-        LOG(INFO) << "close olap scan executor";
     }
     if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
         _thread_pool->shutdown();
-        LOG(INFO) << "shutdown non-pipeline scan thread pool";
     }
     if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
         _pipeline_prepare_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline prepare thread pool";
     }
     if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
         _pipeline_sink_io_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline sink io thread pool";
     }
     if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
         _query_rpc_pool->shutdown();
-        LOG(INFO) << "shutdown query rpc thread pool";
     }
     if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
         _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
-        LOG(INFO) << "stop task worker pool for publish version";
     }
     if (_workgroup_manager != nullptr && need_release("wg_driver_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
-        LOG(INFO) << "stop worker group driver executor";
     }
 }
 
