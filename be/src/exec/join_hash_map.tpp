@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "simd/gather.h"
+
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
@@ -290,57 +292,18 @@ void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashT
     if ((*probe_state->key_columns)[0]->is_nullable()) {
         const auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[0]);
         if (nullable_column->has_null()) {
-            const auto& null_array = nullable_column->null_column()->get_data();
-
-            static constexpr uint32_t W = 8;
-            uint32_t buffer[W];
-            size_t i = 0;
-            for (; i + W <= probe_row_count; i += W) {
-                for (uint32_t j = 0; j < W; j++) {
-                    if (null_array[i + j] == 0) {
-                        buffer[j] = firsts[buckets[i + j]];
-                    } else {
-                        buffer[j] = 0;
-                    }
-                }
-
-                for (uint32_t j = 0; j < W; j++) {
-                    nexts[i + j] = buffer[j];
-                }
-            }
-
-            for (; i < probe_row_count; i++) {
-                if (null_array[i] == 0) {
-                    nexts[i] = firsts[buckets[i]];
-                } else {
-                    nexts[i] = 0;
-                }
-            }
+            const auto* is_nulls = nullable_column->null_column()->get_data().data();
+            SIMDGather::gather(nexts, firsts, buckets, is_nulls, probe_row_count);
 
             probe_state->null_array = &nullable_column->null_column()->get_data();
             probe_state->consider_probe_time_locality();
-            return;
         }
-    }
+    } else {
+        SIMDGather::gather(nexts, firsts, buckets, probe_row_count);
 
-    static constexpr uint32_t W = 8;
-    uint32_t buffer[W];
-    size_t i = 0;
-    for (; i + W <= probe_row_count; i += W) {
-        for (uint32_t j = 0; j < W; j++) {
-            buffer[j] = firsts[buckets[i + j]];
-        }
-
-        for (uint32_t j = 0; j < W; j++) {
-            nexts[i + j] = buffer[j];
-        }
+        probe_state->null_array = nullptr;
+        probe_state->consider_probe_time_locality();
     }
-    for (; i < probe_row_count; i++) {
-        nexts[i] = firsts[buckets[i]];
-    }
-
-    probe_state->null_array = nullptr;
-    probe_state->consider_probe_time_locality();
 }
 
 template <LogicalType LT>

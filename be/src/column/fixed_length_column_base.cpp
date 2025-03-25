@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
+#include "simd/gather.h"
 #include "storage/decimal12.h"
 #include "types/large_int_value.h"
 #include "util/hash_util.hpp"
@@ -49,31 +50,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     _data.resize(orig_size + size);
     auto* dest_data = _data.data() + orig_size;
 
-    static constexpr uint32_t SIMD_WIDTH = [] {
-#ifdef __AVX2__
-        return 256;
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-        return 128;
-#else
-        return 256;
-#endif
-    }();
-    static constexpr uint32_t W = SIMD_WIDTH / (8 * sizeof(T));
-    T buffer[W];
-    size_t i = 0;
-    for (; i + W <= size; i += W) {
-        for (int j = 0; j < W; j++) {
-            buffer[j] = src_data[indexes[i + j]];
-        }
-
-        for (int j = 0; j < W; j++) {
-            dest_data[i + j] = buffer[j];
-        }
-    }
-
-    for (; i < size; i++) {
-        dest_data[i] = src_data[indexes[i]];
-    }
+    SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 
 template <typename T>
