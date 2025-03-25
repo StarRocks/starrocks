@@ -89,6 +89,10 @@ struct GroupReaderParam {
 
     bool case_sensitive = false;
 
+    bool use_file_pagecache = false;
+    int64_t modification_time = 0;
+    uint64_t file_size = 0;
+
     // used to identify io coalesce
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
 

@@ -264,6 +264,7 @@ struct HdfsScannerParams {
 
     DataCacheOptions datacache_options{};
     bool use_file_metacache = false;
+    bool use_file_pagecache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -344,6 +345,7 @@ struct HdfsScannerContext {
     bool return_count_column = false;
 
     bool use_file_metacache = false;
+    bool use_file_pagecache = false;
 
     bool parquet_page_index_enable = false;
 

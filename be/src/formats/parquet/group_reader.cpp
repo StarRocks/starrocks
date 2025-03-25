@@ -300,11 +300,14 @@ Status GroupReader::_create_column_readers() {
     opts.file_meta_data = _param.file_metadata;
     opts.timezone = _param.timezone;
     opts.case_sensitive = _param.case_sensitive;
+    opts.use_file_pagecache = _param.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata;
     opts.first_row_index = _row_group_first_row;
+    opts.modification_time = _param.modification_time;
+    opts.file_size = _param.file_size;
     for (const auto& column : _param.read_cols) {
         ASSIGN_OR_RETURN(ColumnReaderPtr column_reader, _create_column_reader(column));
         _column_readers[column.slot_id()] = std::move(column_reader);
