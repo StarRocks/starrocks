@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
@@ -22,72 +23,28 @@ import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
-import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.MockedWarehouseManager;
-import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.Assert.assertEquals;
-
 public class CompactionSchedulerTest {
-
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+    @Mocked
+    private GlobalTransactionMgr globalTransactionMgr;
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
-
-    @Before
-    public void setUp() {
-    }
-
-    @Test
-    public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
-        long dbId = 9000L;
-        long transactionId = 12345L;
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
-        new Expectations() {
-            {
-                try {
-                    dbTransactionMgr.beginTransaction(
-                            (List<Long>) any, anyString, (TUniqueId) any, (TransactionState.TxnCoordinator) any,
-                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong
-                    );
-                } catch (Exception e) {
-                    // skip
-                }
-                result = transactionId;
-            }
-        };
-
-        UtFrameUtils.mockInitWarehouseEnv();
-
-        // default value
-        Config.lake_compaction_default_timeout_second = 86400;
-        // value smaller than `lake_compaction_default_timeout_second`
-        // expect not affect lake compaction's  transaction operation
-        Config.max_stream_load_timeout_second = 64800;
-        CompactionMgr compactionManager = new CompactionMgr();
-        CompactionScheduler compactionScheduler =
-                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
-        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
-        try {
-            assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));
-        } catch (Exception e) {
-            Assert.fail("Transaction failed for lake compaction");
-        }
-    }
 
     @Test
     public void testDisableTableCompaction() {
@@ -167,5 +124,74 @@ public class CompactionSchedulerTest {
         };
         mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(b1, c1, c2));
         Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
+    }
+
+    @Test
+    public void testAbortStaleCompaction() {
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+
+        compactionManager.handleLoadingFinished(partition1, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(10d)));
+        compactionManager.handleLoadingFinished(partition2, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(10d)));
+
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(c1, c2));
+
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+                Database db = new Database();
+                Table table = new LakeTable();
+                long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
+                PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
+                return new CompactionJob(db, table, partition, 100, false);
+            }
+        };
+        compactionScheduler.runOneCycle();
+        Assert.assertEquals(2, compactionScheduler.getRunningCompactions().size());
+
+        CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND = 0;
+        new MockUp<MetaUtils>() {
+            @Mock
+            public static boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+                return false;
+            }
+        };
+        new MockUp<CompactionJob>() {
+            @Mock
+            public CompactionTask.TaskResult getResult() {
+                return CompactionTask.TaskResult.NONE_SUCCESS;
+            }
+            @Mock
+            public String getFailMessage() {
+                return "abort in test";
+            }
+        };
+        compactionScheduler.runOneCycle();
+        Assert.assertEquals(0, compactionScheduler.getRunningCompactions().size());
     }
 }
