@@ -68,6 +68,9 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name), _table_metric
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_memtable_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_replica_duration_us);
+    REGISTER_STARROCKS_METRIC(load_cancel_replica_fail_total);
+    REGISTER_STARROCKS_METRIC(load_sync_replica_fail_total);
+    REGISTER_STARROCKS_METRIC(load_replica_waiting_num);
 
     REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
