@@ -79,7 +79,6 @@ struct SIMDGather {
     /// dest[i] = src[indexes[i]]
     template <typename DataType, typename IndexType>
     static void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
-        static_assert(std::is_integral_v<DataType>);
         static_assert(std::is_integral_v<IndexType>);
 
         static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
@@ -106,7 +105,6 @@ struct SIMDGather {
     template <typename DataType, typename IndexType, typename CondType>
     static void gather(DataType* dest, const DataType* src, const IndexType* indexes, const CondType* is_filtered,
                        size_t num_rows) {
-        static_assert(std::is_integral_v<DataType>);
         static_assert(std::is_integral_v<IndexType>);
 
         static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
