@@ -546,7 +546,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
                 Utils.publishVersionBatch(publishTablets, txnInfos,
                         startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                        warehouseId);
+                        warehouseId, null);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -817,11 +817,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
+                // Used to collect statistics when the partition is first imported
+                Map<Long, Long> tabletRowNums = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        warehouseId);
+                        warehouseId, tabletRowNums);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
+                if (!tabletRowNums.isEmpty()) {
+                    partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().putAll(tabletRowNums);
+                }
             }
             return true;
         } catch (Throwable e) {
