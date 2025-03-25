@@ -249,9 +249,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 refreshExternalTable(context, baseTableCandidatePartitions);
             }
 
+<<<<<<< HEAD
             if (!Config.enable_materialized_view_external_table_precise_refresh) {
                 try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("MVRefreshSyncPartitions")) {
                     // sync partitions between materialized view and base tables out of lock
+=======
+            if (!Config.enable_materialized_view_external_table_precise_refresh || retryNum > 1) {
+                try (Timer ignored = Tracers.watchScope("MVRefreshSyncPartitions")) {
+                    // sync partitions between mv and base tables out of lock
+>>>>>>> e2a38297fa ([BugFix] Fix partitions not refreshed when retry in refresh materailized view (#57232))
                     // do it outside lock because it is a time-cost operation
                     syncPartitions(context);
                 }
