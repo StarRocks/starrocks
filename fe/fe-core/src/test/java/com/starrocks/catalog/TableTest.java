@@ -59,19 +59,20 @@ public class TableTest {
 
     @Test
     public void testGetMysqlType() {
-        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
+        String mysqlTableType = Table.getTableTypeForMysql();
+        Assert.assertEquals(mysqlTableType, new Table(TableType.OLAP).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.OLAP_EXTERNAL).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.CLOUD_NATIVE).getMysqlType());
 
-        Assert.assertEquals("BASE TABLE", new Table(TableType.MYSQL).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.BROKER).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.HIVE).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.ICEBERG).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.HUDI).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.JDBC).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.DELTALAKE).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.FILE).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.MYSQL).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.BROKER).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.ELASTICSEARCH).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.HIVE).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.ICEBERG).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.HUDI).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.JDBC).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.DELTALAKE).getMysqlType());
+        Assert.assertEquals(mysqlTableType, new Table(TableType.FILE).getMysqlType());
 
         Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
         Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
