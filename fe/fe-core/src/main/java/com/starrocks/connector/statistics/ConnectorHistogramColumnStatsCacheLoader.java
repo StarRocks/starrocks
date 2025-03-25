@@ -58,7 +58,7 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
                         queryHistogramStatistics(connectContext, cacheKey.tableUUID, Lists.newArrayList(cacheKey.column));
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
                 if (!statisticData.isEmpty()) {
-                    return Optional.of(convert2Histogram(cacheKey.tableUUID, statisticData.get(0)));
+                    return Optional.of(convert2Histogram(connectContext, cacheKey.tableUUID, statisticData.get(0)));
                 } else {
                     return Optional.empty();
                 }
@@ -95,7 +95,7 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
 
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(connectContext, tableUUID, columns);
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
-                    Histogram histogram = convert2Histogram(tableUUID, histogramStatsData);
+                    Histogram histogram = convert2Histogram(connectContext, tableUUID, histogramStatsData);
                     result.put(new ConnectorTableColumnKey(tableUUID, histogramStatsData.columnName),
                             Optional.of(histogram));
                 }
@@ -123,8 +123,9 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
         return statisticExecutor.queryHistogram(context, tableUUID, column);
     }
 
-    private Histogram convert2Histogram(String tableUUID, TStatisticData statisticData) throws AnalysisException {
-        Table table = getTableByUUID(tableUUID);
+    private Histogram convert2Histogram(ConnectContext context, String tableUUID, TStatisticData statisticData)
+            throws AnalysisException {
+        Table table = getTableByUUID(context, tableUUID);
         Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
 
         List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, columnType);

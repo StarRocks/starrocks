@@ -84,8 +84,7 @@ public class InfoSchemaDbTest {
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
-        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(),
-                new DefaultAuthorizationProvider()));
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(new DefaultAuthorizationProvider()));
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -349,11 +348,11 @@ public class InfoSchemaDbTest {
         MetadataMgr metadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb((String) any, (String) any);
+                metadataMgr.getDb((ConnectContext) any, (String) any, (String) any);
                 result = new com.starrocks.catalog.Database(0, "db");
                 minTimes = 0;
 
-                metadataMgr.getTable((String) any, (String) any, (String) any);
+                metadataMgr.getTable((ConnectContext) any, (String) any, (String) any, (String) any);
                 result = HiveTable.builder().setHiveTableName("tbl")
                         .setFullSchema(Lists.newArrayList(new Column("v1", Type.INT))).build();
                 minTimes = 0;

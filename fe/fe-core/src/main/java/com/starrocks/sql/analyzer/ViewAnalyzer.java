@@ -66,8 +66,9 @@ public class ViewAnalyzer {
             final String tableName = stmt.getTableName().getTbl();
             FeNameFormat.checkTableName(tableName);
 
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(stmt.getTableName().getCatalog(),
-                    stmt.getTableName().getDb(), stmt.getTableName().getTbl());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(context, stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
+                            stmt.getTableName().getTbl());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", tableName);
             }

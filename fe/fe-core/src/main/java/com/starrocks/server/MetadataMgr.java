@@ -23,7 +23,6 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
@@ -33,7 +32,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -44,7 +42,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
@@ -217,13 +214,13 @@ public class MetadataMgr {
         }
     }
 
-    public List<String> listDbNames(String catalogName) {
+    public List<String> listDbNames(ConnectContext context, String catalogName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> dbNames = ImmutableSet.builder();
 
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listDbNames().forEach(dbNames::add);
+                connectorMetadata.get().listDbNames(context).forEach(dbNames::add);
             } catch (StarRocksConnectorException e) {
                 LOG.error("Failed to listDbNames on catalog {}", catalogName, e);
                 throw e;
@@ -240,19 +237,20 @@ public class MetadataMgr {
         }
     }
 
-    public void dropDb(String catalogName, String dbName, boolean isForce) throws DdlException, MetaNotFoundException {
+    public void dropDb(ConnectContext context, String catalogName, String dbName, boolean isForce)
+            throws DdlException, MetaNotFoundException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
-            if (getDb(catalogName, dbName) == null) {
+            if (getDb(context, catalogName, dbName) == null) {
                 throw new MetaNotFoundException(String.format("Database %s.%s doesn't exists", catalogName, dbName));
             }
-            connectorMetadata.get().dropDb(dbName, isForce);
+            connectorMetadata.get().dropDb(context, dbName, isForce);
         }
     }
 
-    public Database getDb(String catalogName, String dbName) {
+    public Database getDb(ConnectContext context, String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Database db = connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
+        Database db = connectorMetadata.map(metadata -> metadata.getDb(context, dbName)).orElse(null);
         // set catalog name if external catalog
         if (db != null && CatalogMgr.isExternalCatalog(catalogName)) {
             db.setCatalogName(catalogName);
@@ -264,12 +262,12 @@ public class MetadataMgr {
         return localMetastore.getDb(databaseId);
     }
 
-    public List<String> listTableNames(String catalogName, String dbName) {
+    public List<String> listTableNames(ConnectContext context, String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listTableNames(dbName).forEach(tableNames::add);
+                connectorMetadata.get().listTableNames(context, dbName).forEach(tableNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listTableNames on [{}.{}]", catalogName, dbName, e);
                 throw e;
@@ -278,24 +276,7 @@ public class MetadataMgr {
         return ImmutableList.copyOf(tableNames.build());
     }
 
-    public List<String> listTemporaryTableNames(UUID sessionId, String catalogName, String dbName) {
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
-            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            Preconditions.checkArgument(connectorMetadata.isPresent(), "internal catalog doesn't exist");
-            try {
-                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-                Database database = connectorMetadata.get().getDb(dbName);
-                if (database != null) {
-                    return temporaryTableMgr.listTemporaryTables(sessionId, database.getId());
-                }
-            } catch (Exception e) {
-                throw e;
-            }
-        }
-        return Lists.newArrayList();
-    }
-
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -303,11 +284,11 @@ public class MetadataMgr {
             if (!CatalogMgr.isInternalCatalog(catalogName)) {
                 String dbName = stmt.getDbName();
                 String tableName = stmt.getTableName();
-                if (getDb(catalogName, dbName) == null) {
+                if (getDb(context, catalogName, dbName) == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
                 }
 
-                if (tableExists(catalogName, dbName, tableName)) {
+                if (tableExists(context, catalogName, dbName, tableName)) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create table[{}] which already exists", tableName);
                         return false;
@@ -322,14 +303,14 @@ public class MetadataMgr {
         }
     }
 
-    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+    public void createTableLike(ConnectContext context, CreateTableLikeStmt stmt) throws DdlException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
         if (connectorMetadata.isPresent()) {
             String dbName = stmt.getDbName();
             String tableName = stmt.getTableName();
-            if (tableExists(catalogName, dbName, tableName)) {
+            if (tableExists(context, catalogName, dbName, tableName)) {
                 if (stmt.isSetIfNotExists()) {
                     LOG.info("create table[{}] which already exists", tableName);
                     return;
@@ -355,7 +336,7 @@ public class MetadataMgr {
             throw new DdlException("temporary table must be created under internal catalog");
         } else {
             String dbName = stmt.getDbName();
-            Database db = getDb(catalogName, dbName);
+            Database db = localMetastore.getDb(dbName);
             if (db == null) {
                 throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
             }
@@ -393,11 +374,11 @@ public class MetadataMgr {
         if (connectorMetadata.isPresent()) {
             String dbName = stmt.getDbName();
             String tableName = stmt.getTableName();
-            if (getDb(catalogName, dbName) == null) {
+            if (getDb(context, catalogName, dbName) == null) {
                 throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
             }
 
-            if (!tableExists(catalogName, dbName, tableName)) {
+            if (!tableExists(context, catalogName, dbName, tableName)) {
                 throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
             }
 
@@ -449,7 +430,7 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> {
             String dbName = stmt.getDbName();
-            Database db = getDb(catalogName, dbName);
+            Database db = localMetastore.getDb(dbName);
             if (db == null) {
                 throw new StarRocksConnectorException(
                         "Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
@@ -512,13 +493,13 @@ public class MetadataMgr {
         temporaryTableMgr.removeTemporaryTables(sessionId);
     }
 
-    public Optional<Table> getTable(TableName tableName) {
-        return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
+    public Optional<Table> getTable(ConnectContext context, TableName tableName) {
+        return Optional.ofNullable(getTable(context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
 
-    public Table getTable(String catalogName, String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(context, dbName, tblName)).orElse(null);
         if (connectorTable != null && !connectorTable.isMetadataTable()) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
@@ -529,7 +510,7 @@ public class MetadataMgr {
             String originDbName = metadataTable.getOriginDb();
             String originTableName = metadataTable.getOriginTable();
             boolean originTableExist = connectorMetadata.map(metadata ->
-                    metadata.tableExists(originDbName, originTableName)).orElse(false);
+                    metadata.tableExists(context, originDbName, originTableName)).orElse(false);
             if (!originTableExist) {
                 LOG.error("origin table not exists with {}.{}.{}", catalogName, dbName, tblName);
                 return null;
@@ -546,25 +527,25 @@ public class MetadataMgr {
                 .orElse(TableVersionRange.empty().empty());
     }
 
-    public Optional<Database> getDatabase(BaseTableInfo baseTableInfo) {
+    public Optional<Database> getDatabase(ConnectContext context, BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
             return Optional.ofNullable(getDb(baseTableInfo.getDbId()));
         } else {
-            return Optional.ofNullable(getDb(baseTableInfo.getCatalogName(), baseTableInfo.getDbName()));
+            return Optional.ofNullable(getDb(context, baseTableInfo.getCatalogName(), baseTableInfo.getDbName()));
         }
     }
 
-    public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+    public Optional<Table> getTable(ConnectContext context, BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
             return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
         } else {
             return Optional.ofNullable(
-                    getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
+                    getTable(context, baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
         }
     }
 
-    public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        Optional<Table> tableOpt = getTable(baseTableInfo);
+    public Optional<Table> getTableWithIdentifier(ConnectContext context, BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTable(context, baseTableInfo);
         if (baseTableInfo.isInternalCatalog()) {
             return tableOpt;
         } else if (tableOpt.isPresent()) {
@@ -577,8 +558,8 @@ public class MetadataMgr {
         return Optional.empty();
     }
 
-    public Table getTableChecked(BaseTableInfo baseTableInfo) {
-        Optional<Table> tableOpt = getTableWithIdentifier(baseTableInfo);
+    public Table getTableChecked(ConnectContext context, BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTableWithIdentifier(context, baseTableInfo);
         if (tableOpt.isPresent()) {
             return tableOpt.get();
         }
@@ -600,24 +581,25 @@ public class MetadataMgr {
         return localMetastore.getTable(database.getId(), tableId);
     }
 
-    public boolean tableExists(String catalogName, String dbName, String tblName) {
+    public boolean tableExists(ConnectContext context, String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
+        return connectorMetadata.map(metadata -> metadata.tableExists(context, dbName, tblName)).orElse(false);
     }
 
     /**
      * getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
      * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.
-     * For default/internal catalog, this method is equivalent to {@link MetadataMgr#getTable(String, String, String)}.
+     * For default/internal catalog, this method is equivalent to
+     * {@link MetadataMgr#getTable(ConnectContext, String, String, String)}.
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
-    public BasicTable getBasicTable(String catalogName, String dbName, String tblName) {
+    public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName) {
         if (catalogName == null) {
-            return getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
+            return getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return getTable(catalogName, dbName, tblName);
+            return getTable(context, catalogName, dbName, tblName);
         }
 
         // for external catalog, do not reach external metadata service
@@ -625,11 +607,6 @@ public class MetadataMgr {
         return connectorMetadata.map(
                         metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
                 .orElse(null);
-    }
-
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName,

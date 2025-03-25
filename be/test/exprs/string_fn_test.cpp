@@ -22,6 +22,7 @@
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
@@ -479,6 +480,8 @@ PARALLEL_TEST(VecStringFunctionsTest, concatNullTest) {
 
 PARALLEL_TEST(VecStringFunctionsTest, lowerNormalTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    std::unique_ptr<RuntimeState> runtime_state(new RuntimeState());
+    ctx->set_runtime_state(runtime_state.get());
     Columns columns;
 
     BinaryColumn::Ptr str = BinaryColumn::create();
@@ -488,7 +491,9 @@ PARALLEL_TEST(VecStringFunctionsTest, lowerNormalTest) {
 
     columns.emplace_back(str);
 
+    ASSERT_TRUE(StringFunctions::lower_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     ColumnPtr result = StringFunctions::lower(ctx.get(), columns).value();
+    ASSERT_TRUE(StringFunctions::lower_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -1424,6 +1429,9 @@ PARALLEL_TEST(VecStringFunctionsTest, utf8LengthChineseTest) {
 
 PARALLEL_TEST(VecStringFunctionsTest, upperTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    std::unique_ptr<RuntimeState> runtime_state(new RuntimeState());
+    ctx->set_runtime_state(runtime_state.get());
+
     Columns columns;
     BinaryColumn::Ptr str = BinaryColumn::create();
     for (int j = 0; j < 20; ++j) {
@@ -1432,7 +1440,9 @@ PARALLEL_TEST(VecStringFunctionsTest, upperTest) {
 
     columns.emplace_back(str);
 
+    ASSERT_TRUE(StringFunctions::upper_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     ColumnPtr result = StringFunctions::upper(ctx.get(), columns).value();
+    ASSERT_TRUE(StringFunctions::upper_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -1444,6 +1454,8 @@ PARALLEL_TEST(VecStringFunctionsTest, upperTest) {
 
 PARALLEL_TEST(VecStringFunctionsTest, caseToggleTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    std::unique_ptr<RuntimeState> runtime_state(new RuntimeState());
+    ctx->set_runtime_state(runtime_state.get());
     Columns columns;
     BinaryColumn::Ptr src = BinaryColumn::create();
     src->append("");
@@ -1463,8 +1475,13 @@ PARALLEL_TEST(VecStringFunctionsTest, caseToggleTest) {
             "φημὶγὰρἐγὼεἶναιτὸABCD_EFG_HIGK_LMNδίκαιονοὐκἄλλοτιOPQRST_"
             "UVWἢτὸτοῦκρείττονοςσυμφέρονXYZ");
     columns.push_back(src);
+
+    ASSERT_TRUE(StringFunctions::upper_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     auto upper_dst = StringFunctions::upper(ctx.get(), columns).value();
+    ASSERT_TRUE(StringFunctions::upper_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::lower_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     auto lower_dst = StringFunctions::lower(ctx.get(), columns).value();
+    ASSERT_TRUE(StringFunctions::lower_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     auto binary_upper_dst = down_cast<BinaryColumn*>(upper_dst.get());
     auto binary_lower_dst = down_cast<BinaryColumn*>(lower_dst.get());
     ASSERT_TRUE(binary_upper_dst != nullptr);

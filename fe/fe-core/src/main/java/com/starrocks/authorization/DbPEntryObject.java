@@ -52,7 +52,7 @@ public class DbPEntryObject implements PEntryObject {
         return catalogId;
     }
 
-    public static DbPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
+    public static DbPEntryObject generate(List<String> tokens) throws PrivilegeException {
         String catalogName = null;
         long catalogId;
         if (tokens.size() == 2) {
@@ -73,7 +73,7 @@ public class DbPEntryObject implements PEntryObject {
             catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
             catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
         } else {
-            Catalog catalog = mgr.getCatalogMgr().getCatalogByName(catalogName);
+            Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
             if (catalog == null) {
                 throw new PrivObjNotFoundException("cannot find catalog: " + catalogName);
             }
@@ -84,17 +84,17 @@ public class DbPEntryObject implements PEntryObject {
             return new DbPEntryObject(catalogId, PrivilegeBuiltinConstants.ALL_DATABASES_UUID);
         }
 
-        return new DbPEntryObject(catalogId, getDatabaseUUID(mgr, catalogName, tokens.get(0)));
+        return new DbPEntryObject(catalogId, getDatabaseUUID(catalogName, tokens.get(0)));
     }
 
     /**
      * for internal database, use {@link Database#getUUID()} as privilege id.
      * for external database, use database name as privilege id.
      */
-    public static String getDatabaseUUID(GlobalStateMgr mgr, String catalogName, String dbToken) throws PrivObjNotFoundException {
+    public static String getDatabaseUUID(String catalogName, String dbToken) throws PrivObjNotFoundException {
         Preconditions.checkArgument(!dbToken.equals("*"));
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            Database database = mgr.getMetadataMgr().getDb(catalogName, dbToken);
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbToken);
             if (database == null) {
                 throw new PrivObjNotFoundException("cannot find db: " + dbToken);
             }
@@ -135,9 +135,9 @@ public class DbPEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
+    public boolean validate() {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            return globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+            return GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
         }
         // do not validate privilege of external database
         return true;

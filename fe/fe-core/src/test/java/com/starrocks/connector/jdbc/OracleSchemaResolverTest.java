@@ -23,6 +23,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -113,7 +114,7 @@ public class OracleSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> result = jdbcMetadata.listDbNames();
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("oracle", "template1", "test");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -136,7 +137,7 @@ public class OracleSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Database db = jdbcMetadata.getDb("test");
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
             Assert.fail();
@@ -163,7 +164,7 @@ public class OracleSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> result = jdbcMetadata.listTableNames("test");
+            List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
@@ -190,7 +191,7 @@ public class OracleSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table = jdbcMetadata.getTable("test", "tbl1");
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
             Assert.assertEquals("tbl1", table.getName());

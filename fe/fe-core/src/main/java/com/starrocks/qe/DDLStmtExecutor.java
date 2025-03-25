@@ -240,7 +240,7 @@ public class DDLStmtExecutor {
                 String dbName = stmt.getDbName();
                 boolean isForceDrop = stmt.isForceDrop();
                 try {
-                    context.getGlobalStateMgr().getMetadataMgr().dropDb(catalogName, dbName, isForceDrop);
+                    context.getGlobalStateMgr().getMetadataMgr().dropDb(context, catalogName, dbName, isForceDrop);
                 } catch (MetaNotFoundException e) {
                     if (stmt.isSetIfExists()) {
                         LOG.info("drop database[{}] which does not exist", dbName);
@@ -292,7 +292,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().createTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().createTable(context, stmt);
             });
             return null;
         }
@@ -308,7 +308,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().createTableLike(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().createTableLike(context, stmt);
             });
             return null;
         }
@@ -952,7 +952,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRefreshTableStatement(RefreshTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().refreshExternalTable(stmt);
+                context.getGlobalStateMgr().refreshExternalTable(context, stmt);
             });
             return null;
         }

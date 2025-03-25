@@ -94,6 +94,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 public class RestoreJobTest {
@@ -173,6 +174,7 @@ public class RestoreJobTest {
         AgentTaskQueue.clearAllTasks();
     }
 
+    @Test
     public void testResetPartitionForRestore() {
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
@@ -184,7 +186,49 @@ public class RestoreJobTest {
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
 
+        new MockUp<OlapTable>() {
+            @Mock
+            public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                                  int replicationNum, long version, int schemaHash,
+                                                  long partitionId, Database db) {
+                return Status.OK;
+            }
+        };
+
+        Partition part = expectedRestoreTbl.getPartition(CatalogMocker.TEST_PARTITION1_NAME);
+        long oldPartId = part.getId();
+        long oldDefaultPartId = part.getDefaultPhysicalPartition().getId();
+        List<Long> oldPhysicalPartitionIds = part.getSubPartitions().stream().map(p -> p.getId()).collect(Collectors.toList());
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
+        long newPartId = part.getId();
+        long newDefaultPartId = part.getDefaultPhysicalPartition().getId();
+        Assert.assertTrue(newPartId != oldPartId);
+        Assert.assertTrue(oldDefaultPartId != newDefaultPartId);
+
+        for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
+            Assert.assertTrue(physicalPartition.getParentId() == newPartId);
+            Assert.assertTrue(!oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
+        }
+    }
+
+    @Test
+    public void testModifyInvertedIndex() {
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
+
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.addRestoredTable(expectedRestoreTbl);
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return db;
+            }
+        };
+        job.setState(RestoreJob.RestoreJobState.DOWNLOAD);
+        job.replayRun();
+        job.cancelInternal(true);
     }
 
     @Test

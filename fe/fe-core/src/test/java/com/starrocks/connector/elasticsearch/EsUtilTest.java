@@ -17,6 +17,8 @@
 
 package com.starrocks.connector.elasticsearch;
 
+import com.starrocks.common.AnalysisException;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -24,6 +26,7 @@ import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class EsUtilTest {
 
@@ -95,4 +98,131 @@ public class EsUtilTest {
         EsRestClient.EsIndex[] esIndices = getFromJSONArray(jsonArray, EsRestClient.EsIndex[].class);
         System.out.println(JSONObject.valueToString(esIndices));
     }
+
+    @Test
+    public void testParseProperties_8x() throws AnalysisException {
+        String mappings = "{\n" +
+                "  \"idx\": {\n" +
+                "    \"mappings\": {\n" +
+                "      \"dynamic\": \"strict\",\n" +
+                "      \"properties\": {\n" +
+                "        \"id\": { \"type\": \"long\" },\n" +
+                "        \"name\": { \"type\": \"keyword\" },\n" +
+                "        \"description\": { \"type\": \"text\" },\n" +
+                "        \"price\": { \"type\": \"double\" },\n" +
+                "        \"created\": { \"type\": \"date\" },\n" +
+                "        \"tags\": { \"type\": \"keyword\" },\n" +
+                "        \"location\": { \"type\": \"geo_point\" }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        JSONObject props = EsUtil.parseProperties("idx", mappings);
+
+        assertNotNull(props);
+
+        assertEquals("long", props.getJSONObject("id").getString("type"));
+        assertEquals("keyword", props.getJSONObject("name").getString("type"));
+        assertEquals("text", props.getJSONObject("description").getString("type"));
+        assertEquals("double", props.getJSONObject("price").getString("type"));
+        assertEquals("date", props.getJSONObject("created").getString("type"));
+        assertEquals("keyword", props.getJSONObject("tags").getString("type"));
+        assertEquals("geo_point", props.getJSONObject("location").getString("type"));
+    }
+
+    @Test
+    public void testParseProperties_7x() throws AnalysisException {
+        String mappings = "{\n" +
+                "  \"idx\": {\n" +
+                "    \"mappings\": {\n" +
+                "      \"properties\": {\n" +
+                "        \"id\": { \"type\": \"long\" },\n" +
+                "        \"name\": { \"type\": \"keyword\" },\n" +
+                "        \"description\": { \"type\": \"text\" },\n" +
+                "        \"nested_field\": {\n" +
+                "          \"type\": \"nested\",\n" +
+                "          \"properties\": {\n" +
+                "            \"inner_field\": { \"type\": \"keyword\" }\n" +
+                "          }\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        JSONObject props = EsUtil.parseProperties("idx", mappings);
+
+        assertEquals("long", props.getJSONObject("id").getString("type"));
+        assertEquals("keyword", props.getJSONObject("name").getString("type"));
+        assertEquals("text", props.getJSONObject("description").getString("type"));
+
+        JSONObject nested = props.getJSONObject("nested_field");
+        assertEquals("nested", nested.getString("type"));
+        assertEquals("keyword", nested.getJSONObject("properties").getJSONObject("inner_field").getString("type"));
+    }
+
+    @Test
+    public void testParseProperties_6x() throws AnalysisException {
+        String mappings = "{\n" +
+                "  \"idx\": {\n" +
+                "    \"mappings\": {\n" +
+                "      \"_doc\": {\n" +
+                "        \"properties\": {\n" +
+                "          \"id\": { \"type\": \"long\" },\n" +
+                "          \"name\": { \"type\": \"keyword\" },\n" +
+                "          \"description\": { \"type\": \"text\" },\n" +
+                "          \"object_field\": {\n" +
+                "            \"type\": \"object\",\n" +
+                "            \"properties\": {\n" +
+                "              \"sub_field\": { \"type\": \"integer\" }\n" +
+                "            }\n" +
+                "          }\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        JSONObject props = EsUtil.parseProperties("idx", mappings);
+
+        assertEquals("long", props.getJSONObject("id").getString("type"));
+        assertEquals("keyword", props.getJSONObject("name").getString("type"));
+        assertEquals("text", props.getJSONObject("description").getString("type"));
+
+        JSONObject objField = props.getJSONObject("object_field");
+        assertEquals("object", objField.getString("type"));
+        assertEquals("integer", objField.getJSONObject("properties").getJSONObject("sub_field").getString("type"));
+    }
+
+    @Test(expected = JSONException.class)
+    public void testParseProperties_InvalidMapping() throws AnalysisException {
+        String mappings = "{\n" +
+                "  \"idx\": {\n" +
+                "    \"invalid_field\": {\n" + // Invalid mapping structure
+                "      \"properties\": {\n" +
+                "        \"id\": { \"type\": \"long\" }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        EsUtil.parseProperties("idx", mappings);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testParseProperties_NoProperties() throws AnalysisException {
+        String mappings = "{\n" +
+                "  \"idx\": {\n" +
+                "    \"mappings\": {\n" +
+                "      \"_doc\": {\n" +
+                "        \"type\": \"long\"\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        EsUtil.parseProperties("idx", mappings);
+    }
+    
 }

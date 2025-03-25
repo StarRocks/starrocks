@@ -44,6 +44,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
@@ -106,7 +107,6 @@ public class SyncPartitionUtils {
                 RangePartitionDiffer.simpleDiff(unique, mvRangeMap);
     }
 
-
     public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
         PartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
@@ -115,7 +115,6 @@ public class SyncPartitionUtils {
         }
         return false;
     }
-
 
     public static PartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                             Map<String, Range<PartitionKey>> mvRangeMap,
@@ -196,8 +195,8 @@ public class SyncPartitionUtils {
     /**
      * Convert base table with partition expression with the associated partition expressions.
      * eg: Create MV mv1
-     *      partition by tbl1.dt
-     *      as select * from tbl1 join on tbl2 on tbl1.dt = date_trunc('month', tbl2.dt)
+     * partition by tbl1.dt
+     * as select * from tbl1 join on tbl2 on tbl1.dt = date_trunc('month', tbl2.dt)
      * This method will format tbl1's range partition key directly, and will format tbl2's partition range key by
      * using `date_trunc('month', tbl2.dt)`.
      * TODO: now `date_trunc` is supported, should support like to_date(ds) + 1 day ?
@@ -605,7 +604,7 @@ public class SyncPartitionUtils {
         for (String refBaseTableAssociatedPartition : refBaseTableAssociatedPartitions) {
             if (!baseTableVersionInfoMap.containsKey(refBaseTableAssociatedPartition)) {
                 LOG.warn("WARNING: mvPartitionNameRefBaseTablePartitionMap {} failed to tracked the materialized view {} " +
-                        "partition {}", Joiner.on(",").join(mvPartitionNameRefBaseTablePartitionMap.keySet()),
+                                "partition {}", Joiner.on(",").join(mvPartitionNameRefBaseTablePartitionMap.keySet()),
                         mv.getName(), mvPartitionName);
                 continue;
             }
@@ -615,7 +614,6 @@ public class SyncPartitionUtils {
         // finally remove the dropped materialized view partition
         mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
     }
-
 
     private static boolean isMVPartitionNameRefBaseTablePartitionMapEnough(
             Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
@@ -674,7 +672,7 @@ public class SyncPartitionUtils {
         if (!versionMap.containsKey(baseTableInfo)) {
             // version map should always contain ref base table's version info.
             LOG.warn("Base ref table {} is not found in the base table version info map when " +
-                    "materialized view {} drops partition:{}",
+                            "materialized view {} drops partition:{}",
                     baseTableInfo, mv.getName(), mvPartitionName);
             return;
         }
@@ -761,8 +759,8 @@ public class SyncPartitionUtils {
             return;
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
-        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
-                tableName.getDb(), tableName.getTbl());
+        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
 
         if (baseTable == null) {
             return;

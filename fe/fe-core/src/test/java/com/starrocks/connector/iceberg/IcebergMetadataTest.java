@@ -173,7 +173,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
-        Assert.assertEquals(expectResult, metadata.listDbNames());
+        Assert.assertEquals(expectResult, metadata.listDbNames(new ConnectContext()));
     }
 
     @Test
@@ -191,7 +191,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         Database expectResult = new Database(0, db);
-        Assert.assertEquals(expectResult, metadata.getDb(db));
+        Assert.assertEquals(expectResult, metadata.getDb(new ConnectContext(), db));
     }
 
     @Test
@@ -208,7 +208,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertNull(metadata.getDb(db));
+        Assert.assertNull(metadata.getDb(new ConnectContext(), db));
     }
 
     @Test
@@ -228,7 +228,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
-        Assert.assertEquals(expectResult, metadata.listTableNames(db1));
+        Assert.assertEquals(expectResult, metadata.listTableNames(new ConnectContext(), db1));
     }
 
     @Test
@@ -245,7 +245,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Table actual = metadata.getTable("db", "tbl");
+        Table actual = metadata.getTable(new ConnectContext(), "db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
     }
@@ -267,7 +267,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Table actual = metadata.getTable("DB", "TBL");
+        Table actual = metadata.getTable(new ConnectContext(), "DB", "TBL");
         Assert.assertTrue(actual instanceof IcebergTable);
         IcebergTable icebergTable = (IcebergTable) actual;
         Assert.assertEquals("db", icebergTable.getCatalogDBName());
@@ -286,7 +286,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertTrue(metadata.tableExists("db", "tbl"));
+        Assert.assertTrue(metadata.tableExists(new ConnectContext(), "db", "tbl"));
     }
 
     @Test
@@ -318,7 +318,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertNull(metadata.getTable("db", "tbl2"));
+        Assert.assertNull(metadata.getTable(new ConnectContext(), "db", "tbl2"));
     }
 
     @Test(expected = AlreadyExistsException.class)
@@ -418,7 +418,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
@@ -466,7 +466,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergMetadata>() {
             @Mock
-            Table getTable(String dbName, String tblName) {
+            Table getTable(ConnectContext context, String dbName, String tblName) {
                 return new IcebergTable(1, "table1", CATALOG_NAME,
                         CATALOG_NAME, "iceberg_db",
                         "table1", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
@@ -521,7 +521,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -537,7 +537,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -553,7 +553,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -586,7 +586,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        metadata.dropDb("iceberg_db", true);
+        metadata.dropDb(new ConnectContext(), "iceberg_db", true);
     }
 
     @Test
@@ -600,7 +600,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString);
                 result = icebergTable;
                 minTimes = 0;
             }
@@ -696,7 +696,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString);
                 result = icebergTable;
                 minTimes = 0;
 
@@ -1384,7 +1384,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergMetadata>() {
             @Mock
-            public Database getDb(String dbName) {
+            public Database getDb(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
         };

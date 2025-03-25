@@ -44,7 +44,7 @@ public class PipePEntryObject implements PEntryObject {
         this.dbUUID = dbUUID;
     }
 
-    public static PEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
+    public static PEntryObject generate(List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 2) {
             throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
         }
@@ -56,7 +56,7 @@ public class PipePEntryObject implements PEntryObject {
             pipeId = PrivilegeBuiltinConstants.ALL_PIPES_ID;
         } else {
             String dbName = tokens.get(0);
-            Database database = mgr.getLocalMetastore().getDb(dbName);
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (database == null) {
                 throw new PrivObjNotFoundException("cannot find db: " + dbName);
             }
@@ -66,7 +66,7 @@ public class PipePEntryObject implements PEntryObject {
                 pipeId = PrivilegeBuiltinConstants.ALL_PIPES_ID;
             } else {
                 String name = tokens.get(1);
-                Optional<Pipe> pipe = mgr.getPipeManager().mayGetPipe(new PipeName(dbName, name));
+                Optional<Pipe> pipe = GlobalStateMgr.getCurrentState().getPipeManager().mayGetPipe(new PipeName(dbName, name));
 
                 pipe.orElseThrow(() ->
                         new PrivObjNotFoundException(
@@ -110,12 +110,12 @@ public class PipePEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.dbUUID));
+    public boolean validate() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.dbUUID));
         if (db == null) {
             return false;
         }
-        return globalStateMgr.getPipeManager().mayGetPipe(getId()).isPresent();
+        return GlobalStateMgr.getCurrentState().getPipeManager().mayGetPipe(getId()).isPresent();
     }
 
     public List<List<String>> expandObjectNames() {

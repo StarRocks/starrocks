@@ -962,7 +962,10 @@ public:
         return Status::OK();
     }
 
-    bool load_snapshot(phmap::BinaryInputArchive& ar) override { return _map.load(ar); }
+    Status load_snapshot(phmap::BinaryInputArchive& ar) override {
+        TRY_CATCH_BAD_ALLOC(_map.load(ar));
+        return Status::OK();
+    }
 
     Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         size_t kv_header_size = 8;
@@ -1102,6 +1105,7 @@ public:
     }
 };
 
+DEFINE_FAIL_POINT(phmap_try_consume_mem_failed);
 class SliceMutableIndex : public MutableIndex {
 public:
     using KeyType = std::string;
@@ -1379,31 +1383,26 @@ public:
         return dump->finish_pindex_kvs(dump_pb);
     }
 
-    bool load_snapshot(phmap::BinaryInputArchive& ar) override {
+    Status load_snapshot(phmap::BinaryInputArchive& ar) override {
         size_t size = 0;
-        if (!ar.load(&size)) {
-            LOG(ERROR) << "Pindex load snapshot failed because load snapshot size failed";
-            return false;
-        }
-        if (size == 0) {
-            return true;
-        }
-        reserve(size);
+        RETURN_IF(!ar.load(&size), Status::Corruption("Pindex load snapshot size failed"));
+        RETURN_IF(size == 0, Status::OK());
+        TRY_CATCH_BAD_ALLOC(reserve(size));
+        FAIL_POINT_TRIGGER_EXECUTE(phmap_try_consume_mem_failed, {
+            CurrentThread::current().set_try_consume_mem_size(10);
+            return Status::MemoryLimitExceeded("error phmap size");
+        });
         for (auto i = 0; i < size; ++i) {
             size_t compose_key_size = 0;
-            if (!ar.load(&compose_key_size)) {
-                LOG(ERROR) << "Pindex load snapshot failed because load compose_key_size failed";
-                return false;
-            }
+            RETURN_IF(!ar.load(&compose_key_size),
+                      Status::Corruption("Pindex load snapshot failed because load compose_key_size failed"));
             if (compose_key_size == 0) {
                 continue;
             }
             std::string composite_key;
-            raw::stl_string_resize_uninitialized(&composite_key, compose_key_size);
-            if (!ar.load(composite_key.data(), composite_key.size())) {
-                LOG(ERROR) << "Pindex load snapshot failed because load composite_key failed";
-                return false;
-            }
+            TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&composite_key, compose_key_size));
+            RETURN_IF((!ar.load(composite_key.data(), composite_key.size())),
+                      Status::Corruption("Pindex load snapshot failed because load composite_key failed"));
             auto [it, inserted] = _set.emplace(composite_key);
             if (inserted) {
                 _total_kv_pairs_usage += composite_key.size();
@@ -1412,7 +1411,7 @@ public:
                 _set.emplace(composite_key);
             }
         }
-        return true;
+        return Status::OK();
 
         // TODO: read a large buffer and parse instead of one by one.
         // TODO: dive in phmap internal detail and implement load of std::string type inside, use ctrl_&slot_ directly to improve performance
@@ -1964,13 +1963,11 @@ Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue
     return Status::OK();
 }
 
-bool ShardByLengthMutableIndex::load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes) {
+Status ShardByLengthMutableIndex::load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes) {
     for (const auto idx : idxes) {
-        if (!_shards[idx]->load_snapshot(ar)) {
-            return false;
-        }
+        RETURN_IF_ERROR(_shards[idx]->load_snapshot(ar));
     }
-    return true;
+    return Status::OK();
     // notice: accumulate will keep iterate the container, not return early.
     // return std::accumulate(idxes.begin(), idxes.end(), true, [](bool prev, size_t idx) { return _shards[idx]->load_snapshot(ar_in) && prev; });
 }
@@ -2158,11 +2155,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         MonotonicStopWatch watch;
         watch.start();
         // do load snapshot
-        if (!load_snapshot(ar, dumped_shard_idxes)) {
-            std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
-            LOG(WARNING) << err_msg;
-            return Status::InternalError(err_msg);
-        }
+        RETURN_IF_ERROR(load_snapshot(ar, dumped_shard_idxes));
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add read stats manually
         IOProfiler::add_read(snapshot_size, watch.elapsed_time());
@@ -5175,6 +5168,21 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
                         << " time:" << timer.elapsed_time() / 1000000 << "ms";
                 return status;
             } else {
+                if (config::enable_rebuild_pindex_check) {
+                    // if load pindex failed because of memory limit, there may be two possible reasons:
+                    // 1. memory usage is too high
+                    // 2. some bug happened and try to alloc an unusually large amount of memory.
+                    // there should not be large memory requests during loading pindex
+                    if (status.is_mem_limit_exceeded()) {
+                        int64_t try_consume_mem_size = CurrentThread::current().try_consume_mem_size();
+                        // resize hash table will double hash map
+                        if (try_consume_mem_size < config::l0_max_mem_usage * 2) {
+                            LOG(WARNING) << "load persistent index failed due to memory limit, tablet: " << tablet_id
+                                         << " try consume: " << try_consume_mem_size;
+                            return status;
+                        }
+                    }
+                }
                 LOG(WARNING) << "load persistent index failed, tablet: " << tablet_id << ", status: " << status;
                 if (index_meta.has_l0_meta()) {
                     EditVersion l0_version = index_meta.l0_meta().snapshot().version();

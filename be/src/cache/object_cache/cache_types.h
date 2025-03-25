@@ -27,7 +27,6 @@ enum class ObjectCacheModuleType { LRUCACHE, STARCACHE };
 
 struct ObjectCacheOptions {
     size_t capacity = 0;
-    ObjectCacheModuleType module = ObjectCacheModuleType::LRUCACHE;
 };
 
 struct ObjectCacheWriteOptions {

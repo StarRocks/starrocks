@@ -39,7 +39,7 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
-import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_QUERY_MULTI_COLUMN_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
 
@@ -51,8 +51,9 @@ public class StatisticSQLBuilder {
                     + " GROUP BY partition_id";
 
     private static final String QUERY_PARTITION_STATISTIC_TEMPLATE =
-            "SELECT cast(" + STATISTIC_PARTITION_VERSION + " as INT), " +
-                    " `partition_id`, `column_name`, hll_cardinality(hll_union(`ndv`)) as distinct_count"
+            "SELECT cast(" + STATISTIC_PARTITION_VERSION_V2 + " as INT), " +
+                    " `partition_id`, `column_name`, hll_cardinality(hll_union(`ndv`)) as distinct_count,"
+                    + " any_value(null_count), any_value(row_count)"
                     + " FROM " + FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
                     + " GROUP BY `partition_id`, `column_name`";

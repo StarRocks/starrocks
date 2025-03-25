@@ -189,7 +189,9 @@ public class ConnectContext {
     // Command this connection is processing.
     protected MysqlCommand command;
     // last command start time
-    protected Instant startTime = Instant.now();
+    protected volatile Instant startTime = Instant.now();
+    // last command end time
+    protected volatile Instant endTime = Instant.ofEpochMilli(0);
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
@@ -634,6 +636,10 @@ public class ConnectContext {
     public void setStartTime(Instant start) {
         startTime = start;
         returnRows = 0;
+    }
+
+    public void setEndTime() {
+        endTime = Instant.now();
     }
 
     public void updateReturnRows(int returnRows) {
@@ -1221,7 +1227,7 @@ public class ConnectContext {
             dbName = parts[1];
         }
 
-        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
             LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -1393,5 +1399,14 @@ public class ConnectContext {
             }
             return row;
         }
+    }
+
+    public boolean isIdleLastFor(long milliSeconds) {
+        if (command != MysqlCommand.COM_SLEEP) {
+            return false;
+        }
+
+        return endTime.isAfter(startTime)
+                && endTime.plusMillis(milliSeconds).isBefore(Instant.now());
     }
 }

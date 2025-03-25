@@ -145,6 +145,7 @@ public class StarMgrServer {
         com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
         com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
         com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
+        com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
@@ -154,6 +155,7 @@ public class StarMgrServer {
             com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
             com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
             com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
+            com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
         });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";

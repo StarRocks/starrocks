@@ -38,6 +38,7 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.statistic.sample.NDVEstimator;
 
 import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
@@ -1911,35 +1912,6 @@ public class Config extends ConfigBase {
     public static String auth_token = "";
 
     /**
-     * If set to true and the jar that use to authentication is loaded in fe, kerberos authentication is supported.
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_authentication_kerberos = false;
-
-    /**
-     * If kerberos authentication is enabled, the configuration must be filled.
-     * like "starrocks-fe/<HOSTNAME>@STARROCKS.COM".
-     * <p>
-     * Service principal name (SPN) is sent to clients that attempt to authenticate using Kerberos.
-     * The SPN must be present in the database managed by the KDC server, and its key file
-     * needs to be exported and configured. See authentication_kerberos_service_key_tab for details.
-     */
-    @ConfField(mutable = true)
-    public static String authentication_kerberos_service_principal = "";
-
-    /**
-     * If kerberos authentication is enabled, the configuration must be filled.
-     * like "$HOME/path/to/your/starrocks-fe.keytab"
-     * <p>
-     * The keytab file for authenticating tickets received from clients.
-     * This file must exist and contain a valid key for the SPN or authentication of clients will fail.
-     * Export keytab file requires KDC administrator to operate.
-     * for example: ktadd -norandkey -k /path/to/starrocks-fe.keytab starrocks-fe/<HOSTNAME>@STARROCKS.COM
-     */
-    @ConfField(mutable = true)
-    public static String authentication_kerberos_service_key_tab = "";
-
-    /**
      * When set to true, we cannot drop user named 'admin' or grant/revoke role to/from user named 'admin',
      * except that we're root user.
      */
@@ -2170,6 +2142,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static double statistics_min_sample_row_ratio = 0.01;
+
+    @ConfField(mutable = true, comment = "The NDV estimator: DUJ1/GEE/LINEAR/POLYNOMIAL")
+    public static String statistics_sample_ndv_estimator =
+            NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 
     /**
      * The partition size of sample collect, default 1k partitions
@@ -2551,6 +2527,8 @@ public class Config extends ConfigBase {
     public static boolean enable_query_cost_prediction = false;
     @ConfField(mutable = true)
     public static String query_cost_prediction_service_address = "http://localhost:5000";
+    @ConfField(mutable = false)
+    public static int query_cost_predictor_healthchk_interval = 30;
 
     @ConfField
     public static String feature_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -3133,6 +3111,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
 
+    /**
+     * Enable groovy server for debugging
+     */
+    @ConfField
+    public static boolean enable_groovy_debug_server = false;
+
     @ConfField(mutable = true)
     public static short default_replication_num = 3;
 
@@ -3231,6 +3215,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
     public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
+
+    @ConfField(mutable = true, comment = "Whether enable profile in refreshing materialized view or not by default")
+    public static boolean enable_mv_refresh_collect_profile = false;
 
     @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
             "occupying too much meta memory")

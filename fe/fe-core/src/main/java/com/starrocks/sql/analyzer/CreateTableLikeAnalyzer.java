@@ -41,7 +41,7 @@ public class CreateTableLikeAnalyzer {
         FeNameFormat.checkTableName(tableName);
 
         MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(existedDbTbl.getCatalog(),
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, existedDbTbl.getCatalog(),
                 existedDbTbl.getDb(), existedDbTbl.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);

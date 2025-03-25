@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/lrucache_module.h"
+#include "cache/object_cache/starcache_module.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
@@ -30,7 +32,7 @@ protected:
             _kv_size = _key_size + _value_size;
             _mem_quota = 16384;
             _cache_opt.capacity = _mem_quota;
-            ASSERT_OK(_cache.init(_cache_opt));
+            _cache = std::make_shared<LRUCacheModule>(_cache_opt);
         } else {
             _value_size = 300 * 1024;
             _kv_size = _value_size;
@@ -38,7 +40,7 @@ protected:
             _cache_opt.capacity = _mem_quota;
             ASSERT_OK(fs::create_directories(_cache_dir));
             _init_block_cache();
-            ASSERT_OK(_cache.init(_block_cache->starcache_instance()));
+            _cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
         }
     }
     void TearDown() override {
@@ -64,8 +66,8 @@ protected:
     std::string _cache_dir = "./object_cache_test";
     int64_t _mem_quota = 0;
     std::shared_ptr<BlockCache> _block_cache;
-    ObjectCache _cache;
-    ObjectCacheOptions _cache_opt{.module = ObjectCacheModuleType::LRUCACHE};
+    std::shared_ptr<ObjectCache> _cache;
+    ObjectCacheOptions _cache_opt;
     ObjectCacheWriteOptions _write_opt;
     ObjectCacheReadOptions _read_opt;
 
@@ -96,37 +98,33 @@ void ObjectCacheTest::_insert_data() {
         *ptr = i;
 
         ObjectCacheHandlePtr handle = nullptr;
-        ASSERT_OK(_cache.insert(key, (void*)ptr, _value_size, _value_size, &Deleter, &handle, &_write_opt));
-        _cache.release(handle);
+        ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, _value_size, &Deleter, &handle, &_write_opt));
+        _cache->release(handle);
     }
 }
 
 void ObjectCacheTest::_check_not_found(int value) {
     std::string key = int_to_string(6, value);
     ObjectCacheHandlePtr handle = nullptr;
-    Status st = _cache.lookup(key, &handle, &_read_opt);
+    Status st = _cache->lookup(key, &handle, &_read_opt);
     ASSERT_TRUE(st.is_not_found());
 }
 
 void ObjectCacheTest::_check_found(int value) {
     std::string key = int_to_string(6, value);
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache.lookup(key, &handle, &_read_opt));
-    ASSERT_EQ(*(int*)(_cache.value(handle)), value);
-    _cache.release(handle);
+    ASSERT_OK(_cache->lookup(key, &handle, &_read_opt));
+    ASSERT_EQ(*(int*)(_cache->value(handle)), value);
+    _cache->release(handle);
 }
 
 TEST_P(ObjectCacheTest, test_init) {
-    ObjectCache cache;
-    ASSERT_FALSE(cache.initialized());
+    ASSERT_TRUE(_cache->initialized());
+    ASSERT_TRUE(_cache->available());
+    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
 
-    ASSERT_OK(cache.init(_cache_opt));
-    ASSERT_TRUE(cache.initialized());
-    ASSERT_TRUE(cache.available());
-    ASSERT_EQ(_cache.capacity(), _cache_opt.capacity);
-
-    ASSERT_OK(cache.set_capacity(0));
-    ASSERT_FALSE(cache.available());
+    ASSERT_OK(_cache->set_capacity(0));
+    ASSERT_FALSE(_cache->available());
 }
 
 TEST_P(ObjectCacheTest, test_insert_lookup) {
@@ -134,7 +132,7 @@ TEST_P(ObjectCacheTest, test_insert_lookup) {
     _insert_data();
 
     // usage
-    ASSERT_EQ(_cache.usage(), _kv_size * 128);
+    ASSERT_EQ(_cache->usage(), _kv_size * 128);
 
     // not found
     _check_not_found(254);
@@ -143,7 +141,7 @@ TEST_P(ObjectCacheTest, test_insert_lookup) {
     _check_found(30);
 
     // remove
-    ASSERT_OK(_cache.remove(int_to_string(6, 30)));
+    ASSERT_OK(_cache->remove(int_to_string(6, 30)));
 
     // not found
     _check_not_found(30);
@@ -154,25 +152,25 @@ TEST_P(ObjectCacheTest, test_value_slice) {
 
     std::string key = int_to_string(6, 30);
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache.lookup(key, &handle, &_read_opt));
+    ASSERT_OK(_cache->lookup(key, &handle, &_read_opt));
 
-    Slice value = _cache.value_slice(handle);
+    Slice value = _cache->value_slice(handle);
     ASSERT_EQ(value.size, _value_size);
     ASSERT_EQ(*(int*)value.data, 30);
-    _cache.release(handle);
+    _cache->release(handle);
 }
 
 TEST_P(ObjectCacheTest, test_set_capacity) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache.capacity(), _cache_opt.capacity);
-    ASSERT_EQ(_cache.usage(), _kv_size * 128);
+    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->usage(), _kv_size * 128);
 
-    ASSERT_OK(_cache.set_capacity(_mem_quota / 2));
-    ASSERT_EQ(_cache.capacity(), _mem_quota / 2);
-    ASSERT_GT(_cache.usage(), 0);
-    ASSERT_LE(_cache.usage(), _mem_quota / 2);
+    ASSERT_OK(_cache->set_capacity(_mem_quota / 2));
+    ASSERT_EQ(_cache->capacity(), _mem_quota / 2);
+    ASSERT_GT(_cache->usage(), 0);
+    ASSERT_LE(_cache->usage(), _mem_quota / 2);
 
     // not found
     _check_not_found(0);
@@ -185,13 +183,13 @@ TEST_P(ObjectCacheTest, test_adjust_capacity) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache.capacity(), _cache_opt.capacity);
-    ASSERT_EQ(_cache.usage(), _kv_size * 128);
+    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->usage(), _kv_size * 128);
 
-    ASSERT_OK(_cache.adjust_capacity(-_mem_quota / 2, 1024));
-    ASSERT_EQ(_cache.capacity(), _mem_quota / 2);
-    ASSERT_GT(_cache.usage(), 0);
-    ASSERT_LE(_cache.usage(), _mem_quota / 2);
+    ASSERT_OK(_cache->adjust_capacity(-_mem_quota / 2, 1024));
+    ASSERT_EQ(_cache->capacity(), _mem_quota / 2);
+    ASSERT_GT(_cache->usage(), 0);
+    ASSERT_LE(_cache->usage(), _mem_quota / 2);
 
     // not found
     _check_not_found(0);
@@ -204,18 +202,18 @@ TEST_P(ObjectCacheTest, test_prune) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache.usage(), _kv_size * 128);
-    ASSERT_OK(_cache.prune());
-    ASSERT_EQ(_cache.usage(), 0);
+    ASSERT_EQ(_cache->usage(), _kv_size * 128);
+    ASSERT_OK(_cache->prune());
+    ASSERT_EQ(_cache->usage(), 0);
 }
 
 TEST_P(ObjectCacheTest, test_shutdown) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache.usage(), _kv_size * 128);
-    ASSERT_OK(_cache.shutdown());
-    ASSERT_EQ(_cache.usage(), 0);
+    ASSERT_EQ(_cache->usage(), _kv_size * 128);
+    ASSERT_OK(_cache->shutdown());
+    ASSERT_EQ(_cache->usage(), 0);
 }
 
 TEST_P(ObjectCacheTest, test_metrics) {
@@ -230,9 +228,9 @@ TEST_P(ObjectCacheTest, test_metrics) {
         _check_found(i);
     }
 
-    ASSERT_EQ(_cache.lookup_count(), 150);
-    ASSERT_EQ(_cache.hit_count(), 50);
-    ObjectCacheMetrics metrics = _cache.metrics();
+    ASSERT_EQ(_cache->lookup_count(), 150);
+    ASSERT_EQ(_cache->hit_count(), 50);
+    ObjectCacheMetrics metrics = _cache->metrics();
     ASSERT_EQ(metrics.lookup_count, 150);
     ASSERT_EQ(metrics.hit_count, 50);
     ASSERT_EQ(metrics.usage, _kv_size * 128);

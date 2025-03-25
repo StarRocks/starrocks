@@ -548,29 +548,26 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
                 "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         DbPEntryObject dbPEntryObject =
-                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
-        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
-        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                List.of("test_iceberg", "*", "*"));
-        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+                DbPEntryObject.generate(List.of("test_iceberg", "*"));
+        Assert.assertTrue(dbPEntryObject.validate());
+        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(List.of("test_iceberg", "*", "*"));
+        Assert.assertTrue(tablePEntryObject.validate());
 
         dbPEntryObject =
-                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
+                DbPEntryObject.generate(List.of("test_iceberg", "iceberg_db"));
         Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
-        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
-        tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+        Assert.assertTrue(dbPEntryObject.validate());
+        tablePEntryObject = TablePEntryObject.generate(List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
         Assert.assertEquals(tablePEntryObject.getDatabaseUUID(), "iceberg_db");
         Assert.assertEquals(tablePEntryObject.getTableUUID(), "iceberg_tbl");
-        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        Assert.assertTrue(tablePEntryObject.validate());
     }
 
     @Test
     public void testGetResourceMappingExternalTableException() throws Exception {
         ctxToTestUser();
         // no throw
-        TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
+        TablePEntryObject.generate(Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
 
         new MockUp<MetadataMgr>() {
             @Mock
@@ -581,8 +578,7 @@ public class PrivilegeCheckerTest {
 
         // throw
         try {
-            TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                    Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
+            TablePEntryObject.generate(Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
         } catch (PrivObjNotFoundException e) {
             System.out.println(e.getMessage());
             e.getMessage().contains("cannot find table tbl1 in db db1, msg: test");
@@ -3683,20 +3679,20 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withTable("create table db1.tbl_pipe (id int, str string) properties('replication_num'='1') ");
 
         // invalid token
-        Assert.assertThrows(PrivilegeException.class, () -> PipePEntryObject.generate(mgr, ImmutableList.of("*")));
+        Assert.assertThrows(PrivilegeException.class, () -> PipePEntryObject.generate(ImmutableList.of("*")));
         Assert.assertThrows(PrivilegeException.class, () ->
-                PipePEntryObject.generate(mgr, ImmutableList.of("not_existing_database", "*")));
+                PipePEntryObject.generate(ImmutableList.of("not_existing_database", "*")));
         Assert.assertThrows(PrivilegeException.class, () ->
-                PipePEntryObject.generate(mgr, ImmutableList.of("db1", "not_existing_pipe")));
+                PipePEntryObject.generate(ImmutableList.of("db1", "not_existing_pipe")));
 
         starRocksAssert.ddl("create pipe db1.p1 as insert into tbl_pipe " +
                 "select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ");
         starRocksAssert.ddl("create pipe db1.p2 as insert into tbl_pipe " +
                 "select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ");
-        PipePEntryObject p1 = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("db1", "p1"));
-        PipePEntryObject p2 = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("db1", "p2"));
-        PipePEntryObject pAll = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("db1", "*"));
-        PipePEntryObject pAllDb = (PipePEntryObject) PipePEntryObject.generate(mgr, ImmutableList.of("*", "*"));
+        PipePEntryObject p1 = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("db1", "p1"));
+        PipePEntryObject p2 = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("db1", "p2"));
+        PipePEntryObject pAll = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("db1", "*"));
+        PipePEntryObject pAllDb = (PipePEntryObject) PipePEntryObject.generate(ImmutableList.of("*", "*"));
 
         // compareTo
         Assert.assertEquals(-1, p1.compareTo(p2));
@@ -3721,8 +3717,8 @@ public class PrivilegeCheckerTest {
         Assert.assertNotEquals(p1, p2);
 
         // validate
-        Assert.assertTrue(p1.validate(GlobalStateMgr.getCurrentState()));
-        Assert.assertFalse(pAll.validate(GlobalStateMgr.getCurrentState()));
+        Assert.assertTrue(p1.validate());
+        Assert.assertFalse(pAll.validate());
 
         // getDatabase
         Assert.assertTrue(p1.getDatabase().isPresent());

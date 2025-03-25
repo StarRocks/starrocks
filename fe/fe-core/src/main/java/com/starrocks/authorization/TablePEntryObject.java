@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authorization;
 
 import com.google.common.base.Preconditions;
@@ -62,7 +61,7 @@ public class TablePEntryObject implements PEntryObject {
         return catalogId;
     }
 
-    public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
+    public static TablePEntryObject generate(List<String> tokens) throws PrivilegeException {
         String catalogName = null;
         long catalogId;
         if (tokens.size() == 3) {
@@ -93,7 +92,7 @@ public class TablePEntryObject implements PEntryObject {
             catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
             catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
         } else {
-            Catalog catalog = mgr.getCatalogMgr().getCatalogByName(catalogName);
+            Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
             if (catalog == null) {
                 throw new PrivObjNotFoundException("cannot find catalog: " + catalogName);
             }
@@ -107,8 +106,8 @@ public class TablePEntryObject implements PEntryObject {
                     PrivilegeBuiltinConstants.ALL_TABLES_UUID);
         }
 
-        String dbUUID = DbPEntryObject.getDatabaseUUID(mgr, catalogName, tokens.get(0));
-        String tableUUID = getTableUUID(mgr, catalogName, tokens.get(0), tokens.get(1));
+        String dbUUID = DbPEntryObject.getDatabaseUUID(catalogName, tokens.get(0));
+        String tableUUID = getTableUUID(catalogName, tokens.get(0), tokens.get(1));
         return new TablePEntryObject(catalogId, dbUUID, tableUUID);
     }
 
@@ -116,7 +115,7 @@ public class TablePEntryObject implements PEntryObject {
      * for internal table, use {@link Table#getUUID()} as privilege id.
      * for external table, use table name as privilege id.
      */
-    private static String getTableUUID(GlobalStateMgr mgr, String catalogName, String dbToken, String tableToken)
+    private static String getTableUUID(String catalogName, String dbToken, String tableToken)
             throws PrivObjNotFoundException {
         Preconditions.checkArgument(!dbToken.equals("*"));
         if (tableToken.equals("*")) {
@@ -126,7 +125,7 @@ public class TablePEntryObject implements PEntryObject {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             Table table;
             try {
-                table = mgr.getMetadataMgr().getTable(catalogName, dbToken, tableToken);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbToken, tableToken);
             } catch (StarRocksConnectorException e) {
                 throw new PrivObjNotFoundException("cannot find table " +
                         tableToken + " in db " + dbToken + ", msg: " + e.getMessage());
@@ -179,13 +178,15 @@ public class TablePEntryObject implements PEntryObject {
     }
 
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
+    public boolean validate() {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return false;
             }
-            return globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
+            return GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
         }
         // do not validate privilege of external table
         return true;

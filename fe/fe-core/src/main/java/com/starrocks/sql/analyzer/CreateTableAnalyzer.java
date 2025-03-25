@@ -89,7 +89,7 @@ public class CreateTableAnalyzer {
         final String tableName = tableNameObject.getTbl();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, tableNameObject.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, tableNameObject.getDb());
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableNameObject.getDb());
         }
@@ -97,7 +97,7 @@ public class CreateTableAnalyzer {
             analyzeTemporaryTable(statement, context, catalogName, db, tableName);
         } else {
             if (GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .tableExists(catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
+                    .tableExists(context, catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }

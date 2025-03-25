@@ -155,8 +155,8 @@ public class ColumnPrivilege {
                             if (view.isSecurity()) {
                                 List<TableName> allTables = view.getTableRefs();
                                 for (TableName t : allTables) {
-                                    BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                                            t.getCatalog(), t.getDb(), t.getTbl());
+                                    BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                                            .getBasicTable(context, t.getCatalog(), t.getDb(), t.getTbl());
                                     if (basicTable.isOlapView()) {
                                         View subView = (View) basicTable;
                                         QueryStatement queryStatement = subView.getQueryStatement();

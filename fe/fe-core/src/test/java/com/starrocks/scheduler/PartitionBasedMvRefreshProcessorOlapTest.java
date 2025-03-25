@@ -611,7 +611,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 Map<Long, TableSnapshotInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getTableChecked(new ConnectContext(), baseTableInfo);
                     if (!table.isOlapTable()) {
                         continue;
                     }
@@ -1036,6 +1037,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableProfile());
         }
 
         {
@@ -1050,6 +1052,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableProfile());
 
             Config.enable_materialized_view_spill = true;
         }
@@ -1769,6 +1772,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 3);
         Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
     }
+
     @Test
     public void testMVPartitionMappingWithManyToMany() {
         starRocksAssert.withTable(new MTable("mock_tbl", "k2",
@@ -2626,7 +2630,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         taskRun.getProcessor();
                                 final MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 final String postRun = mvTaskRunContext.getPostRun();
-                                Assert.assertTrue(postRun.contains("ANALYZE TABLE "));
+                                Assert.assertFalse(postRun.contains("ANALYZE TABLE "));
                             });
                 }
         );

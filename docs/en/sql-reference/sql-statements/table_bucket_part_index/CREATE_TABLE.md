@@ -666,10 +666,11 @@ PROPERTIES (
 #### Set fast schema evolution
 
 `fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+
   > **NOTE**
   >
-  > - This parameter is only supported for shared-nothing clusters since v3.2.0.
-  > - If you need to enable fast schema evolution for tables in a shared-data cluster, you must configure fast schema evolution at the cluster level using FE dynamic parameter `enable_fast_schema_evolution`.
+  > - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
+  > - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
 
 #### Forbid Base Compaction
 
@@ -709,6 +710,29 @@ Example:
 
 -- Forbid Base Compaction from 8:00 am to 9:00 pm every working day (that is, Monday to Friday).
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
+```
+
+#### Specify Common Partition Expression TTL
+
+From v3.4.1 onwards, StarRocks native tables support Common Partition Expression TTL.
+
+`partition_retention_condition`: The expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly.
+- The expression can only contain partition columns and constants. Non-partition columns are not supported.
+- Common Partition Expression applies to List partitions and Range partitions differently:
+  - For tables with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
+  - For tables with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
+
+Example:
+
+```SQL
+-- Retain the data from the last three months. Column `dt` is the partition column of the table.
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+To disable this feature, you can use the ALTER TABLE statement to set this property as an empty string:
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
 ## Examples

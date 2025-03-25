@@ -46,8 +46,16 @@ public:
 };
 
 struct PredicateFilterEvaluator {
+    enum Evaluator {
+        NONE = 0,
+        ROWGROUP_ZONEMAP = 1,
+        PAGE_INDEX_ZONEMAP = 2,
+        BLOOM_FILTER = 4,
+        ALL = ROWGROUP_ZONEMAP | PAGE_INDEX_ZONEMAP | BLOOM_FILTER,
+    };
+
     template <CompoundNodeType Type>
-    StatusOr<std::optional<SparseRange<uint64_t>>> operator()(const PredicateCompoundNode<Type>& node) {
+    StatusOr<std::optional<SparseRange<uint64_t>>> visit_for_rowgroup_zonemap(const PredicateCompoundNode<Type>& node) {
         DCHECK(group_reader != nullptr);
         std::optional<SparseRange<uint64_t>> row_ranges = std::nullopt;
         const uint64_t rg_first_row = group_reader->get_row_group_first_row();
@@ -62,38 +70,14 @@ struct PredicateFilterEvaluator {
                 cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
             } else {
                 bool row_group_filtered = false;
-                bool page_filtered = false;
                 auto ret = column_reader->row_group_zone_map_filter(col_preds, Type, rg_first_row, rg_num_rows);
                 row_group_filtered = ret.value_or(false);
                 counter.statistics_tried_counter++;
                 counter.statistics_success_counter += row_group_filtered;
-                if (!row_group_filtered && enable_page_index) {
-                    auto ret = column_reader->page_index_zone_map_filter(
-                            col_preds, &cur_row_ranges, Type, group_reader->get_row_group_first_row(),
-                            group_reader->get_row_group_metadata()->num_rows);
-                    page_filtered = ret.value_or(false);
-                    counter.page_index_tried_counter++;
-                    counter.page_index_success_counter += page_filtered;
-                    if (page_filtered) {
-                        row_group_filtered = cur_row_ranges.span_size() == 0 ? true : false;
-                        counter.page_index_filter_group_counter += row_group_filtered;
-                    }
-                }
-                if (!row_group_filtered && enable_bloom_filter) {
-                    ret = column_reader->adaptive_judge_if_apply_bloom_filter(page_filtered ? cur_row_ranges.span_size()
-                                                                                            : rg_num_rows);
-                    if (ret.value_or(true)) {
-                        ret = column_reader->row_group_bloom_filter(col_preds, Type, rg_first_row, rg_num_rows);
-                        row_group_filtered = ret.value_or(false);
-                        counter.bloom_filter_tried_counter++;
-                        counter.bloom_filter_success_counter += row_group_filtered;
-                    }
-                }
-
-                if (!row_group_filtered && !page_filtered) {
-                    cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
-                } else if (row_group_filtered) {
+                if (row_group_filtered) {
                     cur_row_ranges.clear();
+                } else {
+                    cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
                 }
             }
 
@@ -104,9 +88,143 @@ struct PredicateFilterEvaluator {
         }
 
         for (const auto& child : node.compound_children()) {
-            ASSIGN_OR_RETURN(auto cur_row_ranges_opt, child.visit(*this));
+            ASSIGN_OR_RETURN(auto cur_row_ranges_opt, child.visit(*this, Evaluator::ROWGROUP_ZONEMAP));
             if (cur_row_ranges_opt.has_value()) {
                 PredicateFilterEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges_opt.value());
+            }
+        }
+        return row_ranges;
+    }
+
+    template <CompoundNodeType Type>
+    StatusOr<std::optional<SparseRange<uint64_t>>> visit_for_page_index(const PredicateCompoundNode<Type>& node) {
+        DCHECK(group_reader != nullptr);
+        std::optional<SparseRange<uint64_t>> row_ranges;
+        const uint64_t rg_first_row = group_reader->get_row_group_first_row();
+        const uint64_t rg_num_rows = group_reader->get_row_group_metadata()->num_rows;
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            SparseRange<uint64_t> cur_row_ranges;
+            auto* column_reader = group_reader->get_column_reader(cid);
+            if (column_reader == nullptr) {
+                // ColumnReader not found, select all by default
+                cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+            } else {
+                auto ret = column_reader->page_index_zone_map_filter(col_preds, &cur_row_ranges, Type,
+                                                                     group_reader->get_row_group_first_row(),
+                                                                     group_reader->get_row_group_metadata()->num_rows);
+                bool page_filtered = ret.value_or(false);
+                counter.page_index_tried_counter++;
+                counter.page_index_success_counter += page_filtered;
+                if (page_filtered) {
+                    bool row_group_filtered = cur_row_ranges.span_size() == 0;
+                    counter.page_index_filter_group_counter += row_group_filtered;
+                } else {
+                    cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+                }
+            }
+
+            PredicateFilterEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges);
+            if (Type == CompoundNodeType::AND && row_ranges->span_size() == 0) {
+                return row_ranges;
+            }
+        }
+
+        for (const auto& child : node.compound_children()) {
+            ASSIGN_OR_RETURN(auto cur_row_ranges_opt, child.visit(*this, Evaluator::PAGE_INDEX_ZONEMAP));
+            if (cur_row_ranges_opt.has_value()) {
+                PredicateFilterEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges_opt.value());
+            }
+        }
+        return row_ranges;
+    }
+
+    template <CompoundNodeType Type>
+    StatusOr<std::optional<SparseRange<uint64_t>>> visit_for_bloom_filter(const PredicateCompoundNode<Type>& node) {
+        DCHECK(group_reader != nullptr);
+        std::optional<SparseRange<uint64_t>> row_ranges;
+        const uint64_t rg_first_row = group_reader->get_row_group_first_row();
+        const uint64_t rg_num_rows = group_reader->get_row_group_metadata()->num_rows;
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            SparseRange<uint64_t> cur_row_ranges;
+            auto* column_reader = group_reader->get_column_reader(cid);
+            if (column_reader == nullptr) {
+                // ColumnReader not found, select all by default
+                cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+            } else {
+                bool row_group_filtered = false;
+                auto ret = column_reader->adaptive_judge_if_apply_bloom_filter(
+                        row_ranges_before_bf.has_value() ? row_ranges_before_bf->span_size() : rg_num_rows);
+                if (ret.value_or(true)) {
+                    ret = column_reader->row_group_bloom_filter(col_preds, Type, rg_first_row, rg_num_rows);
+                    row_group_filtered = ret.value_or(false);
+                    counter.bloom_filter_tried_counter++;
+                    counter.bloom_filter_success_counter += row_group_filtered;
+                }
+
+                if (row_group_filtered) {
+                    cur_row_ranges.clear();
+                } else {
+                    cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+                }
+            }
+
+            PredicateFilterEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges);
+            if (Type == CompoundNodeType::AND && row_ranges->span_size() == 0) {
+                return row_ranges;
+            }
+        }
+
+        for (const auto& child : node.compound_children()) {
+            ASSIGN_OR_RETURN(auto cur_row_ranges_opt, child.visit(*this, Evaluator::BLOOM_FILTER));
+            if (cur_row_ranges_opt.has_value()) {
+                PredicateFilterEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges_opt.value());
+            }
+        }
+        return row_ranges;
+    }
+
+    template <CompoundNodeType Type>
+    StatusOr<std::optional<SparseRange<uint64_t>>> operator()(const PredicateCompoundNode<Type>& node) {
+        return this->operator()(node, Evaluator::ALL);
+    }
+
+    template <CompoundNodeType Type>
+    StatusOr<std::optional<SparseRange<uint64_t>>> operator()(const PredicateCompoundNode<Type>& node, Evaluator mode) {
+        DCHECK(group_reader != nullptr);
+        bool row_group_filtered = false;
+        std::optional<SparseRange<uint64_t>> row_ranges;
+        if (mode & Evaluator::ROWGROUP_ZONEMAP) {
+            auto ret = visit_for_rowgroup_zonemap(node);
+            if (ret.ok() && ret.value().has_value()) {
+                row_group_filtered = ret.value()->span_size() == 0;
+                row_ranges = std::move(ret.value());
+            }
+        }
+        if (mode & Evaluator::PAGE_INDEX_ZONEMAP) {
+            if (enable_page_index && !row_group_filtered) {
+                auto ret = visit_for_page_index(node);
+                if (ret.ok() && ret.value().has_value()) {
+                    row_group_filtered = ret.value()->span_size() == 0;
+                    row_ranges = std::move(ret.value());
+                }
+            }
+        }
+        if (mode & Evaluator::BLOOM_FILTER) {
+            if (enable_bloom_filter && !row_group_filtered) {
+                if (mode != Evaluator::BLOOM_FILTER) {
+                    row_ranges_before_bf = row_ranges;
+                }
+                auto ret = visit_for_bloom_filter(node);
+                if (ret.ok() && ret.value().has_value()) {
+                    row_group_filtered = ret.value()->span_size() == 0;
+                    if (row_group_filtered) {
+                        row_ranges = std::move(ret.value());
+                    }
+                }
             }
         }
         return row_ranges;
@@ -117,6 +235,7 @@ struct PredicateFilterEvaluator {
     bool enable_page_index;
     bool enable_bloom_filter;
     OptimizationCounter counter;
+    std::optional<SparseRange<uint64_t>> row_ranges_before_bf = std::nullopt;
 };
 
 } // namespace starrocks::parquet

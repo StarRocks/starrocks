@@ -64,7 +64,8 @@ public class AnalyzeMgrTest {
 
     @Test
     public void testRefreshConnectorTableBasicStatisticsCache(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
@@ -85,7 +86,8 @@ public class AnalyzeMgrTest {
     @Test
     public void testAnalyzeMgrBasicStatsPersist() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
@@ -237,7 +239,8 @@ public class AnalyzeMgrTest {
     @Test
     public void testAnalyzeMgrHistogramStatsPersist() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         ExternalHistogramStatsMeta externalHistogramStatsMeta = new ExternalHistogramStatsMeta("hive0", "hive_db",
@@ -288,7 +291,8 @@ public class AnalyzeMgrTest {
 
     @Test
     public void testExternalAnalyzeStatusPersist() throws Exception {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
                 "hive0", "partitioned_db", "t1",
@@ -307,7 +311,8 @@ public class AnalyzeMgrTest {
 
     @Test
     public void testDropExternalAnalyzeStatus() {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,

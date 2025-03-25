@@ -20,6 +20,7 @@
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
+#include "service/brpc_service_test_util.h"
 
 namespace starrocks {
 
@@ -33,19 +34,6 @@ TEST_F(InternalServiceTest, test_get_info_timeout_invalid) {
     auto st = Status(response.status());
     ASSERT_TRUE(st.is_time_out());
 }
-
-class MockClosure : public ::google::protobuf::Closure {
-public:
-    MockClosure() = default;
-    ~MockClosure() override = default;
-
-    void Run() override { _run.store(true); }
-
-    bool has_run() { return _run.load(); }
-
-private:
-    std::atomic_bool _run = false;
-};
 
 TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
@@ -155,12 +143,17 @@ TEST_F(InternalServiceTest, test_load_diagnose) {
     request.mutable_id()->set_hi(0);
     request.mutable_id()->set_lo(0);
     request.set_profile(true);
+    request.set_stack_trace(true);
     PLoadDiagnoseResult response;
     brpc::Controller cntl;
     MockClosure closure;
     service.load_diagnose(&cntl, &request, &response, &closure);
     ASSERT_TRUE(response.has_profile_status());
     auto st = Status(response.profile_status());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
+    ASSERT_TRUE(response.has_stack_trace_status());
+    st = Status(response.stack_trace_status());
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
 }

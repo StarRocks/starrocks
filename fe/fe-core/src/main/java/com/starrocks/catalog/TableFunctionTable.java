@@ -840,10 +840,21 @@ public class TableFunctionTable extends Table {
 
         // csv options
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
-            this.csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            csvColumnSeparator = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_COLUMN_SEPARATOR));
+            int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
+                throw new SemanticException("The valid bytes length for '%s' is [%d, %d]",
+                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
+            }
         }
+
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
-            this.csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            csvRowDelimiter = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_ROW_DELIMITER));
+            int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
+                throw new SemanticException("The valid bytes length for '%s' is [%d, %d]", PROPERTY_CSV_ROW_DELIMITER,
+                        1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
+            }
         }
 
         // parquet options

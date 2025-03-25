@@ -567,17 +567,9 @@ Follow these steps to recover the metadata:
 
    1. Add the following configurations to **fe.conf**:
 
-      - For StarRocks v2.5, v3.0, v3.1.9 and earlier patch versions, and v3.2.4 and earlier patch versions:
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - For StarRocks v3.1.10 and later patch versions, v3.2.5 and later patch versions, and v3.3 and later:
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    2. Restart the node, and check whether your data and metadata are intact.
    3. Check whether the current FE node is the Leader FE node.
@@ -600,17 +592,9 @@ Follow these steps to recover the metadata:
    1. Change the role of the FE node from `OBSERVER` to `FOLLOWER` in the **fe/meta/image/ROLE** file.
    2. Add the following configurations to **fe.conf**:
 
-      - For StarRocks v2.5, v3.0, v3.1.9 and earlier patch versions, and v3.2.4 and earlier patch versions:
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - For StarRocks v3.1.10 and later patch versions, v3.2.5 and later patch versions, and v3.3 and later:
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    3. Restart the node, and check whether your data and metadata are intact.
    4. Check whether the current FE node is the Leader FE node.
@@ -623,27 +607,13 @@ Follow these steps to recover the metadata:
       - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
    5. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier. However, **do not restart the node**.
-   6. Drop all FE nodes except the current node. It now serves as the temporary Leader node.
-
-      ```SQL
-      -- To drop a Follower node, replace <follower_host> with the IP address (priority_networks) 
-      -- of the Follower node, and replace <follower_edit_log_port> (Default: 9010) with 
-      -- the Follower node's edit_log_port.
-      ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-      -- To drop an Observer node, replace <observer_host> with the IP address (priority_networks) 
-      -- of the Observer node, and replace <observer_edit_log_port> (Default: 9010) with 
-      -- the Observer node's edit_log_port.
-      ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-      ```
-
-   7. Add a new Follower node (on a new server) to the cluster.
+   6. Add a new Follower node (on a new server) to the cluster.
 
       ```SQL
       ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
       ```
 
-   8. Start a new FE node on the new server using the temporary Leader FE node as the helper.
+   7. Start a new FE node on the new server using the temporary Leader FE node as the helper.
 
       ```Bash
       # Replace <leader_ip> with the IP address (priority_networks) 
@@ -652,7 +622,7 @@ Follow these steps to recover the metadata:
       ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
       ```
 
-   9. Once the new FE node is started successfully, check the status and roles of both FE nodes:
+   8. Once the new FE node is started successfully, check the status and roles of both FE nodes:
 
       ```SQL
       SHOW FRONTENDS;
@@ -662,8 +632,8 @@ Follow these steps to recover the metadata:
       - If the field `Role` is `FOLLOWER`, this FE node is a Follower FE node.
       - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
-   10. If the new Follower is successfully running in the cluster, you can then stop all nodes.
-   11. Add the following configurations to the **fe.conf of the new Follower only**:
+   9. If the new Follower is successfully running in the cluster, you can then stop all nodes.
+   10. Add the following configurations to the **fe.conf of the new Follower only**:
 
        - For StarRocks v2.5, v3.0, v3.1.9 and earlier patch versions, and v3.2.4 and earlier patch versions:
 
@@ -677,8 +647,8 @@ Follow these steps to recover the metadata:
          bdbje_reset_election_group = true
          ```
 
-   12. Restart the new Follower node, and check whether your data and metadata are intact.
-   13. Check whether the current FE node is the Leader FE node.
+   11. Restart the new Follower node, and check whether your data and metadata are intact.
+   12. Check whether the current FE node is the Leader FE node.
 
        ```SQL
        SHOW FRONTENDS;
@@ -687,28 +657,14 @@ Follow these steps to recover the metadata:
        - If the field `Alive` is `true`, this FE node is properly started and added to the cluster.
        - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
-   14. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier and restart the node.
+   13. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier and restart the node.
 
     </TabItem>
 
   </Tabs>
 
-6. The surviving Follower node is now essentially the Leader node of the cluster. Drop all FE nodes except for the current node.
-
-   ```SQL
-   -- To drop a Follower node, replace <follower_host> with the IP address (priority_networks) 
-   -- of the Follower node, and replace <follower_edit_log_port> (Default: 9010) with 
-   -- the Follower node's edit_log_port.
-   ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-   -- To drop an Observer node, replace <observer_host> with the IP address (priority_networks) 
-   -- of the Observer node, and replace <observer_edit_log_port> (Default: 9010) with 
-   -- the Observer node's edit_log_port.
-   ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-   ```
-
-7. Clear the metadata directories `meta_dir` of the FE nodes that you want to add back to the cluster.
-8. Start new Follower nodes using the new Leader FE node as the helper.
+5. Clear the metadata directories `meta_dir` of the FE nodes that you want to add back to the cluster.
+6. Start new Follower nodes using the new Leader FE node as the helper.
 
    ```Bash
    # Replace <leader_ip> with the IP address (priority_networks) 
@@ -717,7 +673,7 @@ Follow these steps to recover the metadata:
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
-9. Add the Follower nodes back to the cluster.
+7. Add the Follower nodes back to the cluster.
 
    ```SQL
    ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";

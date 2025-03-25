@@ -1051,12 +1051,17 @@ modifyCommentClause
     : COMMENT '=' string
     ;
 
+optimizeRange
+    : BETWEEN start=string AND end=string
+    ;
+
 optimizeClause
     : partitionNames?
       keyDesc?
       partitionDesc?
       orderByDesc?
       distributionDesc?
+      optimizeRange?
      ;
 
 addColumnClause

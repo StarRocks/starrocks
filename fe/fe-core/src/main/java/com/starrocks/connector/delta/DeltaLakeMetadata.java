@@ -98,17 +98,17 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return deltaOps.getAllDatabaseNames();
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return deltaOps.getAllTableNames(dbName);
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         return deltaOps.getDb(dbName);
     }
 
@@ -340,7 +340,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         try {
             return deltaOps.getTable(dbName, tblName);
         } catch (Exception e) {
@@ -350,7 +350,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         return deltaOps.tableExists(dbName, tblName);
     }
 

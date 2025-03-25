@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
@@ -70,7 +69,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
         if (!analyzeJob.isAnalyzeAllDb()) {
             String dbName = analyzeJob.getDbName();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(analyzeJob.getCatalogName(), dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, analyzeJob.getCatalogName(), dbName);
 
             if (db == null) {
                 throw new MetaNotFoundException("No found database: " + dbName);
@@ -80,8 +79,8 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(analyzeJob.getCatalogName(),
-                        dbName, tableName);
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getTable(context, analyzeJob.getCatalogName(), dbName, tableName);
 
                 if (table == null) {
                     throw new MetaNotFoundException("No found table: " + tableName);

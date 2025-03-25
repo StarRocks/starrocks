@@ -93,9 +93,20 @@ public:
 
     void close();
 
+    ThreadPool* async_rpc_pool() { return _async_rpc_pool.get(); }
+
+    std::shared_ptr<LoadChannel> TEST_get_load_channel(UniqueId load_id) {
+        std::lock_guard l(_lock);
+        auto it = _load_channels.find(load_id);
+        return it != _load_channels.end() ? it->second : nullptr;
+    }
+
 private:
+    friend class ChannelOpenTask;
+
     static void* load_channel_clean_bg_worker(void* arg);
 
+    void _open(LoadChannelOpenContext open_context);
     Status _start_bg_worker();
     std::shared_ptr<LoadChannel> _find_load_channel(const UniqueId& load_id);
     std::shared_ptr<LoadChannel> _find_load_channel(int64_t txn_id);
@@ -111,6 +122,9 @@ private:
 
     // thread to clean timeout load channels
     bthread_t _load_channels_clean_thread;
+
+    // Thread pool used to handle rpc request asynchronously
+    std::unique_ptr<ThreadPool> _async_rpc_pool;
 };
 
 } // namespace starrocks

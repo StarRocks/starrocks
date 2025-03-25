@@ -83,7 +83,7 @@ public class QueryPlanLockFreeTest {
     public void testPlanStrategy() throws Exception {
         String sql = "select * from t0";
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable("default_catalog", DB_NAME, "t0");
+                .getTable(new ConnectContext(), "default_catalog", DB_NAME, "t0");
         table.lastSchemaUpdateTime.set(System.nanoTime() + 10000000000L);
         Assert.assertThrows("schema of [t0] had been updated frequently during the plan generation",
                 StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
@@ -103,7 +103,7 @@ public class QueryPlanLockFreeTest {
     public void testCopiedTable() throws Exception {
         String sql = "select t1.* from t1 t1 join t1 t2 on t1.k1 = t2.k2";
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable("default_catalog", DB_NAME, "t1");
+                .getTable(new ConnectContext(), "default_catalog", DB_NAME, "t1");
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         OlapScanNode node1 = (OlapScanNode) plan.second.getScanNodes().get(0);
         OlapScanNode node2 = (OlapScanNode) plan.second.getScanNodes().get(1);

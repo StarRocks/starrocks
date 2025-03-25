@@ -15,7 +15,6 @@
 package com.starrocks.authorization;
 
 import com.google.common.collect.Lists;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -168,46 +167,46 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr)
+    public PEntryObject generateObject(ObjectType objectType, List<String> objectTokens)
             throws PrivilegeException {
         if (ObjectType.TABLE.equals(objectType)) {
-            return TablePEntryObject.generate(mgr, objectTokens);
+            return TablePEntryObject.generate(objectTokens);
         } else if (ObjectType.DATABASE.equals(objectType)) {
-            return DbPEntryObject.generate(mgr, objectTokens);
+            return DbPEntryObject.generate(objectTokens);
         } else if (ObjectType.RESOURCE.equals(objectType)) {
-            return ResourcePEntryObject.generate(mgr, objectTokens);
+            return ResourcePEntryObject.generate(objectTokens);
         } else if (ObjectType.VIEW.equals(objectType)) {
-            return ViewPEntryObject.generate(mgr, objectTokens);
+            return ViewPEntryObject.generate(objectTokens);
         } else if (ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
-            return MaterializedViewPEntryObject.generate(mgr, objectTokens);
+            return MaterializedViewPEntryObject.generate(objectTokens);
         } else if (ObjectType.CATALOG.equals(objectType)) {
-            return CatalogPEntryObject.generate(mgr, objectTokens);
+            return CatalogPEntryObject.generate(objectTokens);
         } else if (ObjectType.RESOURCE_GROUP.equals(objectType)) {
-            return ResourceGroupPEntryObject.generate(mgr, objectTokens);
+            return ResourceGroupPEntryObject.generate(objectTokens);
         } else if (ObjectType.STORAGE_VOLUME.equals(objectType)) {
-            return StorageVolumePEntryObject.generate(mgr, objectTokens);
+            return StorageVolumePEntryObject.generate(objectTokens);
         } else if (ObjectType.PIPE.equals(objectType)) {
-            return PipePEntryObject.generate(mgr, objectTokens);
+            return PipePEntryObject.generate(objectTokens);
         } else if (ObjectType.WAREHOUSE.equals(objectType)) {
-            return WarehousePEntryObject.generate(mgr, objectTokens);
+            return WarehousePEntryObject.generate(objectTokens);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }
 
     @Override
     public PEntryObject generateUserObject(
-            ObjectType objectType, UserIdentity user, GlobalStateMgr globalStateMgr) throws PrivilegeException {
+            ObjectType objectType, UserIdentity user) throws PrivilegeException {
         if (objectType.equals(ObjectType.USER)) {
-            return UserPEntryObject.generate(globalStateMgr, user);
+            return UserPEntryObject.generate(user);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }
 
     @Override
-    public PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId,
-                                               GlobalStateMgr globalStateMgr) throws PrivilegeException {
+    public PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId)
+            throws PrivilegeException {
         if (objectType.equals(ObjectType.FUNCTION) || objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
-            return FunctionPEntryObject.generate(globalStateMgr, databaseId, functionId);
+            return FunctionPEntryObject.generate(databaseId, functionId);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }

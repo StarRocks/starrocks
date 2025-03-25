@@ -48,6 +48,9 @@ void finish_task(const TFinishTaskRequest& finish_task_request) {
                 finish_task_request.task_type == TTaskType::ALTER) {
                 max_retry_times = ALTER_FINISH_TASK_MAX_RETRY;
                 sleep_seconds = sleep_seconds * 2;
+            } else if (result.status.status_code == TStatusCode::LEADER_TRANSFERRED &&
+                       finish_task_request.task_type == TTaskType::CREATE) {
+                sleep_seconds = sleep_seconds * 2;
             } else {
                 break;
             }

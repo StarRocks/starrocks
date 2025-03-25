@@ -23,6 +23,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -97,7 +98,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                 item.setTable_name(analyze.getTableName());
                 TableName name = new TableName(item.getCatalog_name(), item.getDatabase_name(), item.getTable_name());
                 table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                        analyze.getCatalogName(), analyze.getDbName(), analyze.getTableName());
+                        new ConnectContext(), analyze.getCatalogName(), analyze.getDbName(), analyze.getTableName());
                 if (!predicate.test(name) || table == null) {
                     continue;
                 }

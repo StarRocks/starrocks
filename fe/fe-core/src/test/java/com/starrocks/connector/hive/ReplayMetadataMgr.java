@@ -31,6 +31,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -146,17 +147,17 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public Database getDb(String catalogName, String dbName) {
+    public Database getDb(ConnectContext context, String catalogName, String dbName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return super.getDb(catalogName, dbName);
+            return super.getDb(context, catalogName, dbName);
         }
         return new Database(idGen++, dbName);
     }
 
     @Override
-    public Table getTable(String catalogName, String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return super.getTable(catalogName, dbName, tblName);
+            return super.getTable(context, catalogName, dbName, tblName);
         }
 
         if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
@@ -168,7 +169,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
             return tableInfo.table;
         }
         // probably it's a hive view but being created in default catalog.
-        return super.getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
+        return super.getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
     }
 
     @Override

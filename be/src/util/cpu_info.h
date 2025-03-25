@@ -85,16 +85,11 @@ public:
 
     static std::string debug_string();
 
-    static const std::vector<long>& get_cache_sizes() {
-        static std::vector<long> cache_sizes;
-        static std::vector<long> cache_line_sizes;
+    static const std::vector<long>& get_cache_sizes() { return cache_sizes; }
 
-        if (cache_sizes.empty()) {
-            cache_sizes.resize(NUM_CACHE_LEVELS);
-            cache_line_sizes.resize(NUM_CACHE_LEVELS);
-            _get_cache_info(cache_sizes.data(), cache_line_sizes.data());
-        }
-        return cache_sizes;
+    static long get_l2_cache_size() {
+        const auto& cache_sizes = CpuInfo::get_cache_sizes();
+        return cache_sizes[CpuInfo::L2_CACHE] ? cache_sizes[CpuInfo::L2_CACHE] : DEFAULT_L2_CACHE_SIZE;
     }
 
     static long get_l3_cache_size() {
@@ -120,6 +115,8 @@ public:
     static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
 
 private:
+    static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
+
     /// Initialize NUMA-related state - called from Init();
     static void _init_numa();
 
@@ -137,6 +134,7 @@ private:
     /// The values returned are not reliable in some environments, e.g. RHEL5 on EC2, so
     /// so we will keep this as a private method.
     static void _get_cache_info(long cache_sizes[NUM_CACHE_LEVELS], long cache_line_sizes[NUM_CACHE_LEVELS]);
+    static void _init_cache_info();
 
     static bool initialized_;
     static int64_t hardware_flags_;
@@ -163,5 +161,8 @@ private:
     /// Array with 'max_num_cores_' entries, each of which is the index of that core in its
     /// NUMA node.
     static std::vector<int> numa_node_core_idx_;
+
+    static std::vector<long> cache_sizes;
+    static std::vector<long> cache_line_sizes;
 };
 } // namespace starrocks

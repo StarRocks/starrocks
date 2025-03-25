@@ -534,15 +534,18 @@ DISTRIBUTED BY HASH(`id`);
 
 1. 在 MySQL 客户端中向 StarRocks 表中插入两行数据。
 
-    ```SQL
-    mysql> INSERT INTO score_board VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+   ```sql
+   mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
 
-    mysql> select * from score_board;
-    +------+-----------+-------+
-    +------+-----------+-------+
-    +------+-----------+-------+
-    2 rows in set (0.02 sec)
-    ```
+   mysql> select * from score_board;
+   +------+-----------+-------+
+   | id   | name      | score |
+   +------+-----------+-------+
+   |    1 | starrocks |   100 |
+   |    2 | flink     |   100 |
+   +------+-----------+-------+
+   2 rows in set (0.02 sec)
+   ```
 
 2. 在 Flink SQL 客户端按照以下方式创建表`score_board`：
    - DDL 中包括所有列的定义。

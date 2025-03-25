@@ -39,7 +39,7 @@ StarRocks 采用了两种权限模型：
 
 ### 用户标识
 
-在 StarRocks 中，每个用户都拥有唯一的用户标识。由用户登录的 IP（userhost） 和用户名（username）组成，写做：`username@'userhost'`。StarRocks 会将拥有相同用户名，但来自不同 IP 的用户识别为不同的用户标识，即 `user1@'starrocks.com'` 和 `user1@'mirrorship.com'` 是两个用户标识。
+在 StarRocks 中，每个用户都拥有唯一的用户标识。由用户登录的 IP（userhost） 和用户名（username）组成，写做：`username@'userhost'`。StarRocks 会将拥有相同用户名，但来自不同 IP 的用户识别为不同的用户标识，即 `user1@'172.65.xx.1'` 和 `user1@'172.65.xx.2'` 是两个用户标识。
 
 用户标识的另一种表现方式为 `username@['domain']`，其中 `domain` 为域名，可以通过 DNS 解析为一组 IP。最终表现为一组 `username@'userhost'`。其中，`userhost` 的部分可以使用 `%` 来进行模糊匹配。如果不指定 `userhost`，默认为 `'%'`，即表示从任意 host 连接到 StarRocks 的同名用户。
 

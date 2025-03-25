@@ -58,6 +58,7 @@ public class PartitionsSystemTableSystemTable {
                         .column("PARTITION_COMMENT", ScalarType.createVarchar(2048))
                         .column("NODEGROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TABLESPACE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("SUBPARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_PARTITIONS);
     }
 }

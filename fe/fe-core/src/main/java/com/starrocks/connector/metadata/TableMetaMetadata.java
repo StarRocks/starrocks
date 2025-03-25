@@ -19,6 +19,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.Optional;
 
@@ -39,12 +40,12 @@ public class TableMetaMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         MetadataTableName metadataTableName = MetadataTableName.from(tblName);
         MetadataTableType tableType = metadataTableName.getTableType();
         String tableName = metadataTableName.getTableName();
         AbstractMetadataTableFactory tableFactory = MetadataTableFactoryProvider.getFactory(catalogType);
-        return tableFactory.createTable(catalogName, dbName, tableName, tableType);
+        return tableFactory.createTable(context, catalogName, dbName, tableName, tableType);
     }
 
     @Override

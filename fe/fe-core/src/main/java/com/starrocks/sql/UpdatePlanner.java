@@ -153,7 +153,7 @@ public class UpdatePlanner {
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
                 TableName catalogDbTable = updateStmt.getTableName();
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
                     olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());

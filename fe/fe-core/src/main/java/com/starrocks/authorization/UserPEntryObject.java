@@ -33,12 +33,12 @@ public class UserPEntryObject implements PEntryObject {
         return userIdentity;
     }
 
-    public static UserPEntryObject generate(GlobalStateMgr mgr, UserIdentity user) throws PrivilegeException {
+    public static UserPEntryObject generate(UserIdentity user) throws PrivilegeException {
         if (user == null) {
             return new UserPEntryObject(null);
         }
 
-        if (!mgr.getAuthenticationMgr().doesUserExist(user)) {
+        if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(user)) {
             throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
@@ -76,8 +76,9 @@ public class UserPEntryObject implements PEntryObject {
      * All validation are made in com.starrocks.privilege.AuthorizationManager#removeInvalidObject()
      */
     @Override
-    public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getAuthorizationMgr().getUserPrivilegeCollectionUnlockedAllowNull(userIdentity) != null;
+    public boolean validate() {
+        return GlobalStateMgr.getCurrentState().getAuthorizationMgr()
+                .getUserPrivilegeCollectionUnlockedAllowNull(userIdentity) != null;
     }
 
     @Override

@@ -308,4 +308,19 @@ public class ConnectContextTest {
             Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
         }
     }
+
+    @Test
+    public void testIsIdleLastFor() throws Exception {
+        ConnectContext context = new ConnectContext();
+        context.setCommand(MysqlCommand.COM_SLEEP);
+        context.setEndTime();
+
+        Thread.sleep(100);
+
+        Assert.assertTrue(context.isIdleLastFor(99));
+
+        context.setCommand(MysqlCommand.COM_QUERY);
+        context.setStartTime();
+        Assert.assertFalse(context.isIdleLastFor(99));
+    }
 }

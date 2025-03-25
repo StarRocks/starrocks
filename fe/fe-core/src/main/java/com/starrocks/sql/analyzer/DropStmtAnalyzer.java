@@ -71,7 +71,7 @@ public class DropStmtAnalyzer {
 
             String dbName = statement.getDbName();
             // check database
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -127,7 +127,7 @@ public class DropStmtAnalyzer {
 
             String dbName = statement.getDbName();
             // check database
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }

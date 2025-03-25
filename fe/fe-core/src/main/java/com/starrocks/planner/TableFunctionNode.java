@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.thrift.TExplainLevel;
@@ -111,5 +112,10 @@ public class TableFunctionNode extends PlanNode {
 
     public boolean isFnResultRequired() {
         return fnResultRequired;
+    }
+
+    @VisibleForTesting
+    public List<Integer> getOuterSlots() {
+        return outerSlots;
     }
 }

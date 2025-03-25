@@ -1131,6 +1131,7 @@ public class PropertyAnalyzer {
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, Table table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
+        ConnectContext context = new ConnectContext();
 
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
@@ -1149,7 +1150,7 @@ public class PropertyAnalyzer {
                 List<String> columnNames = parseResult.second;
                 if (table.isMaterializedView()) {
                     Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                            context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
                     if (uniqueConstraintTable == null) {
                         throw new SemanticException(String.format("table: %s does not exist", tableName));
                     }
@@ -1191,13 +1192,15 @@ public class PropertyAnalyzer {
         if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
             throw new SemanticException(String.format("catalog: %s do not exist", catalogName));
         }
-        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
+        ConnectContext context = new ConnectContext();
+        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (parentDb == null) {
             throw new SemanticException(
                     String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
         }
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(catalogName, dbName, tableName);
+                .getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new SemanticException(String.format("catalog:%s, database: %s, table:%s do not exist",
                     catalogName, dbName, tableName));

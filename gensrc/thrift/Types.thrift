@@ -609,3 +609,8 @@ enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1
 }
+
+enum TNodeType {
+    Backend = 0,
+    Compute = 1
+}

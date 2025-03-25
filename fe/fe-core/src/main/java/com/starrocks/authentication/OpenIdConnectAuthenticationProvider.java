@@ -25,8 +25,6 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.nio.ByteBuffer;
 
 public class OpenIdConnectAuthenticationProvider implements AuthenticationProvider {
-    public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_OPENID_CONNECT.name();
-
     private final String jwksUrl;
     private final String principalFiled;
     private final String requireIssuer;
@@ -44,7 +42,7 @@ public class OpenIdConnectAuthenticationProvider implements AuthenticationProvid
     public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
             throws AuthenticationException {
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name());
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
         info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());

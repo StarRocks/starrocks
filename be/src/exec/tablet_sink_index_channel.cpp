@@ -72,6 +72,12 @@ NodeChannel::~NodeChannel() noexcept {
         _rpc_request.mutable_requests(i)->release_id();
     }
     _rpc_request.release_id();
+    if (_diagnose_closure) {
+        if (_diagnose_closure->unref()) {
+            delete _diagnose_closure;
+        }
+        _diagnose_closure = nullptr;
+    }
 }
 
 Status NodeChannel::init(RuntimeState* state) {
@@ -1083,7 +1089,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     request.release_id();
 }
 
-static std::atomic_int64_t s_small_rpc_timeout_count{0};
+static std::atomic_int64_t s_small_rpc_timeout_profile_count{0};
 
 void NodeChannel::_try_diagnose(const std::string& error_text) {
     if (error_text.find("[E1008]Reached timeout") == std::string::npos) {
@@ -1092,30 +1098,32 @@ void NodeChannel::_try_diagnose(const std::string& error_text) {
     if (!config::enable_load_diagnose || _diagnose_closure != nullptr) {
         return;
     }
-    if (_rpc_timeout_ms <= config::load_diagnose_small_rpc_timeout_threshold_ms) {
-        int64_t count = s_small_rpc_timeout_count.fetch_add(1);
-        if (count % 20) {
-            return;
-        }
+    bool enable_profile = _rpc_timeout_ms > config::load_diagnose_rpc_timeout_profile_threshold_ms ||
+                          (s_small_rpc_timeout_profile_count.fetch_add(1) % 20 == 0);
+    bool enable_stack_trace = _rpc_timeout_ms > config::load_diagnose_rpc_timeout_stack_trace_threshold_ms;
+    if (!enable_profile && !enable_stack_trace) {
+        return;
     }
-    _diagnose_closure = std::make_unique<RefCountClosure<PLoadDiagnoseResult>>();
+    _diagnose_closure = new RefCountClosure<PLoadDiagnoseResult>();
     _diagnose_closure->ref();
     SET_IGNORE_OVERCROWDED(_diagnose_closure->cntl, load);
     _diagnose_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
     PLoadDiagnoseRequest request;
     request.set_allocated_id(&_parent->_load_id);
     request.set_txn_id(_parent->_txn_id);
-    request.set_profile(true);
+    request.set_profile(enable_profile);
+    request.set_stack_trace(enable_stack_trace);
     _diagnose_closure->ref();
 #ifndef BE_TEST
-    _stub->load_diagnose(&_diagnose_closure->cntl, &request, &_diagnose_closure->result, _diagnose_closure.get());
+    _stub->load_diagnose(&_diagnose_closure->cntl, &request, &_diagnose_closure->result, _diagnose_closure);
 #else
-    std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*> rpc_pair{&request, _diagnose_closure.get()};
+    std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*> rpc_pair{&request, _diagnose_closure};
     TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_send", &rpc_pair);
 #endif
     request.release_id();
     VLOG(2) << "NodeChannel[" << _load_info << "] send diagnose request to [" << _node_info->host << ":"
-            << _node_info->brpc_port << "]";
+            << _node_info->brpc_port << "], rpc_timeout_ms: " << _rpc_timeout_ms
+            << ", enable_profile: " << enable_profile << ", enable_stack_trace: " << enable_stack_trace;
 }
 
 bool NodeChannel::_is_diagnose_done() {
@@ -1129,7 +1137,7 @@ void NodeChannel::_wait_diagnose(RuntimeState* state) {
 #ifndef BE_TEST
     _diagnose_closure->join();
 #else
-    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_join", _diagnose_closure.get());
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_join", _diagnose_closure);
 #endif
     if (_diagnose_closure->cntl.Failed()) {
         LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose failed, node: [" << _node_info->host << ":"
@@ -1137,36 +1145,54 @@ void NodeChannel::_wait_diagnose(RuntimeState* state) {
         return;
     }
     PLoadDiagnoseResult& result = _diagnose_closure->result;
+    bool has_profile = _process_diagnose_profile(state, result);
+    bool has_stack_trace = false;
+    if (result.has_stack_trace_status()) {
+        Status status = Status(result.stack_trace_status());
+        if (!status.ok()) {
+            LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose stack trace failed, node: [" << _node_info->host
+                         << ":" << _node_info->brpc_port << "], error: " << status;
+        } else {
+            has_stack_trace = true;
+        }
+    }
+    VLOG(2) << "NodeChannel[" << _load_info << "] diagnose success, node: [" << _node_info->host << ":"
+            << _node_info->brpc_port << "], has_profile: " << has_profile << ", has_stack_trace: " << has_stack_trace;
+}
+
+bool NodeChannel::_process_diagnose_profile(RuntimeState* state, PLoadDiagnoseResult& result) {
     if (!result.has_profile_status()) {
-        return;
+        return false;
     }
     Status status = Status(result.profile_status());
     if (!status.ok()) {
-        LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose failed, node: [" << _node_info->host << ":"
+        LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose profile failed, node: [" << _node_info->host << ":"
                      << _node_info->brpc_port << "], error: " << status;
-        return;
+        return false;
     }
-    if (_diagnose_closure->result.has_profile_data()) {
-        SCOPED_TIMER(_ts_profile->update_load_channel_profile_timer);
-        const auto* buf = (const uint8_t*)(result.profile_data().data());
-        uint32_t len = result.profile_data().size();
-        TRuntimeProfileTree thrift_profile;
-        auto profile_st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &thrift_profile);
-        if (!profile_st.ok()) {
-            LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose failed, node: [" << _node_info->host << ":"
-                         << _node_info->brpc_port << "], size: " << len << ", error: " << profile_st;
-        } else {
-            RuntimeProfile* load_channel_profile = _runtime_state->load_channel_profile();
-            load_channel_profile->update(thrift_profile);
-            // Query context is only available for pipeline engine
-            auto query_ctx = state->query_ctx();
-            if (query_ctx) {
-                query_ctx->set_enable_profile();
-            }
-            VLOG(2) << "NodeChannel[" << _load_info << "] diagnose success, node: [" << _node_info->host << ":"
-                    << _node_info->brpc_port << "]";
+    if (!result.has_profile_data()) {
+        return false;
+    }
+    SCOPED_TIMER(_ts_profile->update_load_channel_profile_timer);
+    const auto* buf = (const uint8_t*)(result.profile_data().data());
+    uint32_t len = result.profile_data().size();
+    TRuntimeProfileTree thrift_profile;
+    bool has_profile = false;
+    auto profile_st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &thrift_profile);
+    if (!profile_st.ok()) {
+        LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose profile failed, node: [" << _node_info->host << ":"
+                     << _node_info->brpc_port << "], size: " << len << ", error: " << profile_st;
+    } else {
+        RuntimeProfile* load_channel_profile = state->load_channel_profile();
+        load_channel_profile->update(thrift_profile);
+        // Query context is only available for pipeline engine
+        auto query_ctx = state->query_ctx();
+        if (query_ctx) {
+            query_ctx->set_enable_profile();
         }
+        has_profile = true;
     }
+    return has_profile;
 }
 
 IndexChannel::~IndexChannel() {

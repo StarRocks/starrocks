@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -160,7 +161,7 @@ public class DbsProcDirTest {
     public void testFetchResultNormal() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().listDbNames();
+                globalStateMgr.getLocalMetastore().listDbNames((ConnectContext) any);
                 minTimes = 0;
                 result = Lists.newArrayList("db1", "db2");
 
@@ -213,7 +214,7 @@ public class DbsProcDirTest {
     public void testFetchResultInvalid() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().listDbNames();
+                globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext());
                 minTimes = 0;
                 result = null;
             }

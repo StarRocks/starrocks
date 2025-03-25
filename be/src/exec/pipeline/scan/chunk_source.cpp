@@ -88,6 +88,8 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 break;
             }
 
+            // schema won't be used by the computing layer, here we just reset it.
+            chunk->reset_schema();
             chunk->owner_info().set_owner_id(owner_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }

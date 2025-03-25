@@ -266,7 +266,7 @@ Status HiveDataSource::_init_partition_values() {
 
     if (_enable_dynamic_prune_scan_range && _runtime_filters) {
         _init_rf_counters();
-        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_bloom_filter_eval_context);
+        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_membership_filter_eval_context);
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
             return Status::OK();
@@ -566,18 +566,18 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
 void HiveDataSource::_init_rf_counters() {
     auto* root = _runtime_profile;
-    if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
+    if (runtime_membership_filter_eval_context.join_runtime_filter_timer == nullptr) {
         static const char* prefix = "DynamicPruneScanRange";
         ADD_COUNTER(root, prefix, TUnit::NONE);
-        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
+        runtime_membership_filter_eval_context.join_runtime_filter_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
+        runtime_membership_filter_eval_context.join_runtime_filter_hash_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_input_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterInputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_output_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_output_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterOutputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_eval_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterEvaluate", TUnit::UNIT, prefix);
     }
 }
@@ -684,6 +684,16 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.deletion_vector_descriptor) {
         scanner_params.deletion_vector_descriptor =
                 std::make_shared<TDeletionVectorDescriptor>(scan_range.deletion_vector_descriptor);
+    }
+
+    if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
+        scanner_params.lake_schema = tbl->get_iceberg_schema();
+    }
+
+    if (dynamic_cast<const PaimonTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
+        scanner_params.lake_schema = tbl->get_paimon_schema();
     }
 
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {

@@ -76,7 +76,7 @@ public class RBACExecutorTest {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
 
         GlobalStateMgr.getCurrentState()
-                .setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, new DefaultAuthorizationProvider()));
+                .setAuthorizationMgr(new AuthorizationMgr(new DefaultAuthorizationProvider()));
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
 
         for (int i = 0; i < 5; i++) {
