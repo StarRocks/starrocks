@@ -14,8 +14,20 @@
 
 package com.starrocks.lake;
 
+import com.google.common.collect.Lists;
+import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.OlapTable;
+=======
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SinglePartitionInfo;
+>>>>>>> 387dcbb1ab ([Enhancement] Delete shards meta from starmgr after recycling partition for cloud-native cluster (#56691))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
@@ -27,12 +39,24 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+<<<<<<< HEAD
+=======
+import mockit.Mocked;
+>>>>>>> 387dcbb1ab ([Enhancement] Delete shards meta from starmgr after recycling partition for cloud-native cluster (#56691))
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+>>>>>>> 387dcbb1ab ([Enhancement] Delete shards meta from starmgr after recycling partition for cloud-native cluster (#56691))
 
 public class LakeTableHelperTest {
     private static ConnectContext connectContext;
@@ -103,5 +127,55 @@ public class LakeTableHelperTest {
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         Assert.assertFalse(LakeTableHelper.supportCombinedTxnLog(db.getId(), Collections.singletonList(table.getId()),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING));
+    }
+
+    @Test
+    public void testDeleteShardGroupMeta(@Mocked StarOSAgent starOSAgent) {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long tableId = 1001L;
+        long partitionId = 1000L;
+        long physicalPartitionId = 1002L;
+        long groupIdToClear = 5100L;
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(1000L, (short) 3);
+        Partition partition =
+                new Partition(partitionId, physicalPartitionId, "p1", new MaterializedIndex(), distributionInfo);
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        subPartitions.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupIdToClear);
+        });
+
+        // build shardGroupInfos
+        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                .setGroupId(groupIdToClear)
+                .putLabels("tableId", String.valueOf(tableId))
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .addAllShardIds(allShardIds)
+                .build();
+        shardGroupInfos.add(info);
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                for (long groupId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
+                }
+            }
+        };
+
+        LakeTableHelper.deleteShardGroupMeta(partition);
+        Assert.assertEquals(0, shardGroupInfos.size());
     }
 }
