@@ -64,15 +64,20 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class CompactionScheduler extends Daemon {
     private static final Logger LOG = LogManager.getLogger(CompactionScheduler.class);
     private static final String HOST_NAME = FrontendOptions.getLocalHostAddress();
     private static final long LOOP_INTERVAL_MS = 1000L;
+<<<<<<< HEAD
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = LOOP_INTERVAL_MS * 10;
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = LOOP_INTERVAL_MS * 60;
     private static final long PARTITION_CLEAN_INTERVAL_SECOND = 30;
+=======
+    public static long PARTITION_CLEAN_INTERVAL_SECOND = 30;
+>>>>>>> a073b7ae18 ([Enhancement] abort ongoing compaction for deleted partition (#56943))
     private final CompactionMgr compactionManager;
     private final SystemInfoService systemInfoService;
     private final GlobalTransactionMgr transactionMgr;
@@ -100,16 +105,21 @@ public class CompactionScheduler extends Daemon {
 
     @Override
     protected void runOneCycle() {
+<<<<<<< HEAD
         cleanPartition();
+=======
+        List<PartitionIdentifier> deletedPartitionIdentifiers = cleanPhysicalPartition();
+>>>>>>> a073b7ae18 ([Enhancement] abort ongoing compaction for deleted partition (#56943))
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
         if (stateMgr.isLeader() && stateMgr.isReady()) {
-            schedule();
+            abortStaleCompaction(deletedPartitionIdentifiers);
+            scheduleNewCompaction();
             history.changeMaxSize(Config.lake_compaction_history_size);
         }
     }
 
-    private void schedule() {
+    private void scheduleNewCompaction() {
         // Check whether there are completed compaction jobs.
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
                 iterator.hasNext(); ) {
@@ -205,6 +215,19 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    private void abortStaleCompaction(List<PartitionIdentifier> deletedCompactionIdentifiers) {
+        if (deletedCompactionIdentifiers == null || deletedCompactionIdentifiers.isEmpty()) {
+            return;
+        }
+
+        for (PartitionIdentifier partitionIdentifier : deletedCompactionIdentifiers) {
+            CompactionJob job = runningCompactions.get(partitionIdentifier);
+            if (job != null) {
+                job.abort();
+            }
+        }
+    }
+
     private void abortTransactionIgnoreException(CompactionJob job, String reason) {
         try {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
@@ -226,19 +249,36 @@ public class CompactionScheduler extends Daemon {
         return aliveComputeNodes.size() * 16;
     }
 
+<<<<<<< HEAD
     private void cleanPartition() {
+=======
+    // return deleted partition
+    private List<PartitionIdentifier> cleanPhysicalPartition() {
+>>>>>>> a073b7ae18 ([Enhancement] abort ongoing compaction for deleted partition (#56943))
         long now = System.currentTimeMillis();
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
-            compactionManager.getAllPartitions()
+            List<PartitionIdentifier> deletedPartitionIdentifiers = compactionManager.getAllPartitions()
                     .stream()
+<<<<<<< HEAD
                     .filter(p -> !MetaUtils.isPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
+=======
+                    .filter(p -> !MetaUtils.isPhysicalPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
+                    .collect(Collectors.toList());
+
+            // ignore those partitions in runningCompactions
+            deletedPartitionIdentifiers
+                    .stream()
+                    .filter(p -> !runningCompactions.containsKey(p)).forEach(compactionManager::removePartition);
+>>>>>>> a073b7ae18 ([Enhancement] abort ongoing compaction for deleted partition (#56943))
             lastPartitionCleanTime = now;
+            return deletedPartitionIdentifiers;
         }
+        return null;
     }
 
-    private CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+    protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
         PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
