@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "simd/gather.h"
+#pragma once
 
+#include "simd/gather.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
