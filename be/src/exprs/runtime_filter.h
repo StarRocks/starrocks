@@ -37,13 +37,13 @@ namespace starrocks {
 // 0x1. initial global runtime filter impl
 // 0x2. change simd-block-filter hash function.
 // 0x3. Fix serialize problem
-// 0x4. Support multiple different filter typess.
+// 0x4. Support multiple different filters.
 inline const constexpr uint8_t RF_VERSION = 0x2; // deprecated
 // Serialize format: RF_VERSION (1B) | RuntimeFilter(LogicalType | other content)
 inline const constexpr uint8_t RF_VERSION_V2 = 0x3;
 // Serialize format: RF_VERSION (1B) | RuntimeFilterType (1B) | RuntimeFilter(LogicalType | other content)
 inline const constexpr uint8_t RF_VERSION_V3 = 0x4;
-enum class RuntimeFilterSerializeType : uint8_t { NONE = 0, EMPTY_FILTER = 1, BLOOM_FILTER = 2 };
+enum class RuntimeFilterSerializeType : uint8_t { NONE = 0, EMPTY_FILTER = 1, BLOOM_FILTER = 2, BITSET_FILTER = 3 };
 static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION));
 static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION_V2));
 inline const constexpr int32_t RF_VERSION_SZ = sizeof(RF_VERSION_V3);
@@ -57,6 +57,8 @@ inline std::string to_string(RuntimeFilterSerializeType type) {
         return "EmptyFilter";
     case RuntimeFilterSerializeType::BLOOM_FILTER:
         return "BloomFilter";
+    case RuntimeFilterSerializeType::BITSET_FILTER:
+        return "BitsetFilter";
     case RuntimeFilterSerializeType::NONE:
     default:
         return "None";
@@ -323,8 +325,10 @@ public:
         return const_cast<RuntimeFilter*>(this)->get_membership_filter();
     }
 
+    // TODO(lzh): rename to memory_usage
     virtual size_t bf_alloc_size() const { return 0; }
 
+    // TODO(lzh): rename to can_use
     virtual bool can_use_bf() const { return true; }
 
     virtual void clear_bf() {}
@@ -1539,6 +1543,142 @@ public:
     void insert(const CppType& value) {}
 };
 
+template <LogicalType LT>
+concept BitsetSupportedLogicalType = (lt_is_boolean<LT> || lt_is_date<LT> || lt_is_integer<LT> ||
+                                      lt_is_decimal<LT>)&&sizeof(RunTimeCppType<LT>) <= sizeof(int64_t);
+
+template <LogicalType LT>
+class Bitset {
+public:
+    using CppType = RunTimeCppType<LT>;
+
+    static_assert(BitsetSupportedLogicalType<LT>, "Bitset filter only support boolean, date, integer and decimal type");
+
+    void set_min_max(CppType min_value, CppType max_value) {
+        _min_value = min_value;
+        _max_value = max_value;
+    }
+    void init();
+
+    void insert(const CppType& value);
+
+    template <bool CheckRange>
+    ALWAYS_INLINE bool contains(const CppType& value, uint8_t selected) const {
+        bool matched = selected != 0;
+        if constexpr (CheckRange) {
+            matched &= (_min_value <= value) & (value <= _max_value);
+        }
+        // matched_mask = matched ? 0xFFFF'FFFF : 0x0000'0000
+        const uint64_t matched_mask = ~(static_cast<uint64_t>(matched) - 1);
+
+        const uint64_t bucket = _value_interval(value) & matched_mask;
+        const uint64_t group = bucket / 8;
+        const uint64_t index_in_group = bucket % 8;
+        matched &= (_bitset[group] & (1 << index_in_group)) != 0;
+
+        return matched;
+    }
+
+    template <bool CheckRange>
+    void contains_batch(uint8_t* __restrict selection, const CppType* __restrict values, size_t from, size_t to) const;
+    template <bool CheckRange, bool NullIsTrue>
+    void contains_batch(uint8_t* __restrict selection, const CppType* __restrict values,
+                        const uint8_t* __restrict is_nulls, size_t from, size_t to) const;
+
+    /// Whether the bitset contains at least one value in the range [min_value, max_value]
+    bool contains_range(const CppType& min_value, const CppType& max_value) const;
+
+    CppType min_value() const { return _min_value; }
+    CppType max_value() const { return _max_value; }
+    size_t value_interval() const { return _value_interval(_max_value); }
+    size_t size() const { return _bitset.size(); }
+    const uint8_t* data() const { return _bitset.data(); }
+    uint8_t* data() { return _bitset.data(); }
+
+    static auto to_numeric(const CppType& value) {
+        if constexpr (std::is_same_v<CppType, DateValue>) {
+            return static_cast<DateValue::type>(value);
+        } else {
+            return value;
+        }
+    }
+
+private:
+    size_t _value_interval(const CppType& value) const {
+        return static_cast<size_t>(to_numeric(value)) - to_numeric(_min_value);
+    }
+
+    CppType _min_value;
+    CppType _max_value;
+    std::vector<uint8_t> _bitset;
+};
+
+/// RuntimeBitsetFilter only support BROADCAST join.
+template <LogicalType LT>
+class RuntimeBitsetFilter final : public RuntimeMembershipFilter {
+public:
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using ContainerType = RunTimeProxyContainerType<LT>;
+
+    RuntimeBitsetFilter() = default;
+    explicit RuntimeBitsetFilter(const RuntimeMembershipFilter& base) : RuntimeMembershipFilter(base) {}
+    ~RuntimeBitsetFilter() override = default;
+
+    RuntimeFilterSerializeType type() const override { return RuntimeFilterSerializeType::BITSET_FILTER; }
+
+    void init(size_t num_elements) override;
+    LogicalType logical_type() const override { return LT; }
+
+    bool can_use_bf() const override { return true; }
+    size_t bf_alloc_size() const override {
+        return sizeof(_bitset.min_value()) + sizeof(_bitset.max_value()) + sizeof(_bitset.size()) + _bitset.size();
+    }
+
+    void evaluate(const Column* input_column, RunningContext* ctx) const override;
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override;
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override;
+
+    std::string debug_string() const override;
+
+    size_t max_serialized_size() const override;
+    size_t serialize(int serialize_version, uint8_t* data) const override;
+    size_t deserialize(int serialize_version, const uint8_t* data) override;
+
+    void intersect(const RuntimeFilter* rf) override {
+        DCHECK(false) << "RuntimeBitsetFilter does not support intersect";
+    }
+    /// RuntimeBitsetFilter only support for broadcast join, so `merge` and `concat` are not supported.
+    void merge(const RuntimeFilter* rf) override { DCHECK(false) << "RuntimeBitsetFilter does not support merge"; }
+    void concat(RuntimeFilter* rf) override { DCHECK(false) << "RuntimeBitsetFilter does not support concat"; }
+
+    RuntimeFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBitsetFilter()); }
+
+    void set_min_max(CppType min_value, CppType max_value) { _bitset.set_min_max(min_value, max_value); }
+
+    void insert(const CppType& value) { _bitset.insert(value); }
+
+    static auto to_numeric(const CppType& value) { return Bitset<LT>::to_numeric(value); }
+
+    const Bitset<LT>& bitset() const { return _bitset; }
+
+private:
+    template <bool null_is_true>
+    void _evaluate_vectorized(const Column* __restrict input_column, uint8_t* __restrict selection, size_t from,
+                              size_t to) const;
+    template <bool null_is_true>
+    uint16_t _evaluate_branchless(const Column* __restrict input_column, const std::vector<uint32_t>& hash_values,
+                                  uint16_t* __restrict sel, uint16_t sel_size, uint16_t* dst_sel) const;
+
+    bool _test_data(const CppType& value, uint8_t selected) const {
+        return _bitset.template contains<false /*CheckRange*/>(value, selected);
+    }
+
+    Bitset<LT> _bitset;
+};
+
 template <typename T>
 concept DerivedFromMembershipFilter = std::is_base_of_v<RuntimeMembershipFilter, T>;
 
@@ -1703,5 +1843,7 @@ template <LogicalType Type>
 using ComposedRuntimeBloomFilter = ComposedRuntimeFilter<Type, TRuntimeBloomFilter<Type>>;
 template <LogicalType Type>
 using ComposedRuntimeEmptyFilter = ComposedRuntimeFilter<Type, RuntimeEmptyFilter<Type>>;
+template <LogicalType Type>
+using ComposedRuntimeBitsetFilter = ComposedRuntimeFilter<Type, RuntimeBitsetFilter<Type>>;
 
 } // namespace starrocks

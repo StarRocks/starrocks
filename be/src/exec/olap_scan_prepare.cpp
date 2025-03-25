@@ -346,7 +346,74 @@ StatusOr<PredicateCompoundNode<Type>> ChunkPredicateBuilder<E, Type>::get_predic
                 child_builder));
     }
 
+    RETURN_IF_ERROR(_build_bitset_in_predicates(compound_node, parser, col_preds_owner));
+
     return compound_node;
+}
+
+template <BoxedExprType E, CompoundNodeType Type>
+Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root,
+                                                                   PredicateParser* parser,
+                                                                   ColumnPredicatePtrs& col_preds_owner) {
+    if (_opts.runtime_filters == nullptr) {
+        return Status::OK();
+    }
+
+    for (const auto& [_, desc] : _opts.runtime_filters->descriptors()) {
+        SlotId slot_id;
+        if (!desc->is_probe_slot_ref(&slot_id)) {
+            continue;
+        }
+        const auto* slot_desc = _opts.tuple_desc->get_slot_by_id(slot_id);
+        if (slot_desc == nullptr) {
+            continue;
+        }
+        if (desc->is_topn_filter()) {
+            continue;
+        }
+
+        // The un-arrived runtime filter will not be added to the predicate tree,
+        // but will be added to `RuntimeFilterPredicates` by `get_runtime_filter_predicates`.
+        const auto* rf = desc->runtime_filter(_opts.driver_sequence);
+        if (rf == nullptr || rf->type() != RuntimeFilterSerializeType::BITSET_FILTER) {
+            continue;
+        }
+
+        auto column_id = parser->column_id(*slot_desc);
+
+        const auto error_status = Status::NotSupported("runtime bitset filter do not support the logical type: " +
+                                                       std::string(logical_type_to_string(slot_desc->type().type)));
+        RETURN_IF_ERROR(type_dispatch_bitset_filter(slot_desc->type().type, error_status, [&]<LogicalType LT>() {
+            const auto* bitset_rf = down_cast<const RuntimeBitsetFilter<LT>*>(rf->get_membership_filter());
+            auto bitset_in_pred = std::unique_ptr<ColumnPredicate>(
+                    new_bitset_in_predicate(get_type_info(slot_desc->type().type), column_id, bitset_rf->bitset()));
+            bitset_in_pred->set_index_filter_only(true);
+            auto bitset_in_pred_node = PredicateColumnNode{bitset_in_pred.get()};
+            // Only used as index filter. Evaluate will be pushed down by `join_runtime_filter_pushdown`.
+            col_preds_owner.emplace_back(std::move(bitset_in_pred));
+
+            // - For rf with has_null, generate `is_null_pred OR bitset_in_pred`.
+            // - Otherwise, generate `bitset_in_pred`.
+            if (!rf->has_null()) {
+                tree_root.add_child(std::move(bitset_in_pred_node));
+            } else {
+                auto or_node = PredicateOrNode{};
+
+                auto is_null_pred = std::unique_ptr<ColumnPredicate>(
+                        new_column_null_predicate(get_type_info(slot_desc->type().type), column_id, true));
+                is_null_pred->set_index_filter_only(true);
+                or_node.add_child(PredicateColumnNode{is_null_pred.get()});
+                col_preds_owner.emplace_back(std::move(is_null_pred));
+
+                or_node.add_child(std::move(bitset_in_pred_node));
+                tree_root.add_child(std::move(or_node));
+            }
+
+            return Status::OK();
+        }));
+    }
+
+    return Status::OK();
 }
 
 template <bool Negative>
@@ -1267,8 +1334,6 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
             continue;
         }
         auto column_id = parser->column_id(*slot_desc);
-        // Connector scan only use parsed predicate_tree to filter with statistics but not with data rows,
-        // so runtime filters still needs to be used.
         desc->set_has_push_down_to_storage(_opts.is_olap_scan);
         predicates.add_predicate(obj_pool->add(new RuntimeFilterPredicate(desc, column_id)));
     }

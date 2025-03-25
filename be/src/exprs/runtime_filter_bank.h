@@ -60,9 +60,13 @@ public:
 
     static RuntimeFilter* create_runtime_empty_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
     static RuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
+    static RuntimeFilter* create_runtime_bitset_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
     static RuntimeFilter* transmit_to_runtime_empty_filter(ObjectPool* pool, RuntimeFilter* rf);
     static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, RuntimeFilterSerializeType rf_type,
                                                      LogicalType ltype, int8_t join_mode);
+    static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
+                                                     const pipeline::RuntimeMembershipFilterBuildParam& param,
+                                                     size_t column_offset, size_t row_count);
 
     // ====================================
     static Status fill_runtime_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
