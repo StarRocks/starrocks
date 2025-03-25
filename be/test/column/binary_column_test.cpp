@@ -159,6 +159,16 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings) {
         ASSERT_EQ(values[i], c1->get_data()[i]);
     }
 
+    std::vector<Slice> values2{{"abcd"}, {"123456"}};
+    ASSERT_TRUE(c1->append_strings(values2.data(), values2.size()));
+    ASSERT_EQ(values.size() + values2.size(), c1->size());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], c1->get_data()[i]);
+    }
+    for (size_t i = 0; i < values2.size(); i++) {
+        ASSERT_EQ(values2[i], c1->get_data()[i + 2]);
+    }
+
     // Nullable BinaryColumn
     NullableColumn::Ptr c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     ASSERT_TRUE(c2->append_strings(values.data(), values.size()));
