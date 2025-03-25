@@ -1631,6 +1631,7 @@ private:
     }
 };
 
+// Todo:support datetime/date
 template <LogicalType Type>
 class ArrayGenerate {
 public:
