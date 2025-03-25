@@ -1647,9 +1647,9 @@ public:
         NullColumnPtr nulls;
         for (auto& column : columns) {
             if (column->has_null()) {
-                auto nullable_column = down_cast<NullableColumn*>(column.get());
+                const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
                 if (nulls == nullptr) {
-                    nulls = std::static_pointer_cast<NullColumn>(nullable_column->null_column()->clone_shared());
+                    nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());
                 } else {
                     ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
                                                  nullable_column->null_column()->get_data().data());
