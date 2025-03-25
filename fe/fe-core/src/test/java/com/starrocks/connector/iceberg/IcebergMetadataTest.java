@@ -47,6 +47,7 @@ import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.persist.EditLog;
@@ -62,8 +63,10 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -99,12 +102,8 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
-<<<<<<< HEAD
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
-=======
-import org.apache.iceberg.TableMetadata;
->>>>>>> e52cb9e626 ([BugFix] Fix bugs for iceberg rest catalog (#55416))
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -114,6 +113,10 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
+import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.types.Types;
+import org.apache.iceberg.view.BaseView;
+import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -130,6 +133,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.DATE;
 import static com.starrocks.catalog.Type.DATETIME;
 import static com.starrocks.catalog.Type.INT;
@@ -1417,7 +1421,6 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testCreateView(@Mocked RESTCatalog restCatalog, @Mocked BaseView baseView,
                                @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -1484,68 +1487,3 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals("xxx", table.getTableLocation());
     }
 }
-=======
-    public void testVersionRange() {
-        TableVersionRange versionRange = TableVersionRange.empty();
-        Assert.assertTrue(versionRange.isEmpty());
-        Assert.assertTrue(versionRange.start().isEmpty());
-        versionRange = TableVersionRange.withEnd(Optional.of(1L));
-        Assert.assertFalse(versionRange.isEmpty());
-        Assert.assertNotNull(versionRange.toString());
-    }
-
-    @Test
-    public void testGetSnapshotIdFromVersion() {
-        ConstantOperator constantOperator = new ConstantOperator("2023-01-01", VARCHAR);
-        ConnectorTableVersion tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
-        ConnectorTableVersion finalTableVersion = tableVersion;
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Invalid temporal version",
-                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion));
-
-        constantOperator = new ConstantOperator(LocalDateTime.now(), DATE);
-        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
-        ConnectorTableVersion finalTableVersion1 = tableVersion;
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Invalid temporal version",
-                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion1));
-
-        constantOperator = new ConstantOperator("2000-01-01 00:00:00", VARCHAR);
-        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
-        ConnectorTableVersion finalTableVersion2 = tableVersion;
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Invalid temporal version",
-                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion2));
-
-        constantOperator = new ConstantOperator("not_exist", VARCHAR);
-        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
-        ConnectorTableVersion finalTableVersion3 = tableVersion;
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Cannot find snapshot with reference name",
-                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion3));
-
-        constantOperator = new ConstantOperator(123, INT);
-        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
-        ConnectorTableVersion finalTableVersion4 = tableVersion;
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Unsupported type for table version",
-                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion4));
-    }
-
-    public void testNullTableUUID() {
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
-                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
-        Assert.assertEquals(2, icebergTable.getTableIdentifier().split(":").length);
-        Assert.assertEquals(4, icebergTable.getUUID().split("\\.").length);
-
-        new MockUp<TableMetadata>() {
-            @Mock
-            public String uuid() {
-                return null;
-            }
-        };
-        Assert.assertEquals(1, icebergTable.getTableIdentifier().split(":").length);
-        Assert.assertEquals(3, icebergTable.getUUID().split("\\.").length);
-    }
-}
->>>>>>> e52cb9e626 ([BugFix] Fix bugs for iceberg rest catalog (#55416))
