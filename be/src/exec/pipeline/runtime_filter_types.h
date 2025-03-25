@@ -276,11 +276,13 @@ private:
 // not take effects on operators in front of LocalExchangeSourceOperators before they are merged into a total one.
 class PartialRuntimeFilterMerger {
 public:
-    PartialRuntimeFilterMerger(ObjectPool* pool, size_t local_rf_limit, size_t global_rf_limit, int func_version)
+    PartialRuntimeFilterMerger(ObjectPool* pool, size_t local_rf_limit, size_t global_rf_limit, int func_version,
+                               bool enable_join_runtime_bitset_filter)
             : _pool(pool),
               _local_rf_limit(local_rf_limit),
               _global_rf_limit(global_rf_limit),
-              _func_version(func_version) {}
+              _func_version(func_version),
+              _enable_join_runtime_bitset_filter(enable_join_runtime_bitset_filter) {}
 
     void incr_builder() {
         _ht_row_counts.emplace_back(0);
@@ -325,6 +327,7 @@ private:
     const size_t _local_rf_limit;
     const size_t _global_rf_limit;
     const int _func_version;
+    const bool _enable_join_runtime_bitset_filter;
 
     std::atomic<bool> _always_true{false};
     std::atomic<size_t> _num_active_builders{0};

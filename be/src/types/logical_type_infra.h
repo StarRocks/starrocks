@@ -101,6 +101,16 @@ namespace starrocks {
     M(VARBINARY)                        \
     M(JSON)
 
+#define APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(M) \
+    M(TYPE_BOOLEAN)                               \
+    M(TYPE_TINYINT)                               \
+    M(TYPE_SMALLINT)                              \
+    M(TYPE_INT)                                   \
+    M(TYPE_BIGINT)                                \
+    M(TYPE_DECIMAL32)                             \
+    M(TYPE_DECIMAL64)                             \
+    M(TYPE_DATE)
+
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
         return fun.template operator()<type>(args...);
@@ -203,6 +213,15 @@ template <class Functor, class Ret, class... Args>
 auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        return default_value;
+    }
+}
+
+template <class Functor, class Ret, class... Args>
+auto type_dispatch_bitset_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
+    switch (ltype) {
+        APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(_TYPE_DISPATCH_CASE)
     default:
         return default_value;
     }
