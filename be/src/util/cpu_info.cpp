@@ -94,6 +94,8 @@ std::vector<vector<int>> CpuInfo::numa_node_to_cores_;
 std::vector<size_t> CpuInfo::cpuset_cores_;
 std::set<size_t> CpuInfo::offline_cores_;
 std::vector<int> CpuInfo::numa_node_core_idx_;
+std::vector<long> CpuInfo::cache_sizes;
+std::vector<long> CpuInfo::cache_line_sizes;
 
 static struct {
     string name;
@@ -182,6 +184,7 @@ void CpuInfo::init() {
 #endif
 
     _init_numa();
+    _init_cache_info();
     initialized_ = true;
 }
 
@@ -378,6 +381,12 @@ int CpuInfo::get_current_core() {
 #else
     return 0;
 #endif
+}
+
+void CpuInfo::_init_cache_info() {
+    cache_sizes.resize(NUM_CACHE_LEVELS);
+    cache_line_sizes.resize(NUM_CACHE_LEVELS);
+    _get_cache_info(cache_sizes.data(), cache_line_sizes.data());
 }
 
 void CpuInfo::_get_cache_info(long cache_sizes[NUM_CACHE_LEVELS], long cache_line_sizes[NUM_CACHE_LEVELS]) {
