@@ -18,6 +18,11 @@
 #include "util/compression/stream_compression.h"
 
 namespace starrocks {
+
+// ------------------------------------------------------------------------------------
+// SimdBlockFilter
+// ------------------------------------------------------------------------------------
+
 void SimdBlockFilter::init(size_t nums) {
     nums = std::max(MINIMUM_ELEMENT_NUM, nums);
     int log_heap_space = std::ceil(std::log2(nums));
@@ -105,6 +110,7 @@ void SimdBlockFilter::merge(const SimdBlockFilter& bf) {
 }
 
 // For scalar version:
+
 void SimdBlockFilter::make_mask(uint32_t key, uint32_t* masks) const {
     for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
         // add some salt to key
@@ -131,7 +137,12 @@ void SimdBlockFilter::clear() {
     }
 }
 
-size_t RuntimeBloomFilter::max_serialized_size() const {
+// ------------------------------------------------------------------------------------
+// RuntimeBloomFilter
+// ------------------------------------------------------------------------------------
+
+template <LogicalType Type>
+size_t TRuntimeBloomFilter<Type>::max_serialized_size() const {
     // todo(yan): noted that it's not serialize compatible with 32-bit and 64-bit.
     auto num_partitions = _hash_partition_bf.size();
     size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(num_partitions) + sizeof(_join_mode);
@@ -144,13 +155,15 @@ size_t RuntimeBloomFilter::max_serialized_size() const {
     }
     return size;
 }
-
-size_t RuntimeBloomFilter::serialize(int serialize_version, uint8_t* data) const {
+template <LogicalType Type>
+size_t TRuntimeBloomFilter<Type>::serialize(int serialize_version, uint8_t* data) const {
     size_t offset = 0;
     auto num_partitions = _hash_partition_bf.size();
+
 #define JRF_COPY_FIELD(field)                     \
     memcpy(data + offset, &field, sizeof(field)); \
     offset += sizeof(field);
+
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
     JRF_COPY_FIELD(num_partitions);
@@ -166,13 +179,15 @@ size_t RuntimeBloomFilter::serialize(int serialize_version, uint8_t* data) const
     }
     return offset;
 }
-
-size_t RuntimeBloomFilter::deserialize(int serialize_version, const uint8_t* data) {
+template <LogicalType Type>
+size_t TRuntimeBloomFilter<Type>::deserialize(int serialize_version, const uint8_t* data) {
     size_t offset = 0;
     size_t num_partitions = 0;
+
 #define JRF_COPY_FIELD(field)                     \
     memcpy(&field, data + offset, sizeof(field)); \
     offset += sizeof(field);
+
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
     JRF_COPY_FIELD(num_partitions);
@@ -192,7 +207,8 @@ size_t RuntimeBloomFilter::deserialize(int serialize_version, const uint8_t* dat
     return offset;
 }
 
-void RuntimeBloomFilter::clear_bf() {
+template <LogicalType Type>
+void TRuntimeBloomFilter<Type>::clear_bf() {
     if (_hash_partition_bf.empty()) {
         _bf.clear();
     } else {
@@ -202,5 +218,78 @@ void RuntimeBloomFilter::clear_bf() {
     }
     _size = 0;
 }
+
+// ------------------------------------------------------------------------------------
+// RuntimeEmptyFilter
+// ------------------------------------------------------------------------------------
+
+template <LogicalType LT>
+std::string RuntimeEmptyFilter<LT>::debug_string() const {
+    std::stringstream ss;
+    ss << "RuntimeEmptyFilter("
+       << "has_null=" << _has_null     //
+       << ", join_mode=" << _join_mode //
+       << ", num_elements=" << _size   //
+       << ")";
+    return ss.str();
+}
+
+template <LogicalType LT>
+size_t RuntimeEmptyFilter<LT>::max_serialized_size() const {
+    return sizeof(_has_null) + // 1. has_null
+           sizeof(_size) +     // 2. num_elements
+           sizeof(_join_mode); // 3. join_mode
+}
+
+template <LogicalType LT>
+size_t RuntimeEmptyFilter<LT>::serialize(int serialize_version, uint8_t* data) const {
+    DCHECK(serialize_version != RF_VERSION);
+
+    size_t offset = 0;
+
+#define JRF_COPY_FIELD(field)                     \
+    memcpy(data + offset, &field, sizeof(field)); \
+    offset += sizeof(field);
+
+    JRF_COPY_FIELD(_has_null);  // 1. has_null
+    JRF_COPY_FIELD(_size);      // 2. num_elements
+    JRF_COPY_FIELD(_join_mode); // 3. join_mode
+
+#undef JRF_COPY_FIELD
+
+    return offset;
+}
+
+template <LogicalType LT>
+size_t RuntimeEmptyFilter<LT>::deserialize(int serialize_version, const uint8_t* data) {
+    DCHECK(serialize_version != RF_VERSION);
+
+    size_t offset = 0;
+
+#define JRF_COPY_FIELD(field)                     \
+    memcpy(&field, data + offset, sizeof(field)); \
+    offset += sizeof(field);
+
+    JRF_COPY_FIELD(_has_null);  // 1. has_null
+    JRF_COPY_FIELD(_size);      // 2. num_elements
+    JRF_COPY_FIELD(_join_mode); // 3. join_mode
+
+#undef JRF_COPY_FIELD
+
+    return offset;
+}
+
+// ------------------------------------------------------------------------------------
+// Instantiate runtime filters.
+// ------------------------------------------------------------------------------------
+
+#define InstantiateRuntimeFilter(LT)                                  \
+    template class RuntimeEmptyFilter<LT>;                            \
+    template class ComposedRuntimeFilter<LT, RuntimeEmptyFilter<LT>>; \
+    template class TRuntimeBloomFilter<LT>;                           \
+    template class ComposedRuntimeFilter<LT, TRuntimeBloomFilter<LT>>;
+
+APPLY_FOR_ALL_SCALAR_TYPE(InstantiateRuntimeFilter)
+#undef InstantiateRuntimeFilter
 
 } // namespace starrocks

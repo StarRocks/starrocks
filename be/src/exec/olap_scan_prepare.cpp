@@ -1047,6 +1047,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             }
         }
     }
+
     if (_opts.runtime_state->enable_join_runtime_filter_pushdown()) {
         for (const auto& it : _opts.runtime_filters->descriptors()) {
             RuntimeFilterProbeDescriptor* desc = it.second;
@@ -1063,7 +1064,9 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             }
 
             auto column_id = parser->column_id(*slot_desc);
-            desc->set_has_push_down_to_storage(true);
+            // Connector scan only use parsed predicate_tree to filter with statistics but not with data rows,
+            // so runtime filters still needs to be used.
+            desc->set_has_push_down_to_storage(_opts.is_olap_scan);
             // add placeholder predicates, so that the columns needed by runtime filter can be read in the first stage of late materialization
             std::unique_ptr<ColumnPredicate> p(
                     new_column_placeholder_predicate(get_type_info(slot_desc->type().type), column_id));
@@ -1264,7 +1267,9 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
             continue;
         }
         auto column_id = parser->column_id(*slot_desc);
-        desc->set_has_push_down_to_storage(true);
+        // Connector scan only use parsed predicate_tree to filter with statistics but not with data rows,
+        // so runtime filters still needs to be used.
+        desc->set_has_push_down_to_storage(_opts.is_olap_scan);
         predicates.add_predicate(obj_pool->add(new RuntimeFilterPredicate(desc, column_id)));
     }
     return predicates;

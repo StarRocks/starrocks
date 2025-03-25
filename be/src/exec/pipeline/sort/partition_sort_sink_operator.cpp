@@ -78,7 +78,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
             build_runtime_filters[i]->set_or_intersect_filter((*runtime_filter)[i]);
             auto rf = build_runtime_filters[i]->runtime_filter();
             VLOG(2) << "runtime filter version:" << rf->rf_version() << "," << rf->debug_string() << rf;
-            RuntimeBloomFilterList lst = {build_runtime_filters[i]};
+            RuntimeMembershipFilterList lst = {build_runtime_filters[i]};
             _sort_context->set_runtime_filter_collector(
                     _hub, _plan_node_id,
                     std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, std::move(lst)));

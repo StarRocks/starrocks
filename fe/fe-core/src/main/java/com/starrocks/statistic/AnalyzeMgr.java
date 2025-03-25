@@ -381,12 +381,7 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(table.getId(), columns);
-        if (async) {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
-        } else {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatisticsSync(table, columns);
-        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshHistogramStatistics(table, columns, !async);
     }
 
     public void replayRemoveHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
@@ -722,9 +717,9 @@ public class AnalyzeMgr implements Writable {
             MultiColumnStatsMeta value = entry.getValue();
 
             StatisticExecutor statisticExecutor = new StatisticExecutor();
-            statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, key.tableId);
 
             if (tableIdHasDeleted.contains(key.tableId)) {
+                statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, key.tableId);
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveMultiColumnStatsMeta(value);
                 keysToRemove.add(key);
             }
