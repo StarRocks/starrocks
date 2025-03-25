@@ -1670,6 +1670,30 @@ public:
 
         auto num_rows_to_process = all_const_cols ? 1 : num_rows;
 
+        size_t total_elements = 0;
+        auto* data_column = elements->mutable_data_column();
+        auto* null_column = elements->mutable_null_column();
+        ColumnViewer start_viewer = ColumnViewer<Type>(columns[0]);
+        ColumnViewer stop_viewer = ColumnViewer<Type>(columns[1]);
+        ColumnViewer step_viewer = ColumnViewer<Type>(columns[2]);
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
+            if (nulls && nulls->get_data()[cur_row]) {
+                continue;
+            }
+            auto step = step_viewer.value(cur_row);
+            if (step == 0) {
+                continue;
+            }
+            auto start = start_viewer.value(cur_row);
+            auto stop = stop_viewer.value(cur_row);
+            if (step > 0 && start <= stop) {
+                total_elements += (stop - start) / step + 1;
+            } else if (step < 0 && start >= stop) {
+                total_elements += (start - stop) / (-step) + 1;
+            }
+        }
+        TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));
+
         size_t total_elements_num = 0;
         for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
             if (nulls && nulls->get_data()[cur_row]) {
@@ -1677,26 +1701,27 @@ public:
                 continue;
             }
 
-            auto start = columns[0]->get(cur_row).get<InputCppType>();
-            auto stop = columns[1]->get(cur_row).get<InputCppType>();
-            auto step = columns[2]->get(cur_row).get<InputCppType>();
+            auto step = step_viewer.value(cur_row);
 
             // just return empty array
             if (step == 0) {
                 offsets->append(offsets->get_data().back());
                 continue;
             }
+            auto start = start_viewer.value(cur_row);
+            auto stop = stop_viewer.value(cur_row);
 
             InputCppType temp;
             for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
                  cur_element += step) {
-                TRY_CATCH_BAD_ALLOC(elements->append_numbers(&cur_element, sizeof(InputCppType)));
+                data_column->append_datum(cur_element);
                 total_elements_num++;
                 if (__builtin_add_overflow(cur_element, step, &temp)) break;
             }
             offsets->append(total_elements_num);
         }
 
+        null_column->get_data().resize(total_elements_num, 0);
         CHECK_EQ(offsets->get_data().back(), elements->size());
 
         auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
