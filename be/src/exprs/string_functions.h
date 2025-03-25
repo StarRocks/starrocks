@@ -325,6 +325,25 @@ public:
     DEFINE_VECTORIZED_FN(locate_pos);
 
     /**
+     * Return the position of the first occurrence of substring in string
+     *
+     * @param: [string_value, sub_string_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(strpos);
+
+    /**
+     * Return the position of the N-th occurrence of substring in string
+     * When N is negative, search from the end of string
+     *
+     * @param: [string_value, sub_string_value, instance]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(strpos_instance);
+
+    /**
      * @param: [string_value, ......]
      * @paramType: [BinaryColumn, ......]
      * @return: BinaryColumn

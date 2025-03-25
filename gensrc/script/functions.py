@@ -339,6 +339,8 @@ vectorized_functions = [
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
     [30220, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::locate'],
     [30221, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::locate_pos'],
+    [30225, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strpos'],
+    [30226, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::strpos_instance'],
 
     [30250, 'concat', True, True, 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat',
      'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],
