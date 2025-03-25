@@ -47,6 +47,7 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
@@ -603,9 +604,23 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             case SCHEMA:
                 return "SYSTEM VIEW";
             default:
-                // external table also returns "BASE TABLE" for BI compatibility
-                return "BASE TABLE";
+                // external table also returns "BASE TABLE" or "TABLE" for BI compatibility
+                return getTableTypeForMysql();
         }
+    }
+
+    public static String getTableTypeForMysql() {
+        String version = GlobalVariable.version;
+        if (version == null || version.isEmpty()) {
+            return "BASE TABLE";
+        }
+        if (version.startsWith("5")) {
+            return "BASE TABLE";
+        } else if (version.startsWith("8")) {
+            // compatibility for mysql8.0+
+            return "TABLE";
+        }
+        return "BASE TABLE";
     }
 
     public String getComment() {
