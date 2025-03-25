@@ -299,12 +299,13 @@ void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashT
             probe_state->null_array = &nullable_column->null_column()->get_data();
             probe_state->consider_probe_time_locality();
         }
-    } else {
-        SIMDGather::gather(nexts, firsts, buckets, probe_row_count);
-
-        probe_state->null_array = nullptr;
-        probe_state->consider_probe_time_locality();
+        return;
     }
+
+    SIMDGather::gather(nexts, firsts, buckets, probe_row_count);
+
+    probe_state->null_array = nullptr;
+    probe_state->consider_probe_time_locality();
 }
 
 template <LogicalType LT>
