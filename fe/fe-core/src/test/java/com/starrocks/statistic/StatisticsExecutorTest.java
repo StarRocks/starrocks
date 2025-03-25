@@ -24,7 +24,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -296,5 +298,25 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         ConnectContext statsContext = StatisticUtils.buildConnectContext();
         Assert.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
+    }
+
+    @Test
+    public void testSpecifyStatisticsCollectWarehouse() {
+        String sql = "analyze table test.t0_stats";
+        Config.statistics_collect_warehouse = "xxx";
+        FeConstants.enableUnitStatistics = false;
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, 2, 3, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+
+        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "default_catalog", "test");
+        Table table =
+                connectContext.getGlobalStateMgr().getLocalMetastore().getTable(connectContext, "test", "t0_stats");
+
+        Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
+        Assert.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+        Config.statistics_collect_warehouse = "default_warehouse";
+        FeConstants.enableUnitStatistics = true;
     }
 }

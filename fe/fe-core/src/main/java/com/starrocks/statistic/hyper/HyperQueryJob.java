@@ -136,7 +136,7 @@ public abstract class HyperQueryJob {
             return executor.executeStatisticDQL(context, sql);
         } catch (Exception e) {
             failures++;
-            String message = "execute statistics query failed, sql: " + sql;
+            String message = "execute statistics query failed, sql: " + sql +  ", error: " + e.getMessage();
             LOG.error(message, e);
             lastFailure = new RuntimeException(message, e);
             return Collections.emptyList();
