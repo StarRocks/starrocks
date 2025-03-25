@@ -174,12 +174,22 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offse
 
 template <typename T>
 bool BinaryColumnBase<T>::append_strings(const Slice* data, size_t size) {
+    const size_t prev_num_offsets = _offsets.size();
+    _offsets.resize(prev_num_offsets + size);
+    // offsets[i] represents the beginning address (included) of the new `i`-th string.
+    // offsets[i + 1] represents the end address (excluded) of the new `i`-th string.
+    auto* offsets = _offsets.data() + prev_num_offsets - 1;
     for (size_t i = 0; i < size; i++) {
-        const auto& s = data[i];
-        const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
-        _bytes.insert(_bytes.end(), p, p + s.size);
-        _offsets.emplace_back(_bytes.size());
+        offsets[i + 1] = offsets[i] + data[i].size;
     }
+
+    _bytes.resize(_offsets.back());
+    auto* bytes = _bytes.data();
+    for (size_t i = 0; i < size; i++) {
+        const auto* const p = reinterpret_cast<const Bytes::value_type*>(data[i].data);
+        strings::memcpy_inlined(bytes + offsets[i], p, data[i].size);
+    }
+
     _slices_cache = false;
     return true;
 }
