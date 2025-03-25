@@ -115,7 +115,7 @@ INSERT OVERWRITEステートメントのヒントに設定して、ステート�
 例:
 
 ```SQL
-INSERT OVERWRITE /*+set_var(set dynamic_overwrite = false)*/ insert_wiki_edit
+INSERT /*+set_var(dynamic_overwrite = false)*/ OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
