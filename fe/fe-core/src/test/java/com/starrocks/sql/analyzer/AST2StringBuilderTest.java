@@ -185,9 +185,7 @@ public class AST2StringBuilderTest {
         castExpr.setImplicit(false);
         AstToStringBuilder.AST2StringBuilderVisitor visitor = new AstToStringBuilder.AST2StringBuilderVisitor(false, false, true);
         String castRet = castExpr.accept(visitor, null);
-        // "CAST(" + printWithParentheses(node.getChild(0))
-        //                        + " AS " + node.getType().toString() + ")"
-        // Assert.assertEquals();
-        System.out.println("ret is: " + castRet);
+        String expectedStr = "CAST('2024-12-26 12:00:00' AS DATE)";
+        Assert.assertEquals(castRet, expectedStr);
     }
 }
