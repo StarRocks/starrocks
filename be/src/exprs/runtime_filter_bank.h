@@ -61,7 +61,7 @@ public:
     static size_t serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
                                                                    uint8_t* data);
     static int deserialize_runtime_filter(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data, size_t size);
-     static int deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool, SkewBroadcastRfMaterial** material,
+    static int deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool, SkewBroadcastRfMaterial** material,
                                                                   const uint8_t* data, size_t size,
                                                                   const PTypeDesc& ptype);
 
@@ -73,7 +73,7 @@ public:
                                                      LogicalType ltype, int8_t join_mode);
     static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
                                                      const pipeline::RuntimeMembershipFilterBuildParam& param,
-                                                     size_t column_offset, size_t row_count);                                    
+                                                     size_t column_offset, size_t row_count);
     // ====================================
     static Status fill_runtime_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                       size_t column_offset, bool eq_null, bool is_skew_join = false);
