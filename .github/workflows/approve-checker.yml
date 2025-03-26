@@ -124,7 +124,6 @@ jobs:
       github.event_name == 'pull_request_review' && 
       needs.info.outputs.BASE_REF != 'main' && 
       !contains(needs.info.outputs.LABELS, 'sync') &&
-      contains(needs.info.outputs.TITLE, 'backport') &&
       (startsWith(needs.info.outputs.TITLE, '[Feature]') || startsWith(needs.info.outputs.TITLE, '[Enhancement]')) &&
       needs.info.outputs.DIFF_LINES > 100
     name: FEATURE-ENHANCEMENT-BACKPORT-REVIEW

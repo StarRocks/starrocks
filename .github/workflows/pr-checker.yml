@@ -260,7 +260,7 @@ jobs:
     needs: sync-checker
     if: >
       github.event.action != 'synchronize' &&
-      contains(github.event.pull_request.title, 'backport') &&
+      github.base_ref != 'main' &&
       (startsWith(needs.info.outputs.TITLE, '[Feature]') || startsWith(needs.info.outputs.TITLE, '[Enhancement]')) &&
       !contains(github.event.pull_request.labels.*.name, 'backport_approval')
     env:
@@ -270,4 +270,4 @@ jobs:
       - name: CHECK NECESSARY
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/check-pr-backport-review-necessary.sh.sh
+          ./bin/check-pr-backport-review-necessary.sh
