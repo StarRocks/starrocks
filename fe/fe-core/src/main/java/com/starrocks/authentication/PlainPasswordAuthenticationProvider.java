@@ -18,12 +18,13 @@ import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 public class PlainPasswordAuthenticationProvider implements AuthenticationProvider {
     /**
@@ -61,8 +62,19 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
 
         if (!Config.enable_password_reuse) {
-            AuthenticationHandler.authenticate(new ConnectContext(), userIdentity.getUser(), userIdentity.getHost(),
-                    password.getBytes(StandardCharsets.UTF_8), null);
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            Map.Entry<UserIdentity, UserAuthenticationInfo> userAuthenticationInfoEntry =
+                    authenticationMgr.getBestMatchedUserIdentity(userIdentity.getUser(), userIdentity.getHost());
+            if (userAuthenticationInfoEntry != null) {
+                try {
+                    authenticate(userIdentity.getUser(), userIdentity.getHost(),
+                            password.getBytes(StandardCharsets.UTF_8), null, userAuthenticationInfoEntry.getValue());
+                } catch (AuthenticationException e) {
+                    return;
+                }
+
+                throw new AuthenticationException("Can't reuse password");
+            }
         }
     }
 
@@ -130,5 +142,10 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         } else {
             return MysqlPassword.checkPassword(originalPassword);
         }
+    }
+
+    @Override
+    public byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
+        return randomString;
     }
 }
