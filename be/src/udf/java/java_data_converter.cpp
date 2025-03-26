@@ -416,7 +416,7 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
                 RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, map_column->keys_column().get(),
                                               {.l = key_element}));
 
-                ASSIGN_OR_RETURN(auto val_element, key_list_stub.get(i));
+                ASSIGN_OR_RETURN(auto val_element, val_list_stub.get(i));
                 RETURN_IF_ERROR(append_jvalue(type_desc.children[1], true, map_column->values_column().get(),
                                               {.l = val_element}));
             }

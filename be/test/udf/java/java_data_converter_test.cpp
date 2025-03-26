@@ -213,6 +213,7 @@ TEST_F(DataConverterTest, append_jvalue) {
         jobject obj = val2.l;
         LOCAL_REF_GUARD(obj);
         ASSERT_OK(append_jvalue(tdesc, true, c1.get(), val2));
+        ASSERT_EQ(c1->debug_item(0), "{1:34}");
     }
 }
 } // namespace starrocks
