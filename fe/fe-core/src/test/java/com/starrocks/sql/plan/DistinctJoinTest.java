@@ -60,18 +60,21 @@ public class DistinctJoinTest extends TPCDS1TTestBase {
     @Test
     public void testAddDistinct() throws Exception {
         String sql =
-                "select count(*) from (select catalog_sales.cs_bill_cdemo_sk from catalog_sales left semi join store_sales on catalog_sales.cs_bill_cdemo_sk = store_sales.ss_addr_sk) a;";
+                "select count(*) from (select catalog_sales.cs_bill_cdemo_sk from catalog_sales" +
+                        " left semi join store_sales on catalog_sales.cs_bill_cdemo_sk = store_sales.ss_addr_sk) a;";
         String plan = getLogicalFragmentPlan(sql);
-        assertContains("AGGREGATE ([GLOBAL] aggregate [{58: count=count(58: count)}] group by [[]] having [null]\n" +
-                "    EXCHANGE GATHER\n" +
-                "        AGGREGATE ([LOCAL] aggregate [{58: count=count()}] group by [[]] having [null]\n" +
-                "            LEFT SEMI JOIN (join-predicate [7: cs_bill_cdemo_sk = 42: ss_addr_sk] post-join-predicate [null])\n" +
-                "                SCAN (columns[7: cs_bill_cdemo_sk] predicate[null])\n" +
-                "                EXCHANGE BROADCAST\n" +
-                "                    AGGREGATE ([GLOBAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
-                "                        EXCHANGE SHUFFLE[42]\n" +
-                "                            AGGREGATE ([LOCAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
-                "                                SCAN (columns[42: ss_addr_sk] predicate[42: ss_addr_sk IS NOT NULL])");
+        assertContains(
+                "AGGREGATE ([GLOBAL] aggregate [{58: count=count(58: count)}] group by [[]] having [null]\n" +
+                        "    EXCHANGE GATHER\n" +
+                        "        AGGREGATE ([LOCAL] aggregate [{58: count=count()}] group by [[]] having [null]\n" +
+                        "            LEFT SEMI JOIN " +
+                        "(join-predicate [7: cs_bill_cdemo_sk = 42: ss_addr_sk] post-join-predicate [null])\n" +
+                        "                SCAN (columns[7: cs_bill_cdemo_sk] predicate[null])\n" +
+                        "                EXCHANGE BROADCAST\n" +
+                        "                    AGGREGATE ([GLOBAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
+                        "                        EXCHANGE SHUFFLE[42]\n" +
+                        "                            AGGREGATE ([LOCAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
+                        "                                SCAN (columns[42: ss_addr_sk] predicate[42: ss_addr_sk IS NOT NULL])");
     }
 
 }
