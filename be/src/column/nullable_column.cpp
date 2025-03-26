@@ -29,7 +29,7 @@ NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&
             << "nullable column's data must be single column";
     DCHECK(!null_column->is_constant() && !null_column->is_nullable())
             << "nullable column's data must be single column";
-    _null_column = NullColumn::static_pointer_cast(std::move(null_column));
+    _null_column = NullColumn::static_pointer_cast(Column::mutate(std::move(null_column)));
     _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
 }
 
