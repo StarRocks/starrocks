@@ -64,7 +64,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ env.COMMIT_ID }}
+          ref: ${{ env.BASE_REF }}
+
+      - name: checkout commit
+        run: |
+          git reset ${{ env.COMMIT_ID }} --hard
 
       - name: Download BE UT XML
         id: download-ut-xml
