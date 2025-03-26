@@ -392,20 +392,24 @@ with w1 as (
 select count(1)
 from t1 join [broadcast] w1 using(c_bool_1_null);
 
- with w1 as (
+with w1 as (
     select * from t2 order by k1 limit 10
 )
 select count(1)
 from t1 join [broadcast] w1 using(c_bool_2_notnull);
 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 using(c_tinyint_1_null);
+from t1 join [broadcast] w1 using(c_tinyint_1_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 using(c_tinyint_2_notnull);
+from t1 join [broadcast] w1 using(c_tinyint_2_notnull);
 
- 
 select count(1)
 from t1 join [broadcast] t2 using(c_smallint_1_null);
 
@@ -453,13 +457,17 @@ from t1 join [broadcast] t2 using(c_str_1_null);
 select count(1)
 from t1 join [broadcast] t2 using(c_str_2_notnull);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 using(c_str_3_low_null);
+from t1 join [broadcast] w1 using(c_str_3_low_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 using(c_str_4_low_notnull);
+from t1 join [broadcast] w1 using(c_str_4_low_notnull);
 
  
 select count(1)
@@ -477,18 +485,23 @@ with w1 as (
 select count(1)
 from t1 join [broadcast] w1 on t1.c_bool_1_null <=> w1.c_bool_1_null;
 
- with w1 as (
+with w1 as (
     select * from t2 order by k1 limit 10
 )
 select count(1)
 from t1 join [broadcast] w1 on t1.c_bool_2_notnull <=> w1.c_bool_2_notnull;
 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 on t1.c_tinyint_1_null <=> t2.c_tinyint_1_null;
+from t1 join [broadcast] w1 on t1.c_tinyint_1_null <=> w1.c_tinyint_1_null;
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 on t1.c_tinyint_2_notnull <=> t2.c_tinyint_2_notnull;
+from t1 join [broadcast] w1 on t1.c_tinyint_2_notnull <=> w1.c_tinyint_2_notnull;
 
  
 select count(1)
@@ -538,13 +551,17 @@ from t1 join [broadcast] t2 on t1.c_str_1_null <=> t2.c_str_1_null;
 select count(1)
 from t1 join [broadcast] t2 on t1.c_str_2_notnull <=> t2.c_str_2_notnull;
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 on t1.c_str_3_low_null <=> t2.c_str_3_low_null;
+from t1 join [broadcast] w1 on t1.c_str_3_low_null <=> w1.c_str_3_low_null;
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t2 on t1.c_str_4_low_notnull <=> t2.c_str_4_low_notnull;
+from t1 join [broadcast] w1 on t1.c_str_4_low_notnull <=> w1.c_str_4_low_notnull;
 
  
 select count(1)
@@ -562,18 +579,23 @@ with w1 as (
 select count(1)
 from (select distinct c_bool_1_null from t1)t join [broadcast] w1 using(c_bool_1_null);
 
- with w1 as (
+with w1 as (
     select * from t2 order by k1 limit 10
 )
 select count(1)
 from (select distinct c_bool_2_notnull from t1)t join [broadcast] w1 using(c_bool_2_notnull);
 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from (select distinct c_tinyint_1_null from t1)t join [broadcast] t2 using(c_tinyint_1_null);
+from (select distinct c_tinyint_1_null from t1)t join [broadcast] w1 using(c_tinyint_1_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from (select distinct c_tinyint_2_notnull from t1)t join [broadcast] t2 using(c_tinyint_2_notnull);
+from (select distinct c_tinyint_2_notnull from t1)t join [broadcast] w1 using(c_tinyint_2_notnull);
 
  
 select count(1)
@@ -623,13 +645,17 @@ from (select distinct c_str_1_null from t1)t join [broadcast] t2 using(c_str_1_n
 select count(1)
 from (select distinct c_str_2_notnull from t1)t join [broadcast] t2 using(c_str_2_notnull);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+) 
 select count(1)
-from (select distinct c_str_3_low_null from t1)t join [broadcast] t2 using(c_str_3_low_null);
+from (select distinct c_str_3_low_null from t1)t join [broadcast] w1 using(c_str_3_low_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from (select distinct c_str_4_low_notnull from t1)t join [broadcast] t2 using(c_str_4_low_notnull);
+from (select distinct c_str_4_low_notnull from t1)t join [broadcast] w1 using(c_str_4_low_notnull);
 
  
 select count(1)
@@ -653,12 +679,17 @@ from t1 join [shuffle] w1 using(c_bool_1_null);
 select count(1)
 from t1 join [shuffle] w1 using(c_bool_2_notnull);
 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [shuffle] t2 using(c_tinyint_1_null);
+from t1 join [shuffle] w1 using(c_tinyint_1_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [shuffle] t2 using(c_tinyint_2_notnull);
+from t1 join [shuffle] w1 using(c_tinyint_2_notnull);
 
  
 select count(1)
@@ -708,13 +739,17 @@ from t1 join [shuffle] t2 using(c_str_1_null);
 select count(1)
 from t1 join [shuffle] t2 using(c_str_2_notnull);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [shuffle] t2 using(c_str_3_low_null);
+from t1 join [shuffle] w1 using(c_str_3_low_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [shuffle] t2 using(c_str_4_low_notnull);
+from t1 join [shuffle] w1 using(c_str_4_low_notnull);
 
  
 select count(1)
@@ -737,12 +772,17 @@ from t1 join [broadcast] w1 using(c_bool_1_null);
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] w1 using(c_bool_2_notnull);
 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
-from t1 join [broadcast] t2 using(c_tinyint_1_null);
+from t1 join [broadcast] w1 using(c_tinyint_1_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
-from t1 join [broadcast] t2 using(c_tinyint_2_notnull);
+from t1 join [broadcast] w1 using(c_tinyint_2_notnull);
 
  
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
@@ -792,13 +832,17 @@ from t1 join [broadcast] t2 using(c_str_1_null);
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
 from t1 join [broadcast] t2 using(c_str_2_notnull);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
-from t1 join [broadcast] t2 using(c_str_3_low_null);
+from t1 join [broadcast] w1 using(c_str_3_low_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
-from t1 join [broadcast] t2 using(c_str_4_low_notnull);
+from t1 join [broadcast] w1 using(c_str_4_low_notnull);
 
  
 select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
@@ -816,18 +860,23 @@ with w1 as (
 select count(1)
 from t1 join [broadcast] w1 using(c_bool_1_null);
 
- with w1 as (
+with w1 as (
     select * from t3 order by k1 limit 10
 )
 select count(1)
 from t1 join [broadcast] w1 using(c_bool_2_notnull);
 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t3 using(c_tinyint_1_null);
+from t1 join [broadcast] w1 using(c_tinyint_1_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t3 using(c_tinyint_2_notnull);
+from t1 join [broadcast] w1 using(c_tinyint_2_notnull);
 
  
 select count(1)
@@ -877,13 +926,17 @@ from t1 join [broadcast] t3 using(c_str_1_null);
 select count(1)
 from t1 join [broadcast] t3 using(c_str_2_notnull);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+) 
 select count(1)
-from t1 join [broadcast] t3 using(c_str_3_low_null);
+from t1 join [broadcast] w1 using(c_str_3_low_null);
 
- 
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
 select count(1)
-from t1 join [broadcast] t3 using(c_str_4_low_notnull);
+from t1 join [broadcast] w1 using(c_str_4_low_notnull);
 
  
 select count(1)
