@@ -42,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -58,6 +59,8 @@ public class PlannerMetaLocker {
     // Map database id -> database
     private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
+    private UUID queryId;
+
     /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
      * lockTablesWithIntensiveDbLock can internally guarantee the order of locking,
@@ -68,13 +71,14 @@ public class PlannerMetaLocker {
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        this.queryId = session.getQueryId();
     }
 
     /**
      * Try to acquire the lock, return false if the lock cannot be obtained.
      */
     public boolean tryLock(long timeout, TimeUnit unit) {
-        Locker locker = new Locker();
+        Locker locker = new Locker(queryId);
 
         boolean isLockSuccess = false;
         List<Database> lockedDbs = Lists.newArrayList();
@@ -100,7 +104,7 @@ public class PlannerMetaLocker {
     }
 
     public void lock() {
-        Locker locker = new Locker();
+        Locker locker = new Locker(queryId);
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
