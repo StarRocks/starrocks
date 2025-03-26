@@ -1035,7 +1035,7 @@ TJoinDistributionMode::type HashJoinNode::distribution_mode() const {
     return _distribution_mode;
 }
 
-const std::vector<RuntimeFilterBuildDescriptor*>& HashJoinNode::build_runtime_filters() const {
+const std::list<RuntimeFilterBuildDescriptor*>& HashJoinNode::build_runtime_filters() const {
     return _build_runtime_filters;
 }
 

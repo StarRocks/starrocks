@@ -112,8 +112,11 @@ std::string RuntimeFilterPort::listeners(int32_t filter_id) {
 }
 
 void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
-        const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs, const std::vector<Columns>& keyColumns,
+        const std::list<RuntimeFilterBuildDescriptor*>& rf_descs_list, const std::vector<Columns>& keyColumns,
         const std::vector<bool>& null_safe, const std::vector<TypeDescriptor>& type_descs) {
+    // transform list into vector for convenience
+    pipeline::RuntimeMembershipFilters rf_descs(rf_descs_list.begin(), rf_descs_list.end());
+
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
         if (filter == nullptr) continue;
@@ -133,7 +136,7 @@ void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
     }
 }
 
-void RuntimeFilterPort::publish_runtime_filters(const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs) {
+void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs) {
     RuntimeState* state = _state;
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
@@ -150,8 +153,7 @@ void RuntimeFilterPort::publish_runtime_filters(const std::vector<RuntimeFilterB
         rpc_http_min_size = state->query_options().runtime_filter_rpc_http_min_size;
     }
 
-    for (size_t i = 0; i < rf_descs.size(); i++) {
-        auto* rf_desc = rf_descs[i];
+    for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
 
         if (filter == nullptr || !rf_desc->has_remote_targets()) continue;

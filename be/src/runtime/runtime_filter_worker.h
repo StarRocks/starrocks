@@ -52,9 +52,9 @@ class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
     void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
-    void publish_runtime_filters(const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs);
+    void publish_runtime_filters(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
 
-    void publish_runtime_filters_for_skew_broadcast_join(const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
+    void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs_list,
                                                          const std::vector<Columns>& keyColumns,
                                                          const std::vector<bool>& null_safe,
                                                          const std::vector<TypeDescriptor>& type_descs);

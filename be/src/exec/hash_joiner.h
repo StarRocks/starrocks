@@ -69,7 +69,7 @@ struct HashJoinerParam {
                     std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
-                    bool build_conjunct_ctxs_is_empty, std::vector<RuntimeFilterBuildDescriptor*> build_runtime_filters,
+                    bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
                     bool enable_late_materialization, bool enable_partition_hash_join, bool is_skew_join)
@@ -110,7 +110,7 @@ struct HashJoinerParam {
     TPlanNodeType::type _build_node_type;
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
-    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+    std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     std::set<SlotId> _build_output_slots;
     std::set<SlotId> _probe_output_slots;
 

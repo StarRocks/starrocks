@@ -49,7 +49,7 @@ public:
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
     bool can_generate_global_runtime_filter() const;
     TJoinDistributionMode::type distribution_mode() const;
-    const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() const;
+    const std::list<RuntimeFilterBuildDescriptor*>& build_runtime_filters() const;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
 
 private:
@@ -106,7 +106,7 @@ private:
     std::vector<ExprContext*> _build_equivalence_partition_expr_ctxs;
 
     std::list<ExprContext*> _runtime_in_filters;
-    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+    std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     bool _build_runtime_filters_from_planner;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;

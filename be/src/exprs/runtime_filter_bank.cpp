@@ -422,14 +422,8 @@ struct FilterIniter {
     }
 };
 
-<<<<<<< HEAD
 Status RuntimeFilterHelper::fill_runtime_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                                 size_t column_offset, bool eq_null, bool is_skew_join) {
-=======
-Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
-                                                      size_t column_offset, bool eq_null,
-                                                      bool for_skew_broadcast_join) {
->>>>>>> 88a045abd1 (refactor rf)
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }
@@ -437,13 +431,18 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
     const auto rf_type = filter->type();
     switch (rf_type) {
     case RuntimeFilterSerializeType::BLOOM_FILTER:
-        return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeBloomFilter, is_skew_join>(), column,
-                                    column_offset, filter, eq_null);
+        if (is_skew_join) {
+            return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeBloomFilter, true>(), column,
+                                        column_offset, filter, eq_null);
+        } else {
+            return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeBloomFilter, false>(), column,
+                                        column_offset, filter, eq_null);
+        }
     case RuntimeFilterSerializeType::BITSET_FILTER: {
         const auto error_status = Status::NotSupported("runtime bitset filter do not support the logical type: " +
                                                        std::string(logical_type_to_string(type)));
-        return type_dispatch_bitset_filter(type, error_status, FilterIniter<ComposedRuntimeBitsetFilter, false>(), column,
-                                           column_offset, filter, eq_null);
+        return type_dispatch_bitset_filter(type, error_status, FilterIniter<ComposedRuntimeBitsetFilter, false>(),
+                                           column, column_offset, filter, eq_null);
     }
     case RuntimeFilterSerializeType::EMPTY_FILTER:
         return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeEmptyFilter, false>(), column,
