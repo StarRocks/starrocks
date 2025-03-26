@@ -12,14 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -126,5 +137,34 @@ public class PlainPasswordAuthenticationProviderTest {
         } catch (AuthenticationException e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testValidatePassword() throws Exception {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(null));
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        Config.enable_validate_password = true;
+        Config.enable_password_reuse = false;
+        ConnectContext context = new ConnectContext();
+
+        String sql = "create user u1 identified by '123456abcD!'";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, context);
+        Analyzer.analyze(stmt, context);
+        authenticationMgr.createUser(stmt);
+
+        sql = "alter user u1 identified by '123456abcD!'";
+        AlterUserStmt alterUserStmt = (AlterUserStmt) SqlParser.parse(sql, context.getSessionVariable().getSqlMode()).get(0);
+        Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(alterUserStmt, context));
+
+        Config.enable_validate_password = false;
+        Config.enable_password_reuse = true;
     }
 }
