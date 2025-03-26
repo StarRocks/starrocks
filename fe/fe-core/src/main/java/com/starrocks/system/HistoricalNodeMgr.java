@@ -93,11 +93,15 @@ public class HistoricalNodeMgr {
             writer.writeJson(nodeSetEntry.getValue());
         }
         writer.close();
-        LOG.info("save image for historical node manager, serializedHistoricalNodes: {}", serializedHistoricalNodes);
+        LOG.info("save image for historical node manager, nodeSetSize: {}", serializedHistoricalNodes.size());
     }
 
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         reader.readMap(String.class, HistoricalNodeSet.class, whToComputeNodeIds::put);
-        LOG.info("load image for historical node manager, whToComputeNodeIds: {}", whToComputeNodeIds);
+        LOG.info("load image for historical node manager, nodeSetSize: {}", whToComputeNodeIds.size());
+    }
+
+    public void clear() {
+        whToComputeNodeIds.clear();
     }
 }

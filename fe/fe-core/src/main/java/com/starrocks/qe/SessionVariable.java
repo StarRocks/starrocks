@@ -4948,7 +4948,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setDatacache_evict_probability(datacacheEvictProbability);
         tResult.setDatacache_priority(datacachePriority);
         tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
-        tResult.setDatacache_sharing_work_period(datacacheSharingWorkPeriod);
         tResult.setEnable_cache_select(enableCacheSelect);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);

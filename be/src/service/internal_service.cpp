@@ -631,7 +631,7 @@ void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcControll
                << ", cache_key: " << HashUtil::hash(request->cache_key().data(), request->cache_key().size(), 0)
                << ", offset: " << request->offset() << ", size: " << request->size();
 
-    BlockCache* block_cache = BlockCache::instance();
+    BlockCache* block_cache = CacheEnv::GetInstance()->block_cache();
     if (!block_cache || !block_cache->available()) {
         st = Status::ServiceUnavailable("block cache is unavailable");
     } else {

@@ -502,7 +502,12 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
             new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
-    cache_stream.set_peer_cache_node("127.0.0.1:0");
+
+    cache_stream.set_peer_cache_node("1.1.1.1:1");
+    ASSERT_EQ(cache_stream._peer_host, "1.1.1.1");
+    ASSERT_EQ(cache_stream._peer_port, 1);
+    // Replace with a invalid ip for test
+    cache_stream._peer_host = "127.0.0.1";
     auto& stats = cache_stream.stats();
 
     // first read from backend
@@ -514,7 +519,7 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
     ASSERT_EQ(stats.read_cache_count, 0);
     ASSERT_EQ(stats.write_cache_count, block_count);
 
-    // first read from cache
+    // first read from local cache
     for (int i = 0; i < block_count; ++i) {
         char buffer[block_size];
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
