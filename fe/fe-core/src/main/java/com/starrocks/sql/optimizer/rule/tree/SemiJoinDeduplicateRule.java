@@ -30,14 +30,15 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.PushDownAggregateCollector;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.List;
@@ -49,7 +50,6 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
     private static final Logger LOG = LogManager.getLogger(SemiJoinDeduplicateRule.class);
     private static final int PUSH_DOWN_DISTINCT_AUTO = 0;
     private static final int PUSH_DOWN_ALL_DISTINCT_FORCE = 1;
-    private static final int PUSH_DOWN_DISTINCT_TO_RIGHT = 2;
 
     private boolean hasRewrite;
 
@@ -78,20 +78,19 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
 
         boolean canDeduplicate;
         boolean parentIsSemiAntiJoin;
-        // whether the deduplicate can be done globally,true means global, false means local
         // only used when canDeduplicate is true
-        boolean globalDeduplicate;
+        boolean isJoinLeftChild;
 
-        public DeduplicateContext(boolean parentIsSemiJoin, boolean canDeduplicate, boolean globalDeduplicate) {
+        public DeduplicateContext(boolean parentIsSemiJoin, boolean canDeduplicate, boolean isJoinLeftChild) {
             this.parentIsSemiAntiJoin = parentIsSemiJoin;
             this.canDeduplicate = canDeduplicate;
-            this.globalDeduplicate = globalDeduplicate;
+            this.isJoinLeftChild = isJoinLeftChild;
         }
 
         public DeduplicateContext() {
             this.canDeduplicate = false;
             this.parentIsSemiAntiJoin = false;
-            this.globalDeduplicate = false;
+            this.isJoinLeftChild = false;
         }
     }
 
@@ -100,12 +99,14 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
         private final ColumnRefFactory factory;
         private final SessionVariable sessionVariable;
         private boolean hasRewrite;
+        private final boolean forcePushDown;
 
         public DeduplicateVisitor(TaskContext taskContext) {
             this.optimizerContext = taskContext.getOptimizerContext();
             this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
             this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
             this.hasRewrite = false;
+            this.forcePushDown = sessionVariable.getSemiJoinDeduplicateMode() == PUSH_DOWN_ALL_DISTINCT_FORCE;
         }
 
         public boolean hasRewrite() {
@@ -129,8 +130,7 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
             return visitChildren(opt, context);
         }
 
-        @Override
-        public OptExpression visitLogicalProject(OptExpression opt, DeduplicateContext context) {
+        public OptExpression passThrough(OptExpression opt, DeduplicateContext context) {
             if (opt.getOp().hasLimit()) {
                 return visitChildren(opt, context);
             }
@@ -141,14 +141,13 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
         }
 
         @Override
-        public OptExpression visitLogicalFilter(OptExpression opt, DeduplicateContext context) {
-            if (opt.getOp().hasLimit()) {
-                return visitChildren(opt, context);
-            }
+        public OptExpression visitLogicalProject(OptExpression opt, DeduplicateContext context) {
+            return passThrough(opt, context);
+        }
 
-            // pass through the context from parent to child
-            opt.setChild(0, process(opt.inputAt(0), context));
-            return opt;
+        @Override
+        public OptExpression visitLogicalFilter(OptExpression opt, DeduplicateContext context) {
+            return passThrough(opt, context);
         }
 
         @Override
@@ -167,7 +166,7 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
             // when meets distinct agg, we unset 'parentIsSemiJoin' and set 'canDeduplicate'
             // this is because we only want to do deduplicate to children like:
             // distinct->semi join->children, instead of semi join->distinct->children
-            DeduplicateContext newContext = new DeduplicateContext(false, true, true);
+            DeduplicateContext newContext = new DeduplicateContext(false, true, false);
             opt.setChild(0, process(child, newContext));
             return opt;
         }
@@ -192,27 +191,31 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
             List<BinaryPredicateOperator> equalConjs =
                     JoinHelper.getEqualsPredicate(leftOutputColumns, rightOutputColumns,
                             Utils.extractConjuncts(joinOperator.getOnPredicate()));
-            // 3. only support with one equal condition in onPredicate
-            if (equalConjs.size() > 2 || joinOperator.getPredicate() != null) {
+            // 3. only support with one equal condition in onPredicate when forcePushDown is false
+            if (!forcePushDown && (equalConjs.size() != 1 || joinOperator.getPredicate() != null)) {
                 return visit(opt, context);
             }
 
             if (joinType.isLeftSemiAntiJoin()) {
+                // left semi/anti join's left side can be deduplicated when parent doesn't care about input's repetition rate
                 if (context.canDeduplicate) {
-                    DeduplicateContext newContextForLeftChild = new DeduplicateContext(true, true, false);
+                    DeduplicateContext newContextForLeftChild = new DeduplicateContext(true, true, true);
                     opt.setChild(0, process(opt.inputAt(0), newContextForLeftChild));
                 } else {
                     opt.setChild(0, process(opt.inputAt(0), DeduplicateContext.EMPTY));
                 }
 
-                DeduplicateContext newContextForRightChild = new DeduplicateContext(true, true, true);
+                // left semi/anti join's right side always can be deduplicated
+                DeduplicateContext newContextForRightChild = new DeduplicateContext(true, true, false);
                 opt.setChild(1, process(opt.inputAt(1), newContextForRightChild));
             } else {
-                DeduplicateContext newContextForLeftChild = new DeduplicateContext(true, true, false);
+                // right semi/anti join's left side always can be deduplicated
+                DeduplicateContext newContextForLeftChild = new DeduplicateContext(true, true, true);
                 opt.setChild(0, process(opt.inputAt(0), newContextForLeftChild));
 
                 if (context.canDeduplicate) {
-                    DeduplicateContext newContextForRightChild = new DeduplicateContext(true, true, true);
+                    // right semi/anti join's right side can be deduplicated when parent doesn't care about input's repetition rate
+                    DeduplicateContext newContextForRightChild = new DeduplicateContext(true, true, false);
                     opt.setChild(1, process(opt.inputAt(1), newContextForRightChild));
                 } else {
                     opt.setChild(1, process(opt.inputAt(1), DeduplicateContext.EMPTY));
@@ -243,31 +246,37 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
             if (checkStatistics(context, outputColumns, expressionContext.getStatistics())) {
                 hasRewrite = true;
 
-                AggType aggType;
-                if (sessionVariable.getCboPushDownDISTINCT().equalsIgnoreCase("local")) {
-                    aggType = AggType.LOCAL;
-                } else {
-                    aggType = AggType.GLOBAL;
-                }
-
-                LogicalAggregationOperator distinct =
-                        new LogicalAggregationOperator(aggType, groupBys, new HashMap<>());
-                if (aggType.isLocal()) {
-                    distinct.setOnlyLocalAggregate();
-                }
+                LogicalAggregationOperator distinct = getLogicalAggregationOperator(groupBys);
                 return OptExpression.create(distinct, opt);
             } else {
                 return opt;
             }
         }
 
+        @NotNull
+        private LogicalAggregationOperator getLogicalAggregationOperator(List<ColumnRefOperator> groupBys) {
+            AggType aggType;
+            if (sessionVariable.getCboPushDownDISTINCT().equalsIgnoreCase("local")) {
+                aggType = AggType.LOCAL;
+            } else {
+                aggType = AggType.GLOBAL;
+            }
+
+            LogicalAggregationOperator distinct = new LogicalAggregationOperator(aggType, groupBys, new HashMap<>());
+            if (aggType.isLocal()) {
+                distinct.setOnlyLocalAggregate();
+            }
+            return distinct;
+        }
+
         private boolean checkStatistics(DeduplicateContext context, ColumnRefSet groupBys, Statistics statistics) {
-            if (sessionVariable.getSemiJoinDeduplicateMode() == PUSH_DOWN_ALL_DISTINCT_FORCE) {
+            if (forcePushDown) {
                 return true;
             }
 
-            if (sessionVariable.getSemiJoinDeduplicateMode() == PUSH_DOWN_DISTINCT_TO_RIGHT &&
-                    !context.globalDeduplicate) {
+            // add a distinct node in left child can be a bad case when join is brodcast join or bucket shuffle join
+            // so we have forbidden it for safety
+            if (context.isJoinLeftChild) {
                 return false;
             }
 
@@ -284,50 +293,27 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
 
             List<ColumnStatistic>[] cards = new List[] {lower, medium, high};
 
-            columnStatistics.forEach(s -> cards[groupByCardinality(s, statistics.getOutputRowCount())].add(s));
-            double lowerCartesian = lower.stream().map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b)
-                    .orElse(Double.MAX_VALUE);
+            columnStatistics.forEach(
+                    s -> cards[PushDownAggregateCollector.groupByCardinality(s, statistics.getOutputRowCount())].add(
+                            s));
 
-            LOG.info("lower: {}, medium: {}, high: {}, globalDeduplicate: {}, lowerCartesian is too big: {}",
-                    lower.size(), medium.size(), high.size(), context.globalDeduplicate,
-                    lowerCartesian * 5 > statistics.getOutputRowCount());
+            LOG.debug("lower: {}, medium: {}, high: {}, isJoinLeftChild: {}",
+                    lower.size(), medium.size(), high.size(), context.isJoinLeftChild);
 
             if (!high.isEmpty()) {
                 return false;
             }
 
-            if (medium.size() > 1) {
+            if (groupBys.size() == 2 && !medium.isEmpty()) {
                 return false;
             }
 
-            if (medium.size() == 1 && !context.globalDeduplicate) {
-                return false;
-            }
+            lower.addAll(medium);
+            double cartesian = lower.stream().map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b)
+                    .orElse(Double.MAX_VALUE);
 
-            return !(lowerCartesian * 5 > statistics.getOutputRowCount());
-        }
-
-        // high(2): row_count / cardinality < MEDIUM_AGGREGATE_EFFECT_COEFFICIENT
-        // medium(1): row_count / cardinality >= MEDIUM_AGGREGATE_EFFECT_COEFFICIENT and < LOW_AGGREGATE_EFFECT_COEFFICIENT
-        // lower(0): row_count / cardinality >= LOW_AGGREGATE_EFFECT_COEFFICIENT
-        private int groupByCardinality(ColumnStatistic statistic, double rowCount) {
-            if (statistic.isUnknown()) {
-                return 2;
-            }
-
-            double distinct = statistic.getDistinctValuesCount();
-
-            if (rowCount == 0 ||
-                    distinct * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT > rowCount) {
-                return 2;
-            } else if (distinct * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT <= rowCount &&
-                    distinct * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT > rowCount) {
-                return 1;
-            } else if (distinct * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT <= rowCount) {
-                return 0;
-            }
-
-            return 2;
+            // only 2 low cardinality column or 1 low cardinality column or 1 medium cardinality column can get there
+            return !(cartesian * 5 > statistics.getOutputRowCount());
         }
     }
 }

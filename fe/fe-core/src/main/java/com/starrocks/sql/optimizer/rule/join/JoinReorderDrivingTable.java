@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.BitSet;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,15 +45,12 @@ public class JoinReorderDrivingTable extends JoinOrder {
     // if t1 is driving table, then expressionMap will be: {t2.c1: t1.c1} after handle t1 join t2
     // when t3 join (t1 join t2), we will rewrite t2.c1 = t3.c1 into t1.c1 = t3.c1 using expressionMap
     // then expressionMap will be: {t3:c1: t1.c1}, {t2.c1: t1:c1}
-    private Map<ColumnRefOperator, ScalarOperator> expressionMap;
+    private Map<ColumnRefOperator, ScalarOperator> expressionMap = new HashMap<>();
 
     public JoinReorderDrivingTable(OptimizerContext context) {
         super(context);
     }
 
-    /**
-     * 检查是否是同一个表的join
-     */
     private boolean isSameTableJoin(GroupInfo left, GroupInfo right) {
         if (!(left.bestExprInfo.expr.getOp() instanceof LogicalScanOperator l)) {
             return false;
@@ -63,33 +61,18 @@ public class JoinReorderDrivingTable extends JoinOrder {
         return l.getTable().getId() == r.getTable().getId();
     }
 
-    /**
-     * 检查表是否包含查询所需的输出列
-     */
+
     private boolean containsOutputColumns(GroupInfo group) {
         ColumnRefSet outputColumns = group.bestExprInfo.expr.getOutputColumns();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
         return outputColumns.containsAll(requiredOutputColumns);
     }
 
-    /**
-     * 检查是否可以与driving table进行join
-     * 通过检查是否存在直接的join条件或可以通过等价关系推导出的join条件
-     */
-    private boolean canJoinWithDrivingTable(GroupInfo leftGroup, GroupInfo rightGroup) {
-        BitSet leftBitSet = leftGroup.atoms;
-        BitSet rightBitSet = new BitSet();
-        rightBitSet.set(0); // driving table的位置是0
-
-        List<ScalarOperator> joinPredicates = buildInnerJoinPredicate(leftBitSet, rightBitSet);
-        return !joinPredicates.isEmpty();
-    }
-
     @Override
     protected void enumerate() {
         List<GroupInfo> atoms = joinLevels.get(1).groups;
 
-        // 1. find the driving table（包含输出列的表）
+        // 1. find the driving table
         GroupInfo drivingTable = null;
         int drivingTableIndex = -1;
         for (int i = 0; i < atoms.size(); i++) {
@@ -129,7 +112,7 @@ public class JoinReorderDrivingTable extends JoinOrder {
 
             int bestIndex = -1;
             for (int i = next; i < atomSize; i++) {
-                if (!used[i] && canJoinWithDrivingTable(leftGroup, atoms.get(i))) {
+                if (!used[i] && canBuildInnerJoinPredicate(leftGroup, atoms.get(i))) {
                     bestIndex = i;
                     break;
                 }
@@ -189,27 +172,34 @@ public class JoinReorderDrivingTable extends JoinOrder {
                     right = colRef;
                 }
             }
-            // replace right table's column with left table's column
-            expressionMap.put(right, left);
 
-            // remove right table's output column from new join's output, because we don't need it anymore
             Projection projection = joinExpr.get().expr.getOp().getProjection();
             if (projection != null) {
+                // remove right table's output column from new join's output, because we don't need it anymore
                 rightGroup.bestExprInfo.expr.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory())
                         .forEach(col -> {
                             projection.getColumnRefMap().remove(col);
 
                         });
-            }
 
-            // add left table's on predicate column into new join's projection
-            projection.getColumnRefMap().values().stream().forEach(col -> {
-                projection.getColumnRefMap().putIfAbsent((ColumnRefOperator) col, col);
-            });
+                // add left table's on predicate column into new join's projection
+                projection.getColumnRefMap().values().stream().forEach(col -> {
+                    projection.getColumnRefMap().putIfAbsent((ColumnRefOperator) col, col);
+                });
+            }
 
             // rewrite on predicate
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionMap, false);
-            rewriter.rewrite(newJoinOperator.getOnPredicate());
+            ScalarOperator newOnPredicate = rewriter.rewrite(newJoinOperator.getOnPredicate());
+
+            LogicalJoinOperator joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, newOnPredicate);
+            OptExpression newJoinExpr =
+                    OptExpression.create(joinOperator, leftGroup.bestExprInfo.expr, rightGroup.bestExprInfo.expr);
+            joinExpr.get().expr = newJoinExpr;
+
+            // replace right table's column with left table's column
+            // every iteration, we use map first, after create new join op, then we insert new kv into map
+            expressionMap.put(right, left);
 
             // calculate logical property, statistic, cost
             joinExpr.get().expr.deriveLogicalPropertyItself();
