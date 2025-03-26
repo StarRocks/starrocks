@@ -73,7 +73,8 @@ public class DistinctJoinTest extends TPCDS1TTestBase {
                         "                EXCHANGE BROADCAST\n" +
                         "                    AGGREGATE ([GLOBAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
                         "                        EXCHANGE SHUFFLE[42]\n" +
-                        "                            AGGREGATE ([LOCAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
+                        "                            AGGREGATE ([LOCAL] aggregate [{}] group by [[42: ss_addr_sk]] having " +
+                        "[null]\n" +
                         "                                SCAN (columns[42: ss_addr_sk] predicate[42: ss_addr_sk IS NOT NULL])");
     }
 
