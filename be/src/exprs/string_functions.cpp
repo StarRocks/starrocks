@@ -2042,13 +2042,6 @@ template ColumnPtr StringCaseToggleFunction<true>::evaluate<TYPE_VARCHAR, TYPE_V
 template struct StringCaseToggleFunction<false>;
 template ColumnPtr StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(const ColumnPtr& v1);
 
-
-template struct StringCaseToggleFunction<true>;
-template ColumnPtr StringCaseToggleFunction<true>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(const ColumnPtr& v1);
-
-template struct StringCaseToggleFunction<false>;
-template ColumnPtr StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(const ColumnPtr& v1);
-
 template <bool to_upper>
 struct UTF8StringCaseToggleFunction {
 public:
