@@ -31,9 +31,13 @@ jobs:
       REPO: ${{ github.repository }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
-      LABELS: ${{ steps.label_info.outputs.labels }}
       PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
       HEAD_REF: ${{ steps.pr.outputs.HEAD_REF }}
+      BASE_REF: ${{ steps.pr.outputs.BASE_REF }}
+      TITLE: ${{ steps.pr_info.outputs.title }}
+      LABELS: ${{ steps.pr_info.outputs.labels }}
+      DIFF_LINES: ${{ steps.pr_info.outputs.diff_lines }}
+
 
     steps:
       - name: PR
@@ -44,24 +48,39 @@ jobs:
           else
             echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
             echo "HEAD_REF=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+            echo "BASE_REF=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: LABELS
-        id: label_info
+      - name: INFO
+        id: pr_info
         env:
           PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
         run: |
-          labels=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels -q '.labels[].name')
+          pr_info=$(gh pr view ${PR_NUMBER} -R ${REPO} --json labels,title,files)
+          labels=$(echo ${pr_info} | jq -r '.labels[].name')
+          title=$(echo ${pr_info} | jq -r '.title')
+          diff_lines=$(echo ${pr_info} | jq -r '([.files[].additions, .files[].deletions] | add)')
+          
+          echo "diff_lines=${diff_lines}" >> $GITHUB_OUTPUT
+          
           echo "labels<<EOF" >> $GITHUB_OUTPUT
           echo "$labels" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
+          echo "title<<EOF" >> $GITHUB_OUTPUT
+          echo "${title}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+                    
           cat $GITHUB_OUTPUT
 
   meta-review:
     needs: info
     runs-on: [ self-hosted, normal ]
-    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'META-REVIEW') && !contains(needs.info.outputs.LABELS, 'sync') && !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
+    if: >
+      github.event_name == 'pull_request_review' && 
+      contains(needs.info.outputs.LABELS, 'META-REVIEW') && 
+      !contains(needs.info.outputs.LABELS, 'sync') && 
+      !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
     name: META-REVIEW
 
     env:
@@ -79,7 +98,11 @@ jobs:
   proto-review:
     needs: info
     runs-on: [ self-hosted, normal ]
-    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'PROTO-REVIEW') && !contains(needs.info.outputs.LABELS, 'sync') && !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
+    if: >
+      github.event_name == 'pull_request_review' && 
+      contains(needs.info.outputs.LABELS, 'PROTO-REVIEW') && 
+      !contains(needs.info.outputs.LABELS, 'sync') && 
+      !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
     name: PROTO-REVIEW
 
     env:
@@ -90,6 +113,29 @@ jobs:
 
     steps:
       - name: PROTO-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  feature-enhancement-backport-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event_name == 'pull_request_review' && 
+      needs.info.outputs.BASE_REF != 'main' && 
+      !contains(needs.info.outputs.LABELS, 'sync') &&
+      (startsWith(needs.info.outputs.TITLE, '[Feature]') || startsWith(needs.info.outputs.TITLE, '[Enhancement]')) &&
+      needs.info.outputs.DIFF_LINES > 100
+    name: FEATURE-ENHANCEMENT-BACKPORT-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: feature-reviewer
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: APPROVE-REVIEW
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
