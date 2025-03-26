@@ -609,18 +609,39 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         }
     }
 
+    /**
+     * Determines the MySQL table type based on the MySQL server version.
+     * <p>
+     * MySQL 5.x uses "BASE TABLE" for normal tables.
+     * MySQL 8.x and later use "TABLE" for normal tables.
+     * <p>
+     * This function ensures compatibility with different MySQL versions
+     * and prevents issues with BI tools like Tableau that expect the correct table type.
+     * <p>
+     * If the version is invalid or cannot be parsed, the function defaults to "BASE TABLE".
+     *
+     * @return "BASE TABLE" for MySQL 5.x or invalid versions, "TABLE" for MySQL 8.x and later.
+     */
     public static String getTableTypeForMysql() {
         String version = GlobalVariable.version;
         if (version == null || version.isEmpty()) {
+            return "BASE TABLE"; // Default to "BASE TABLE" if version is missing
+        }
+
+        try {
+            // Extract the major version number (e.g., "8" from "8.0.33")
+            String[] versionParts = version.split("\\.");
+            int majorVersion = Integer.parseInt(versionParts[0]);
+
+            if (majorVersion >= 8) {
+                return "TABLE";
+            } else {
+                return "BASE TABLE";
+            }
+        } catch (NumberFormatException e) {
+            // If the version is invalid (e.g., "invalid.version"), return "BASE TABLE" as a fallback
             return "BASE TABLE";
         }
-        if (version.startsWith("5")) {
-            return "BASE TABLE";
-        } else if (version.startsWith("8")) {
-            // compatibility for mysql8.0+
-            return "TABLE";
-        }
-        return "BASE TABLE";
     }
 
     public String getComment() {
