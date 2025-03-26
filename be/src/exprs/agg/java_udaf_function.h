@@ -103,7 +103,9 @@ public:
                             Column* to) const final {
         auto* udaf_ctx = ctx->udaf_ctxs();
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
-        append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
+        auto st = append_jvalue(ctx->get_return_type(), udaf_ctx->finalize->method_desc[0].is_box, to, val);
+        SET_FUNCTION_CONTEXT_ERR(st, ctx);
+        RETURN_IF_UNLIKELY(!st.ok(), (void)0);
         release_jvalue(udaf_ctx->finalize->method_desc[0].is_box, val);
     }
 
@@ -118,7 +120,6 @@ public:
         RETURN_IF_UNLIKELY_NULL(rets, (void)0);
         // 1.2 convert input as input array
         int num_cols = ctx->get_num_args();
-        std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
         DeferOp defer = DeferOp([&]() {
             // clean up arrays
@@ -133,8 +134,9 @@ public:
         for (int i = 0; i < src.size(); ++i) {
             raw_input_ptrs[i] = src[i].get();
         }
-        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, raw_input_ptrs.data(), num_cols,
-                                                                batch_size, &args);
+        auto st =
+                JavaDataTypeConverter::convert_to_boxed_array(ctx, raw_input_ptrs.data(), num_cols, batch_size, &args);
+        SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
         // 2 batch call update
@@ -198,7 +200,6 @@ public:
     void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
@@ -207,8 +208,8 @@ public:
         {
             auto states_arr = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st =
-                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
             helper.batch_update(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->update->method.handle(),
                                 states_arr, args.data(), args.size());
@@ -218,7 +219,6 @@ public:
     void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const Filter& filter) const override {
         auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
-        std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
@@ -227,8 +227,8 @@ public:
             auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
                                                                                    filter.data(), batch_size);
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st =
-                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
             helper.batch_update_if_not_null(ctx, ctx->udaf_ctxs()->handle.handle(),
                                             ctx->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
@@ -241,13 +241,12 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
         std::vector<jobject> args;
-        std::vector<DirectByteBuffer> buffers;
         int num_cols = ctx->get_num_args();
         env->PushLocalFrame(num_cols * 3 + 1);
         auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
         {
-            auto st =
-                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
             auto* stub = ctx->udaf_ctxs()->update_batch_call_stub.get();

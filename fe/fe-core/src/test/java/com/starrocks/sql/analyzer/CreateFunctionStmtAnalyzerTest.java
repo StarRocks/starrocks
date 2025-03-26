@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -25,6 +26,9 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
 
 public class CreateFunctionStmtAnalyzerTest {
     private static StarRocksAssert starRocksAssert;
@@ -101,6 +105,103 @@ public class CreateFunctionStmtAnalyzerTest {
                 }
             };
             CreateFunctionStmt stmt = createStmt("symbol", "");
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    private static class ComplexEval {
+        public List<?> evaluate(List<?> a, Map<?, ?> b) {
+            return Lists.newArrayList();
+        }
+    }
+
+    @Test
+    public void testJScalarUDFNoScalarInputs() {
+        try {
+            Config.enable_udf = true;
+            new MockUp<CreateFunctionAnalyzer>() {
+                @Mock
+                public String computeMd5(CreateFunctionStmt stmt) {
+                    return "0xff";
+                }
+            };
+            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+                @Mock
+                public final Class<?> loadClass(String name, boolean resolve)
+                        throws ClassNotFoundException {
+                    return ComplexEval.class;
+                }
+            };
+
+            String createFunctionSql = String.format("CREATE %s FUNCTION ABC.Echo(array<string>,map<int, string>) \n"
+                    + "RETURNS array<int> \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"%s\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");", "", "symbol");
+
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    private String buildFunction(String ret, String args) {
+        String sql = String.format("CREATE FUNCTION ABC.Echo(%s) \n"
+                + "RETURNS %s \n"
+                + "properties (\n"
+                + "    \"symbol\" = \"symbol\",\n"
+                + "    \"type\" = \"StarrocksJar\",\n"
+                + "    \"file\" = \"http://localhost:8080/\"\n"
+                + ");", args, ret);
+        return sql;
+    }
+    void mockClazz(Class<?> clazz) {
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public String computeMd5(CreateFunctionStmt stmt) {
+                return "0xff";
+            }
+        };
+        new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            @Mock
+            public final Class<?> loadClass(String name, boolean resolve)
+                    throws ClassNotFoundException {
+                return clazz;
+            }
+        };
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testJScalarUDFNoScalarUnmatchedArgs() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(ComplexEval.class);
+            String createFunctionSql = buildFunction("array<string>", "array<int>, array<string>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testJScalarUDFNoScalarUnmatchedRetTypes() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(ComplexEval.class);
+            String createFunctionSql = buildFunction("string", "array<int>, map<string,string>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
             Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
         } finally {

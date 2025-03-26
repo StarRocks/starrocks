@@ -214,11 +214,12 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
     LOCAL_REF_GUARD_ENV(env, column_class_names);
 
     auto& helper = JVMFunctionHelper::getInstance();
-    int len = helper.list_size(column_class_names);
+    JavaListStub list_stub(column_class_names);
+    ASSIGN_OR_RETURN(int len, list_stub.size());
 
     _result_chunk = std::make_shared<Chunk>();
     for (int i = 0; i < len; i++) {
-        jobject jelement = helper.list_get(column_class_names, i);
+        ASSIGN_OR_RETURN(jobject jelement, list_stub.get(i));
         LOCAL_REF_GUARD_ENV(env, jelement);
         std::string class_name = helper.to_string((jstring)(jelement));
         ASSIGN_OR_RETURN(auto ret_type, _precheck_data_type(class_name, _slot_descs[i]));
@@ -311,12 +312,12 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
     {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-
+        JavaListStub list_stub(jchunk);
         COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
         (*chunk)->reset();
 
         for (size_t i = 0; i < _slot_descs.size(); i++) {
-            jobject jcolumn = helper.list_get(jchunk, i);
+            ASSIGN_OR_RETURN(jobject jcolumn, list_stub.get(i));
             LOCAL_REF_GUARD_ENV(env, jcolumn);
             auto& result_column = _result_chunk->columns()[i];
             auto st =
