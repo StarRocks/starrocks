@@ -105,6 +105,7 @@ Usage: $0 <options>
      --without-avx2     build Backend without avx2(instruction)
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
+     --without-fix-cve  skip fix-cve step
      -h,--help          Show this help message
 
   Eg.
@@ -140,6 +141,7 @@ OPTS=$(getopt \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
+  -l 'without-fix-cve' \
   -l 'with-maven-batch-mode:' \
   -l 'help' \
   -- "$@")
@@ -165,6 +167,7 @@ USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_RELATIVE_SRC_PATH=ON
+FIX_CVE=ON
 
 # Default to OFF, turn it ON if current shell is non-interactive
 WITH_MAVEN_BATCH_MODE=OFF
@@ -262,6 +265,7 @@ else
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
+            --without-fix-cve) FIX_CVE=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -575,7 +579,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     MSG="${MSG} √ ${MSG_BE}"
 fi
 
-
+if [ ${FIX_CVE} == "ON" ]; then
+    echo "Fix CVE"
+    python3 fix-cve/fix-cve.py ${STARROCKS_OUTPUT}
+fi
 
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
 build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
