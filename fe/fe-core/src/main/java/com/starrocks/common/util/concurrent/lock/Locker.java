@@ -35,6 +35,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class Locker {
@@ -56,6 +57,10 @@ public class Locker {
     /* The thread that request lock. */
     private final Thread lockerThread;
 
+    // The queryId that request lock.
+    // maybe null if not query
+    private UUID queryId;
+
     public Locker() {
         this.waitingForRid = null;
         this.waitingForType = null;
@@ -64,6 +69,11 @@ public class Locker {
         this.lockerThread = Thread.currentThread();
         this.threadId = lockerThread.getId();
         this.threadName = lockerThread.getName();
+    }
+
+    public Locker(UUID queryId) {
+        this();
+        this.queryId = queryId;
     }
 
     /**
@@ -102,6 +112,14 @@ public class Locker {
         } catch (LockException e) {
             throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
+    }
+
+    public void setQueryId(UUID queryID) {
+        this.queryId = queryID;
+    }
+
+    public UUID getQueryId() {
+        return queryId;
     }
 
     // --------------- Database locking API ---------------
