@@ -4870,6 +4870,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return semiJoinDeduplicateMode;
     }
 
+    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
+        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
+    }
+
     public boolean isEnableInnerJoinToSemi() {
         return enableInnerJoinToSemi;
     }
