@@ -153,6 +153,62 @@ public class CreateFunctionStmtAnalyzerTest {
         }
     }
 
+    private String buildFunction(String ret, String args) {
+        String sql = String.format("CREATE FUNCTION ABC.Echo(%s) \n"
+                + "RETURNS %s \n"
+                + "properties (\n"
+                + "    \"symbol\" = \"symbol\",\n"
+                + "    \"type\" = \"StarrocksJar\",\n"
+                + "    \"file\" = \"http://localhost:8080/\"\n"
+                + ");", args, ret);
+        return sql;
+    }
+    void mockClazz(Class<?> clazz) {
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public String computeMd5(CreateFunctionStmt stmt) {
+                return "0xff";
+            }
+        };
+        new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            @Mock
+            public final Class<?> loadClass(String name, boolean resolve)
+                    throws ClassNotFoundException {
+                return clazz;
+            }
+        };
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testJScalarUDFNoScalarUnmatchedArgs() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(ComplexEval.class);
+            String createFunctionSql = buildFunction("array<string>", "array<int>, array<string>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testJScalarUDFNoScalarUnmatchedRetTypes() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(ComplexEval.class);
+            String createFunctionSql = buildFunction("string", "array<int>, map<string,string>");
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
     public static class EmptyAggEval {
         public static class State {
             public int serializeLength() {
