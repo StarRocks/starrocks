@@ -431,7 +431,7 @@ TABLE_ID	bigint	YES	false	None
 -- !result
 select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA_LENGTH,MAX_DATA_LENGTH,INDEX_LENGTH,DATA_FREE,AUTO_INCREMENT,TABLE_COMMENT from information_schema.temp_tables where `session`=(select session_id());
 -- result:
-def	t	BASE TABLE	StarRocks	0	0	0	None	None	None	None	
+def	t	TABLE	StarRocks	0	0	0	None	None	None	None	
 -- !result
 drop temporary table `t`;
 -- result:

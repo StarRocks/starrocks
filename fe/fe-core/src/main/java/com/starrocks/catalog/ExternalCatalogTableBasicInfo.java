@@ -52,9 +52,8 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
 
     @Override
     public String getMysqlType() {
-        return "BASE TABLE";
+        return Table.getTableTypeForMysql();
     }
-
     @Override
     public String getEngine() {
         return Table.TableType.serialize(this.tableType);
