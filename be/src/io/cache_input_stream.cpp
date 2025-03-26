@@ -164,12 +164,16 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
     }
     if (!res.is_not_found() && !res.is_resource_busy()) return res;
 
+<<<<<<< HEAD
     if (sb) {
         // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
         _deduplicate_shared_buffer(sb);
     }
 
     return Status::NotFound("Not Found");
+=======
+    return res;
+>>>>>>> 763bca4dcc ([BugFix]fix deduplicate shared buffer when read from remote (#57295))
 }
 
 Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const int64_t size, char* out) {
@@ -193,6 +197,7 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
         // check [read_offset_cursor, read_size) is already in SharedBuffer
         // If existed, we can use zero copy to avoid copy data from SharedBuffer to _buffer
         SharedBufferPtr sb = nullptr;
+<<<<<<< HEAD
         auto ret = _sb_stream->find_shared_buffer(read_offset_cursor, read_size);
         if (ret.ok()) {
             sb = ret.value();
@@ -202,6 +207,36 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
         } else {
             RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
             src = _buffer.data();
+=======
+        int64_t read_remote_ns = 0;
+        int64_t previous_remote_bytes = _sb_stream->shared_io_bytes() + _sb_stream->direct_io_bytes();
+        {
+            SCOPED_RAW_TIMER(&read_remote_ns);
+            auto ret = _sb_stream->find_shared_buffer(read_offset_cursor, read_size);
+            if (ret.ok()) {
+                sb = ret.value();
+                const uint8_t* buffer = nullptr;
+                RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, read_offset_cursor, read_size, sb));
+                src = (char*)buffer;
+            } else {
+                RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
+                src = _buffer.data();
+            }
+        }
+
+        if (sb) {
+            // Duplicate the block ranges to avoid saving the same data both in block_map and shared buffer.
+            _deduplicate_shared_buffer(sb);
+        }
+
+        if (_enable_cache_io_adaptor) {
+            int64_t delta_remote_bytes =
+                    _sb_stream->shared_io_bytes() + _sb_stream->direct_io_bytes() - previous_remote_bytes;
+            if (delta_remote_bytes > 0) {
+                _cache->record_read_remote(_block_size,
+                                           _calculate_remote_latency_per_block(delta_remote_bytes, read_remote_ns));
+            }
+>>>>>>> 763bca4dcc ([BugFix]fix deduplicate shared buffer when read from remote (#57295))
         }
 
         // write _buffer's data into `out`
