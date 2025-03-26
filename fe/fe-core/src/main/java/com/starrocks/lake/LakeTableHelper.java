@@ -43,8 +43,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 
 public class LakeTableHelper {
@@ -162,6 +166,28 @@ public class LakeTableHelper {
             return false;
         }
         return isSharedDirectory(shardInfo.getFilePath().getFullPath(), partition.getId());
+    }
+
+    /**
+     * delete `partition`'s all shard group meta (shards meta included) from starmanager
+     */
+    static void deleteShardGroupMeta(Partition partition) {
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        // use Set to avoid duplicate shard group id
+        Set<Long> needRemoveShardGroupIdSet = new HashSet<>();
+        for (PhysicalPartition subPartition : subPartitions) {
+            // TODO backport notion:
+            // From v3.4, each MaterializedIndex will have its own shard group id,
+            // so we should gather by calling `index.getShardGroupId()`
+            // Right now (V3.3), it's fine to use subPartition's getShardGroupId()
+            needRemoveShardGroupIdSet.add(subPartition.getShardGroupId());
+        }
+        if (!needRemoveShardGroupIdSet.isEmpty()) {
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            starOSAgent.deleteShardGroup(new ArrayList<>(needRemoveShardGroupIdSet));
+            LOG.debug("Deleted shard group related to partition {}, group ids: {}", partition.getId(),
+                    needRemoveShardGroupIdSet);
+        }
     }
 
     /**
