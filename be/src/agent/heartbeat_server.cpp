@@ -264,7 +264,8 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
                 return Status::InternalError("Unmatched backend ip");
             }
 
-            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost();
+            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost()
+                      << ", new local_ip is " << BackendOptions::get_local_ip();
         }
     }
 
