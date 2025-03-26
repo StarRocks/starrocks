@@ -91,6 +91,7 @@ public class PlanTestNoneDBBase {
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
         connectContext.getSessionVariable().setCboExtractCommonPlan(false);
+        connectContext.getSessionVariable().setUseCorrelatedPredicateEstimate(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
