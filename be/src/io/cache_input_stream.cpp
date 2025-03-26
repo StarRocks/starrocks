@@ -164,11 +164,6 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
     }
     if (!res.is_not_found() && !res.is_resource_busy()) return res;
 
-    if (sb) {
-        // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
-        _deduplicate_shared_buffer(sb);
-    }
-
     return Status::NotFound("Not Found");
 }
 
@@ -202,6 +197,10 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
         } else {
             RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
             src = _buffer.data();
+        }
+        if (sb) {
+            // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
+            _deduplicate_shared_buffer(sb);
         }
 
         // write _buffer's data into `out`
