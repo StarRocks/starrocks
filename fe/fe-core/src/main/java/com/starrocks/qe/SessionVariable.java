@@ -1769,7 +1769,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In order to be compatible with the previous behavior, the default value is false.
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
-    
+
     @VarAttr(name = SEMI_JOIN_DEDUPLICATE_MODE)
     private int semiJoinDeduplicateMode = 0;
 
@@ -4839,6 +4839,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getSemiJoinDeduplicateMode() {
         return semiJoinDeduplicateMode;
+    }
+
+    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
+        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
     }
 
     public boolean isEnableInnerJoinToSemi() {
