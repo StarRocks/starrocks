@@ -1,0 +1,422 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifdef USE_STAROS
+
+#include "tablet_warmup_manager.h"
+
+#include <chrono>
+
+#include "agent/master_info.h"
+#include "common/config.h"
+#include "gen_cpp/FrontendService.h"
+#include "runtime/client_cache.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
+#include "storage/lake/versioned_tablet.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
+#include "util/string_parser.hpp"
+#include "util/threadpool.h"
+#include "util/thrift_rpc_helper.h"
+
+// NOLINT
+#include "service/staros_worker.h"
+
+namespace starrocks::lake {
+
+static constexpr int64_t INVALID_PARTITION_ID = -1;
+
+TabletWarmupManager::WarmupContext::~WarmupContext() {
+    if (_future.wait_for(std::chrono::nanoseconds(1)) == std::future_status::timeout) {
+        _promise.set_value(Status::Aborted("aborted!"));
+        LOG_EVERY_N(INFO, 100) << "warmup failed for tablet: " << _tablet_id << ", error: aborted"
+                               << ", counter: " << google::COUNTER;
+    }
+    auto st = _future.get();
+    if (!st.ok()) {
+        VLOG(3) << "warmup failed for tablet: " << _tablet_id << ", error:" << st;
+    }
+}
+
+TabletWarmupManager::TabletWarmupManager(TabletManager* tablet_mgr)
+        : _tablet_mgr(tablet_mgr), _partition_version_cache(_FIXED_FIFO_CACHE_SIZE, _FXIED_FIFO_CACHE_EXPIRE_MS) {
+    // Nothing to do
+}
+
+TabletWarmupManager::~TabletWarmupManager() {
+    if (!_stopped) {
+        stop();
+    }
+}
+
+void TabletWarmupManager::init() {
+    int max_threads = config::tablet_warmup_max_threads;
+    auto st = ThreadPoolBuilder("cloud_native_warmup")
+                      .set_min_threads(max_threads)
+                      .set_max_threads(max_threads)
+                      .set_max_queue_size(INT_MAX)
+                      .build(&_thread_pool);
+    CHECK(st.ok()) << st;
+    _stopped = false;
+    _schedule_thread = std::thread([this] { this->loop_schedule(); });
+}
+
+void TabletWarmupManager::stop() {
+    bool expected = false;
+    if (_stopped.compare_exchange_strong(expected, true)) {
+        _schedule_thread.join();
+        _thread_pool->shutdown();
+        {
+            std::scoped_lock lock(_mutex);
+            _tablet_id_list.clear();
+        }
+        {
+            std::scoped_lock lock(_mutex_inprogress);
+            _tablet_in_progress.clear();
+        }
+    }
+}
+
+Status TabletWarmupManager::update_max_threads(int max_threads) {
+    if (_thread_pool != nullptr) {
+        return _thread_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
+}
+
+void TabletWarmupManager::warmup_tablet(uint64_t tablet_id) {
+    // ignore the returned shared_future
+    warmup_tablet2(tablet_id);
+}
+
+std::shared_future<Status> TabletWarmupManager::warmup_tablet2(uint64_t tablet_id) {
+    if (_stopped) {
+        auto promise = std::promise<Status>();
+        promise.set_value(Status::Aborted("Warmup manager stopped!"));
+        return promise.get_future().share();
+    }
+    std::scoped_lock lock(_mutex);
+    _tablet_id_list.emplace_back(std::make_unique<WarmupContext>(static_cast<int64_t>(tablet_id)));
+    return _tablet_id_list.back()->_future;
+}
+
+void TabletWarmupManager::loop_schedule() {
+    while (!_stopped.load()) {
+        // report back to starmgr if any
+        std::set<uint64_t> tmp_set_report;
+        {
+            std::scoped_lock lock(_mutex_batch_report);
+            tmp_set_report.swap(_tablet_id_report);
+        }
+        if (!tmp_set_report.empty()) {
+            std::vector<uint64_t> ids(tmp_set_report.begin(), tmp_set_report.end());
+            auto st = _thread_pool->submit_func(
+                    std::bind(&TabletWarmupManager::batch_report_tablet_replica_status, this, std::move(ids)));
+            if (!st.ok()) {
+                VLOG(3) << "batch report tablet replica status failed: " << st;
+            }
+            tmp_set_report.clear();
+        }
+
+        // get visible version if any
+        std::set<int64_t> tmp_set_version;
+        {
+            std::scoped_lock lock(_mutex_pending_version);
+            tmp_set_version.swap(_tablet_id_pending_version);
+        }
+        if (!tmp_set_version.empty()) {
+            std::vector<int64_t> ids(tmp_set_version.begin(), tmp_set_version.end());
+            auto st = _thread_pool->submit_func(
+                    std::bind(&TabletWarmupManager::batch_get_partitions_meta_from_frontend, this, std::move(ids)));
+            if (!st.ok()) {
+                for (auto id : tmp_set_version) {
+                    abort_warmup(id, st);
+                }
+            }
+            tmp_set_version.clear();
+        }
+
+        bool has_pending_ids = false;
+        {
+            std::scoped_lock lock(_mutex);
+            has_pending_ids = !_tablet_id_list.empty();
+        }
+        if (has_pending_ids) {
+            // give up copying the _tablet_id_list into a temp list and passes into batch_prepare_warmup() as parameter
+            auto st = _thread_pool->submit_func([this] { this->batch_prepare_warmup(); });
+            if (!st.ok()) {
+                VLOG(3) << "Failed to prepare warmup for tablets, error: " << st;
+            }
+        }
+        // TODO: configurable sleep interval
+        std::this_thread::sleep_for(std::chrono::milliseconds(_schedule_sleep_ms));
+    }
+}
+
+void TabletWarmupManager::batch_prepare_warmup() {
+    decltype(_tablet_id_list) tmp_ctxs;
+    {
+        std::scoped_lock lock(_mutex);
+        tmp_ctxs.swap(_tablet_id_list);
+    }
+    for (auto& ctx : tmp_ctxs) {
+        if (ctx->_tablet_id <= 0) {
+            // the ctx is not in the _tablet_in_progress, so just abort it directly with the context interface
+            ctx->abort(Status::InvalidArgument("Invalid tablet_id"));
+            continue;
+        }
+        if (!staros_need_warmup_tablet(ctx->_tablet_id)) {
+            ctx->done();
+            continue;
+        }
+
+        int64_t tablet_id = ctx->_tablet_id;
+        bool duplicate = false;
+        {
+            std::scoped_lock lock(_mutex_inprogress);
+            if (_tablet_in_progress.find(tablet_id) == _tablet_in_progress.end()) {
+                _tablet_in_progress.emplace(tablet_id, std::move(ctx));
+            } else {
+                duplicate = true;
+            }
+        }
+        if (duplicate) {
+            ctx->abort(Status::Aborted("duplicate tablet id found in warmup"));
+            continue;
+        }
+        // NOTE: ctx is not available after this because of moved into _tablet_in_progress
+
+        auto st = _thread_pool->submit_func([this, tablet_id]() { this->get_tablet_visible_version(tablet_id); });
+        if (!st.ok()) {
+            abort_warmup(tablet_id, std::move(st));
+        }
+    }
+}
+
+void TabletWarmupManager::get_tablet_visible_version(int64_t tablet_id) {
+    auto info_or = g_worker->get_shard_info(tablet_id);
+    if (!info_or.ok()) {
+        abort_warmup(tablet_id, to_status(info_or.status()));
+        return;
+    }
+    int64_t partition_id = get_partition_id_from_shard_info(info_or.value());
+    if (partition_id == INVALID_PARTITION_ID) {
+        add_tablet_id_pending_visible_version(tablet_id);
+        return;
+    }
+
+    // get a valid partition_id from the shardInfo
+    auto partition_version_opt = _partition_version_cache.get(partition_id);
+    if (partition_version_opt) {
+        auto version = *partition_version_opt;
+        auto st =
+                _thread_pool->submit_func([this, tablet_id, version]() { this->do_warmup_tablet(tablet_id, version); });
+        if (!st.ok()) {
+            abort_warmup(tablet_id, std::move(st));
+        }
+    } else {
+        add_tablet_id_pending_visible_version(tablet_id);
+    }
+}
+
+void TabletWarmupManager::add_tablet_id_pending_visible_version(int64_t tablet_id) {
+    std::scoped_lock lock(_mutex_pending_version);
+    _tablet_id_pending_version.insert(tablet_id);
+}
+
+void TabletWarmupManager::batch_get_partitions_meta_from_frontend(const std::vector<int64_t>& tablet_ids) {
+    TPartitionMetaRequest request;
+    request.__set_tablet_ids(tablet_ids);
+    TPartitionMetaResponse response;
+    TNetworkAddress master_addr = get_master_address();
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &response](ClientConnection<FrontendServiceClient>& client) {
+                client->getPartitionMeta(response, request);
+            });
+    TEST_SYNC_POINT_CALLBACK("TabletWarmupManager::batch_get_partitions_meta.frontendrpc", &st);
+    if (!st.ok()) {
+        for (auto id : tablet_ids) {
+            abort_warmup(id, st);
+        }
+        return;
+    }
+    for (size_t i = 0; i < response.partition_metas.size(); ++i) {
+        auto& meta = response.partition_metas.at(i);
+        _partition_version_cache.put(meta.partition_id, meta.visible_version);
+    }
+    const auto& id_meta_index = response.tablet_id_partition_meta_index;
+
+    for (auto id : tablet_ids) {
+        auto iter = id_meta_index.find(id);
+        if (iter == id_meta_index.end()) {
+            abort_warmup(id, Status::NotFound("tablet id not found from frontend"));
+            continue;
+        }
+        auto version = response.partition_metas.at(iter->second).visible_version;
+        auto st = _thread_pool->submit_func(
+                [this, id = id, version = version]() { this->do_warmup_tablet(id, version); });
+        if (!st.ok()) {
+            abort_warmup(id, std::move(st));
+            continue;
+        }
+    }
+}
+
+void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
+    std::scoped_lock lock(_mutex_inprogress);
+    auto iter = _tablet_in_progress.find(tablet_id);
+    if (iter != _tablet_in_progress.end()) {
+        iter->second->abort(status);
+        _tablet_in_progress.erase(iter);
+    }
+}
+
+void TabletWarmupManager::done_warmup(int64_t tablet_id) {
+    std::unique_ptr<WarmupContext> ctx;
+    {
+        std::scoped_lock lock(_mutex_inprogress);
+        auto iter = _tablet_in_progress.find(tablet_id);
+        if (iter == _tablet_in_progress.end()) {
+            return;
+        } else {
+            ctx = std::move(iter->second);
+            _tablet_in_progress.erase(iter);
+        }
+    }
+    // call the done() under no lock
+    ctx->done();
+    std::scoped_lock lock(_mutex_batch_report);
+    _tablet_id_report.insert(static_cast<uint64_t>(tablet_id));
+}
+
+void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
+    if (version <= 1) {
+        done_warmup(tablet_id);
+        return;
+    }
+
+    staros::WarmupLevel warmup_level = staros_worker_warmup_level();
+    if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
+        done_warmup(tablet_id);
+        return;
+    }
+
+    // WARMUP-Level1: TABLET META
+    auto tablet = _tablet_mgr->get_tablet(tablet_id, version);
+    if (!tablet.ok()) {
+        abort_warmup(tablet_id, std::move(tablet.status()));
+        return;
+    }
+    if (warmup_level == staros::WarmupLevel::WARMUP_META) {
+        done_warmup(tablet_id);
+        return;
+    }
+    // check stop point
+    if (_stopped.load()) {
+        abort_warmup(tablet_id, Status::Aborted("aborted"));
+        return;
+    }
+
+    // WARMUP-LEVEL2: Segments & Footers
+    auto schema = ChunkHelper::convert_schema(tablet->get_schema());
+    auto reader_or = (*tablet).new_reader(schema);
+    if (!reader_or.ok()) {
+        abort_warmup(tablet_id, std::move(reader_or.status()));
+        return;
+    }
+    auto reader = std::move(reader_or.value());
+    auto st = reader->prepare();
+    if (!st.ok()) {
+        abort_warmup(tablet_id, std::move(st));
+        return;
+    }
+    TabletReaderParams params;
+    // the principle is only read file from remote and cache them to local disk cache
+    // do not fill any memory cache
+    params.use_page_cache = false;
+    params.lake_io_opts.fill_metadata_cache = false;
+    params.lake_io_opts.fill_data_cache = true;
+    params.lake_io_opts.cache_file_only = true;
+    st.update(reader->open(params));
+    if (!st.ok()) {
+        abort_warmup(tablet_id, std::move(st));
+        return;
+    }
+    if (warmup_level == staros::WarmupLevel::WARMUP_INDEX) {
+        done_warmup(tablet_id);
+        reader->close();
+        return;
+    }
+    // check stop point
+    if (_stopped.load()) {
+        abort_warmup(tablet_id, Status::Aborted("aborted"));
+        reader->close();
+        return;
+    }
+
+    // WARMUP-LEVEL3: Segments Data
+    // iterate the reader until EOF
+    auto read_chunk_ptr = ChunkHelper::new_chunk(schema, 4096);
+    do {
+        auto st = reader->get_next(read_chunk_ptr.get());
+        read_chunk_ptr->reset();
+        if (st.is_end_of_file()) {
+            break;
+        }
+        if (!st.ok()) {
+            abort_warmup(tablet_id, std::move(st));
+            break;
+        }
+        if (_stopped.load()) {
+            abort_warmup(tablet_id, Status::Aborted("aborted"));
+            break;
+        }
+    } while (true);
+    reader->close();
+
+    done_warmup(tablet_id);
+}
+
+void TabletWarmupManager::batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids) {
+    auto update_st = batch_update_tablet_replica_info(tablet_ids);
+    TEST_SYNC_POINT_CALLBACK("TabletWarmupManager::batch_report_status.starlet_report",
+                             const_cast<std::vector<uint64_t>*>(&tablet_ids));
+    if (!update_st.ok()) {
+        VLOG(3) << "update tablet replica info failed. err:" << update_st;
+    }
+}
+
+int64_t TabletWarmupManager::get_partition_id_from_shard_info(staros::starlet::ShardInfo& info) {
+    // LakeTablet.PROPERTY_KEY_PARTITION_ID
+    static std::string partition_key("partitionId");
+    auto iter = info.properties.find(partition_key);
+    if (iter == info.properties.end()) {
+        return INVALID_PARTITION_ID;
+    }
+    auto& str_value = iter->second;
+    StringParser::ParseResult result;
+    auto val = StringParser::string_to_unsigned_int<int64_t>(str_value.data(), str_value.size(), &result);
+    if (result == StringParser::PARSE_SUCCESS) {
+        return val;
+    } else {
+        return INVALID_PARTITION_ID;
+    }
+}
+
+} // namespace starrocks::lake
+#endif

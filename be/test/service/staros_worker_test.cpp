@@ -59,11 +59,12 @@ TEST(StarOSWorkerTest, test_add_listener) {
     EXPECT_EQ(1, ids.size());
     EXPECT_EQ(2, ids[0]);
 
-    // add it again
+    // add it again, will notify again
+    ids.clear();
     EXPECT_TRUE(worker->add_shard(info).ok());
-    // no change, the shard:2 is already added
-    EXPECT_EQ(1, counter);
+    EXPECT_EQ(2, counter);
     EXPECT_EQ(1, ids.size());
+    EXPECT_EQ(2, ids[0]);
 }
 
 TEST(StarOSWorkerTest, test_fs_cache) {

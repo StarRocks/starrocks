@@ -239,6 +239,7 @@ set(EXEC_FILES
         ./storage/delta_column_group_test.cpp
         ./storage/fast_schema_evolution_test.cpp
         ./storage/file_utils_test.cpp
+        ./storage/fixed_fifo_cache_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/key_coder_test.cpp
@@ -265,6 +266,7 @@ set(EXEC_FILES
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/alter_tablet_meta_test.cpp
         ./storage/lake/tablet_manager_test.cpp
+        ./storage/lake/tablet_warmup_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
         ./storage/lake/auto_increment_partial_update_test.cpp
         ./storage/lake/tablet_reader_test.cpp

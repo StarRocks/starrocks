@@ -28,6 +28,7 @@
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
+#include "storage/lake/tablet_manager.h"
 #include "util/await.h"
 #include "util/debug_util.h"
 #include "util/lru_cache.h"
@@ -120,15 +121,14 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
 #ifndef BE_TEST
         StarRocksMetrics::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
 #endif
-        // it is an insert op to the map
-        // NOTE:
-        //  1. Since the following statement is invoked outside the lock, it is possible that
-        //     the shard may be removed when retrieving from the callback.
-        //  2. Expect the callback is as quick and simple as possible, otherwise it will occupy
-        //     the GRPC thread too long and blocking response sent back to StarManager. A better
-        //     choice would be: starting a new thread pool and send callback tasks in the thread pool.
-        on_add_shard_event(shard.id);
     }
+    // NOTE:
+    //  1. Since the following statement is invoked outside the lock, it is possible that
+    //     the shard may be removed when retrieving from the callback.
+    //  2. Expect the callback is as quick and simple as possible, otherwise it will occupy
+    //     the GRPC thread too long and blocking response sent back to StarManager. A better
+    //     choice would be: starting a new thread pool and send callback tasks in the thread pool.
+    on_add_shard_event(shard.id);
     return absl::OkStatus();
 }
 
@@ -477,6 +477,25 @@ absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::Fi
     return ret;
 }
 
+absl::Status StarOSWorker::batch_update_shard_replica_info(const std::vector<ShardId>& shard_ids) {
+    return g_starlet->batch_update_shard_replica_info(shard_ids);
+}
+
+bool StarOSWorker::need_warmup_shard(ShardId id) const {
+    if (worker_group_property().warmup_level() == staros::WarmupLevel::WARMUP_NOTHING) {
+        return false;
+    }
+    auto info_or = get_shard_info(id);
+    if (!info_or.ok()) {
+        return false;
+    }
+    auto info = std::move(info_or.value());
+    if (!need_enable_cache(info)) {
+        return false;
+    }
+    return info.replica_warmup_enabled(worker_id());
+}
+
 Status to_status(const absl::Status& absl_status) {
     switch (absl_status.code()) {
     case absl::StatusCode::kOk:
@@ -553,6 +572,9 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
     g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
     g_starlet->init(starlet_config);
     g_starlet->start();
+
+    // register the WarmupManager listener to the worker
+    lake::TabletManager::enable_tablet_warmup_listener();
 }
 
 void shutdown_staros_worker() {
@@ -580,6 +602,18 @@ void update_staros_starcache() {
         fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
         (void)fslib::star_cache_update_memory_quota_bytes(fslib::FLAGS_star_cache_mem_size_bytes);
     }
+}
+
+Status batch_update_tablet_replica_info(const std::vector<uint64_t>& tablet_ids) {
+    return to_status(StarOSWorker::batch_update_shard_replica_info(tablet_ids));
+}
+
+bool staros_need_warmup_tablet(int64_t tablet_id) {
+    return g_worker->need_warmup_shard(static_cast<uint64_t>(tablet_id));
+}
+
+staros::WarmupLevel staros_worker_warmup_level() {
+    return g_worker->worker_group_property().warmup_level();
 }
 
 } // namespace starrocks

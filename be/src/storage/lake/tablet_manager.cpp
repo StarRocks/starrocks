@@ -18,6 +18,7 @@
 #include <bvar/bvar.h>
 
 #include <atomic>
+#include <functional>
 #include <utility>
 
 #include "agent/master_info.h"
@@ -55,6 +56,7 @@
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
 #include "service/staros_worker.h"
+#include "storage/lake/tablet_warmup_manager.h"
 #endif
 
 namespace starrocks::lake {
@@ -64,6 +66,20 @@ static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
 
+void TabletManager::enable_tablet_warmup_listener() {
+#ifdef USE_STAROS
+    if (g_worker == nullptr) {
+        return;
+    }
+    auto* mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    if (mgr == nullptr) {
+        return;
+    }
+    g_worker->register_add_shard_listener(
+            std::bind(&TabletWarmupManager::warmup_tablet, mgr->_tablet_warmup_manager.get(), std::placeholders::_1));
+#endif
+}
+
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
                              int64_t cache_capacity)
         : _location_provider(std::move(location_provider)),
@@ -71,6 +87,10 @@ TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr) {
     _update_mgr->set_tablet_mgr(this);
+#ifdef USE_STAROS
+    _tablet_warmup_manager = std::make_unique<TabletWarmupManager>(this);
+    _tablet_warmup_manager->init();
+#endif
 }
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity)
@@ -864,6 +884,15 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
 
 void TabletManager::stop() {
     _compaction_scheduler->stop();
+#ifdef USE_STAROS
+    if (g_worker != nullptr) {
+        // clean the listener
+        g_worker->register_add_shard_listener(nullptr);
+    }
+    if (_tablet_warmup_manager) {
+        _tablet_warmup_manager->stop();
+    }
+#endif
 }
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version,
