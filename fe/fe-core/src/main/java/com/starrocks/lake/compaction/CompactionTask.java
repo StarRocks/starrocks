@@ -123,7 +123,7 @@ public class CompactionTask {
             abortRequest.txnId = request.txnId;
             try {
                 Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
-                LOG.info("aborted compaction task, txn_id: {}, node: {}", request.txnId, nodeId);
+                LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", request.txnId, nodeId);
             } catch (Exception e) {
                 LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,
                         nodeId, e.getMessage());
