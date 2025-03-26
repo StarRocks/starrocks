@@ -15,11 +15,13 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -46,8 +48,45 @@ public class InnerToSemiRule extends TransformationRule {
         context.getTaskContext().setRequiredColumns(columnRefSet);
 
         OptExpression newChild = new ReorderJoinRule().rewrite_for_distinct_join(input.inputAt(0), context);
-        input.setChild(0, newChild);
         context.getTaskContext().setRequiredColumns(back);
+
+        newChild = rewriteInnerToSemi(newChild, true);
+        input.setChild(0, newChild);
+
         return Lists.newArrayList(input);
+    }
+
+    private OptExpression rewriteInnerToSemi(OptExpression opt, boolean parentIsInnerOrDistinct) {
+        if (opt.getOp() instanceof LogicalJoinOperator joinOperator) {
+            if (!joinOperator.getJoinHint().isEmpty() || joinOperator.getPredicate() != null) {
+                return opt;
+            }
+
+            if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN) {
+                if (parentIsInnerOrDistinct) {
+                    List<OptExpression> children = opt.getInputs();
+                    for (int i = 0; i < children.size(); i++) {
+                        OptExpression child = children.get(i);
+                        if (!opt.getOutputColumns().isIntersect(child.getOutputColumns())) {
+                            if (i == 0) {
+                                joinOperator = new LogicalJoinOperator(JoinOperator.RIGHT_SEMI_JOIN,
+                                        joinOperator.getOnPredicate());
+                            } else {
+                                joinOperator = new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
+                                        joinOperator.getOnPredicate());
+                            }
+
+                            opt = OptExpression.create(joinOperator, opt.getInputs());
+                            break;
+                        }
+                    }
+                }
+                for (int i = 0; i < opt.getInputs().size(); i++) {
+                    opt.getInputs().set(i, rewriteInnerToSemi(opt.getInputs().get(i), true));
+                }
+            }
+        }
+
+        return opt;
     }
 }

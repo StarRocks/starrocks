@@ -350,13 +350,15 @@ public class QueryOptimizer extends Optimizer {
     }
 
     private void distinctJoinRewrite(TaskScheduler scheduler, OptExpression tree, TaskContext rootTaskContext) {
-        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
-        deriveLogicalProperty(tree);
-        scheduler.rewriteOnce(tree, rootTaskContext, new InnerToSemiRule());
-        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        deriveLogicalProperty(tree);
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableInnerJoinToSemi()) {
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+            deriveLogicalProperty(tree);
+            scheduler.rewriteOnce(tree, rootTaskContext, new InnerToSemiRule());
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+        }
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -775,6 +777,7 @@ public class QueryOptimizer extends Optimizer {
         boolean pushDistinctBelowWindowFlag = false;
         boolean pushDistinct = false;
         boolean pushAggFlag = false;
+        boolean joinReorder = false;
         if (context.getSessionVariable().isCboPushDownDistinctBelowWindow()) {
             // TODO(by satanson): in future, PushDownDistinctAggregateRule and PushDownAggregateRule should be
             //  fused one rule to tackle with all scenarios of agg push-down.
@@ -783,26 +786,12 @@ public class QueryOptimizer extends Optimizer {
             pushDistinctBelowWindowFlag = rule.getRewriter().hasRewrite();
         }
 
-        if (context.getSessionVariable().getSemiJoinDeduplicateMode() !=
-                SemiJoinDeduplicateRule.DISABLE_PUSH_DOWN_DISTINCT) {
-            SemiJoinDeduplicateRule rule = new SemiJoinDeduplicateRule();
-            tree = rule.rewrite(tree, rootTaskContext);
-            pushDistinct = rule.hasRewrite();
-        }
-
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
             if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
                 // Reorder joins before applying PushDownAggregateRule to better decide where to push down aggregator.
                 // For example, do not push down a not very efficient aggregator below a very small broadcast join.
-                scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
-                scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-                scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-                CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
-                deriveLogicalProperty(tree);
-                tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
-                tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-                deriveLogicalProperty(tree);
-                Utils.calculateStatistics(tree, context);
+                logicalJoinReorder(tree, rootTaskContext);
+                joinReorder = true;
             }
 
             PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
@@ -813,6 +802,17 @@ public class QueryOptimizer extends Optimizer {
             }
         }
 
+        if (context.getSessionVariable().getSemiJoinDeduplicateMode() !=
+                SemiJoinDeduplicateRule.DISABLE_PUSH_DOWN_DISTINCT) {
+            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
+            if (!joinReorder) {
+                logicalJoinReorder(tree, rootTaskContext);
+            }
+            SemiJoinDeduplicateRule rule = new SemiJoinDeduplicateRule();
+            tree = rule.rewrite(tree, rootTaskContext);
+            pushDistinct = rule.hasRewrite();
+        }
+
         if (pushDistinctBelowWindowFlag || pushDistinct || pushAggFlag) {
             deriveLogicalProperty(tree);
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
@@ -821,6 +821,18 @@ public class QueryOptimizer extends Optimizer {
         }
 
         return tree;
+    }
+
+    private void logicalJoinReorder(OptExpression tree, TaskContext rootTaskContext) {
+        scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+        deriveLogicalProperty(tree);
+        tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
+        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        Utils.calculateStatistics(tree, context);
     }
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {

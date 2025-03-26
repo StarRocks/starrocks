@@ -893,6 +893,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
     public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
+    public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
 
     public static final String CBO_PUSH_DOWN_DISTINCT = "cbo_push_down_distinct";
 
@@ -1782,9 +1783,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SEMI_JOIN_DEDUPLICATE_MODE)
     private int semiJoinDeduplicateMode = 0;
 
-    // auto, global, local
+    @VarAttr(name = ENABLE_INNER_JOIN_TO_SEMI)
+    private boolean enableInnerJoinToSemi = true;
+
+    // global, local
     @VarAttr(name = CBO_PUSH_DOWN_DISTINCT, flag = VariableMgr.INVISIBLE)
-    private String cboPushDownDISTINCT = "auto";
+    private String cboPushDownDISTINCT = "global";
 
     @VarAttr(name = ENABLE_DATACACHE_SHARING)
     private boolean enableDataCacheSharing = true;
@@ -4864,6 +4868,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getSemiJoinDeduplicateMode() {
         return semiJoinDeduplicateMode;
+    }
+
+    public boolean isEnableInnerJoinToSemi() {
+        return enableInnerJoinToSemi;
     }
 
     public String getCboPushDownDISTINCT() {
