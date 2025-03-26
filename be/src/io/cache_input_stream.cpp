@@ -117,7 +117,7 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
 Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t size, const int64_t block_offset,
                                           const int64_t block_size, char* out) {
     DCHECK(block_offset % _block_size == 0);
-    DCHECK(block_size < _block_size);
+    DCHECK(block_size <= _block_size);
 
     int64_t block_id = offset / _block_size;
     int64_t shift = offset - block_offset;
@@ -195,10 +195,9 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
             _stats.skip_read_cache_count += 1;
             _stats.skip_read_cache_bytes += read_size;
         }
-    } else {
-        VLOG_CACHE << "read cache failed, cache_id: "<< HashUtil::hash64(_cache_key.data(), _cache_key.size(), 0)
-                   << ", st: " << res.message() << ", can_try_peer_cache: " << _can_try_peer_cache()
-                   << ", peer_host: " << _peer_host << ", peer_port: " << _peer_port;
+    } else if (!res.is_not_found()) {
+        // Ensure to read data from remote storage
+        res = Status::NotFound("not found");
     }
 
     return res;

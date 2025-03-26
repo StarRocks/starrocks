@@ -17,6 +17,8 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
@@ -160,19 +162,62 @@ TEST_F(InternalServiceTest, test_load_diagnose) {
 
 TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
-    {
-        PFetchDataCacheRequest request;
-        PFetchDataCacheResponse response;
-        request.set_request_id(0);
-        request.set_cache_key("not_exist_key");
-        request.set_offset(0);
-        request.set_size(100);
 
+    PFetchDataCacheRequest request;
+    PFetchDataCacheResponse response;
+    request.set_request_id(0);
+    request.set_cache_key("test_file");
+    request.set_offset(0);
+    request.set_size(1024);
+
+    {
         brpc::Controller cntl;
         MockClosure closure;
         service._fetch_datacache(&cntl, &request, &response, &closure);
         auto st = Status(response.status());
         ASSERT_FALSE(st.ok());
+    }
+
+    std::shared_ptr<BlockCache> cache(new BlockCache);
+    {
+        CacheOptions options;
+        options.mem_space_size = 20 * 1024 * 1024;
+        options.block_size = 256 * 1024 * 1024;
+        options.max_concurrent_inserts = 100000;
+        options.max_flying_memory_mb = 100;
+        options.engine = "starcache";
+        options.inline_item_count_limit = 1000;
+        Status status = cache->init(options);
+        ASSERT_TRUE(status.ok());
+
+        const size_t cache_size = 1024;
+        const std::string cache_key = "test_file";
+        std::string value(cache_size, 'a');
+        Status st = cache->write(cache_key, 0, cache_size, value.c_str());
+        ASSERT_TRUE(st.ok());
+
+        CacheEnv* cache_env = CacheEnv::GetInstance();
+        cache_env->_block_cache = cache;
+    }
+
+    {
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.fetch_datacache(&cntl, &request, &response, &closure);
+        for (int retry = 3; retry > 0; --retry) {
+            if (closure.has_run()) {
+                break;
+            }
+            sleep(1);
+        }
+        auto st = Status(response.status());
+        // Read cache data.
+        ASSERT_TRUE(st.ok()) << st.message();
+
+        IOBuffer buffer;
+        cntl.response_attachment().swap(buffer.raw_buf());
+        std::string target_value(1024, 'a');
+        ASSERT_EQ(buffer.const_raw_buf().to_string(), target_value);
     }
 }
 

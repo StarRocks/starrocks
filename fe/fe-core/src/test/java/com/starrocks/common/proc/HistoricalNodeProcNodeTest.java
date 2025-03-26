@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.system;
+package com.starrocks.common.proc;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.HistoricalNodeMgr;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -24,33 +26,16 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-public class HistoricalNodeMgrTest {
+public class HistoricalNodeProcNodeTest {
     @Before
     public void setUp() throws IOException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
-    }
 
-    @Test
-    public void testUpdateHistoricalBackendIds() throws Exception {
-        HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+
         String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-
-        List<Long> backendIds = Arrays.asList(101L, 102L, 103L);
-        long updateTime = System.currentTimeMillis();
-        historicalNodeMgr.updateHistoricalBackendIds(backendIds, updateTime, warehouse);
-
-        Assert.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), backendIds.size());
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
-        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
-    }
-
-    @Test
-    public void testUpdateHistoricalComputeNodeIds() throws Exception {
-        HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
-        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-
-        List<Long> computeNodeIds = Arrays.asList(201L, 202L, 203L);
+        List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
         historicalNodeMgr.updateHistoricalComputeNodeIds(computeNodeIds, updateTime, warehouse);
 
@@ -60,12 +45,21 @@ public class HistoricalNodeMgrTest {
     }
 
     @Test
-    public void testNonExistWarehouseNodeSet() throws Exception {
-        HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
-        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    public void testFetchResult() throws AnalysisException {
+        HistoricalNodeProcNode node = new HistoricalNodeProcNode(GlobalStateMgr.getCurrentState());
+        BaseProcResult result = (BaseProcResult) node.fetchResult();
+        Assert.assertNotNull(result);
 
-        Assert.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), 0);
-        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), 0);
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), 0);
+        List<List<String>> rows = result.getRows();
+        List<String> list1 = rows.get(0);
+        Assert.assertEquals(list1.size(), 4);
+        // Warehouse
+        Assert.assertEquals(list1.get(0), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        // BackendIds
+        Assert.assertEquals(list1.get(1), "[]");
+        // ComputeNodeIds
+        Assert.assertEquals(list1.get(2), "[201, 202]");
+        // UpdateTime
+        Assert.assertNotEquals(list1.get(3), "0");
     }
 }
