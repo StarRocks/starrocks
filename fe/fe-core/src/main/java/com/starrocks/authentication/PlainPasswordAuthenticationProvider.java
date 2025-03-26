@@ -18,7 +18,10 @@ import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
+=======
+>>>>>>> 8621bb163 ([BugFix] Fix bug switch to mysql_native_password authPlugin fail (#57309))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
@@ -68,7 +71,11 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                     authenticationMgr.getBestMatchedUserIdentity(userIdentity.getUser(), userIdentity.getHost());
             if (userAuthenticationInfoEntry != null) {
                 try {
+<<<<<<< HEAD
                     authenticate(null, userIdentity.getUser(), userIdentity.getHost(),
+=======
+                    authenticate(userIdentity.getUser(), userIdentity.getHost(),
+>>>>>>> 8621bb163 ([BugFix] Fix bug switch to mysql_native_password authPlugin fail (#57309))
                             password.getBytes(StandardCharsets.UTF_8), null, userAuthenticationInfoEntry.getValue());
                 } catch (AuthenticationException e) {
                     return;

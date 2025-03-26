@@ -49,7 +49,6 @@ public class MysqlAuthPacket extends MysqlPacket {
     private String pluginName;
     private MysqlCapability capability;
     private Map<String, String> connectAttributes;
-    private byte[] randomString;
 
     public String getUser() {
         return userName;

@@ -145,7 +145,7 @@ public class MysqlProto {
         authPacket.setRandomString(randomString);
         // StarRocks support the Protocol::AuthSwitchRequest to tell client which auth plugin is using
         try {
-            switchAuthPlugin(authPacket, context);
+            switchAuthPlugin(authPacket, context, randomString);
         } catch (AuthenticationException e) {
             // receive response failed.
             LOG.warn("read auth switch response failed for user {}", authPacket.getUser());
@@ -158,10 +158,13 @@ public class MysqlProto {
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
 
+<<<<<<< HEAD
         return new NegotiateResult(authPacket, NegotiateState.OK);
     }
 
     public static NegotiateResult authenticate(ConnectContext context, MysqlAuthPacket authPacket) throws IOException {
+=======
+>>>>>>> 8621bb163 ([BugFix] Fix bug switch to mysql_native_password authPlugin fail (#57309))
         try {
             AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
                     authPacket.getAuthResponse(), authPacket.getRandomString());
@@ -270,7 +273,7 @@ public class MysqlProto {
     public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
     }
 
-    public static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context)
+    public static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context, byte[] randomString)
             throws AuthenticationException, IOException {
         String user = mysqlAuthPacket.getUser();
         String authPluginName = mysqlAuthPacket.getPluginName();
@@ -314,8 +317,13 @@ public class MysqlProto {
             MysqlCodec.writeInt1(outputStream, (byte) 0xfe);
             MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
 
+<<<<<<< HEAD
             byte[] authSwitchRequestPacket = provider
                     .authSwitchRequestPacket(user, context.getMysqlChannel().getRemoteIp(), mysqlAuthPacket.getRandomString());
+=======
+            byte[] authSwitchRequestPacket =
+                    provider.authSwitchRequestPacket(user, context.getMysqlChannel().getRemoteIp(), randomString);
+>>>>>>> 8621bb163 ([BugFix] Fix bug switch to mysql_native_password authPlugin fail (#57309))
             if (authSwitchRequestPacket != null) {
                 MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
             }
