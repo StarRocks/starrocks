@@ -27,16 +27,18 @@
 #include "jni.h"
 #include "types/logical_type.h"
 #include "udf/java/java_native_method.h"
+#include "udf/java/type_traits.h"
 #include "udf/java/utils.h"
 #include "util/defer_op.h"
 
 // find a jclass and return a global jclass ref
-#define JNI_FIND_CLASS(clazz_name)                \
-    [](const char* name) {                        \
-        auto clazz = _env->FindClass(name);       \
-        auto g_clazz = _env->NewGlobalRef(clazz); \
-        _env->DeleteLocalRef(clazz);              \
-        return (jclass)g_clazz;                   \
+#define JNI_FIND_CLASS(clazz_name)                                                                 \
+    [](const char* name) {                                                                         \
+        auto clazz = _env->FindClass(name);                                                        \
+        CHECK(clazz != nullptr) << "not found class" << name << " plz check JDK and jni-packages"; \
+        auto g_clazz = _env->NewGlobalRef(clazz);                                                  \
+        _env->DeleteLocalRef(clazz);                                                               \
+        return (jclass)g_clazz;                                                                    \
     }(clazz_name)
 
 #define ADD_NUMBERIC_CLASS(prim_clazz, clazz, sign)                                                           \
@@ -64,15 +66,52 @@ namespace starrocks {
 constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
 constexpr const char* CLASS_NATIVE_METHOD_HELPER_NAME = "com.starrocks.utils.NativeMethodHelper";
 
+constexpr const char* BATCH_UPDATE_SIGNATURE =
+        "(Ljava/lang/Object;Ljava/lang/reflect/Method;Lcom/starrocks/udf/FunctionStates;[I[Ljava/lang/Object;)V";
+constexpr const char* BATCH_CALL_SIGNATURE =
+        "(Ljava/lang/Object;Ljava/lang/reflect/Method;I[Ljava/lang/Object;)[Ljava/lang/Object;";
+constexpr const char* BATCH_CALL_NO_ARGS_SIGNATURE =
+        "(Ljava/lang/Object;Ljava/lang/reflect/Method;I)[Ljava/lang/Object;";
+constexpr const char* BATCH_UPDATE_STATE_SIGNATURE =
+        "(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)V";
+constexpr const char* BATCH_UPDATE_IF_NOT_NULL_SIGNATURE =
+        "(Ljava/lang/Object;Ljava/lang/reflect/Method;Lcom/starrocks/udf/FunctionStates;[I[Ljava/lang/Object;)V";
+constexpr const char* INT_BATCH_CALL_SIGNATURE = "([Ljava/lang/Object;Ljava/lang/reflect/Method;I)[I";
+
+constexpr const char* CREATE_BOXED_PRIMI_SIGNATURE = "(ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)[Ljava/lang/Object;";
+constexpr const char* CREATE_BOXED_STRING_SIGNATURE =
+        "(ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)[Ljava/lang/Object;";
+constexpr const char* CREATE_BOXED_LIST_SIGNATURE =
+        "(ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;[Ljava/lang/Object;)[Ljava/lang/Object;";
+constexpr const char* CREATE_BOXED_MAP_SIGNATURE =
+        "(ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;[Ljava/lang/Object;[Ljava/lang/Object;)[Ljava/lang/Object;";
+
+#define INIT_STATIC_METHOD(target, clazz, name, signature)    \
+    target = _env->GetStaticMethodID(clazz, name, signature); \
+    CHECK(target != nullptr) << "not found method:" << name << " plz check your jni-packages";
+
+#define INIT_HELPER_METHOD(target, name, signature) INIT_STATIC_METHOD(target, _udf_helper_class, name, signature);
+
+#define SET_METHOD_ID(target, clazz, name, signature)   \
+    target = _env->GetMethodID(clazz, name, signature); \
+    DCHECK(target != nullptr);
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wwrite-strings"
 static JNINativeMethod java_native_methods[] = {
         {"resizeStringData", "(JI)J", (void*)&JavaNativeMethods::resizeStringData},
+        {"resize", "(JI)V", (void*)&JavaNativeMethods::resize},
+        {"getColumnLogicalType", "(J)I", (void*)&JavaNativeMethods::getColumnLogicalType},
         {"getAddrs", "(J)[J", (void*)&JavaNativeMethods::getAddrs},
         {"memoryTrackerMalloc", "(J)J", (void*)&JavaNativeMethods::memory_malloc},
         {"memoryTrackerFree", "(J)V", (void*)&JavaNativeMethods::memory_free},
 };
 #pragma GCC diagnostic pop
+
+StatusOr<jobject> MapMeta::newLocalInstance(jobject keys, jobject values) const {
+    JNIEnv* env = getJNIEnv();
+    return env->NewObject(immutable_map_class->clazz(), immutable_map_constructor, keys, values);
+}
 
 JVMFunctionHelper& JVMFunctionHelper::getInstance() {
     if (_env == nullptr) {
@@ -93,13 +132,11 @@ void JVMFunctionHelper::_init() {
     _object_array_class = JNI_FIND_CLASS("[Ljava/lang/Object;");
     _string_class = JNI_FIND_CLASS("java/lang/String");
     _jarrays_class = JNI_FIND_CLASS("java/util/Arrays");
-    _list_class = JNI_FIND_CLASS("java/util/List");
     _exception_util_class = JNI_FIND_CLASS("org/apache/commons/lang3/exception/ExceptionUtils");
 
     CHECK(_object_class);
     CHECK(_string_class);
     CHECK(_jarrays_class);
-    CHECK(_list_class);
     CHECK(_exception_util_class);
 
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
@@ -123,55 +160,78 @@ void JVMFunctionHelper::_init() {
     _string_construct_with_bytes = _env->GetMethodID(_string_class, "<init>", "([BLjava/nio/charset/Charset;)V");
     DCHECK(_string_construct_with_bytes != nullptr);
 
+    // init JNI native methods
+    std::string native_method_name = JVMFunctionHelper::to_jni_class_name(CLASS_NATIVE_METHOD_HELPER_NAME);
+    jclass native_method_class = JNI_FIND_CLASS(native_method_name.c_str());
+    DCHECK(native_method_class != nullptr);
+    int res = _env->RegisterNatives(native_method_class, java_native_methods,
+                                    sizeof(java_native_methods) / sizeof(java_native_methods[0]));
+
+    // init UDF Helper
     std::string name = JVMFunctionHelper::to_jni_class_name(CLASS_UDF_HELPER_NAME);
     _udf_helper_class = JNI_FIND_CLASS(name.c_str());
     DCHECK(_udf_helper_class != nullptr);
-
-    std::string native_method_name = JVMFunctionHelper::to_jni_class_name(CLASS_NATIVE_METHOD_HELPER_NAME);
-    jclass _native_method_class = JNI_FIND_CLASS(native_method_name.c_str());
-    DCHECK(_native_method_class != nullptr);
-    int res = _env->RegisterNatives(_native_method_class, java_native_methods,
-                                    sizeof(java_native_methods) / sizeof(java_native_methods[0]));
     DCHECK_EQ(res, 0);
-    _create_boxed_array = _env->GetStaticMethodID(_udf_helper_class, "createBoxedArray",
-                                                  "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
 
-    _batch_update = _env->GetStaticMethodID(
-            _udf_helper_class, "batchUpdate",
-            "(Ljava/lang/Object;Ljava/lang/reflect/Method;Lcom/starrocks/udf/FunctionStates;[I[Ljava/lang/Object;)V");
-    _batch_call = _env->GetStaticMethodID(
-            _udf_helper_class, "batchCall",
-            "(Ljava/lang/Object;Ljava/lang/reflect/Method;I[Ljava/lang/Object;)[Ljava/lang/Object;");
-    _batch_call_no_args = _env->GetStaticMethodID(_udf_helper_class, "batchCall",
-                                                  "(Ljava/lang/Object;Ljava/lang/reflect/Method;I)[Ljava/lang/Object;");
-    _batch_update_state = _env->GetStaticMethodID(_udf_helper_class, "batchUpdateState",
-                                                  "(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)V");
-    _batch_update_if_not_null = _env->GetStaticMethodID(
-            _udf_helper_class, "batchUpdateIfNotNull",
-            "(Ljava/lang/Object;Ljava/lang/reflect/Method;Lcom/starrocks/udf/FunctionStates;[I[Ljava/lang/Object;)V");
+    INIT_HELPER_METHOD(_create_boxed_array, "createBoxedArray", "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
+    INIT_HELPER_METHOD(_batch_update, "batchUpdate", BATCH_UPDATE_SIGNATURE);
+    INIT_HELPER_METHOD(_batch_call, "batchCall", BATCH_CALL_SIGNATURE);
+    INIT_HELPER_METHOD(_batch_call_no_args, "batchCall", BATCH_CALL_NO_ARGS_SIGNATURE);
+    INIT_HELPER_METHOD(_batch_update_state, "batchUpdateState", BATCH_UPDATE_STATE_SIGNATURE);
+    INIT_HELPER_METHOD(_batch_update_if_not_null, "batchUpdateIfNotNull", BATCH_UPDATE_IF_NOT_NULL_SIGNATURE);
+    INIT_HELPER_METHOD(_batch_create_bytebuf, "batchCreateDirectBuffer", "(J[II)[Ljava/lang/Object;");
+    INIT_HELPER_METHOD(_int_batch_call, "batchCall", INT_BATCH_CALL_SIGNATURE);
+    INIT_HELPER_METHOD(_get_boxed_result, "getResultFromBoxedArray", "(IILjava/lang/Object;J)V");
+    INIT_HELPER_METHOD(_extract_keys_from_map, "extractKeyList", "(Ljava/util/Map;)Ljava/util/List;");
+    INIT_HELPER_METHOD(_extract_values_from_map, "extractValueList", "(Ljava/util/Map;)Ljava/util/List;");
+    // init UDF Helper convert method
+    jmethodID tmp = nullptr;
+    INIT_HELPER_METHOD(tmp, "createBoxedBoolArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<uint8_t>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedByteArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<int8_t>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedShortArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<int16_t>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedIntegerArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<int32_t>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedLongArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<int64_t>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedFloatArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<float>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedDoubleArray", CREATE_BOXED_PRIMI_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<double>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedStringArray", CREATE_BOXED_STRING_SIGNATURE);
+    _method_map.emplace(JNIPrimTypeId<Slice>::id, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedListArray", CREATE_BOXED_LIST_SIGNATURE);
+    _method_map.emplace(TYPE_ARRAY_METHOD_ID, tmp);
+    INIT_HELPER_METHOD(tmp, "createBoxedMapArray", CREATE_BOXED_MAP_SIGNATURE);
+    _method_map.emplace(TYPE_MAP_METHOD_ID, tmp);
 
-    _batch_create_bytebuf =
-            _env->GetStaticMethodID(_udf_helper_class, "batchCreateDirectBuffer", "(J[II)[Ljava/lang/Object;");
-
-    CHECK(_batch_create_bytebuf) << " not found method batchCreateDirectBuffer plz check jni-packages";
-
-    _int_batch_call = _env->GetStaticMethodID(_udf_helper_class, "batchCall",
-                                              "([Ljava/lang/Object;Ljava/lang/reflect/Method;I)[I");
-    _get_boxed_result =
-            _env->GetStaticMethodID(_udf_helper_class, "getResultFromBoxedArray", "(IILjava/lang/Object;J)V");
+    // init bytebuffer
     _direct_buffer_class = JNI_FIND_CLASS("java/nio/ByteBuffer");
-    _direct_buffer_clear = _env->GetMethodID(_direct_buffer_class, "clear", "()Ljava/nio/Buffer;");
-    DCHECK(_batch_call);
-    DCHECK(_batch_call_no_args);
-    DCHECK(_batch_update_state);
-    DCHECK(_batch_update_if_not_null);
-    DCHECK(_get_boxed_result);
-    DCHECK(_direct_buffer_clear);
+    SET_METHOD_ID(_direct_buffer_clear, _direct_buffer_class, "clear", "()Ljava/nio/Buffer;");
 
-    _list_get = _env->GetMethodID(_list_class, "get", "(I)Ljava/lang/Object;");
-    DCHECK(_list_get != nullptr);
-    _list_size = _env->GetMethodID(_list_class, "size", "()I");
-    DCHECK(_list_size != nullptr);
+    // init list meta
+    auto list_clazz = JNI_FIND_CLASS("java/util/List");
+    DCHECK(list_clazz);
+    _list_meta.list_class = new JVMClass(std::move(list_clazz));
+    auto array_list_clazz = JNI_FIND_CLASS("java/util/ArrayList");
+    DCHECK(array_list_clazz);
+    _list_meta.array_list_class = new JVMClass(std::move(array_list_clazz));
+
+    SET_METHOD_ID(_list_meta.list_get, list_clazz, "get", "(I)Ljava/lang/Object;");
+    SET_METHOD_ID(_list_meta.list_size, list_clazz, "size", "()I");
+    SET_METHOD_ID(_list_meta.list_add, list_clazz, "add", "(Ljava/lang/Object;)Z");
+
+    // init immutable map meta
+    auto immutable_map_clazz = JNI_FIND_CLASS("com/starrocks/udf/ImmutableMap");
+    DCHECK(immutable_map_clazz != nullptr);
+    _map_meta.immutable_map_class = new JVMClass(std::move(immutable_map_clazz));
+    auto map_clazz = JNI_FIND_CLASS("java/util/Map");
+    DCHECK(map_clazz);
+    _map_meta.map_class = new JVMClass(map_clazz);
+    _map_meta.immutable_map_constructor =
+            _env->GetMethodID(_map_meta.immutable_map_class->clazz(), "<init>", "(Ljava/util/List;Ljava/util/List;)V");
 
     name = JVMFunctionHelper::to_jni_class_name(UDAFStateList::clazz_name);
     jclass loaded_clazz = JNI_FIND_CLASS(name.c_str());
@@ -206,6 +266,12 @@ JVMClass& JVMFunctionHelper::function_state_clazz() {
         env->ExceptionClear();                                                   \
         return Status::RuntimeError(msg);                                        \
     }
+
+Status JVMFunctionHelper::_check_exception_status() {
+    auto& helper = *this;
+    RETURN_ERROR_IF_EXCEPTION(_env, "exception happened when invoke method: {}");
+    return Status::OK();
+}
 
 std::string JVMFunctionHelper::array_to_string(jobject object) {
     _env->ExceptionClear();
@@ -370,14 +436,6 @@ Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, job
     return Status::OK();
 }
 
-jobject JVMFunctionHelper::list_get(jobject obj, int idx) {
-    return _env->CallObjectMethod(obj, _list_get, idx);
-}
-
-int JVMFunctionHelper::list_size(jobject obj) {
-    return static_cast<int>(_env->CallIntMethod(obj, _list_size));
-}
-
 // convert UDAF ctx to jobject
 jobject JVMFunctionHelper::convert_handle_to_jobject(FunctionContext* ctx, int state) {
     auto* states = ctx->udaf_ctxs()->states.get();
@@ -389,6 +447,18 @@ jobject JVMFunctionHelper::convert_handles_to_jobjects(FunctionContext* ctx, job
     return states->get_state(ctx, _env, state_ids);
 }
 
+StatusOr<jobject> JVMFunctionHelper::extract_key_list(jobject map) {
+    auto res = _env->CallStaticObjectMethod(_udf_helper_class, _extract_keys_from_map, map);
+    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
+    return res;
+}
+
+StatusOr<jobject> JVMFunctionHelper::extract_val_list(jobject map) {
+    auto res = _env->CallStaticObjectMethod(_udf_helper_class, _extract_values_from_map, map);
+    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
+    return res;
+}
+
 DEFINE_NEW_BOX(boolean, uint8_t, Boolean, Boolean);
 DEFINE_NEW_BOX(byte, int8_t, Byte, Byte);
 DEFINE_NEW_BOX(short, int16_t, Short, Short);
@@ -397,7 +467,6 @@ DEFINE_NEW_BOX(long, int64_t, Long, Long);
 DEFINE_NEW_BOX(float, float, Float, Float);
 DEFINE_NEW_BOX(double, double, Double, Double);
 
-// TODO:
 jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     auto bytesArr = _env->NewByteArray(size);
     LOCAL_REF_GUARD(bytesArr);
@@ -480,6 +549,16 @@ StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
     auto local_ref = env->NewObject((jclass)_clazz.handle(), constructor);
     LOCAL_REF_GUARD(local_ref);
     return env->NewGlobalRef(local_ref);
+}
+
+StatusOr<jobject> JVMClass::newLocalInstance() const {
+    JNIEnv* env = getJNIEnv();
+    // get default constructor
+    jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
+    if (constructor == nullptr) {
+        return Status::InternalError("couldn't found default constructor for Java Object");
+    }
+    return env->NewObject((jclass)_clazz.handle(), constructor);
 }
 
 UDAFStateList::UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get,
@@ -756,7 +835,6 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
             while (sign[i] != ';') {
                 i++;
             }
-            // return Status::NotSupported("Not support Array Type");
             desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
         }
         if (sign[i] == 'L') {
@@ -777,8 +855,10 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 // clang-format on
             } else if (type == "java/lang/String") {
                 desc->emplace_back(MethodTypeDescriptor{TYPE_VARCHAR, true});
-            } else {
-                desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
+            } else if (type == "java/util/List") {
+                desc->emplace_back(MethodTypeDescriptor{TYPE_ARRAY, true});
+            } else if (type == "java/util/Map") {
+                desc->emplace_back(MethodTypeDescriptor{TYPE_MAP, true});
             }
             continue;
         }
@@ -863,6 +943,30 @@ StatusOr<jobject> BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input
     auto* env = JVMFunctionHelper::getInstance().getEnv();
     auto res = env->CallStaticObjectMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()),
                                             jni_inputs);
+    RETURN_ERROR_IF_JNI_EXCEPTION(env);
+    return res;
+}
+
+Status JavaListStub::add(jobject element) {
+    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    const auto& meta = helper.list_meta();
+    env->CallVoidMethod(_list, meta.list_add, element);
+    RETURN_ERROR_IF_JNI_EXCEPTION(env);
+    return Status::OK();
+}
+
+StatusOr<jobject> JavaListStub::get(int index) {
+    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    const auto& meta = helper.list_meta();
+    auto res = env->CallObjectMethod(_list, meta.list_get, index);
+    RETURN_ERROR_IF_JNI_EXCEPTION(env);
+    return res;
+}
+
+StatusOr<size_t> JavaListStub::size() {
+    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    const auto& meta = helper.list_meta();
+    auto res = env->CallIntMethod(_list, meta.list_size);
     RETURN_ERROR_IF_JNI_EXCEPTION(env);
     return res;
 }

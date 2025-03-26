@@ -22,6 +22,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
+#include "exprs/function_context.h"
 #include "exprs/table_function/table_function.h"
 #include "gutil/casts.h"
 #include "jni.h"
@@ -41,8 +42,11 @@ const TableFunction* getJavaUDTFFunction() {
 
 class JavaUDTFState : public TableFunctionState {
 public:
-    JavaUDTFState(std::string libpath, std::string symbol, const TTypeDesc& desc)
-            : _libpath(std::move(libpath)), _symbol(std::move(symbol)), _ret_type(TypeDescriptor::from_thrift(desc)) {}
+    JavaUDTFState(std::string libpath, std::string symbol, std::vector<TypeDescriptor> type_desc, const TTypeDesc& desc)
+            : _libpath(std::move(libpath)),
+              _symbol(std::move(symbol)),
+              _arg_type_descs(std::move(type_desc)),
+              _ret_type(TypeDescriptor::from_thrift(desc)) {}
     ~JavaUDTFState() override = default;
 
     Status open();
@@ -50,6 +54,7 @@ public:
 
     const TypeDescriptor& type_desc() { return _ret_type; }
     JavaMethodDescriptor* method_process() { return _process.get(); }
+    const std::vector<TypeDescriptor>& arg_type_descs() const { return _arg_type_descs; }
     jclass get_udtf_clazz() { return _udtf_class.clazz(); }
     jobject handle() { return _udtf_handle.handle(); }
 
@@ -62,6 +67,7 @@ private:
     JVMClass _udtf_class = nullptr;
     JavaGlobalRef _udtf_handle = nullptr;
     std::unique_ptr<JavaMethodDescriptor> _process;
+    std::vector<TypeDescriptor> _arg_type_descs;
     TypeDescriptor _ret_type;
 };
 
@@ -96,7 +102,11 @@ Status JavaUDTFFunction::init(const TFunction& fn, TableFunctionState** state) c
     std::string libpath;
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, &libpath));
     // Now we only support one return types
-    *state = new JavaUDTFState(std::move(libpath), fn.table_fn.symbol, fn.table_fn.ret_types[0]);
+    std::vector<TypeDescriptor> arg_typedescs;
+    for (auto& type : fn.arg_types) {
+        arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
+    }
+    *state = new JavaUDTFState(std::move(libpath), fn.table_fn.symbol, arg_typedescs, fn.table_fn.ret_types[0]);
     return Status::OK();
 }
 
@@ -162,8 +172,12 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
         for (int j = 0; j < num_cols; ++j) {
             auto method_type = stateUDTF->method_process()->method_desc[j + 1];
-            jvalue val = cast_to_jvalue<true>(method_type.type, method_type.is_box, cols[j].get(), i);
-            call_stack.push_back(val);
+            auto val_st = cast_to_jvalue(stateUDTF->arg_type_descs()[j], method_type.is_box, cols[j].get(), i);
+            if (!val_st.ok()) {
+                stateUDTF->set_status(val_st.status());
+                return {};
+            }
+            call_stack.push_back(val_st.value());
         }
 
         rets[i] = env->CallObjectMethodA(stateUDTF->handle(), methodID, call_stack.data());
@@ -185,9 +199,6 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
     auto col = ColumnHelper::create_column(stateUDTF->type_desc(), true);
     col->reserve(num_rows);
 
-    // TODO: support primitive array
-    MethodTypeDescriptor method_desc{stateUDTF->type_desc().type, true, true};
-
     for (int i = 0; i < num_rows; ++i) {
         int len = rets[i] != nullptr ? env->GetArrayLength((jarray)rets[i]) : 0;
         offsets[i + 1] = offsets[i] + len;
@@ -195,12 +206,16 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
         for (int j = 0; j < len; ++j) {
             jobject vi = env->GetObjectArrayElement((jobjectArray)rets[i], j);
             LOCAL_REF_GUARD_ENV(env, vi);
-            auto st = check_type_matched(method_desc, vi);
+            auto st = check_type_matched(stateUDTF->type_desc(), vi);
             if (UNLIKELY(!st.ok())) {
                 state->set_status(st);
-                return std::make_pair(Columns{}, nullptr);
+                return {};
             }
-            append_jvalue(method_desc, col.get(), {.l = vi});
+            auto res = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi});
+            if (UNLIKELY(!res.ok())) {
+                state->set_status(Status::InternalError(res.to_string()));
+                return {};
+            }
         }
     }
 
