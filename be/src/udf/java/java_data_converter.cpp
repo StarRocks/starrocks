@@ -273,7 +273,7 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
             ASSIGN_OR_RETURN(auto key, cast_to_jvalue(type_desc.children[0], true, spec_col->keys_column().get(), i));
             auto key_obj = key.l;
             LOCAL_REF_GUARD(key_obj);
-            RETURN_IF_ERROR(val_list_stub.add(key_obj));
+            RETURN_IF_ERROR(key_list_stub.add(key_obj));
 
             ASSIGN_OR_RETURN(auto value,
                              cast_to_jvalue(type_desc.children[1], true, spec_col->values_column().get(), i));
@@ -413,10 +413,12 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
 
             for (size_t i = 0; i < len; ++i) {
                 ASSIGN_OR_RETURN(auto key_element, key_list_stub.get(i));
-                RETURN_IF_ERROR(append_jvalue(type_desc, true, map_column->keys_column().get(), {.l = key_element}));
+                RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, map_column->keys_column().get(),
+                                              {.l = key_element}));
 
                 ASSIGN_OR_RETURN(auto val_element, key_list_stub.get(i));
-                RETURN_IF_ERROR(append_jvalue(type_desc, true, map_column->values_column().get(), {.l = val_element}));
+                RETURN_IF_ERROR(append_jvalue(type_desc.children[1], true, map_column->values_column().get(),
+                                              {.l = val_element}));
             }
 
             size_t last_offset = map_column->offsets_column()->get_data().back();
