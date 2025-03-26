@@ -63,7 +63,8 @@ jobs:
   title-check:
     runs-on: ubuntu-latest
     needs: sync-checker
-    if: !startsWith(github.event.pull_request.title, 'Revert ')
+    if: >
+      !startsWith(github.event.pull_request.title, 'Revert ')
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_NUMBER: ${{ github.event.number }}
@@ -261,7 +262,7 @@ jobs:
     if: >
       github.event.action != 'synchronize' &&
       github.base_ref != 'main' &&
-      (startsWith(needs.info.outputs.TITLE, '[Feature]') || startsWith(needs.info.outputs.TITLE, '[Enhancement]')) &&
+      (startsWith(github.event.pull_request.title, '[Feature]') || startsWith(github.event.pull_request.title, '[Enhancement]')) &&
       !contains(github.event.pull_request.labels.*.name, 'backport_approval')
     env:
       PR_NUMBER: ${{ github.event.number }}
