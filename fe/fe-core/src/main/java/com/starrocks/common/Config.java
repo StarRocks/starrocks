@@ -2832,15 +2832,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
-<<<<<<< HEAD
-=======
     @ConfField(mutable = true)
     public static String statistics_collect_warehouse = "default_warehouse";
-
-    @ConfField(mutable = true)
-    public static int lake_warehouse_max_compute_replica = 3;
-
->>>>>>> e4217b1e98 ([Enhancement] support specify the warehouse to execute statistics collect job (#57279))
+    
     @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
     public static long warehouse_idle_check_interval_seconds = 60;
 
