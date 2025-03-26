@@ -42,7 +42,7 @@ public class MysqlHandshakePacketTest {
 
         new Expectations() {
             {
-                MysqlPassword.createRandomString(20);
+                MysqlPassword.createRandomString();
                 minTimes = 0;
                 result = buf;
             }
@@ -53,7 +53,7 @@ public class MysqlHandshakePacketTest {
 
     @Test
     public void testWrite() {
-        MysqlHandshakePacket packet = new MysqlHandshakePacket(1090, false);
+        MysqlHandshakePacket packet = new MysqlHandshakePacket(1090, false, MysqlPassword.createRandomString());
         MysqlSerializer serializer = MysqlSerializer.newInstance(capability);
 
         packet.writeTo(serializer);

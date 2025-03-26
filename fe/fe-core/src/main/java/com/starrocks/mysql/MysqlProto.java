@@ -58,7 +58,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 // MySQL protocol util
@@ -95,8 +94,10 @@ public class MysqlProto {
 
         // Server send handshake packet to client.
         serializer.reset();
+
+        byte[] randomString = MysqlPassword.createRandomString();
         MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId(),
-                SSLContextLoader.getSslContext() != null);
+                SSLContextLoader.getSslContext() != null, randomString);
         handshakePacket.writeTo(serializer);
         channel.sendAndFlush(serializer.toByteBuffer());
 
@@ -143,7 +144,7 @@ public class MysqlProto {
 
         // StarRocks support the Protocol::AuthSwitchRequest to tell client which auth plugin is using
         try {
-            switchAuthPlugin(authPacket, context);
+            switchAuthPlugin(authPacket, context, randomString);
         } catch (AuthenticationException e) {
             // receive response failed.
             LOG.warn("read auth switch response failed for user {}", authPacket.getUser());
@@ -154,9 +155,6 @@ public class MysqlProto {
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
 
-        // NOTE: when we behind proxy, we need random string sent by proxy.
-        byte[] randomString = Objects.equals(authPacket.getPluginName(), AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString()) ?
-                null : handshakePacket.getAuthPluginData();
         try {
             AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
                     authPacket.getAuthResponse(), randomString);
@@ -264,7 +262,7 @@ public class MysqlProto {
     public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
     }
 
-    public static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context)
+    public static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context, byte[] randomString)
             throws AuthenticationException, IOException {
         String user = mysqlAuthPacket.getUser();
         String authPluginName = mysqlAuthPacket.getPluginName();
@@ -296,42 +294,42 @@ public class MysqlProto {
                 provider = securityIntegration.getAuthenticationProvider();
                 break;
             }
+        }
 
-            if (provider == null) {
-                return;
+        if (provider == null) {
+            return;
+        }
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        if (!authPluginName.equalsIgnoreCase(switchAuthPlugin)) {
+            // AuthSwitchRequest Packet
+            MysqlCodec.writeInt1(outputStream, (byte) 0xfe);
+            MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
+
+            byte[] authSwitchRequestPacket =
+                    provider.authSwitchRequestPacket(user, context.getMysqlChannel().getRemoteIp(), randomString);
+            if (authSwitchRequestPacket != null) {
+                MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
             }
-        }
+            MysqlCodec.writeInt1(outputStream, 0);
 
-        byte[] authMoreDataPacket = null;
-        if (provider != null) {
-            authMoreDataPacket = provider.authMoreDataPacket(user, context.getMysqlChannel().getRemoteIp());
-        }
-
-        if (authMoreDataPacket != null || !authPluginName.equalsIgnoreCase(switchAuthPlugin)) {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            if (!authPluginName.equalsIgnoreCase(switchAuthPlugin)) {
-                // AuthSwitchRequest Packet
-                MysqlCodec.writeInt1(outputStream, (byte) 0xfe);
-                MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
-                if (authMoreDataPacket != null) {
-                    MysqlCodec.writeBytes(outputStream, authMoreDataPacket);
-                }
-                MysqlCodec.writeInt1(outputStream, 0);
-
-                mysqlAuthPacket.setPluginName(switchAuthPlugin);
-            } else {
-                // AuthMoreData Packet
+            mysqlAuthPacket.setPluginName(switchAuthPlugin);
+        } else {
+            // AuthMoreData Packet
+            byte[] authMoreDataPacket = provider.authMoreDataPacket(user, context.getMysqlChannel().getRemoteIp());
+            if (authMoreDataPacket != null) {
                 MysqlCodec.writeInt1(outputStream, (byte) 0x01);
                 MysqlCodec.writeBytes(outputStream, authMoreDataPacket);
             }
+        }
 
+        if (outputStream.size() > 0) {
             MysqlChannel channel = context.getMysqlChannel();
             channel.sendAndFlush(ByteBuffer.wrap(outputStream.toByteArray()));
             ByteBuffer authSwitchResponse = channel.fetchOnePacket();
             if (authSwitchResponse == null) {
                 throw new AuthenticationException("read auth switch response failed for user " + user);
             }
-
             mysqlAuthPacket.setAuthResponse(MysqlCodec.readEofString(authSwitchResponse));
         }
     }

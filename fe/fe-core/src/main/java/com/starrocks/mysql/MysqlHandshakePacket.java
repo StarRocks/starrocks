@@ -36,14 +36,10 @@ package com.starrocks.mysql;
 
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 // MySQL protocol handshake packet.
 public class MysqlHandshakePacket extends MysqlPacket {
-    private static final Logger LOG = LogManager.getLogger(MysqlHandshakePacket.class);
 
-    private static final int SCRAMBLE_LENGTH = 20;
     // Version of handshake packet, since MySQL 3.21.0, Handshake of protocol 10 is used
     private static final int PROTOCOL_VERSION = 10;
 
@@ -59,14 +55,10 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private final byte[] authPluginData;
     private final boolean supportSSL;
 
-    public MysqlHandshakePacket(int connectionId, boolean supportSSL) {
+    public MysqlHandshakePacket(int connectionId, boolean supportSSL, byte[] authPluginData) {
         this.connectionId = connectionId;
-        this.authPluginData = MysqlPassword.createRandomString(SCRAMBLE_LENGTH);
+        this.authPluginData = authPluginData;
         this.supportSSL = supportSSL;
-    }
-
-    public byte[] getAuthPluginData() {
-        return authPluginData;
     }
 
     @Override

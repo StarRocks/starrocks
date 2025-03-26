@@ -149,7 +149,8 @@ public class MysqlAuthPacketTest {
 
         MysqlAuthPacket authPacket = buildPacket("harbor");
         ConnectContext context = new ConnectContext();
-        MysqlProto.switchAuthPlugin(authPacket, context);
+        byte[] randomString = MysqlPassword.createRandomString();
+        MysqlProto.switchAuthPlugin(authPacket, context, randomString);
         Assert.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
 
         //test security integration
@@ -163,7 +164,7 @@ public class MysqlAuthPacketTest {
 
         Config.authentication_chain = new String[] {"native", "oidc"};
         authPacket = buildPacket("tina");
-        MysqlProto.switchAuthPlugin(authPacket, context);
+        MysqlProto.switchAuthPlugin(authPacket, context, randomString);
         Assert.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
     }
 
@@ -190,10 +191,11 @@ public class MysqlAuthPacketTest {
 
         MysqlAuthPacket authPacket = buildPacket("harbor");
         ConnectContext context = new ConnectContext();
-        Assert.assertThrows(AuthenticationException.class, () -> MysqlProto.switchAuthPlugin(authPacket, context));
+        byte[] randomString = MysqlPassword.createRandomString();
+        Assert.assertThrows(AuthenticationException.class, () -> MysqlProto.switchAuthPlugin(authPacket, context, randomString));
 
         authPacket.setPluginName(null);
-        MysqlProto.switchAuthPlugin(authPacket, context);
+        MysqlProto.switchAuthPlugin(authPacket, context, randomString);
         Assert.assertNull(authPacket.getPluginName());
     }
 
