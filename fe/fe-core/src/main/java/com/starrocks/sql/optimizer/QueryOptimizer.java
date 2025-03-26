@@ -346,6 +346,7 @@ public class QueryOptimizer extends Optimizer {
                 context.getQueryMaterializationContext().getValidCandidateMVs().stream().anyMatch(
                         MaterializationContext::hasMultiTables)) {
             context.getSessionVariable().setCboPushDownAggregateMode(-1);
+            context.getSessionVariable().setSemiJoinDeduplicateMode(-1);
         }
     }
 

@@ -39,7 +39,11 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("complexPredicateCases")
     void testComplexPredicateCases(String sql, String expect) throws Exception {
+        //        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
         String plan = getFragmentPlan(sql);
+        if (!plan.contains(expect)) {
+            System.out.println(sql);
+        }
         assertContains(plan, expect);
     }
 
