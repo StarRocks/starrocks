@@ -355,6 +355,28 @@ public class StarRocksClient
         return "'" + value.replace("'", "''").replace("\\", "\\\\") + "'";
     }
 
+    private String getMysqlServerVersion()
+    {
+        return handle.createQuery("SELECT VERSION()")
+                .mapTo(String.class)
+                .findOne()
+                .orElse("5.7.0");
+    }
+
+    private String getTableTypeForMysql()
+    {
+        String version = getMysqlServerVersion();
+        if (version == null || version.isEmpty()) {
+            return "BASE TABLE";
+        }
+        if (version.startsWith("5")) {
+            return "BASE TABLE";
+        } else if (version.startsWith("8")) {
+            return "TABLE";
+        }
+        return "BASE TABLE";
+    }
+
     @Override
     public Optional<ColumnMapping> toColumnMapping(ConnectorSession session, Connection connection, JdbcTypeHandle typeHandle)
     {
@@ -1009,12 +1031,14 @@ public class StarRocksClient
         Long getRowCount(JdbcTableHandle table)
         {
             RemoteTableName remoteTableName = table.getRequiredNamedRelation().getRemoteTableName();
+            String tableType = getTableTypeForMysql();
             return handle.createQuery("" +
                             "SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES " +
                             "WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table_name " +
-                            "AND TABLE_TYPE = 'BASE TABLE' ")
+                            "AND TABLE_TYPE = :table_type ")
                     .bind("schema", remoteTableName.getCatalogName().orElse(null))
                     .bind("table_name", remoteTableName.getTableName())
+                    .bind("table_type", tableType)
                     .mapTo(Long.class)
                     .findOne()
                     .orElse(null);
