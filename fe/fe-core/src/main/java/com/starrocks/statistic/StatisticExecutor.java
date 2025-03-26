@@ -551,7 +551,6 @@ public class StatisticExecutor {
                         basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                         basicStatsMeta.setProperties(statsJob.getProperties());
                         basicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
-                        basicStatsMeta.resetDeltaRows();
                     }
 
                     for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
