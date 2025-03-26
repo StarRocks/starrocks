@@ -59,7 +59,7 @@ public class Frontend extends JsonWriter {
     @SerializedName(value = "e")
     private int editLogPort;
     @SerializedName(value = "fid")
-    private int fid = -1;
+    private int fid = 0;
 
     private int queryPort;
     private int rpcPort;
