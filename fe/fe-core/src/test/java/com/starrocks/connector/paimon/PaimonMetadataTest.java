@@ -688,8 +688,10 @@ public class PaimonMetadataTest {
     @Test
     public void testCreatePaimonView() {
         Assert.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.createView(new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
-                    Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO)));
+                () -> metadata.createView(connectContext, new CreateViewStmt(false, false,
+                        new TableName("catalog", "db", "table"),
+                    Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                        "", false, null, NodePosition.ZERO)));
     }
 
     @Test

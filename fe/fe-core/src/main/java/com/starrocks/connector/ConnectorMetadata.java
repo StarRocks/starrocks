@@ -56,7 +56,6 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -220,15 +219,12 @@ public interface ConnectorMetadata {
     default void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
     }
 
-    default void createDb(String dbName) throws DdlException, AlreadyExistsException {
-        createDb(dbName, new HashMap<>());
-    }
-
     default boolean dbExists(ConnectContext context, String dbName) {
         return listDbNames(context).contains(dbName.toLowerCase(Locale.ROOT));
     }
 
-    default void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
+    default void createDb(ConnectContext context, String dbName, Map<String, String> properties)
+            throws DdlException, AlreadyExistsException {
         throw new StarRocksConnectorException("This connector doesn't support creating databases");
     }
 
@@ -248,11 +244,11 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
-    default boolean createTable(CreateTableStmt stmt) throws DdlException {
+    default boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
         throw new StarRocksConnectorException("This connector doesn't support creating tables");
     }
 
-    default void dropTable(DropTableStmt stmt) throws DdlException {
+    default void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
         throw new StarRocksConnectorException("This connector doesn't support dropping tables");
     }
 
@@ -317,11 +313,11 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException {
     }
 
-    default void createView(CreateViewStmt stmt) throws DdlException {
+    default void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
         throw new StarRocksConnectorException("This connector doesn't support create view");
     }
 
-    default void alterView(AlterViewStmt stmt) throws StarRocksException {
+    default void alterView(ConnectContext context, AlterViewStmt stmt) throws StarRocksException {
         throw new StarRocksConnectorException("This connector doesn't support alter view");
     }
 

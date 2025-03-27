@@ -28,6 +28,7 @@ import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -44,6 +45,7 @@ import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -91,7 +93,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
                 CacheLoader.from(key -> {
-                    Table nativeTable = getTable(key.dbName, key.tableName);
+                    Table nativeTable = getTable(new ConnectContext(), key.dbName, key.tableName);
                     IcebergTable icebergTable =
                             IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
                                     .setNativeTable(nativeTable).build();
@@ -114,96 +116,103 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<String> listAllDatabases() {
-        return delegate.listAllDatabases();
+    public List<String> listAllDatabases(ConnectContext context) {
+        return delegate.listAllDatabases(context);
     }
 
-    public void createDB(String dbName, Map<String, String> properties) {
-        delegate.createDB(dbName, properties);
+    @Override
+    public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
+        delegate.createDB(context, dbName, properties);
     }
 
-    public void dropDB(String dbName) throws MetaNotFoundException {
-        delegate.dropDB(dbName);
+    @Override
+    public void dropDB(ConnectContext context, String dbName) throws MetaNotFoundException {
+        delegate.dropDB(context, dbName);
         databases.invalidate(dbName);
     }
 
     @Override
-    public Database getDB(String dbName) {
+    public Database getDB(ConnectContext context, String dbName) {
         if (databases.asMap().containsKey(dbName)) {
             return databases.getIfPresent(dbName);
         }
-        Database db = delegate.getDB(dbName);
+        Database db = delegate.getDB(context, dbName);
         databases.put(dbName, db);
         return db;
     }
 
     @Override
-    public List<String> listTables(String dbName) {
-        return delegate.listTables(dbName);
+    public List<String> listTables(ConnectContext context, String dbName) {
+        return delegate.listTables(context, dbName);
     }
 
     @Override
-    public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+    public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-        if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
+        if (context == null || context.getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
 
         if (tables.getIfPresent(icebergTableName) != null) {
-            return tables.getIfPresent(icebergTableName);
+            if (Strings.isNullOrEmpty(context.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog)) {
+                return tables.getIfPresent(icebergTableName);
+            }
         }
 
-        Table icebergTable = delegate.getTable(dbName, tableName);
+        Table icebergTable = delegate.getTable(context, dbName, tableName);
         tables.put(icebergTableName, icebergTable);
         return icebergTable;
     }
 
     @Override
-    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
-        return delegate.tableExists(dbName, tableName);
+    public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(context, dbName, tableName);
     }
 
     @Override
-    public boolean createTable(String dbName,
+    public boolean createTable(ConnectContext context,
+                               String dbName,
                                String tableName,
                                Schema schema,
                                PartitionSpec partitionSpec,
                                String location,
                                Map<String, String> properties) {
-        return delegate.createTable(dbName, tableName, schema, partitionSpec, location, properties);
+        return delegate.createTable(context, dbName, tableName, schema, partitionSpec, location, properties);
     }
 
     @Override
-    public boolean dropTable(String dbName, String tableName, boolean purge) {
-        boolean dropped = delegate.dropTable(dbName, tableName, purge);
+    public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
+        boolean dropped = delegate.dropTable(context, dbName, tableName, purge);
         invalidateCache(new IcebergTableName(dbName, tableName));
         return dropped;
     }
 
     @Override
-    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
-        delegate.renameTable(dbName, tblName, newTblName);
+    public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
+            throws StarRocksConnectorException {
+        delegate.renameTable(context, dbName, tblName, newTblName);
         invalidateCache(new IcebergTableName(dbName, tblName));
     }
 
     @Override
-    public boolean createView(String catalogName, ConnectorViewDefinition connectorViewDefinition, boolean replace) {
-        return delegate.createView(catalogName, connectorViewDefinition, replace);
+    public boolean createView(ConnectContext context, String catalogName, ConnectorViewDefinition connectorViewDefinition,
+                              boolean replace) {
+        return delegate.createView(context, catalogName, connectorViewDefinition, replace);
     }
 
     @Override
-    public boolean alterView(View currentView, ConnectorViewDefinition connectorViewDefinition) {
-        return delegate.alterView(currentView, connectorViewDefinition);
+    public boolean alterView(ConnectContext context, View currentView, ConnectorViewDefinition connectorViewDefinition) {
+        return delegate.alterView(context, currentView, connectorViewDefinition);
     }
 
     @Override
-    public boolean dropView(String dbName, String viewName) {
-        return delegate.dropView(dbName, viewName);
+    public boolean dropView(ConnectContext context, String dbName, String viewName) {
+        return delegate.dropView(context, dbName, viewName);
     }
 
-    public View getView(String dbName, String viewName) {
-        return delegate.getView(dbName, viewName);
+    public View getView(ConnectContext context, String dbName, String viewName) {
+        return delegate.getView(context, dbName, viewName);
     }
 
     @Override
@@ -246,7 +255,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             partitionCache.invalidate(icebergTableName);
         } else {
             BaseTable currentTable = (BaseTable) tables.getIfPresent(icebergTableName);
-            BaseTable updateTable = (BaseTable) delegate.getTable(dbName, tableName);
+            BaseTable updateTable = (BaseTable) delegate.getTable(new ConnectContext(), dbName, tableName);
             if (updateTable == null) {
                 invalidateCache(icebergTableName);
                 return;

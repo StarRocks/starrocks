@@ -21,6 +21,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.jdbc.IcebergJdbcCatalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -34,6 +36,7 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.jdbc.JdbcCatalog;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -52,6 +55,12 @@ public class IcebergJdbcCatalogTest {
 
     private static String LOCATION = "s3://path/to/warehouse";
     private static String URI = "jdbc:mysql://host:port/db_name";
+    public static ConnectContext connectContext;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
 
     @Test
     public void testNewIcebergJdbcCatalog(@Mocked JdbcCatalog jdbcCatalog) {
@@ -95,7 +104,7 @@ public class IcebergJdbcCatalogTest {
         IcebergJdbcCatalog icebergJdbcCatalog = new IcebergJdbcCatalog("catalog",
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
-        List<String> dbs = icebergJdbcCatalog.listAllDatabases();
+        List<String> dbs = icebergJdbcCatalog.listAllDatabases(connectContext);
         assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
@@ -120,11 +129,11 @@ public class IcebergJdbcCatalogTest {
         IcebergJdbcCatalog icebergJdbcCatalog = new IcebergJdbcCatalog("catalog",
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
-        icebergJdbcCatalog.createDB("db", new HashMap<>());
-        Database db = icebergJdbcCatalog.getDB("db");
+        icebergJdbcCatalog.createDB(connectContext, "db", new HashMap<>());
+        Database db = icebergJdbcCatalog.getDB(connectContext, "db");
         assertEquals("db", db.getFullName());
-        icebergJdbcCatalog.dropTable("db", "table", true);
-        icebergJdbcCatalog.dropDB("db");
+        icebergJdbcCatalog.dropTable(connectContext, "db", "table", true);
+        icebergJdbcCatalog.dropDB(connectContext, "db");
     }
 
     @Test
@@ -148,7 +157,7 @@ public class IcebergJdbcCatalogTest {
         IcebergJdbcCatalog icebergJdbcCatalog = new IcebergJdbcCatalog("catalog",
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
-        icebergJdbcCatalog.createDB("db", ImmutableMap.of(LOCATION_PROPERTY, LOCATION));
+        icebergJdbcCatalog.createDB(connectContext, "db", ImmutableMap.of(LOCATION_PROPERTY, LOCATION));
     }
 
     @Test
@@ -166,7 +175,7 @@ public class IcebergJdbcCatalogTest {
                 "iceberg.catalog.uri", URI));
         StarRocksConnectorException e =
                 assertThrows(StarRocksConnectorException.class,
-                        () -> icebergJdbcCatalog.createDB("db", ImmutableMap.of(LOCATION_PROPERTY, LOCATION)));
+                        () -> icebergJdbcCatalog.createDB(connectContext, "db", ImmutableMap.of(LOCATION_PROPERTY, LOCATION)));
         String msg = String.format("Invalid location URI: %s. msg: No FileSystem for scheme \"s3\"", LOCATION);
         assertEquals(msg, e.getMessage());
     }
@@ -188,7 +197,7 @@ public class IcebergJdbcCatalogTest {
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
-        Assert.assertEquals(expectResult, icebergJdbcCatalog.listTables(db1));
+        Assert.assertEquals(expectResult, icebergJdbcCatalog.listTables(connectContext, db1));
     }
 
     @Test
@@ -203,7 +212,7 @@ public class IcebergJdbcCatalogTest {
         IcebergJdbcCatalog icebergJdbcCatalog = new IcebergJdbcCatalog("catalog",
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
-        Table table = icebergJdbcCatalog.getTable("db", "tbl1");
+        Table table = icebergJdbcCatalog.getTable(connectContext, "db", "tbl1");
         assertEquals("tbl1", table.name());
     }
 
@@ -218,7 +227,7 @@ public class IcebergJdbcCatalogTest {
         IcebergJdbcCatalog icebergJdbcCatalog = new IcebergJdbcCatalog("catalog",
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
-        assertTrue(icebergJdbcCatalog.tableExists("db1", "tbl1"));
+        assertTrue(icebergJdbcCatalog.tableExists(connectContext, "db1", "tbl1"));
     }
 
     @Test
@@ -232,11 +241,12 @@ public class IcebergJdbcCatalogTest {
         IcebergJdbcCatalog icebergJdbcCatalog = new IcebergJdbcCatalog("catalog",
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
-        icebergJdbcCatalog.renameTable("db", "tb1", "tb2");
-        boolean exists = icebergJdbcCatalog.tableExists("db", "tbl2");
+        icebergJdbcCatalog.renameTable(connectContext, "db", "tb1", "tb2");
+        boolean exists = icebergJdbcCatalog.tableExists(connectContext, "db", "tbl2");
         Assert.assertTrue(exists);
 
-        boolean createTableFlag = icebergJdbcCatalog.createTable("db", "tb2", null, null, LOCATION, new HashMap<>());
+        boolean createTableFlag = icebergJdbcCatalog.createTable(connectContext, "db", "tb2", null, null,
+                LOCATION, new HashMap<>());
         assertEquals(true, createTableFlag);
     }
 
@@ -249,7 +259,8 @@ public class IcebergJdbcCatalogTest {
         IcebergJdbcCatalog icebergJdbcCatalog = new IcebergJdbcCatalog("catalog",
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
-        boolean createTableFlag = icebergJdbcCatalog.createTable("db", "tb2", null, null, LOCATION, new HashMap<>());
+        boolean createTableFlag = icebergJdbcCatalog.createTable(connectContext, "db", "tb2", null, null,
+                LOCATION, new HashMap<>());
         assertEquals(true, createTableFlag);
     }
 

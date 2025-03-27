@@ -32,15 +32,16 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.CatalogProperties;
-import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.BadRequestException;
-import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.rest.RESTSessionCatalog;
+import org.apache.iceberg.rest.auth.OAuth2Properties;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
@@ -51,6 +52,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -58,6 +60,10 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameT
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+import static java.lang.String.format;
+import static org.apache.iceberg.CatalogUtil.configureHadoopConf;
+import static org.apache.iceberg.rest.auth.OAuth2Properties.CREDENTIAL;
+import static org.apache.iceberg.rest.auth.OAuth2Properties.TOKEN;
 
 public class IcebergRESTCatalog implements IcebergCatalog {
 
@@ -66,10 +72,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
     public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
 
+    private String catalogName = null;
     private final Configuration conf;
-    private final RESTCatalog delegate;
+    OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(new OAuth2SecurityConfig());
+    private final RESTSessionCatalog delegate;
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
+        this.catalogName = name;
         this.conf = conf;
         Map<String, String> copiedProperties = Maps.newHashMap(properties);
 
@@ -94,14 +103,16 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         // setup oauth2
         OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(copiedProperties);
-        OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
+        securityProperties = new OAuth2SecurityProperties(securityConfig);
         copiedProperties.putAll(securityProperties.get());
 
-        delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
+        delegate = new RESTSessionCatalog();
+        configureHadoopConf(delegate, conf);
+        delegate.initialize(name, copiedProperties);
     }
 
     // for ut
-    public IcebergRESTCatalog(RESTCatalog restCatalog, Configuration conf) {
+    public IcebergRESTCatalog(RESTSessionCatalog restCatalog, Configuration conf) {
         this.delegate = restCatalog;
         this.conf = conf;
     }
@@ -112,24 +123,24 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
-        return delegate.loadTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
+    public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.loadTable(convertContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
     }
 
     @Override
-    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
-        return delegate.tableExists(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
+    public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(convertContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
     }
 
     @Override
-    public List<String> listAllDatabases() {
-        return delegate.listNamespaces().stream()
+    public List<String> listAllDatabases(ConnectContext context) {
+        return delegate.listNamespaces(convertContext(context)).stream()
                 .map(ns -> ns.level(0))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public void createDB(String dbName, Map<String, String> properties) {
+    public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -147,14 +158,14 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                 throw new IllegalArgumentException("Unrecognized property: " + key);
             }
         }
-        delegate.createNamespace(convertDbNameToNamespace(dbName), properties);
+        delegate.createNamespace(convertContext(context), convertDbNameToNamespace(dbName), properties);
     }
 
     @Override
-    public void dropDB(String dbName) throws MetaNotFoundException {
+    public void dropDB(ConnectContext context, String dbName) throws MetaNotFoundException {
         Database database;
         try {
-            database = getDB(dbName);
+            database = getDB(context, dbName);
         } catch (Exception e) {
             LOG.error("Failed to access database {}", dbName, e);
             throw new MetaNotFoundException("Failed to access database " + dbName);
@@ -169,22 +180,22 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             throw new MetaNotFoundException("Database location is empty");
         }
 
-        delegate.dropNamespace(convertDbNameToNamespace(dbName));
+        delegate.dropNamespace(convertContext(context), convertDbNameToNamespace(dbName));
     }
 
     @Override
-    public Database getDB(String dbName) {
-        Map<String, String> dbMeta = delegate.loadNamespaceMetadata(convertDbNameToNamespace(dbName));
+    public Database getDB(ConnectContext context, String dbName) {
+        Map<String, String> dbMeta = delegate.loadNamespaceMetadata(convertContext(context), convertDbNameToNamespace(dbName));
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override
-    public List<String> listTables(String dbName) {
+    public List<String> listTables(ConnectContext context, String dbName) {
         Namespace ns = convertDbNameToNamespace(dbName);
-        List<TableIdentifier> tableIdentifiers = new ArrayList<>(delegate.listTables(ns));
+        List<TableIdentifier> tableIdentifiers = new ArrayList<>(delegate.listTables(convertContext(context), ns));
         List<TableIdentifier> viewIdentifiers = new ArrayList<>();
         try {
-            viewIdentifiers = delegate.listViews(ns);
+            viewIdentifiers = delegate.listViews(convertContext(context), ns);
         } catch (BadRequestException e) {
             LOG.warn("Failed to list views from {} namespace. Perhaps the server side does not implement the interface. " +
                     "Ask the user to check it", ns, e);
@@ -197,13 +208,15 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public boolean createTable(
+            ConnectContext context,
             String dbName,
             String tableName,
             Schema schema,
             PartitionSpec partitionSpec,
             String location,
             Map<String, String> properties) {
-        Table nativeTable = delegate.buildTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), schema)
+        Table nativeTable = delegate.buildTable(convertContext(context),
+                        TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
                 .withProperties(properties)
@@ -213,29 +226,34 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public boolean dropTable(String dbName, String tableName, boolean purge) {
-        return delegate.dropTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), purge);
+    public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
+        if (purge) {
+            return delegate.purgeTable(convertContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
+        } else {
+            return delegate.dropTable(convertContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
+        }
     }
 
     @Override
-    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+    public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
+            throws StarRocksConnectorException {
         Namespace ns = convertDbNameToNamespace(dbName);
-        delegate.renameTable(TableIdentifier.of(ns, tblName), TableIdentifier.of(ns, newTblName));
+        delegate.renameTable(convertContext(context), TableIdentifier.of(ns, tblName), TableIdentifier.of(ns, newTblName));
     }
 
     @Override
-    public ViewBuilder getViewBuilder(TableIdentifier identifier) {
-        return delegate.buildView(identifier);
+    public ViewBuilder getViewBuilder(ConnectContext context, TableIdentifier identifier) {
+        return delegate.buildView(convertContext(context), identifier);
     }
 
     @Override
-    public boolean dropView(String dbName, String viewName) {
-        return delegate.dropView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+    public boolean dropView(ConnectContext context, String dbName, String viewName) {
+        return delegate.dropView(convertContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
     }
 
     @Override
-    public View getView(String dbName, String viewName) {
-        return delegate.loadView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+    public View getView(ConnectContext context, String dbName, String viewName) {
+        return delegate.loadView(convertContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
     }
 
     @Override
@@ -261,8 +279,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Map<String, String> loadNamespaceMetadata(Namespace ns) {
-        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
+    public Map<String, String> loadNamespaceMetadata(ConnectContext context, Namespace ns) {
+        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(convertContext(context), ns));
     }
 
     private Map<String, String> buildProperties(ConnectorViewDefinition definition) {
@@ -286,8 +304,28 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public String defaultTableLocation(Namespace ns, String tableName) {
+    public String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
         // iceberg rest catalog doesn't require location property, and could choose the default location.
         return null;
+    }
+
+    private SessionCatalog.SessionContext convertContext(ConnectContext context) {
+        String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
+
+        Map<String, String> properties = ImmutableMap.of(
+                "user", context.getQualifiedUser(),
+                "catalogName", this.catalogName);
+
+        Map<String, String> credentials;
+        if (Strings.isNullOrEmpty(context.getAuthToken())) {
+            credentials = Maps.filterKeys(securityProperties.get(), key -> Set.of(TOKEN, CREDENTIAL).contains(key));
+        } else {
+            credentials = ImmutableMap.<String, String>builder()
+                    .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken())
+                    .buildOrThrow();
+        }
+
+        return new SessionCatalog.SessionContext(sessionId, context.getQualifiedUser(), credentials, properties,
+                context.getCurrentUserIdentity());
     }
 }

@@ -970,7 +970,7 @@ public class StmtExecutor {
                 CreateTemporaryTableStmt createTemporaryTableStmt =
                         (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
                 createTemporaryTableStmt.setSessionId(context.getSessionId());
-                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
+                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(context, createTemporaryTableStmt);
             } else {
                 return context.getGlobalStateMgr().getMetadataMgr().createTable(context, stmt.getCreateTableStmt());
             }
