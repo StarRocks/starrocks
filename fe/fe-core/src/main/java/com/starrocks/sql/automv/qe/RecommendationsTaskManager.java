@@ -31,6 +31,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.Result;
@@ -65,10 +66,23 @@ public class RecommendationsTaskManager extends FrontendDaemon {
         return deadline.isBefore(Instant.now());
     }
 
-    public boolean canSubmitTask() {
+    public void trySubmitTask(RecommendationsTaskStatus taskStatus) {
+        String taskName = taskStatus.getTaskName();
+        RecommendationsTaskStatus duplicateTaskStatus = taskStatusMap.get(taskName);
+        if (duplicateTaskStatus != null && duplicateTaskStatus.isPending()) {
+            throw new SemanticException("Duplicate pending task '%s' exists", taskName);
+        }
         long numPendingTasks = taskStatusMap.values()
-                .stream().filter(taskStatus -> taskStatus.isPending() && !isExpired(taskStatus)).count();
-        return numPendingTasks < GlobalVariable.getAutoMVRecommendationsTaskPendingLimit();
+                .stream().filter(status -> status.isPending() && !isExpired(status)).count();
+        if (numPendingTasks >= GlobalVariable.getAutoMVRecommendationsTaskPendingLimit()) {
+            throw new SemanticException("Too many pending tasks: num=%d, limit=%d", numPendingTasks,
+                    GlobalVariable.getAutoMVRecommendationsTaskPendingLimit());
+        }
+        // submit many tasks concurrently
+        duplicateTaskStatus = taskStatusMap.putIfAbsent(taskName, taskStatus);
+        if (duplicateTaskStatus != null && duplicateTaskStatus.isPending()) {
+            throw new SemanticException("Duplicate pending task '%s' exists", taskName);
+        }
     }
 
     @Override

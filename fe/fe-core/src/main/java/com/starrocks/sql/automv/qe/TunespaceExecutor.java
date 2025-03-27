@@ -312,17 +312,14 @@ public class TunespaceExecutor {
             return context;
         }
 
-        private void asyncShowRecommendationsInternal(String taskName, ShowRecommendationsStmt node,
+        private void asyncShowRecommendationsInternal(RecommendationsTaskStatus taskStatus,
+                                                      ShowRecommendationsStmt node,
                                                       ConnectContext ctx) {
             TableName tsName = node.getTableName();
             TableName resultTableName =
                     new TableName(tsName.getCatalog(), tsName.getDb(), "__recommendations_results__");
 
-            RecommendationsTaskStatus taskStatus =
-                    new RecommendationsTaskStatus(taskName, tsName.toString(), resultTableName.toString());
-            taskStatus.setStatus(RecommendationsTaskStatus.Status.PENDING);
-            taskStatus.persist();
-            ctx.getGlobalStateMgr().getRecommendationsTaskMgr().applyLogEntry(taskStatus);
+            String taskName = taskStatus.getTaskName();
             ConnectContext context = buildNewConnectContext(ctx);
             try (ConnectContext.ScopeGuard scopedGuard = context.bindScope()) {
                 int replicationNum = PropertiesPolicy.calcReplicationNum();
@@ -390,12 +387,19 @@ public class TunespaceExecutor {
         @Override
         public ShowResultSet visitSubmitRecommendationsTaskStmt(SubmitRecommendationsTaskStmt node,
                                                                 ConnectContext context) {
-            if (context.getGlobalStateMgr().getRecommendationsTaskMgr().canSubmitTask()) {
-                RecommendationsTaskManager.THREAD_POOL.submit(
-                        () -> asyncShowRecommendationsInternal(node.getTaskName(), node.getStmt(), context));
-            } else {
-                throw new SemanticException("Too many recommendations tasks");
-            }
+            TableName tsName = node.getStmt().getTableName();
+            TableName resultTableName =
+                    new TableName(tsName.getCatalog(), tsName.getDb(), "__recommendations_results__");
+            RecommendationsTaskStatus taskStatus =
+                    new RecommendationsTaskStatus(node.getTaskName(), tsName.toString(),
+                            resultTableName.toString());
+
+            taskStatus.setStatus(RecommendationsTaskStatus.Status.PENDING);
+            context.getGlobalStateMgr().getRecommendationsTaskMgr().trySubmitTask(taskStatus);
+            taskStatus.persist();
+            context.getGlobalStateMgr().getRecommendationsTaskMgr().applyLogEntry(taskStatus);
+            RecommendationsTaskManager.THREAD_POOL.submit(
+                    () -> asyncShowRecommendationsInternal(taskStatus, node.getStmt(), context));
             return null;
         }
     }
