@@ -98,6 +98,7 @@ StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const Ordi
 }
 
 Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values) {
+    ScopedTimerPrinter do_load_timer("OrdinalIndexReader::_do_load inner on file " + opts.read_file->filename()); // 2258439272 ns
     if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
@@ -124,11 +125,18 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     PageHandle page_handle;
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(PageIO::read_and_decompress_page(page_opts, &page_handle, &body, &footer));
+    {
+        ScopedTimerPrinter read_and_decompress_page_timer("PageIO::read_and_decompress_page outer on file " +
+                                                          opts.read_file->filename()); // 2258122462 ns
+        RETURN_IF_ERROR(PageIO::read_and_decompress_page(page_opts, &page_handle, &body, &footer));
+    }
 
     // parse and save all (ordinal, pp) from index page
     IndexPageReader reader;
-    RETURN_IF_ERROR(reader.parse(body, footer.index_page_footer()));
+    {
+        ScopedTimerPrinter reader_parse_timer("reader.parse outer on file " + opts.read_file->filename());
+        RETURN_IF_ERROR(reader.parse(body, footer.index_page_footer())); // 18986 ns
+    }
 
     _num_pages = reader.count();
     _ordinals = std::make_unique<ordinal_t[]>(_num_pages + 1);
@@ -136,8 +144,11 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     for (int i = 0; i < _num_pages; i++) {
         Slice key = reader.get_key(i);
         ordinal_t ordinal = 0;
-        RETURN_IF_ERROR(KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
-                                                                               (uint8_t*)&ordinal, nullptr));
+        {
+            ScopedTimerPrinter decode_ascending_timer("decode_ascending outer on file " + opts.read_file->filename()); // 2586 ns
+            RETURN_IF_ERROR(KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
+                                                                                   (uint8_t*)&ordinal, nullptr));
+        }
 
         _ordinals[i] = ordinal;
         _pages[i] = reader.get_value(i).offset;

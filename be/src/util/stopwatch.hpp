@@ -95,4 +95,15 @@ private:
     bool _running;
 };
 
+class ScopedTimerPrinter {
+public:
+    explicit ScopedTimerPrinter(std::string prefix) : _prefix(std::move(prefix)) { _sw.start(); }
+    // Update counter when object is destroyed
+    ~ScopedTimerPrinter() { LOG(WARNING) << _prefix << " elapsed_time: " << _sw.elapsed_time() << " ns"; }
+
+private:
+    std::string _prefix;
+    MonotonicStopWatch _sw;
+};
+
 } // namespace starrocks

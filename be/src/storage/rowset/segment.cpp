@@ -229,6 +229,7 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
                       const LakeIOOptions& lake_io_opts) {
+    ScopedTimerPrinter segment_open("Segment::_open inner on segment " + _segment_file_info.path);
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
@@ -239,9 +240,18 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
         _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
     }
 
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
-    RETURN_IF_ERROR(_create_column_readers(&footer));
+    {
+        ScopedTimerPrinter parse_segment_footer_timer("parse_segment_footer outer on segment " +
+                                                      _segment_file_info.path);
+        ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
+        RETURN_IF_ERROR(
+                Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    }
+    {
+        ScopedTimerPrinter create_column_readers_timer("_create_column_readers outer on segment " +
+                                                       _segment_file_info.path);
+        RETURN_IF_ERROR(_create_column_readers(&footer));
+    }
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     return Status::OK();
@@ -398,6 +408,9 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             continue;
         }
 
+        ScopedTimerPrinter create_column_reader_timer("ColumnReader::create outer on segment " +
+                                                      _segment_file_info.path + ", column " +
+                                                      std::string(column.name()));
         auto res = ColumnReader::create(footer->mutable_columns(iter->second), this, &column);
         if (!res.ok()) {
             return res.status();
@@ -465,6 +478,8 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                             const TabletSchemaCSPtr& read_tablet_schema) {
+    ScopedTimerPrinter new_dcg_segment("new_dcg_segment inner on segment " + _segment_file_info.path + ", dcg idx " +
+                                       std::to_string(idx));
     std::shared_ptr<TabletSchema> tablet_schema;
     if (read_tablet_schema != nullptr) {
         tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);

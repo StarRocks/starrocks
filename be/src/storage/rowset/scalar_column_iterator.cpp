@@ -49,6 +49,8 @@ ScalarColumnIterator::ScalarColumnIterator(ColumnReader* reader) : _reader(reade
 ScalarColumnIterator::~ScalarColumnIterator() = default;
 
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
+    ScopedTimerPrinter column_iterators_init_timer("ScalarColumnIterator::init inner on file " +
+                                                   opts.read_file->filename() + ", colunm name " + _reader->name()); // 2258485860 ns
     _opts = opts;
 
     IndexReadOptions index_opts;
@@ -58,7 +60,12 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     index_opts.lake_io_opts = opts.lake_io_opts;
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
-    RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
+    {
+        ScopedTimerPrinter reader_load_ordinal_index_timer("_reader->load_ordinal_index outer on file " +
+                                                           opts.read_file->filename() + ", colunm name " +
+                                                           _reader->name()); // 2258477607 ns
+        RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
+    }
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
@@ -115,6 +122,8 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
             _all_dict_encoded = _reader->all_dict_encoded();
             // if _all_dict_encoded is true, load dictionary page into memory for `dict_lookup`.
             RETURN_IF(!_all_dict_encoded, Status::OK());
+            ScopedTimerPrinter load_dict_page_timer("_load_dict_page outer on file " + opts.read_file->filename() +
+                                                    ", colunm name " + _reader->name()); // 60489392 ns
             if (column_type == TYPE_VARCHAR) {
                 RETURN_IF_ERROR(_load_dict_page<TYPE_VARCHAR>());
             } else {
@@ -125,6 +134,8 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
             // whether all data pages are using dict encoding, must load the last data page
             // and check its encoding.
             ordinal_t last_row = _reader->num_rows() - 1;
+            ScopedTimerPrinter seek_to_ordinal_timer("seek_to_ordinal outer on file " + opts.read_file->filename() +
+                                                     ", colunm name " + _reader->name());
             RETURN_IF_ERROR(seek_to_ordinal(last_row));
             _all_dict_encoded = _page->encoding_type() == DICT_ENCODING;
         }

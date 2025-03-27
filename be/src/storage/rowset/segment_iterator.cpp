@@ -502,6 +502,9 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
 }
 
 StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
+    ScopedTimerPrinter get_dcg_segment_timer("_get_dcg_segment inner on segment " + _segment->file_name() +
+                                             ", column uid " + std::to_string(ucid) + ", dcg_size " +
+                                             std::to_string(_dcgs.size()));
     // iterate dcg from new ver to old ver
     for (const auto& dcg : _dcgs) {
         // cols file index -> column index in corresponding file
@@ -509,6 +512,9 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         if (idx.first >= 0) {
             ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
             if (_dcg_segments.count(column_file) == 0) {
+                ScopedTimerPrinter get_dcg_segment_timer(
+                        "_segment->new_dcg_segment outer on segment " + _segment->file_name() + ", column uid " +
+                        std::to_string(ucid) + ", col index " + std::to_string(idx.first));
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
             }
@@ -523,8 +529,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
                                                                                     std::string* filename,
                                                                                     FileEncryptionInfo* encryption_info,
                                                                                     ColumnAccessPath* path) {
+    ScopedTimerPrinter new_dcg_column_iterator_timer("_new_dcg_column_iterator inner on segment " +
+                                                     _segment->file_name() + ", column " + std::string(column.name()));
     // build column iter from delta column group
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
+    SegmentSharedPtr dcg_segment;
+    {
+        ScopedTimerPrinter get_dcg_segment_timer("_get_dcg_segment outer on segment " + _segment->file_name() +
+                                                 ", column name " + std::string(column.name()) + ", uid " +
+                                                 std::to_string(column.unique_id()));
+        ASSIGN_OR_RETURN(dcg_segment, _get_dcg_segment(column.unique_id()));
+    }
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
@@ -532,6 +546,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
         if (encryption_info != nullptr && dcg_segment->encryption_info()) {
             *encryption_info = *dcg_segment->encryption_info();
         }
+        ScopedTimerPrinter new_column_iterator_timer("new_column_iterator outer on segment " + _segment->file_name() +
+                                                     ", column name " + std::string(column.name()) + ", uid " +
+                                                     std::to_string(column.unique_id()));
         return dcg_segment->new_column_iterator(column, path);
     }
     return nullptr;
@@ -554,6 +571,8 @@ void SegmentIterator::_init_column_access_paths() {
 }
 
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
+    ScopedTimerPrinter init_column_iterator_by_cid_timer("_init_column_iterator_by_cid inner on segment " +
+                                                         _segment->file_name() + ", cid " + std::to_string(cid)); // 2304559099 ns
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
@@ -580,10 +599,23 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     }
     auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
     const auto& col = tablet_schema->column(cid);
-    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, access_path));
+    std::unique_ptr<starrocks::ColumnIterator> col_iter;
+    {
+        ScopedTimerPrinter new_dcg_column_iterator_timer("_new_dcg_column_iterator outer on segment " +
+                                                         _segment->file_name() + ", cid " + std::to_string(cid) +
+                                                         ", name " + std::string(col.name())); // 24822 ns
+        ASSIGN_OR_RETURN(col_iter, _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, access_path));
+    }
     if (col_iter == nullptr) {
+        ScopedTimerPrinter col_iter_nullptr_timer("col_iter_nullptr on on segment " + _segment->file_name() + ", cid " +
+                                                  std::to_string(cid) + ", name " + std::string(col.name())); // 45997135 ns
         // not found in delta column group, create normal column iterator
-        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
+        {
+            ScopedTimerPrinter segment_new_column_iterator_or_default_timer(
+                    "_segment->new_column_iterator_or_default outer on segment " + _segment->file_name() + ", cid " +
+                    std::to_string(cid) + ", name " + std::string(col.name())); // 21955574 ns
+            ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
+        }
         const auto encryption_info = _segment->encryption_info();
         if (encryption_info) {
             opts.encryption_info = *encryption_info;
@@ -607,6 +639,9 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             _column_files[cid] = std::move(rfile);
         }
     } else {
+        ScopedTimerPrinter col_iter_not_nullptr_timer("col_iter_not_nullptr on segment " + _segment->file_name() +
+                                                      ", cid " + std::to_string(cid) + ", name " +
+                                                      std::string(col.name()));
         // create delta column iterator
         // TODO io_coalesce
         _column_iterators[cid] = std::move(col_iter);
@@ -615,15 +650,20 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         iter_opts.read_file = dcg_file.get();
         _column_files[cid] = std::move(dcg_file);
     }
+    ScopedTimerPrinter _column_iterators_init_timer("_column_iterators->init on segment " + _segment->file_name() +
+                                                    ", cid " + std::to_string(cid) + ", name " +
+                                                    std::string(col.name()));   // 2258494877 ns
     RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
     return Status::OK();
 }
 
 template <bool check_global_dict>
-Status SegmentIterator::_init_column_iterators(const Schema& schema) {
+Status SegmentIterator::_init_column_iterators(const Schema& schema) { // 4467058614 ns
     DCHECK_EQ(_predicate_columns, _cid_to_predicates.size());
     SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
 
+    LOG(WARNING) << "begin _init_column_iterators inner on segment " + _segment->file_name();
+    ScopedTimerPrinter field_timer("_init_column_iterators inner on segment " + _segment->file_name());
     const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
     if constexpr (check_global_dict) {
@@ -633,6 +673,8 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     bool has_predicate = !_cid_to_predicates.empty();
     _predicate_need_rewrite.resize(n, false);
     for (const FieldPtr& f : schema.fields()) {
+        ScopedTimerPrinter field_timer("for loop on segment " + _segment->file_name() + ", column name " +
+                                       std::string(f->name())); // 2304576061 ns
         const ColumnId cid = f->id();
         if (_column_iterators[cid] == nullptr) {
             bool check_dict_enc;
@@ -649,7 +691,12 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 check_dict_enc = has_predicate;
             }
 
-            RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
+            {
+                ScopedTimerPrinter init_column_iterator_by_cid_timer(
+                        "_init_column_iterator_by_cid outer on segment " + _segment->file_name() + ", cid " +
+                        std::to_string(cid) + ", name " + std::string(f->name()));
+                RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
+            }
 
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());

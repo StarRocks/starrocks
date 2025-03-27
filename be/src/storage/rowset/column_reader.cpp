@@ -436,6 +436,8 @@ Status ColumnReader::ngram_bloom_filter(const std::vector<const ::starrocks::Col
 }
 
 Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
+    ScopedTimerPrinter load_ordinal_index_timer("ColumnReader::load_ordinal_index inner on file " +
+                                                opts.read_file->filename()); // 2258468859 ns
     if (_ordinal_index == nullptr || _ordinal_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _ordinal_index_meta.get();
