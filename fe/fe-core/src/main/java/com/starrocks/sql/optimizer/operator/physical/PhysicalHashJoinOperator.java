@@ -24,10 +24,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     private ScalarOperator skewColumn;
     private List<ScalarOperator> skewValues;
+    private Optional<PhysicalHashJoinOperator> skewJoinFriend = Optional.empty();
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
@@ -73,6 +75,14 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
 
     public List<ScalarOperator> getSkewValues() {
         return skewValues;
+    }
+
+    public Optional<PhysicalHashJoinOperator> getSkewJoinFriend() {
+        return skewJoinFriend;
+    }
+
+    public void setSkewJoinFriend(PhysicalHashJoinOperator skewJoinFriend) {
+        this.skewJoinFriend = Optional.ofNullable(skewJoinFriend);
     }
 
     @Override

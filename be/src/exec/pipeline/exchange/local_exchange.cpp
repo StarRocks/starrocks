@@ -341,6 +341,13 @@ Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_dr
     return Status::OK();
 }
 
+Status DirectThroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t sources_num = _source->get_sources().size();
+    _source->get_sources()[(sink_driver_sequence) % sources_num]->add_chunk(chunk);
+
+    return Status::OK();
+}
+
 Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     size_t sources_num = _source->get_sources().size();
     if (sources_num == 1) {

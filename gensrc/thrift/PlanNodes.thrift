@@ -749,6 +749,7 @@ struct THashJoinNode {
   55: optional bool interpolate_passthrough = false
   56: optional bool late_materialization = false
   57: optional bool enable_partition_hash_join = false
+  58: optional bool is_skew_join = false
 }
 
 struct TMergeJoinNode {

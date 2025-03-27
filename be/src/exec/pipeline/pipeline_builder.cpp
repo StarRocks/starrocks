@@ -342,7 +342,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_grouped_exchange(int32_t p
 }
 
 OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* state, int32_t plan_node_id,
-                                                                  std::vector<OpFactories>& pred_operators_list) {
+                                                                  std::vector<OpFactories>& pred_operators_list,
+                                                                  LocalExchanger::PassThroughType pass_through_type) {
     // If there is only one pred pipeline, we needn't local passthrough anymore.
     if (pred_operators_list.size() == 1) {
         return pred_operators_list[0];
@@ -384,7 +385,13 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
         local_exchange_source->group_leader()->set_adaptive_blocking_event(std::move(merged_blocking_events));
     }
 
-    auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
+    std::shared_ptr<LocalExchanger> exchanger;
+    if (pass_through_type == LocalExchanger::PassThroughType::RANDOM) {
+        exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
+    } else {
+        exchanger = std::make_shared<DirectThroughExchanger>(mem_mgr, local_exchange_source.get());
+    }
+
     for (auto& pred_operators : pred_operators_list) {
         auto local_exchange_sink =
                 std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), plan_node_id, exchanger);
