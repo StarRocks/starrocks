@@ -3405,17 +3405,29 @@ TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
     }
     ASSERT_EQ(N * 2, read_tablet(_tablet, rowsets.size() + 1));
 
-    _tablet->updates()->set_error("ut_test");
-    ASSERT_TRUE(_tablet->updates()->is_error());
-    config::enable_pindex_rebuild_in_compaction = false;
-    auto index_entry = StorageEngine::instance()->update_manager()->index_cache().get_or_create(_tablet->tablet_id());
-    auto& index = index_entry->value();
-    index.set_status(true, Status::InternalError("ut"));
-    _tablet->updates()->reset_error();
-    ASSERT_FALSE(_tablet->updates()->is_error());
+    {
+        config::max_apply_retry_times = 0;
+        _tablet->updates()->set_error("ut_test");
+        ASSERT_TRUE(_tablet->updates()->is_error());
+        config::enable_pindex_rebuild_in_compaction = false;
+        auto index_entry =
+                StorageEngine::instance()->update_manager()->index_cache().get_or_create(_tablet->tablet_id());
+        auto& index = index_entry->value();
+        index.set_status(true, Status::InternalError("ut"));
+        _tablet->updates()->reset_error();
+        ASSERT_FALSE(_tablet->updates()->is_error());
 
-    ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
-    ASSERT_TRUE(_tablet->updates()->is_error());
+        ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+        ASSERT_TRUE(_tablet->updates()->is_error());
+    }
+
+    {
+        config::max_apply_retry_times = 1;
+        config::retry_apply_interval_second = 1;
+        _tablet->updates()->reset_error();
+        _tablet->updates()->check_for_apply();
+        ASSERT_FALSE(_tablet->updates()->is_error());
+    }
 }
 
 TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
@@ -3545,6 +3557,7 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
 
 TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     config::retry_apply_interval_second = 1;
+    config::max_apply_retry_times = 0;
     _tablet = create_tablet(rand(), rand());
     _tablet->updates()->stop_compaction(true);
     _tablet->set_enable_persistent_index(true);
@@ -3582,7 +3595,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         ASSERT_TRUE(_tablet->rowset_commit(version, rs).ok());
         ASSERT_EQ(version, _tablet->updates()->max_version());
 
-        read_tablet(_tablet, version);
+        _tablet->updates()->wait_apply_done();
         ASSERT_TRUE(_tablet->updates()->is_error());
 
         // Disable fail point and reset error
@@ -3668,7 +3681,10 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         config::retry_apply_interval_second = old_val;
     }
 
-    // 16. delvec inconsistent
+    // 16. write tablet meta failed
+    test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", 17, N / 2);
+
+    // 17. delvec inconsistent
     {
         // Enable fail point
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
@@ -3677,8 +3693,8 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
         // Create and commit rowset
         auto rs = create_rowset(_tablet, keys, &deletes);
-        ASSERT_TRUE(_tablet->rowset_commit(17, rs).ok());
-        ASSERT_EQ(17, _tablet->updates()->max_version());
+        ASSERT_TRUE(_tablet->rowset_commit(18, rs).ok());
+        ASSERT_EQ(18, _tablet->updates()->max_version());
 
         // Wait for a short duration and check error state
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -3691,6 +3707,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
 TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     config::retry_apply_interval_second = 1;
+    config::max_apply_retry_times = 1;
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(true);
     _tablet->updates()->stop_compaction(true);
@@ -3706,6 +3723,7 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     ASSERT_EQ(N, read_tablet(_tablet, 3));
 
     // 1. load index failed
+    config::max_apply_retry_times = 0;
     PFailPointTriggerMode trigger_mode;
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
     std::string fp_name = "tablet_apply_load_index_failed";
@@ -3771,6 +3789,7 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     // 10. write meta failed
     test_fail_point("tablet_apply_index_commit_failed", "tablet_meta_manager_apply_rowset_manager_internal_error");
 
+    config::max_apply_retry_times = 1;
     // 11. cache del vec failed
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
     fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";
