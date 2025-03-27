@@ -293,7 +293,7 @@ public class CheckpointController extends FrontendDaemon {
         }
 
         // put the leader node to the end
-        workers.add(GlobalStateMgr.getServingState().getNodeMgr().getSelfFe());
+        workers.add(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
 
         for (Frontend frontend : workers) {
             LOG.info("frontend: {} heap used percent: {}", frontend.getNodeName(), frontend.getHeapUsedPercent());

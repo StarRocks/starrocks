@@ -2286,6 +2286,10 @@ public class GlobalStateMgr {
         return checkpointController;
     }
 
+    public void setCheckpointController(CheckpointController checkpointController) {
+        this.checkpointController = checkpointController;
+    }
+
     public void setLeader(LeaderInfo info) {
         nodeMgr.setLeader(info);
     }

@@ -61,6 +61,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.load.Load;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -70,6 +71,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -536,11 +538,16 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "", 0);
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
+
+                nodeMgr.getMySelf();
+                minTimes = 0;
+                result = frontend;
             }
         };
 
