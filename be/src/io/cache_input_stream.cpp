@@ -146,11 +146,6 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         _stats.skip_read_cache_bytes += read_size;
     }
 
-    if (res.ok() && sb) {
-        // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
-        _deduplicate_shared_buffer(sb);
-    }
-
     return res;
 }
 
@@ -189,6 +184,11 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
                 RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
                 src = _buffer.data();
             }
+        }
+
+        if (sb) {
+            // Duplicate the block ranges to avoid saving the same data both in block_map and shared buffer.
+            _deduplicate_shared_buffer(sb);
         }
 
         if (_enable_cache_io_adaptor) {
