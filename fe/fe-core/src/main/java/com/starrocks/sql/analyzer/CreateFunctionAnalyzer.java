@@ -20,7 +20,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
@@ -187,10 +189,10 @@ public class CreateFunctionAnalyzer {
         Method method = mainClass.getMethod(CreateFunctionStmt.EVAL_METHOD_NAME, true);
         mainClass.checkMethodNonStaticAndPublic(method);
         mainClass.checkArgumentCount(method, argsDef.getArgTypes().length);
-        mainClass.checkReturnUdfType(method, returnType.getType());
+        mainClass.checkScalarReturnUdfType(method, returnType.getType());
         for (int i = 0; i < method.getParameters().length; i++) {
             Parameter p = method.getParameters()[i];
-            mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+            mainClass.checkScalarUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
         }
     }
 
@@ -364,6 +366,8 @@ public class CreateFunctionAnalyzer {
                     .put(PrimitiveType.CHAR, String.class)
                     .put(PrimitiveType.VARCHAR, String.class)
                     .build();
+    private static final Class<?> JAVA_ARRAY_CLASS_TYPE = List.class;
+    private static final Class<?> JAVA_MAP_CLASS_TYPE = Map.class;
 
     public static class UDFInternalClassLoader extends URLClassLoader {
         public UDFInternalClassLoader(String udfPath) throws IOException {
@@ -490,6 +494,57 @@ public class CreateFunctionAnalyzer {
 
         private void checkUdfType(Method method, Type expType, Class<?> ptype, String pname) {
             if (!(expType instanceof ScalarType)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        String.format("UDF class '%s' method '%s' does not support non-scalar type '%s'",
+                                clazz.getCanonicalName(), method.getName(), expType));
+            }
+            ScalarType scalarType = (ScalarType) expType;
+            Class<?> cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
+            if (cls == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        String.format("UDF class '%s' method '%s' does not support type '%s'",
+                                clazz.getCanonicalName(), method.getName(), scalarType));
+            }
+            if (!cls.equals(ptype)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                cls.getCanonicalName()));
+            }
+        }
+
+        private void checkScalarReturnUdfType(Method method, Type expType) {
+            checkScalarUdfType(method, expType, method.getReturnType(), CreateFunctionStmt.RETURN_FIELD_NAME);
+        }
+
+        private void checkScalarUdfType(Method method, Type expType, Class<?> ptype, String pname) {
+            if (!(expType instanceof ScalarType)) {
+                if (expType.isArrayType()) {
+                    if (!ptype.equals(JAVA_ARRAY_CLASS_TYPE)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                        clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                        JAVA_ARRAY_CLASS_TYPE.getCanonicalName()));
+                    }
+                    ArrayType arrayType = (ArrayType) expType;
+                    if (PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(arrayType.getItemType().getPrimitiveType())) {
+                        return;
+                    }
+                }
+
+                if (expType.isMapType()) {
+                    MapType mapType = (MapType) expType;
+                    if (!ptype.equals(JAVA_MAP_CLASS_TYPE)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                        clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                        JAVA_ARRAY_CLASS_TYPE.getCanonicalName()));
+                    }
+                    if (PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(mapType.getKeyType().getPrimitiveType())
+                            && PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(mapType.getValueType().getPrimitiveType())) {
+                        return;
+                    }
+                }
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         String.format("UDF class '%s' method '%s' does not support non-scalar type '%s'",
                                 clazz.getCanonicalName(), method.getName(), expType));

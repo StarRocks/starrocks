@@ -123,7 +123,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
 
 Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* state) {
     // publish empty runtime filters
-    // Building RuntimeBloomFilter need to know the initial hash table size and all join keys datas.
+    // Building RuntimeMembershipFilter need to know the initial hash table size and all join keys datas.
     // It usually involves re-reading all the data that has been spilled
     // which cannot be streamed process in the spill scenario when build phase is finished
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
@@ -133,7 +133,7 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists;
-        RuntimeBloomFilterList bloom_filters;
+        RuntimeMembershipFilterList bloom_filters;
         runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
                                             std::make_unique<RuntimeFilterCollector>(in_filter_lists));
         state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
@@ -144,7 +144,7 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
 
         if (merged.value()) {
             RuntimeInFilterList in_filters;
-            RuntimeBloomFilterList bloom_filters;
+            RuntimeMembershipFilterList bloom_filters;
             // publish empty runtime bloom-filters
             state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
             // move runtime filters into RuntimeFilterHub.

@@ -60,7 +60,7 @@ public:
     void TearDown() override {}
 
 protected:
-    using Int32RF = ComposedRuntimeFilter<TYPE_INT>;
+    using Int32RF = ComposedRuntimeBloomFilter<TYPE_INT>;
 
     StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
 
@@ -811,7 +811,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
 
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->get_bloom_filter()->init(10);
+    rf->get_membership_filter()->init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {
@@ -844,10 +844,10 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
                                     {"col3", TYPE_INT_DESC, 3},        {"col4", TYPE_INT_DESC, 4},
                                     {"col5", TYPE_INT_DESC, 5},        {""}};
 
-    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_INT>());
+    auto* rf = _pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->bloom_filter().init(10);
+    rf->membership_filter().init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {

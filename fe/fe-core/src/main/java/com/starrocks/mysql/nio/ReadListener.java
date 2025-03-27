@@ -33,6 +33,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.rpc.RpcException;
@@ -68,7 +69,9 @@ public class ReadListener implements ChannelListener<ConduitStreamSourceChannel>
                 ctx.setThreadLocalInfo();
                 try {
                     connectProcessor.processOnce();
-                    if (ctx.isKilled() || GracefulExitFlag.isGracefulExit()) {
+                    if (ctx.isKilled()
+                            || (GracefulExitFlag.isGracefulExit()
+                                && !SqlUtils.isPreQuerySQL(connectProcessor.getExecutor().getParsedStmt()))) {
                         ctx.stopAcceptQuery();
                         ctx.cleanup();
                     } else {

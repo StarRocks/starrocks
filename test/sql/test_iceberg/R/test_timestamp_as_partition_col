@@ -1,0 +1,25 @@
+-- name: test_timestamp_as_partition_col
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.t_timestamp_partition_null;
+-- result:
+1	None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.t_timestamp_partition_not_null;
+-- result:
+1	2024-01-02 00:00:00
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.t_timestamp_partition_not_null;
+-- result:
+1	2024-01-01 16:00:00
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

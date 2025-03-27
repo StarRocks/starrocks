@@ -133,6 +133,7 @@ This project is used by the following companies. Learn more about their use case
 - [Tencent(Games)](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
 - [Tencent(LLM)](https://www.youtube.com/watch?v=WVHXFks9EQk)
 - [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
+- [Airtable](https://medium.com/airtable-eng/live-shard-data-archive-export-and-ingestion-to-starrocks-for-validation-6af555e8b3fe)
 - [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
 - [Xiaohongshu/RedNote](https://www.youtube.com/watch?v=2cvIZY4EDak&list=PL0eWwaesODdiJ0aXLzSTyNfkjjIFYpOTf)
