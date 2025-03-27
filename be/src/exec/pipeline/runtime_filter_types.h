@@ -19,13 +19,11 @@
 #include <utility>
 
 #include "common/statusor.h"
-#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
-#include "gutil/casts.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
