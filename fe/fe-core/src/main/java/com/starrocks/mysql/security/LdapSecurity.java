@@ -97,7 +97,9 @@ public class LdapSecurity {
             ctx = new InitialDirContext(env);
             SearchControls sc = new SearchControls();
             sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
-            String searchFilter = "(" + Config.authentication_ldap_simple_user_search_attr + "=" + user + ")";
+            // Escapes special characters in user input to prevent LDAP injection
+            String safeUser = escapeLdapValue(user);
+            String searchFilter = "(" + Config.authentication_ldap_simple_user_search_attr + "=" + safeUser + ")";
             NamingEnumeration<SearchResult> results = ctx.search(baseDN, searchFilter, sc);
 
             String userDN = null;
@@ -148,5 +150,19 @@ public class LdapSecurity {
             }
         }
         return src;
+    }
+
+    public static String escapeLdapValue(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        value = value.replace("\\", "\\5c");
+        value = value.replace("*", "\\2a");
+        value = value.replace("(", "\\28");
+        value = value.replace(")", "\\29");
+        value = value.replace("|", "\\7c");
+        value = value.replace("\\u0000", "\\00");
+        return value;
     }
 }
