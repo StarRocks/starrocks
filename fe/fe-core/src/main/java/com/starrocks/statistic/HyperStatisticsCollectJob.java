@@ -86,7 +86,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
                 queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
                             partitionIdList, splitSize);
             } else {
-                PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties);
+                PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties, partitionTabletRowCounts);
                 queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
                         partitionIdList, splitSize, sampler);
             }

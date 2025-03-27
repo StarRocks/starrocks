@@ -243,6 +243,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     }
     // return tablet and its version which has already finished.
     int total_tablet_cnt = 0;
+    std::vector<TTabletInfo> finish_tablet_infos;
     for (const auto& partition_version : publish_version_req.partition_version_infos) {
         std::vector<TabletInfo> tablet_infos;
         StorageEngine::instance()->tablet_manager()->get_tablets_by_partition(partition_version.partition_id,
@@ -265,9 +266,20 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
 
                 if (enable_sync_publish && tablet_tasks.empty() && max_continuous_version < partition_version.version) {
                     error_tablet_ids.push_back(tablet_info.tablet_id);
+                } else if (partition_version.version == 2) {
+                    // Used to collect statistics when the partition is first imported
+                    finish_tablet_infos.emplace_back();
+                    auto& finish_tablet_info = finish_tablet_infos.back();
+                    finish_tablet_info.__set_row_count(tablet->num_rows());
+                    finish_tablet_info.__set_partition_id(tablet->partition_id());
+                    finish_tablet_info.__set_tablet_id(tablet->tablet_id());
                 }
             }
         }
+    }
+
+    if (!finish_tablet_infos.empty()) {
+        finish_task.__set_finish_tablet_infos(finish_tablet_infos);
     }
 
     // TODO: add more information to status, rather than just first error tablet
