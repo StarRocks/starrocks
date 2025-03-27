@@ -376,7 +376,7 @@ public class SelectAnalyzer {
         for (Expr expression : outputExpressions) {
             List<AnalyticExpr> window = Lists.newArrayList();
             expression.collect(AnalyticExpr.class, window);
-            if (outputWindowFunctions.stream()
+            if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
                 throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
             }
@@ -388,7 +388,7 @@ public class SelectAnalyzer {
         for (Expr expression : orderByExpressions) {
             List<AnalyticExpr> window = Lists.newArrayList();
             expression.collect(AnalyticExpr.class, window);
-            if (orderByWindowFunctions.stream()
+            if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
                 throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
             }
