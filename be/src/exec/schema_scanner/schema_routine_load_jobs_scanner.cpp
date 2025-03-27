@@ -40,14 +40,14 @@ SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"STATISTICS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TIMESTAMP_PROGRESS", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
         {"REASONS_OF_STATE_CHANGED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
          true},
         {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"LATEST_SOURCE_POSITION", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
-        {"OFFSET_LAG", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true}};
+        {"OFFSET_LAG", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
+        {"TIMESTAMP_PROGRESS", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true}};
 
 SchemaRoutineLoadJobsScanner::SchemaRoutineLoadJobsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -194,21 +194,6 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 16: {
-                // timestamp_progress
-                Slice timestamp_progress = Slice(info.timestamp_progress);
-                JsonValue json_value;
-                JsonValue* json_value_ptr = &json_value;
-                Status s = JsonValue::parse(timestamp_progress, &json_value);
-                if (!s.ok()) {
-                    LOG(WARNING) << "parse timestamp_progress failed. timestamp_progress:"
-                                 << timestamp_progress.to_string() << " error:" << s;
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
-                } else {
-                    fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
-                }
-                break;
-            }
-            case 17: {
                 // reasons_of_state_changed
                 if (info.__isset.reasons_of_state_changed) {
                     Slice reasons_of_state_changed = Slice(info.reasons_of_state_changed);
@@ -218,7 +203,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 18: {
+            case 17: {
                 // error_log_urls
                 if (info.__isset.error_log_urls) {
                     Slice error_log_urls = Slice(info.error_log_urls);
@@ -228,7 +213,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 19: {
+            case 18: {
                 // tracking sql
                 if (info.__isset.tracking_sql) {
                     Slice sql = Slice(info.tracking_sql);
@@ -238,7 +223,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 20: {
+            case 19: {
                 // other_msg
                 if (info.__isset.other_msg) {
                     Slice other_msg = Slice(info.other_msg);
@@ -248,7 +233,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 21: {
+            case 20: {
                 // latest_source_position
                 Slice latest_source_position = Slice(info.latest_source_position);
                 JsonValue json_value;
@@ -263,7 +248,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 22: {
+            case 21: {
                 // offset_lag
                 Slice offset_lag = Slice(info.offset_lag);
                 JsonValue json_value;
@@ -271,6 +256,21 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 Status s = JsonValue::parse(offset_lag, &json_value);
                 if (!s.ok()) {
                     LOG(WARNING) << "parse offset_lag failed. offset_lag:" << offset_lag.to_string() << " error:" << s;
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+                }
+                break;
+            }
+            case 22: {
+                // timestamp_progress
+                Slice timestamp_progress = Slice(info.timestamp_progress);
+                JsonValue json_value;
+                JsonValue* json_value_ptr = &json_value;
+                Status s = JsonValue::parse(timestamp_progress, &json_value);
+                if (!s.ok()) {
+                    LOG(WARNING) << "parse timestamp_progress failed. timestamp_progress:"
+                        << timestamp_progress.to_string() << " error:" << s;
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 } else {
                     fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);

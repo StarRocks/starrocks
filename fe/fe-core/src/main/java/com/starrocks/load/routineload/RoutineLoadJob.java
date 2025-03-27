@@ -2083,7 +2083,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setStatistic(getStatistic());
             String progressJsonStr = getProgress().toJsonString();
             info.setProgress(progressJsonStr);
-            info.setTimestamp_progress(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
                     info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
@@ -2103,6 +2102,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setOther_msg(otherMsg);
             info.setLatest_source_position(getSourceProgressString());
             info.setOffset_lag(getSourceLagString(progressJsonStr));
+            info.setTimestamp_progress(getTimestampProgress().toJsonString());
             return info;
         } finally {
             readUnlock();

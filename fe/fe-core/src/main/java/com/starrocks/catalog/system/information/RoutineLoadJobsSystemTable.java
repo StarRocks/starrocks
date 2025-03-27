@@ -47,13 +47,13 @@ public class RoutineLoadJobsSystemTable {
                         .column("CUSTOM_PROPERTIES", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("STATISTICS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TIMESTAMP_PROGRESS", ScalarType.createJsonType())
                         .column("REASONS_OF_STATE_CHANGED", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("ERROR_LOG_URLS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OTHER_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("LATEST_SOURCE_POSITION", ScalarType.createJsonType())
                         .column("OFFSET_LAG", ScalarType.createJsonType())
+                        .column("TIMESTAMP_PROGRESS", ScalarType.createJsonType())
                         .build(), TSchemaTableType.SCH_ROUTINE_LOAD_JOBS);
     }
 }
