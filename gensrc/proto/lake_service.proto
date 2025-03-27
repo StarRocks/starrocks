@@ -45,6 +45,8 @@ message PublishVersionResponse {
     // Mapping from tablet id to compaction score.
     map<int64, double> compaction_scores = 2;
     optional StatusPB status = 3;
+    // Mapping from tablet id to row_nums when the partition is first imported
+    map<int64, uint64> tablet_row_nums = 4;
 }
 
 message AbortTxnRequest {
