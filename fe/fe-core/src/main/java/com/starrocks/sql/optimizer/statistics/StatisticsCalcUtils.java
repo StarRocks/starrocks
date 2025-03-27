@@ -220,7 +220,7 @@ public class StatisticsCalcUtils {
         // For example, a large amount of data LOAD may cause the number of rows to change greatly.
         // This leads to very inaccurate row counts.
         LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
-        long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
+        long deltaRows = deltaRows(table, basicStatsMeta.getTotalRows());
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), selectedPartitions);
         Map<Long, Long> result = Maps.newHashMap();
@@ -278,7 +278,7 @@ public class StatisticsCalcUtils {
             // attempt use updateRows from basicStatsMeta to adjust estimated row counts
             if (StatsConstants.AnalyzeType.SAMPLE == analyzeType
                     && basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp)) {
-                long statsRowCount = Math.max(basicStatsMeta.getUpdateRows() / table.getPartitions().size(), 1)
+                long statsRowCount = Math.max(basicStatsMeta.getTotalRows() / table.getPartitions().size(), 1)
                         * selectedPartitions.size();
                 if (statsRowCount > rowCount) {
                     rowCount = statsRowCount;
