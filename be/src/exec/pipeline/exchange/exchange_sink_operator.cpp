@@ -137,7 +137,7 @@ private:
 };
 
 bool ExchangeSinkOperator::Channel::is_local() {
-    if (BackendOptions::get_localhost() != _brpc_dest_addr.hostname) {
+    if (BackendOptions::get_local_ip() != _brpc_dest_addr.hostname) {
         return false;
     }
     if (config::brpc_port != _brpc_dest_addr.port) {
