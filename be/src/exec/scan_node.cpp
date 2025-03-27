@@ -129,7 +129,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
         int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan) {
-    if (scan_ranges_per_driver_seq.empty() && !in_colocate_exec_group) {
+    if ((scan_ranges_per_driver_seq.empty() && !in_colocate_exec_group) || always_shared_scan()) {
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
                                                             enable_tablet_internal_parallel,
