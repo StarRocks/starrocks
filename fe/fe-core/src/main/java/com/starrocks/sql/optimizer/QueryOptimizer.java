@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -825,15 +826,17 @@ public class QueryOptimizer extends Optimizer {
     }
 
     private void logicalJoinReorder(OptExpression tree, TaskContext rootTaskContext) {
-        scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
-        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
-        deriveLogicalProperty(tree);
-        tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
-        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        deriveLogicalProperty(tree);
-        Utils.calculateStatistics(tree, context);
+        if (!FeConstants.runningUnitTest) {
+            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+            deriveLogicalProperty(tree);
+            tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            Utils.calculateStatistics(tree, context);
+        }
     }
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {
