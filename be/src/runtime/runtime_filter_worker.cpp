@@ -427,7 +427,10 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
                 rf->get_membership_filter()->clear_bf();
             }
         }
-        status->skew_broadcast_rf_material->key_column.reset();
+        if (status->skew_broadcast_rf_material != nullptr) {
+            DCHECK(status->skew_broadcast_rf_material->key_column.get() != nullptr);
+            status->skew_broadcast_rf_material->key_column.reset();
+        }
     }
     _send_total_runtime_filter(rf_version, filter_id);
 }
