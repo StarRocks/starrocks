@@ -169,6 +169,10 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
                             projectionOnJoin, leftSkewColumn, skewValues);
 
+            // we have to let them know each other for runtimr filter
+            newBroadcastJoinOpt.setSkewJoinFriend(newShuffleJoinOpt);
+            newShuffleJoinOpt.setSkewJoinFriend(newBroadcastJoinOpt);
+
             LocalExchangerType localExchangerType =
                     opt.isExistRequiredDistribution() ? LocalExchangerType.PASS_THROUGH : LocalExchangerType.DIRECT;
             PhysicalConcatenateOperator concatenateOperator =

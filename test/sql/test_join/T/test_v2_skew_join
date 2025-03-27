@@ -40,8 +40,10 @@ PROPERTIES (
     "replication_num"="1"
 );
 
-set enable_optimize_skew_join_by_query_rewrite=true;
-set enable_optimize_skew_join_by_broadcast_skew_values=false;
+set enable_optimize_skew_join_by_query_rewrite=false;
+set enable_optimize_skew_join_by_broadcast_skew_values=true;
+-- large enough so global rf must deploy
+set runtime_filter_scan_wait_time=100000;
 
 -- tinyint
 truncate table t1;
@@ -144,6 +146,10 @@ truncate table t2;
 insert into t1(c_key, c_bigint) values (1, 1), (2, 1), (3, 1), (4, 1234567), (5, 1234567), (6, 3);
 insert into t2(c_key, c_int) values (1, 1), (2, 1234567), (3, 3);
 select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- on predicate with complex expr
+select t1.c_key, t2.c_key from t2 join [skew|t2.c_int(1,2,99999)] t1 on abs(t1.c_bigint)=abs(t2.c_int) order by t1.c_key, t2.c_key;
+select t1.c_key, t2.c_key from t2 join [skew|t2.c_int(1,2,99999)] t1 on abs(t2.c_int) = abs(t1.c_bigint) order by t1.c_key, t2.c_key;
+select t1.c_key, t2.c_key from t2 join [skew|t2.c_int(1,2,99999)] t1 on t1.c_key = t2.c_key and abs(t2.c_int) = abs(t1.c_bigint) order by t1.c_key, t2.c_key;
 
 -- type not match
 truncate table t1;
@@ -158,3 +164,32 @@ truncate table t2;
 insert into t1(c_key, c_bigint) values (1, 1), (2, 1), (3, 1), (4, 1234567), (5, 1234567), (6, 3);
 insert into t2(c_key, c_int) values (1, 1), (2, 1234567), (3, 3);
 select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+
+-- left join
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+
+-- multi column
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int and t1.c_key = t2.c_key order by t1.c_key, t2.c_key;
+
+-- topn can execute correctly
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key limit 2;
+
+-- skew value doesn't exsit in table
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(555,666,777)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+
+-- left table and right table all skew
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,1234567,3)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+
+insert into t1(c_key, c_bigint) values (7,4);
+insert into t2(c_key, c_int) values (4,9);
+-- left table all skew
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,1234567,3,4)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+
+-- right table all skew
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,1234567,3,4)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+
+-- one phase agg,so broadcast and shuffle join is in different fragment to satisfy one agg's requirement of input
+select sum(t1.c_key), t1.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t1.c_bigint order by c_bigint limit 1;
+
+-- two phase agg,so broadcast and shuffle join is in same fragment because local agg has no requiremnt for input
+select sum(t1.c_key), t2.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t2.c_bigint;

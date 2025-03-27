@@ -1622,4 +1622,6 @@ CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
+
+CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 } // namespace starrocks::config

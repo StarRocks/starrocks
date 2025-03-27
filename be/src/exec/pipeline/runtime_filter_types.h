@@ -19,13 +19,11 @@
 #include <utility>
 
 #include "common/statusor.h"
-#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
-#include "gutil/casts.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
@@ -53,17 +51,20 @@ using OpTRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeMember
 // Parameters used to build runtime bloom-filters.
 struct RuntimeMembershipFilterBuildParam {
     RuntimeMembershipFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, Columns columns,
-                                      MutableRuntimeFilterPtr runtime_filter)
+                                      MutableRuntimeFilterPtr runtime_filter, TypeDescriptor type_descriptor)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
               is_empty(is_empty),
               columns(std::move(columns)),
-              runtime_filter(std::move(runtime_filter)) {}
+              runtime_filter(std::move(runtime_filter)),
+              _type_descriptor(std::move(type_descriptor)) {}
     bool multi_partitioned;
     bool eq_null;
     bool is_empty;
     Columns columns;
     MutableRuntimeFilterPtr runtime_filter;
+    // used for skew join
+    TypeDescriptor _type_descriptor;
 };
 
 // RuntimeFilterCollector contains runtime in-filters and bloom-filters, it is stored in RuntimeFilerHub
