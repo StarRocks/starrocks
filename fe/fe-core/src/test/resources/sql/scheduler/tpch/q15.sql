@@ -157,89 +157,83 @@ PLAN FRAGMENT 0
 
   RESULT SINK
 
-  24:MERGING-EXCHANGE
+    22:MERGING-EXCHANGE
 
-PLAN FRAGMENT 1
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+    PLAN FRAGMENT 1
+    OUTPUT EXPRS:
+    PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 24
+    STREAM DATA SINK
+    EXCHANGE ID: 22
     UNPARTITIONED
 
-  23:SORT
-  |  order by: <slot 1> 1: s_suppkey ASC
-  |  offset: 0
-  |  
-  22:Project
-  |  <slot 1> : 1: s_suppkey
-  |  <slot 2> : 2: s_name
-  |  <slot 3> : 3: s_address
-  |  <slot 5> : 5: s_phone
-  |  <slot 26> : 26: sum
-  |  
-  21:HASH JOIN
-  |  join op: INNER JOIN (BUCKET_SHUFFLE)
-  |  colocate: false, reason: 
-  |  equal join conjunct: 1: s_suppkey = 10: L_SUPPKEY
-  |  
-  |----20:EXCHANGE
-  |    
-  0:OlapScanNode
-     TABLE: supplier
-     PREAGGREGATION: ON
-     partitions=1/1
-     rollup: supplier
-     tabletRatio=12/12
-     tabletList=1487,1489,1491,1493,1495,1497,1499,1501,1503,1505 ...
-     cardinality=1
-     avgRowSize=84.0
+    21:SORT
+    |  order by: <slot 1> 1: s_suppkey ASC
+    |  offset: 0
+    |
+    20:Project
+    |  <slot 1> : 1: s_suppkey
+    |  <slot 2> : 2: s_name
+    |  <slot 3> : 3: s_address
+    |  <slot 5> : 5: s_phone
+    |  <slot 26> : 26: sum
+    |
+    19:HASH JOIN
+    |  join op: INNER JOIN (BUCKET_SHUFFLE)
+    |  colocate: false, reason:
+    |  equal join conjunct: 1: s_suppkey = 10: L_SUPPKEY
+    |
+    |----18:EXCHANGE
+    |
+    0:OlapScanNode
+    TABLE: supplier
+    PREAGGREGATION: ON
+    partitions=1/1
+    rollup: supplier
+    tabletRatio=12/12
+    cardinality=1
+    avgRowSize=84.0
 
-PLAN FRAGMENT 2
- OUTPUT EXPRS:
-  PARTITION: HASH_PARTITIONED: 10: L_SUPPKEY
+    PLAN FRAGMENT 2
+    OUTPUT EXPRS:
+    PARTITION: HASH_PARTITIONED: 10: L_SUPPKEY
 
-  STREAM DATA SINK
-    EXCHANGE ID: 20
+    STREAM DATA SINK
+    EXCHANGE ID: 18
     BUCKET_SHUFFLE_HASH_PARTITIONED: 10: L_SUPPKEY
 
-  19:Project
-  |  <slot 10> : 10: L_SUPPKEY
-  |  <slot 26> : 26: sum
-  |  
-  18:HASH JOIN
-  |  join op: INNER JOIN (BROADCAST)
-  |  colocate: false, reason: 
-  |  equal join conjunct: 26: sum = 46: max
-  |  
-  |----17:EXCHANGE
-  |    
-  5:AGGREGATE (merge finalize)
-  |  output: sum(26: sum)
-  |  group by: 10: L_SUPPKEY
-  |  having: 26: sum IS NOT NULL
-  |  
-  4:EXCHANGE
+    17:Project
+    |  <slot 10> : 10: L_SUPPKEY
+    |  <slot 26> : 26: sum
+    |
+    16:HASH JOIN
+    |  join op: INNER JOIN (BROADCAST)
+    |  colocate: false, reason:
+    |  equal join conjunct: 26: sum = 46: max
+    |
+    |----15:EXCHANGE
+    |
+    5:AGGREGATE (merge finalize)
+    |  output: sum(26: sum)
+    |  group by: 10: L_SUPPKEY
+    |  having: 26: sum IS NOT NULL
+    |
+    4:EXCHANGE
 
-PLAN FRAGMENT 3
- OUTPUT EXPRS:
-  PARTITION: UNPARTITIONED
+    PLAN FRAGMENT 3
+    OUTPUT EXPRS:
+    PARTITION: UNPARTITIONED
 
-  STREAM DATA SINK
-    EXCHANGE ID: 17
+    STREAM DATA SINK
+    EXCHANGE ID: 15
     UNPARTITIONED
 
-  16:SELECT
-  |  predicates: 46: max IS NOT NULL
-  |  
-  15:ASSERT NUMBER OF ROWS
-  |  assert number of rows: LE 1
-  |  
-  14:AGGREGATE (merge finalize)
-  |  output: max(46: max)
-  |  group by: 
-  |  
-  13:EXCHANGE
+    14:AGGREGATE (merge finalize)
+    |  output: max(46: max)
+    |  group by:
+    |  having: 46: max IS NOT NULL
+    |
+    13:EXCHANGE
 
 PLAN FRAGMENT 4
  OUTPUT EXPRS:

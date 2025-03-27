@@ -43,6 +43,7 @@ public class InnerToSemiRule extends TransformationRule {
             return Lists.newArrayList(input);
         }
 
+
         ColumnRefSet columnRefSet = input.getChildOutputColumns(0);
         ColumnRefSet back = context.getTaskContext().getRequiredColumns();
         context.getTaskContext().setRequiredColumns(columnRefSet);
