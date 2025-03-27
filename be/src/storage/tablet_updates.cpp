@@ -1225,7 +1225,8 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
         _apply_version_changed.notify_all();
     }
 
-    WARN_IF_ERROR(index.on_commited(), "primary index on commited failed, tablet: " + _tablet.tablet_id());
+    WARN_IF_ERROR(index.on_commited(),
+                  fmt::format("primary index on commited failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
 
     _update_total_stats(version_info.rowsets, nullptr, nullptr);
@@ -1800,7 +1801,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         }
     }
     new_deletes.clear();
-    WARN_IF_ERROR(index.on_commited(), "primary index on_commit failed, tablet: " + _tablet.tablet_id());
+    WARN_IF_ERROR(index.on_commited(), fmt::format("primary index on_commit failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
@@ -2529,7 +2530,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         _apply_version_changed.notify_all();
     }
 
-    WARN_IF_ERROR(index.on_commited(), "primary index on commited failed, tablet: " + _tablet.tablet_id());
+    WARN_IF_ERROR(index.on_commited(),
+                  fmt::format("primary index on commited failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     {
