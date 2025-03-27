@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <exec/pipeline/runtime_filter_types.h>
+#include <column/column.h>
 
 #include <atomic>
 #include <cstdint>
@@ -32,6 +32,8 @@
 #include "util/ref_count_closure.h"
 #include "util/uid_util.h"
 namespace starrocks {
+struct TypeDescriptor;
+enum LogicalType;
 
 class ExecEnv;
 class RuntimeState;
