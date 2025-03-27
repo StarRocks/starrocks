@@ -88,7 +88,7 @@ public class StatisticsCollectionTrigger {
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     // partition_id -> tablet_id -> row_count
-    protected com.google.common.collect.Table<Long, Long, Long> ptRowNums = HashBasedTable.create();
+    protected com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
 
     public static StatisticsCollectionTrigger triggerOnInsertOverwrite(InsertOverwriteJobStats stats,
                                                 Database db,
@@ -202,8 +202,8 @@ public class StatisticsCollectionTrigger {
                                 new ArrayList<>(partitionIds), null, null,
                                 analyzeType, StatsConstants.ScheduleType.ONCE,
                                 analyzeStatus.getProperties(), List.of(), List.of());
-                        if (!ptRowNums.isEmpty()) {
-                            job.setPtRowNums(ptRowNums);
+                        if (!partitionTabletRowCounts.isEmpty()) {
+                            job.setPartitionTabletRowCounts(partitionTabletRowCounts);
                         }
 
                         statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
@@ -264,7 +264,7 @@ public class StatisticsCollectionTrigger {
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
                     partitionIds.add(partitionId);
-                    tabletRows.forEach((tabletId, rowCount) -> ptRowNums.put(partitionId, tabletId, rowCount));
+                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
                 }
             }
         } finally {
@@ -279,7 +279,7 @@ public class StatisticsCollectionTrigger {
         analyzeType = decideAnalyzeTypeForLoad(txnState, (OlapTable) table);
 
         if (analyzeType != SAMPLE) {
-            ptRowNums.clear();
+            partitionTabletRowCounts.clear();
         }
     }
 

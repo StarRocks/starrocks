@@ -78,7 +78,7 @@ public abstract class StatisticsCollectJob {
     // After the partition is first imported, we cannot immediately get the tablet row count.
     // we need to wait the tabletStatMgr to sync in the background. so we collect row num for each tablet.
     // partition_id -> tablet_id -> row_count
-    protected com.google.common.collect.Table<Long, Long, Long> ptRowNums = HashBasedTable.create();
+    protected com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                    StatsConstants.AnalyzeType analyzeType, StatsConstants.ScheduleType scheduleType,
@@ -188,8 +188,8 @@ public abstract class StatisticsCollectJob {
         sessionVariable.setConnectorIoTasksPerScanOperator(4);
     }
 
-    public void setPtRowNums(com.google.common.collect.Table<Long, Long, Long> ptRowNums) {
-        this.ptRowNums = ptRowNums;
+    public void setPartitionTabletRowCounts(com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
+        this.partitionTabletRowCounts = partitionTabletRowCounts;
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {

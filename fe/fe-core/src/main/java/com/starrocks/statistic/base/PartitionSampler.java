@@ -57,7 +57,7 @@ public class PartitionSampler {
     }
 
     public void classifyPartitions(Table table, List<Long> partitions,
-                                   com.google.common.collect.Table<Long, Long, Long> ptRowNums) {
+                                   com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
         for (Long partitionId : partitions) {
             Partition p = table.getPartition(partitionId);
             if (p == null || !p.hasData()) {
@@ -71,8 +71,8 @@ public class PartitionSampler {
 
             for (Tablet tablet : p.getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
                 Long rowCount = tablet.getFuzzyRowCount();
-                if (rowCount <= 0 && ptRowNums != null && !ptRowNums.isEmpty()) {
-                    rowCount = ptRowNums.get(partitionId, tablet.getId());
+                if (rowCount <= 0 && partitionTabletRowCounts != null && !partitionTabletRowCounts.isEmpty()) {
+                    rowCount = partitionTabletRowCounts.get(partitionId, tablet.getId());
                 }
 
                 if (rowCount == null || rowCount <= 0) {
@@ -140,7 +140,7 @@ public class PartitionSampler {
     }
 
     public static PartitionSampler create(Table table, List<Long> partitions, Map<String, String> properties,
-                                          com.google.common.collect.Table<Long, Long, Long> ptRowNums) {
+                                          com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
         double highSampleRatio = Double.parseDouble(properties.getOrDefault(StatsConstants.HIGH_WEIGHT_SAMPLE_RATIO, "0.5"));
         double mediumHighRatio =
                 Double.parseDouble(properties.getOrDefault(StatsConstants.MEDIUM_HIGH_WEIGHT_SAMPLE_RATIO, "0.5"));
@@ -150,7 +150,7 @@ public class PartitionSampler {
         int maxSize = Integer.parseInt(properties.getOrDefault(StatsConstants.MAX_SAMPLE_TABLET_NUM, "5000"));
 
         PartitionSampler sampler = new PartitionSampler(highSampleRatio, mediumHighRatio, mediumLowRatio, lowRatio, maxSize);
-        sampler.classifyPartitions(table, partitions, ptRowNums);
+        sampler.classifyPartitions(table, partitions, partitionTabletRowCounts);
         return sampler;
     }
 

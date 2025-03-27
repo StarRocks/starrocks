@@ -272,7 +272,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     auto& finish_tablet_info = finish_tablet_infos.back();
                     finish_tablet_info.__set_row_count(tablet->num_rows());
                     finish_tablet_info.__set_partition_id(tablet->partition_id());
-                    finish_tablet_infos.push_back(finish_tablet_info);
+                    finish_tablet_info.__set_tablet_id(tablet->tablet_id());
                 }
             }
         }
