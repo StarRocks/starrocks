@@ -270,7 +270,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 Status s = JsonValue::parse(timestamp_progress, &json_value);
                 if (!s.ok()) {
                     LOG(WARNING) << "parse timestamp_progress failed. timestamp_progress:"
-                        << timestamp_progress.to_string() << " error:" << s;
+                                 << timestamp_progress.to_string() << " error:" << s;
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 } else {
                     fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
