@@ -16,6 +16,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
