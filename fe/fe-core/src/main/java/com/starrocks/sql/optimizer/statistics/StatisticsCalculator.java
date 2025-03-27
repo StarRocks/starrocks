@@ -419,11 +419,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         ScalarOperator predicate = node.getPredicate();
         Map<Long, Statistics> partitionStatistics =
-                StatisticsCalcUtils.getPartitionStatistics(node, table, columnMap);
+                StatisticsCalcUtils.getPartitionStatistics(node, table, columnMap, statistics);
         if (MapUtils.isEmpty(partitionStatistics)) {
             return;
         }
         long tableRows = 0;
+
+        // This block is reentrant. This is the first cardinality estimation of the scan node.
+        // we need to ensure that the state of each predicate is reset before each entry.
+        Utils.extractConjuncts(predicate).forEach(op -> op.setNotEvalEstimate(false));
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         for (var entry : partitionStatistics.entrySet()) {
             Statistics partitionStat = estimateStatistics(ImmutableList.of(predicate), entry.getValue());
@@ -433,8 +437,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             tableRows += partitionSelectedRows;
         }
+        // For scan node, there is no need to evaluate the predicate later.
+        Utils.extractConjuncts(predicate).forEach(op -> op.setNotEvalEstimate(true));
         // adjust output rows
-        predicate.setNotEvalEstimate(true);
         statistics.setOutputRowCount(tableRows);
 
         // adjust output column statistics if possible
@@ -458,6 +463,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 ColumnStatistic newStats = buildFrom(tableStats).setDistinctValuesCount(avgDistinctCount).build();
                 statistics.addColumnStatistic(column, newStats);
             }
+        }
+
+        if (partitionStatistics.size() == 1) {
+            Statistics partitionStats =  partitionStatistics.values().iterator().next();
+            columnMap.keySet().forEach(column ->
+                    statistics.addColumnStatistic(column, partitionStats.getColumnStatistic(column)));
         }
     }
 

@@ -14,7 +14,6 @@
 
 package com.starrocks.authorization;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.List;
@@ -42,11 +41,12 @@ public interface AuthorizationProvider {
     /**
      * generate PEntryObject by tokenlist
      */
-    PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException;
+    PEntryObject generateObject(ObjectType objectType, List<String> objectTokens)
+            throws PrivilegeException;
 
-    PEntryObject generateUserObject(ObjectType objectType, UserIdentity user, GlobalStateMgr mgr) throws PrivilegeException;
+    PEntryObject generateUserObject(ObjectType objectType, UserIdentity user) throws PrivilegeException;
 
-    PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId, GlobalStateMgr globalStateMgr)
+    PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId)
             throws PrivilegeException;
 
     /**

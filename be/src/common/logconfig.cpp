@@ -161,6 +161,7 @@ static void failure_writer(const char* data, size_t size) {
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
 
+// MUST not add LOG(XXX) in this function, may cause deadlock.
 static void failure_function() {
     dump_trace_info();
     failure_handler_after_output_log();

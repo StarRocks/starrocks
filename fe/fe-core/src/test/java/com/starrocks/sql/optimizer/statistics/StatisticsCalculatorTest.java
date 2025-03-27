@@ -289,7 +289,7 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalIcebergTableScan() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table icebergTable = globalStateMgr.getMetadataMgr().getTable("iceberg0", "partitioned_db", "t1");
+        Table icebergTable = globalStateMgr.getMetadataMgr().getTable(connectContext, "iceberg0", "partitioned_db", "t1");
         List<Column> columns = icebergTable.getColumns();
 
         Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();

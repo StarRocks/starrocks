@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -146,7 +147,8 @@ public class StatisticsCalcUtils {
      * Only return the statistics if all columns and all partitions have the required statistics, otherwise return null
      */
     public static Map<Long, Statistics> getPartitionStatistics(Operator node, OlapTable table,
-                                                               Map<ColumnRefOperator, Column> columns) {
+                                                               Map<ColumnRefOperator, Column> columns,
+                                                               Statistics.Builder statistics) {
 
         // 1. only FULL statistics has partition-level info
         BasicStatsMeta basicStatsMeta =
@@ -182,6 +184,16 @@ public class StatisticsCalcUtils {
                 String columnName = columnNames.get(i);
                 ColumnStatistic columnStatistic = entry.getValue().get(i);
                 ColumnRefOperator ref = columnNameMap.get(columnName);
+                if (ConnectContext.get().getSessionVariable().isCboUseHistogramEvaluateListPartition()) {
+                    // fill histogram if exists
+                    ColumnStatistic originColStats = statistics.getColumnStatistics(ref);
+                    if (originColStats != null) {
+                        Histogram histogram = originColStats.getHistogram();
+                        if (histogram != null) {
+                            columnStatistic = ColumnStatistic.buildFrom(columnStatistic).setHistogram(histogram).build();
+                        }
+                    }   
+                }
                 builder.addColumnStatistic(ref, columnStatistic);
             }
             long partitionRow = partitionRows.get(entry.getKey());
@@ -208,7 +220,7 @@ public class StatisticsCalcUtils {
         // For example, a large amount of data LOAD may cause the number of rows to change greatly.
         // This leads to very inaccurate row counts.
         LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
-        long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
+        long deltaRows = deltaRows(table, basicStatsMeta.getTotalRows());
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), selectedPartitions);
         Map<Long, Long> result = Maps.newHashMap();
@@ -266,7 +278,7 @@ public class StatisticsCalcUtils {
             // attempt use updateRows from basicStatsMeta to adjust estimated row counts
             if (StatsConstants.AnalyzeType.SAMPLE == analyzeType
                     && basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp)) {
-                long statsRowCount = Math.max(basicStatsMeta.getUpdateRows() / table.getPartitions().size(), 1)
+                long statsRowCount = Math.max(basicStatsMeta.getTotalRows() / table.getPartitions().size(), 1)
                         * selectedPartitions.size();
                 if (statsRowCount > rowCount) {
                     rowCount = statsRowCount;

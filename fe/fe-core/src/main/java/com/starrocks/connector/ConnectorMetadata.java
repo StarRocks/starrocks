@@ -18,14 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -79,7 +77,7 @@ public interface ConnectorMetadata {
      *
      * @return a list of string containing all database names of connector
      */
-    default List<String> listDbNames() {
+    default List<String> listDbNames(ConnectContext context) {
         return Lists.newArrayList();
     }
 
@@ -89,7 +87,7 @@ public interface ConnectorMetadata {
      * @param dbName - the string of which all table names are listed
      * @return a list of string containing all table names of `dbName`
      */
-    default List<String> listTableNames(String dbName) {
+    default List<String> listTableNames(ConnectContext context, String dbName) {
         return Lists.newArrayList();
     }
 
@@ -126,7 +124,7 @@ public interface ConnectorMetadata {
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
-    default Table getTable(String dbName, String tblName) {
+    default Table getTable(ConnectContext context, String dbName, String tblName) {
         return null;
     }
 
@@ -136,19 +134,8 @@ public interface ConnectorMetadata {
         return TableVersionRange.empty();
     }
 
-    default boolean tableExists(String dbName, String tblName) {
-        return listTableNames(dbName).contains(tblName);
-    }
-
-    /**
-     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
-     *
-     * @param dbName  - the string represents the database name
-     * @param tblName - the string represents the table name
-     * @return a Table instance
-     */
-    default Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
-        return null;
+    default boolean tableExists(ConnectContext context, String dbName, String tblName) {
+        return listTableNames(context, dbName).contains(tblName);
     }
 
     /**
@@ -237,15 +224,15 @@ public interface ConnectorMetadata {
         createDb(dbName, new HashMap<>());
     }
 
-    default boolean dbExists(String dbName) {
-        return listDbNames().contains(dbName.toLowerCase(Locale.ROOT));
+    default boolean dbExists(ConnectContext context, String dbName) {
+        return listDbNames(context).contains(dbName.toLowerCase(Locale.ROOT));
     }
 
     default void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
         throw new StarRocksConnectorException("This connector doesn't support creating databases");
     }
 
-    default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+    default void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
         throw new StarRocksConnectorException("This connector doesn't support dropping databases");
     }
 
@@ -253,7 +240,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default Database getDb(String name) {
+    default Database getDb(ConnectContext context, String name) {
         return null;
     }
 

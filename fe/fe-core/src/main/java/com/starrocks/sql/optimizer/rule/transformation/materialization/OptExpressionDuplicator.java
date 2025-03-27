@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
@@ -28,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -117,10 +117,11 @@ public class OptExpressionDuplicator {
 
     /**
      * Duplicate the OptExpression tree.
-     * @param source: source OptExpression
-     * @param prevColumnRefFactory: column ref factory where source OptExpression is from
+     *
+     * @param source:                    source OptExpression
+     * @param prevColumnRefFactory:      column ref factory where source OptExpression is from
      * @param isResetSelectedPartitions: whether to reset selected partitions
-     * @param isRefreshExternalTable: whether to refresh external table
+     * @param isRefreshExternalTable:    whether to refresh external table
      * @return
      */
     public OptExpression duplicate(OptExpression source,
@@ -252,7 +253,9 @@ public class OptExpressionDuplicator {
                     String catalogName = cachedIcebergTable.getCatalogName();
                     String dbName = cachedIcebergTable.getCatalogDBName();
                     TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                    Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+                    Table currentTable =
+                            GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
+                                    .orElse(null);
                     if (currentTable == null) {
                         return null;
                     }

@@ -572,7 +572,7 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }

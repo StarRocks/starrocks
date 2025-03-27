@@ -278,8 +278,7 @@ public class MvRewriteJoinTest extends MVTestBase {
             String query = "select a.k1, a.v2 FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
                     "on a.k1=b.k1 order by 1 limit 3;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
-            PlanTestBase.assertNotContains("test_mv1");
+            PlanTestBase.assertNotContains(plan, "test_mv1");
         }
         connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
         {
@@ -287,7 +286,6 @@ public class MvRewriteJoinTest extends MVTestBase {
             String query = "select a.k1, a.v2 FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
                     "on a.k1=b.k1 order by 1 limit 3;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, "test_mv1");
         }
         {
@@ -295,7 +293,6 @@ public class MvRewriteJoinTest extends MVTestBase {
             String query = "select a.k1, a.v2 FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
                     "on a.k1=b.k1 order by 1 limit 3;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, "test_mv1");
         }
         connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
@@ -325,8 +322,7 @@ public class MvRewriteJoinTest extends MVTestBase {
                     " left join test_partition_tbl3 c on a.k1=c.k1 " +
                     " order by 1 limit 3;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
-            PlanTestBase.assertNotContains("test_mv1", "test_mv2");
+            PlanTestBase.assertNotContains(plan, "test_mv1", "test_mv2");
         }
         connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
         {
@@ -336,7 +332,6 @@ public class MvRewriteJoinTest extends MVTestBase {
                     " left join test_partition_tbl3 c on a.k1=c.k1 " +
                     " order by 1 limit 3;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, "test_mv2");
         }
         {
@@ -346,10 +341,51 @@ public class MvRewriteJoinTest extends MVTestBase {
                     " left join test_partition_tbl3 c on a.k1=c.k1 " +
                     " where b.v1=1 and c.v1=1 order by 1 limit 3;";
             String plan = getFragmentPlan(query, "MV");
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, "test_mv2");
         }
         connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropMaterializedView("test_mv2");
+    }
+
+    @Test
+    public void testMVViewRewriteJoin() throws Exception {
+        String view1 = "CREATE VIEW view1 as select * from test_partition_tbl1;";
+        String view2 = "CREATE VIEW view2 as select * from test_partition_tbl2;";
+        starRocksAssert.withView(view1);
+        starRocksAssert.withView(view2);
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "REFRESH MANUAL\n" +
+                "AS select * from view1;");
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "REFRESH MANUAL\n" +
+                "AS select * from view2;");
+        {
+            String query = "select a.k1, a.v2 FROM (select * from view1 where k1='2020-02-01') a " +
+                    " left join (select * from view2 where k1 ='2020-02-01')b on a.k1=b.k1 " +
+                    " order by 1 limit 3;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "test_mv2");
+        }
+
+        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
+                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
+                "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+
+        {
+            String query = "select a.k1, a.v2 FROM (select * from view1 where k1='2020-02-01') a " +
+                    " left join (select * from view2 where k1 ='2020-02-01')b on a.k1=b.k1 " +
+                    " order by 1 limit 3;";
+            String plan = getFragmentPlan(query, "MV");
+            // original predicate should be kept
+            PlanTestBase.assertContains(plan, "     TABLE: test_partition_tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 1: k1 = '2020-02-01'");
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv2\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 16: k1 = '2020-02-01'");
+        }
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropMaterializedView("test_mv2");
     }

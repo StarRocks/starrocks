@@ -83,6 +83,10 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// Whether abort the process if a large memory allocation is detected which the requested
+// size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
+CONF_mBool(abort_on_large_memory_allocation, "false");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -962,6 +966,7 @@ CONF_mBool(parquet_reader_bloom_filter_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
 CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
+CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
 

@@ -50,7 +50,7 @@ public class AlterTableStatementAnalyzer {
 
         checkAlterOpConflict(alterClauseList);
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), tbl.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
         }
