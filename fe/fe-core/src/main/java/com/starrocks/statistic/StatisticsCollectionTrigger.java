@@ -15,6 +15,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -85,6 +86,9 @@ public class StatisticsCollectionTrigger {
     // execution stats
     private Future<?> future;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
+
+    // partition_id -> tablet_id -> row_count
+    protected com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
 
     public static StatisticsCollectionTrigger triggerOnInsertOverwrite(InsertOverwriteJobStats stats,
                                                 Database db,
@@ -194,12 +198,15 @@ public class StatisticsCollectionTrigger {
                             statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
                         }
                         statsConnectCtx.setThreadLocalInfo();
+                        StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                                new ArrayList<>(partitionIds), null, null,
+                                analyzeType, StatsConstants.ScheduleType.ONCE,
+                                analyzeStatus.getProperties(), List.of(), List.of());
+                        if (!partitionTabletRowCounts.isEmpty()) {
+                            job.setPartitionTabletRowCounts(partitionTabletRowCounts);
+                        }
 
-                        statisticExecutor.collectStatistics(statsConnectCtx,
-                                StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        new ArrayList<>(partitionIds), null, null,
-                                        analyzeType, StatsConstants.ScheduleType.ONCE,
-                                        analyzeStatus.getProperties(), List.of(), List.of()), analyzeStatus, false);
+                        statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
                     });
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);
@@ -248,13 +255,16 @@ public class StatisticsCollectionTrigger {
         try {
             for (var entry : tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
                 // partition commit info id is physical partition id.
-                // statistic collect granularity is logic partition.
+                // statistic collect granularity is logical partition.
                 long physicalPartitionId = entry.getKey();
                 PartitionCommitInfo partitionCommitInfo = entry.getValue();
+                Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+
                 if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                    Partition partition = table.getPartition(physicalPartition.getParentId());
-                    partitionIds.add(partition.getId());
+                    Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                    partitionIds.add(partitionId);
+                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
                 }
             }
         } finally {
@@ -267,6 +277,10 @@ public class StatisticsCollectionTrigger {
         }
 
         analyzeType = decideAnalyzeTypeForLoad(txnState, (OlapTable) table);
+
+        if (analyzeType != SAMPLE) {
+            partitionTabletRowCounts.clear();
+        }
     }
 
     private void prepareAnalyzeForOverwrite() {
@@ -282,7 +296,7 @@ public class StatisticsCollectionTrigger {
         if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
             return null;
         } else if (targetRows > Config.statistic_sample_collect_rows) {
-            return StatsConstants.AnalyzeType.SAMPLE;
+            return SAMPLE;
         } else {
             return StatsConstants.AnalyzeType.FULL;
         }
@@ -310,7 +324,7 @@ public class StatisticsCollectionTrigger {
         if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
             return null;
         } else if (loadRows > Config.statistic_sample_collect_rows) {
-            return StatsConstants.AnalyzeType.SAMPLE;
+            return SAMPLE;
         } else {
             return StatsConstants.AnalyzeType.FULL;
         }
