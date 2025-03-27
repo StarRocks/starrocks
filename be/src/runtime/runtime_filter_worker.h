@@ -15,6 +15,7 @@
 #pragma once
 
 #include <column/column.h>
+#include <types/logical_type.h>
 
 #include <atomic>
 #include <cstdint>
@@ -33,7 +34,6 @@
 #include "util/uid_util.h"
 namespace starrocks {
 struct TypeDescriptor;
-enum LogicalType;
 
 class ExecEnv;
 class RuntimeState;
