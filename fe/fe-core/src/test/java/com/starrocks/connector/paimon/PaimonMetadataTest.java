@@ -16,6 +16,12 @@ package com.starrocks.connector.paimon;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.TableName;
+>>>>>>> 7f8982ef0a ([BugFix] Do not allow creating a view in unsupported external catalog (#57312))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
@@ -28,18 +34,29 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.Memo;
+=======
+import com.starrocks.sql.ast.ColWithComment;
+import com.starrocks.sql.ast.CreateViewStmt;
+>>>>>>> 7f8982ef0a ([BugFix] Do not allow creating a view in unsupported external catalog (#57312))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> 7f8982ef0a ([BugFix] Do not allow creating a view in unsupported external catalog (#57312))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -473,6 +490,13 @@ public class PaimonMetadataTest {
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
     }
+    @Test
+    public void testCreatePaimonView() {
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.createView(new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
+                    Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO)));
+    }
+
     @Test
     public void testGetTableStatistics() {
         String stats = "{\n" +

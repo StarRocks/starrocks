@@ -331,6 +331,7 @@ public interface ConnectorMetadata {
     }
 
     default void createView(CreateViewStmt stmt) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support create view");
     }
 
     default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
