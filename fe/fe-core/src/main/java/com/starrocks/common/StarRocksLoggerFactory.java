@@ -35,7 +35,7 @@ public class StarRocksLoggerFactory {
     }
 
     public Logger getLogger(Class<?> clazz) {
-        if (Strings.isNullOrEmpty(prefix)) {
+        if (FeConstants.runningUnitTest || Strings.isNullOrEmpty(prefix)) {
             return LogManager.getLogger(clazz);
         } else {
             return LogManager.getLogger(clazz, new PrefixedMessageFactory(prefix));
