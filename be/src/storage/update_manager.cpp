@@ -23,6 +23,7 @@
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/persistent_index_compaction_manager.h"
+#include "storage/persistent_index_rebuild_executor.h"
 #include "storage/rowset_column_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -112,6 +113,9 @@ Status UpdateManager::init() {
 
     _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
     RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
+
+    _pindex_rebuild_executor = std::make_unique<PersistentIndexRebuildExecutor>();
+    RETURN_IF_ERROR(_pindex_rebuild_executor->init());
     return Status::OK();
 }
 
@@ -121,6 +125,9 @@ void UpdateManager::stop() {
     }
     if (_apply_thread_pool) {
         _apply_thread_pool->shutdown();
+    }
+    if (_pindex_rebuild_executor) {
+        _pindex_rebuild_executor->shutdown();
     }
 }
 
@@ -516,8 +523,31 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // before used in apply process, in that case, these will be loaded again in apply
     // process.
 
-    Status st;
+    if (rowset->is_partial_update()) {
+        auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
+        bool loaded = index_entry->value().is_loaded();
+        if (!loaded) {
+            auto latch_or = _pindex_rebuild_executor->submit_task(
+                    std::static_pointer_cast<Tablet>(tablet->shared_from_this()));
+            if (latch_or.ok()) {
+                auto finished = latch_or.value()->wait_for(std::chrono::seconds(
+                        config::pk_index_rebuild_load_wait_seconds));
+                if (!finished) {
+                    String msg = fmt::format("persistent index is still rebuilding, wait timeout. tablet: {}",
+                                             tablet->tablet_id());
+                    LOG(INFO) << msg;
+                    return Status::Uninitialized(msg);
+                }
+            } else {
+                String msg = fmt::format("fail to submit persistent index rebuild task. tablet: {}, error: {}",
+                                         tablet->tablet_id(), latch_or.status().to_string());
+                LOG(WARNING) << msg;
+                return Status::Uninitialized(msg);
+            }
+        }
+    }
 
+    Status st;
     if (rowset->is_column_mode_partial_update()) {
         auto state_entry = _update_column_state_cache.get_or_create(
                 strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
@@ -541,19 +571,6 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         } else {
             LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
             _update_state_cache.remove(state_entry);
-        }
-    }
-
-    if (st.ok()) {
-        auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
-        st = index_entry->value().load(tablet);
-        index_entry->update_expire_time(MonotonicMillis() + get_index_cache_expire_ms(*tablet));
-        _index_cache.update_object_size(index_entry, index_entry->value().memory_usage());
-        if (st.ok()) {
-            _index_cache.release(index_entry);
-        } else {
-            LOG(WARNING) << "load primary index error: " << st << " tablet: " << tablet->tablet_id();
-            _index_cache.remove(index_entry);
         }
     }
 
