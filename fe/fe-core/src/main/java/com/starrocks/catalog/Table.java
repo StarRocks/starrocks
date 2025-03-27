@@ -48,11 +48,8 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
-=======
 import com.starrocks.qe.GlobalVariable;
->>>>>>> 2599d8f9fd ([BugFix]Fix Tableau `Table` missing (#57259))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
