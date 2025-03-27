@@ -14,6 +14,8 @@
 
 #include "runtime/runtime_filter_worker.h"
 
+#include <exec/pipeline/hashjoin/hash_joiner_fwd.h>
+
 #include <cstddef>
 #include <random>
 #include <utility>
