@@ -15,7 +15,6 @@
 package com.starrocks.qe.scheduler.plan;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TpchSQL;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import org.junit.jupiter.api.AfterAll;
@@ -43,7 +42,6 @@ public class SchedulerTPCHTest extends SchedulerTestBase {
     @BeforeAll
     public static void beforeAll() throws Exception {
         SchedulerTestBase.beforeClass();
-        FeConstants.runningUnitTest = true;
     }
 
     @AfterAll
