@@ -391,7 +391,8 @@ public class TabletTaskExecutor {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(mark.getKey());
+                    ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+                            getBackendOrComputeNode(mark.getKey());
                     sb.append(cn != null ? cn.getHost() : "N/A");
                     sb.append(") ");
                 }
