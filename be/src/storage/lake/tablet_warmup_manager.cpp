@@ -35,6 +35,16 @@
 // NOLINT
 #include "service/staros_worker.h"
 
+namespace {
+bvar::Adder<int64_t> g_lake_warmup_tablet_fail_count("lake_warmup_tablet_fail_count");
+bvar::Adder<int64_t> g_lake_warmup_tablet_success_count("lake_warmup_tablet_success_count");
+bvar::Adder<int64_t> g_lake_warmup_tablet_processing_count("lake_warmup_tablet_processing_count");
+bvar::Adder<int64_t> g_lake_warmup_read_remote_bytes;
+bvar::Window<bvar::Adder<int64_t>> g_lake_warmup_read_remote_bytes_minute("lake", "warmup_read_remote_bytes_minute",
+                                                                          &g_lake_warmup_read_remote_bytes, 60);
+bvar::LatencyRecorder g_lake_warmup_tablet_latency("lake_warmup_tablet_latency");
+} // namespace
+
 namespace starrocks::lake {
 
 static constexpr int64_t INVALID_PARTITION_ID = -1;
@@ -99,6 +109,10 @@ Status TabletWarmupManager::update_max_threads(int max_threads) {
 }
 
 void TabletWarmupManager::warmup_tablet(uint64_t tablet_id) {
+    staros::WarmupLevel warmup_level = staros_worker_warmup_level();
+    if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
+        return;
+    }
     // ignore the returned shared_future
     warmup_tablet2(tablet_id);
 }
@@ -190,6 +204,7 @@ void TabletWarmupManager::batch_prepare_warmup() {
             std::scoped_lock lock(_mutex_inprogress);
             if (_tablet_in_progress.find(tablet_id) == _tablet_in_progress.end()) {
                 _tablet_in_progress.emplace(tablet_id, std::move(ctx));
+                g_lake_warmup_tablet_processing_count << 1;
             } else {
                 duplicate = true;
             }
@@ -283,10 +298,12 @@ void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
     if (iter != _tablet_in_progress.end()) {
         iter->second->abort(status);
         _tablet_in_progress.erase(iter);
+        g_lake_warmup_tablet_processing_count << -1;
     }
+    g_lake_warmup_tablet_fail_count << 1;
 }
 
-void TabletWarmupManager::done_warmup(int64_t tablet_id) {
+void TabletWarmupManager::done_warmup(int64_t tablet_id, bool report) {
     std::unique_ptr<WarmupContext> ctx;
     {
         std::scoped_lock lock(_mutex_inprogress);
@@ -296,25 +313,32 @@ void TabletWarmupManager::done_warmup(int64_t tablet_id) {
         } else {
             ctx = std::move(iter->second);
             _tablet_in_progress.erase(iter);
+            g_lake_warmup_tablet_processing_count << -1;
         }
     }
     // call the done() under no lock
     ctx->done();
-    std::scoped_lock lock(_mutex_batch_report);
-    _tablet_id_report.insert(static_cast<uint64_t>(tablet_id));
+    if (report) {
+        std::scoped_lock lock(_mutex_batch_report);
+        _tablet_id_report.insert(static_cast<uint64_t>(tablet_id));
+        g_lake_warmup_tablet_success_count << 1;
+    }
 }
 
 void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
     if (version <= 1) {
-        done_warmup(tablet_id);
+        done_warmup(tablet_id, false /* report */);
         return;
     }
 
     staros::WarmupLevel warmup_level = staros_worker_warmup_level();
     if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
-        done_warmup(tablet_id);
+        done_warmup(tablet_id, false /* report */);
         return;
     }
+
+    auto start_ts = butil::gettimeofday_us();
+    DeferOp defer([start_ts]() { g_lake_warmup_tablet_latency << (butil::gettimeofday_us() - start_ts); });
 
     // WARMUP-Level1: TABLET META
     auto tablet = _tablet_mgr->get_tablet(tablet_id, version);
@@ -323,7 +347,7 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         return;
     }
     if (warmup_level == staros::WarmupLevel::WARMUP_META) {
-        done_warmup(tablet_id);
+        done_warmup(tablet_id, true /* report */);
         return;
     }
     // check stop point
@@ -351,14 +375,14 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
     params.use_page_cache = false;
     params.lake_io_opts.fill_metadata_cache = false;
     params.lake_io_opts.fill_data_cache = true;
-    params.lake_io_opts.cache_file_only = true;
+    params.lake_io_opts.cache_file_only = config::lake_cache_select_in_physical_way;
     st.update(reader->open(params));
     if (!st.ok()) {
         abort_warmup(tablet_id, std::move(st));
         return;
     }
     if (warmup_level == staros::WarmupLevel::WARMUP_INDEX) {
-        done_warmup(tablet_id);
+        done_warmup(tablet_id, true /* report */);
         reader->close();
         return;
     }
@@ -387,9 +411,12 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
             break;
         }
     } while (true);
+
+    g_lake_warmup_read_remote_bytes << reader->stats().compressed_bytes_read_remote;
+
     reader->close();
 
-    done_warmup(tablet_id);
+    done_warmup(tablet_id, true /* report */);
 }
 
 void TabletWarmupManager::batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids) {

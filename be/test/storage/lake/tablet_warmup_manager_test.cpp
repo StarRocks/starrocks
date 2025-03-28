@@ -373,10 +373,11 @@ TEST_F(TabletWarmupManagerTest, test_batch_report_tablet_replica_status) {
         for (int i = 0; i < repeats; ++i) {
             auto tablet_id = next_id();
             auto partition_id = next_id();
+            TabletContext ctx{tablet_id, partition_id, 1};
+            write_data_and_increase_visible_version(ctx, _tablet_mgr.get());
 
             auto* cache = _warmup_mgr->TEST_partition_version_cache();
-            // visible version to 0x1, no need to warmup
-            cache->put(partition_id, 0x01);
+            cache->put(ctx.partition_id, ctx.visible_version);
 
             auto shard_info = generateShardInfo(tablet_id, true, partition_id);
             auto st = g_worker->add_shard(shard_info);
@@ -518,7 +519,7 @@ TEST_F(TabletWarmupManagerTest, test_chaos_concurrent) {
     }
 
     // let the monkeys play for a while
-    std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
     // async stop the _warmup_mgr
     threads.push_back(std::make_unique<std::thread>([&] { _warmup_mgr->stop(); }));
     // notify all threads to stop

@@ -482,9 +482,6 @@ absl::Status StarOSWorker::batch_update_shard_replica_info(const std::vector<Sha
 }
 
 bool StarOSWorker::need_warmup_shard(ShardId id) const {
-    if (worker_group_property().warmup_level() == staros::WarmupLevel::WARMUP_NOTHING) {
-        return false;
-    }
     auto info_or = get_shard_info(id);
     if (!info_or.ok()) {
         return false;
