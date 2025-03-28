@@ -462,6 +462,7 @@ public class OAuth2Util {
         private static final long MIN_REFRESH_WAIT_MILLIS = 10;
         private volatile Map<String, String> headers;
         private volatile AuthConfig config;
+        private volatile boolean enableActorToken = false;
 
         public AuthSession(Map<String, String> baseHeaders, AuthConfig config) {
             this.headers = RESTUtil.merge(baseHeaders, authHeaders(config.token()));
@@ -474,6 +475,10 @@ public class OAuth2Util {
 
         public Map<String, String> headers() {
             return headers;
+        }
+
+        public void setEnableActorToken(boolean enableActorToken) {
+            this.enableActorToken = enableActorToken;
         }
 
         public String token() {
@@ -769,8 +774,8 @@ public class OAuth2Util {
                             parent.headers(),
                             token,
                             tokenType,
-                            parent.token(),
-                            parent.tokenType(),
+                            parent.enableActorToken ? parent.token() : null,
+                            parent.enableActorToken ? parent.tokenType() : null,
                             parent.scope(),
                             parent.oauth2ServerUri(),
                             parent.optionalOAuthParams());

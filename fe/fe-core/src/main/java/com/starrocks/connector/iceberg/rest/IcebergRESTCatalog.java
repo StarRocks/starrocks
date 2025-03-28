@@ -312,10 +312,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private SessionCatalog.SessionContext convertContext(ConnectContext context) {
         String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
 
-        Map<String, String> properties = ImmutableMap.of(
-                "user", context.getQualifiedUser(),
-                "catalogName", this.catalogName);
-
         Map<String, String> credentials;
         if (Strings.isNullOrEmpty(context.getAuthToken())) {
             credentials = Maps.filterKeys(securityProperties.get(), key -> Set.of(TOKEN, CREDENTIAL).contains(key));
@@ -325,7 +321,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                     .buildOrThrow();
         }
 
-        return new SessionCatalog.SessionContext(sessionId, context.getQualifiedUser(), credentials, properties,
+        return new SessionCatalog.SessionContext(sessionId, context.getQualifiedUser(), credentials, ImmutableMap.of(),
                 context.getCurrentUserIdentity());
     }
 }

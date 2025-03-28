@@ -225,7 +225,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void createDb(ConnectContext context, String dbName, Map<String, String> properties) throws AlreadyExistsException {
-        if (dbExists(new ConnectContext(), dbName)) {
+        if (dbExists(context, dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
 

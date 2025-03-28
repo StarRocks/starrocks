@@ -309,6 +309,8 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
             headersBuilder.putAll(this.catalogAuth.headers()).putAll(OAuth2Util.basicAuthHeaders(credential));
             this.catalogAuth.setHeaders(headersBuilder.buildKeepingLast());
         }
+        this.catalogAuth.setEnableActorToken(
+                PropertyUtil.propertyAsBoolean(mergedProps, "enable_actor_token", false));
 
         this.pageSize = PropertyUtil.propertyAsNullableInt(mergedProps, REST_PAGE_SIZE);
         if (pageSize != null) {
