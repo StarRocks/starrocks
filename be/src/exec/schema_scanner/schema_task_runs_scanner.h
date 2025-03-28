@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
@@ -29,6 +30,8 @@ public:
 
 private:
     Status fill_chunk(ChunkPtr* chunk);
+
+    static constexpr int64_t kPageLimit = 200;
 
     int _task_run_index{0};
     TGetTaskRunInfoResult _task_run_result;
