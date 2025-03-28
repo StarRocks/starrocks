@@ -369,4 +369,27 @@ public class GroupingSetsTest extends PlanTestBase {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }
+
+    @Test
+    public void testNotEliminateConstantGroupByColumnInGroupingSets() throws Exception {
+        String sql = "select v1, v2,v3, cnt\n" +
+                "from(\n" +
+                "select v1, v2, v3, count(*) as cnt\n" +
+                "from  (\n" +
+                "select v1, 1 as v2, v3, 1 as metric\n" +
+                "from t0\n" +
+                ") t2\n" +
+                "group by cube(v1,v2,v3)\n" +
+                ")t3;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  6:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 6> : 6: v2\n" +
+                "  |  <slot 7> : 7: count\n" +
+                "  |  \n" +
+                "  5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7: count)\n" +
+                "  |  group by: 1: v1, 6: v2, 3: v3, 8: GROUPING_ID"));
+    }
 }
