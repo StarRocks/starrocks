@@ -209,6 +209,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         }
         _tablet_meta = new_tablet_meta;
     } while (false);
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
 
     for (auto& version : versions_to_delete) {
         auto it = _rs_version_map.find(version);
@@ -365,6 +366,7 @@ void Tablet::modify_rowsets_without_lock(const std::vector<RowsetSharedPtr>& to_
     // which means "to_add->version()" equals to "to_delete->version()".
     // So we should delete the "to_delete" before adding the "to_add",
     // otherwise, the "to_add" will be deleted from _rs_version_map, eventually.
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
     std::vector<RowsetMetaSharedPtr> rs_metas_to_delete;
     for (auto& rs : to_delete) {
         rs_metas_to_delete.push_back(rs->rowset_meta());
@@ -588,6 +590,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
         return contain_status;
     }
 
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
