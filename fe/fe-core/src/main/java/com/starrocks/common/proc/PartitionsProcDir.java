@@ -90,7 +90,7 @@ import java.util.stream.Collectors;
  */
 public class PartitionsProcDir implements ProcDirInterface {
     private final PartitionType partitionType;
-    private ImmutableList<String> titleNames;
+    public ImmutableList<String> titleNames;
     private Database db;
     private OlapTable table;
     private boolean isTempPartition = false;
@@ -103,7 +103,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         this.createTitleNames();
     }
 
-    private void createTitleNames() {
+    public PartitionsProcDir(PartitionType partitionType) {
+        this.partitionType = partitionType;
+    }
+
+    public void createTitleNames() {
         if (table.isCloudNativeTableOrMaterializedView()) {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                     .add("PartitionId")
@@ -273,14 +277,14 @@ public class PartitionsProcDir implements ProcDirInterface {
         return result;
     }
 
-    private List<List<Comparable>> getPartitionInfos() {
+    public List<List<Comparable>> getPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             List<Long> partitionIds;
             PartitionInfo tblPartitionInfo = table.getPartitionInfo();
@@ -320,7 +324,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return partitionInfos;
     }
@@ -433,15 +437,15 @@ public class PartitionsProcDir implements ProcDirInterface {
         long partitionId = -1L;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             PhysicalPartition partition;
             try {
                 partition = table.getPhysicalPartition(Long.parseLong(partitionIdOrName));
             } catch (NumberFormatException e) {
-                partition = table.getPartition(partitionIdOrName, false);
+                partition = table.getPartition(partitionIdOrName, false).getDefaultPhysicalPartition();
                 if (partition == null) {
-                    partition = table.getPartition(partitionIdOrName, true);
+                    partition = table.getPartition(partitionIdOrName, true).getDefaultPhysicalPartition();
                 }
             }
 
@@ -451,7 +455,7 @@ public class PartitionsProcDir implements ProcDirInterface {
 
             return new IndicesProcDir(db, table, partition);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

@@ -89,6 +89,8 @@ public class GlobalStateMgrTestUtil {
     public static String testTxnLable8 = "testTxnLable8";
     public static String testTxnLable9 = "testTxnLable9";
     public static String testTxnLable10 = "testTxnLable10";
+    public static String testTxnLableCompaction1 = "testTxnLableCompaction1";
+    public static String testTxnLableCompaction2 = "testTxnLableCompaction2";
     public static String testEsTable1 = "partitionedEsTable1";
     public static long testEsTableId1 = 14;
 
@@ -109,7 +111,7 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
-        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getLocalMetastore();
         metastore.unprotectCreateDb(db);
         return globalStateMgr;
     }
@@ -131,13 +133,16 @@ public class GlobalStateMgrTestUtil {
             if (masterPartition.getId() != slavePartition.getId()) {
                 return false;
             }
-            if (masterPartition.getVisibleVersion() != slavePartition.getVisibleVersion()
-                    || masterPartition.getNextVersion() != slavePartition.getNextVersion()) {
+            if (masterPartition.getDefaultPhysicalPartition().getVisibleVersion()
+                    != slavePartition.getDefaultPhysicalPartition().getVisibleVersion()
+                    || masterPartition.getDefaultPhysicalPartition().getNextVersion()
+                    != slavePartition.getDefaultPhysicalPartition().getNextVersion()) {
                 return false;
             }
-            List<MaterializedIndex> allMaterializedIndices = masterPartition.getMaterializedIndices(IndexExtState.ALL);
+            List<MaterializedIndex> allMaterializedIndices = masterPartition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.ALL);
             for (MaterializedIndex masterIndex : allMaterializedIndices) {
-                MaterializedIndex slaveIndex = slavePartition.getIndex(masterIndex.getId());
+                MaterializedIndex slaveIndex = slavePartition.getDefaultPhysicalPartition().getIndex(masterIndex.getId());
                 if (slaveIndex == null) {
                     return false;
                 }
@@ -181,7 +186,7 @@ public class GlobalStateMgrTestUtil {
 
         // index
         MaterializedIndex index = new MaterializedIndex(indexId, IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId + 100, indexId, 0, TStorageMedium.HDD);
         index.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
@@ -190,9 +195,9 @@ public class GlobalStateMgrTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, testPartition1, index, distributionInfo);
-        partition.updateVisibleVersion(testStartVersion);
-        partition.setNextVersion(testStartVersion + 1);
+        Partition partition = new Partition(partitionId, partitionId + 100, testPartition1, index, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // columns
         List<Column> columns = new ArrayList<Column>();

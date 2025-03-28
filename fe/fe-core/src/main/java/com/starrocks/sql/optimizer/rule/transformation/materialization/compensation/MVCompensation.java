@@ -14,11 +14,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.compensation;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,70 +34,100 @@ public class MVCompensation {
     private final SessionVariable sessionVariable;
     // The state of compensation.
     private final MVTransparentState state;
-    private final Map<Table, BaseCompensation<?>> compensations;
+    private final Map<Table, TableCompensation> compensations;
 
     public MVCompensation(SessionVariable sessionVariable,
                           MVTransparentState state,
-                          Map<Table, BaseCompensation<?>> compensations) {
+                          Map<Table, TableCompensation> compensations) {
         this.sessionVariable = sessionVariable;
         this.state = state;
+        if (state.isCompensate()) {
+            Preconditions.checkArgument(compensations != null && !compensations.isEmpty());
+        }
         this.compensations = compensations;
     }
 
-    public static MVCompensation createNoCompensateState(SessionVariable sessionVariable) {
+    public boolean isNoCompensate() {
+        if (state.isNoCompensate()) {
+            return true;
+        }
+        if (state.isCompensate()) {
+            if (CollectionUtils.sizeIsEmpty(compensations)) {
+                return true;
+            }
+            if (compensations.values().stream().allMatch(e -> e.getState().isNoCompensate())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isUncompensable() {
+        return state.isUncompensable();
+    }
+
+    public static MVCompensation compensate(SessionVariable sessionVariable,
+                                            Map<Table, TableCompensation> compensations) {
+        if (CollectionUtils.sizeIsEmpty(compensations) || compensations.values().stream()
+                .allMatch(e -> e.isNoCompensate())) {
+            return noCompensate(sessionVariable);
+        } else {
+            return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, compensations);
+        }
+    }
+
+    public static MVCompensation noCompensate(SessionVariable sessionVariable) {
         return new MVCompensation(sessionVariable, MVTransparentState.NO_COMPENSATE, null);
     }
 
-    public static MVCompensation createNoRewriteState(SessionVariable sessionVariable) {
-        return new MVCompensation(sessionVariable, MVTransparentState.NO_REWRITE, null);
+    public static MVCompensation unknown(SessionVariable sessionVariable) {
+        return new MVCompensation(sessionVariable, MVTransparentState.UNKNOWN, null);
     }
 
-    public static MVCompensation createUnkownState(SessionVariable sessionVariable) {
-        return new MVCompensation(sessionVariable, MVTransparentState.UNKNOWN, null);
+    public static MVCompensation withState(SessionVariable sessionVariable,
+                                           MVTransparentState state) {
+        Preconditions.checkArgument(state != MVTransparentState.COMPENSATE);
+        return new MVCompensation(sessionVariable, state, null);
     }
 
     public MVTransparentState getState() {
         return state;
     }
 
-    public Map<Table, BaseCompensation<?>> getCompensations() {
+    public Map<Table, TableCompensation> getCompensations() {
         return compensations;
     }
 
-    private boolean useTransparentRewrite() {
-        return sessionVariable.isEnableMaterializedViewTransparentUnionRewrite();
-    }
-
     public boolean isTransparentRewrite() {
-        if (!useTransparentRewrite()) {
-            return false;
-        }
-        // No compensate once if mv's freshness is satisfied.
-        if (state.isCompensate()) {
-            return true;
-        }
-        return false;
+        return state.isCompensate();
     }
 
     public boolean isCompensatePartitionPredicate() {
         // always false if it's set to false from session variable
-        if (!sessionVariable.isEnableMaterializedViewRewritePartitionCompensate()) {
+        if (state.isNoCompensate() || state.isCompensate()) {
             return false;
-        }
-        if (state.isNoCompensate()) {
-            return false;
-        } else if (state.isCompensate()) {
-            return !useTransparentRewrite();
         } else {
             return true;
         }
     }
 
+    public boolean isTableNeedCompensate(Table table) {
+        return !CollectionUtils.sizeIsEmpty(compensations) && compensations.containsKey(table);
+    }
+
+    public TableCompensation getTableCompensation(Table table) {
+        return compensations.get(table);
+    }
+
     @Override
     public String toString() {
-        return "MvCompensation{" +
-                "state=" + state +
-                ", compensations=" + MvUtils.shrinkToSize(compensations, Config.max_mv_task_run_meta_message_values_length) +
-                '}';
+        StringBuilder sb = new StringBuilder();
+        sb.append("state=").append(state);
+        if (!CollectionUtils.sizeIsEmpty(compensations)) {
+            for (Map.Entry<Table, TableCompensation> entry : compensations.entrySet()) {
+                sb.append(" [").append(entry.getKey().getName()).append(":").append(entry.getValue().toString()).append("]");
+            }
+        }
+        return sb.toString();
     }
 }

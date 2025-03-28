@@ -20,13 +20,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -35,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -62,6 +62,7 @@ import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -339,10 +340,10 @@ public class PipeManagerTest {
             private int count = 0;
 
             @Mock
-            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws StarRocksException {
                 count++;
                 if (count <= errorCount) {
-                    throw new UserException("network connection error");
+                    throw new StarRocksException("network connection error");
                 } else {
                     List<FileStatus> res = new ArrayList<>();
                     res.add(new FileStatus(1024, false, 1, 1, 1, new Path("file1")));
@@ -353,7 +354,7 @@ public class PipeManagerTest {
     }
 
     public static void mockRepoExecutorDML() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -370,7 +371,7 @@ public class PipeManagerTest {
     }
 
     private void mockRepoExecutor() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -813,7 +814,7 @@ public class PipeManagerTest {
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
         pipe = getPipe("p_crud");
-        Assert.assertEquals("{\"auto_ingest\":\"false\",\"BATCH_SIZE\":\"10GB\"}", pipe.getPropertiesJson());
+        Assert.assertEquals("{\"auto_ingest\":\"false\",\"batch_size\":\"10GB\"}", pipe.getPropertiesJson());
 
         // drop
         sql = "drop pipe p_crud";
@@ -957,18 +958,18 @@ public class PipeManagerTest {
     public void testTaskProperties() throws Exception {
         mockRepoExecutor();
         String pipeName = "p_task_properties";
-        createPipe("create pipe p_task_properties properties('task.query_timeout'='20') " +
+        createPipe("create pipe p_task_properties properties('task.insert_timeout'='20') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         Pipe pipe = getPipe(pipeName);
-        Assert.assertEquals("{\"task.query_timeout\":\"20\"}", pipe.getPropertiesJson());
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "20"), pipe.getTaskProperties());
+        Assert.assertEquals("{\"task.insert_timeout\":\"20\"}", pipe.getPropertiesJson());
+        Assert.assertEquals(ImmutableMap.of("insert_timeout", "20"), pipe.getTaskProperties());
         dropPipe(pipeName);
 
         // default task execution variables
         createPipe("create pipe p_task_properties " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         pipe = getPipe(pipeName);
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "3600"), pipe.getTaskProperties());
+        Assert.assertEquals(ImmutableMap.of(), pipe.getTaskProperties());
     }
 
     @Test
@@ -1073,8 +1074,8 @@ public class PipeManagerTest {
                     FileListRepo.PipeFileState.LOADING, "insert-label");
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public TransactionStatus getLabelStatus(long dbId, String label) {
-                    return TransactionStatus.COMMITTED;
+                public TransactionStateSnapshot getLabelStatus(long dbId, String label) {
+                    return new TransactionStateSnapshot(TransactionStatus.COMMITTED, "");
                 }
             };
 

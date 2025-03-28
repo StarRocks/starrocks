@@ -32,19 +32,28 @@ MetadataCache::MetadataCache(size_t capacity) {
 }
 
 void MetadataCache::cache_rowset(Rowset* ptr) {
-    _insert(ptr->rowset_id_str(), ptr, ptr->segment_memory_usage());
+    std::weak_ptr<Rowset>* weak_ptr = new std::weak_ptr<Rowset>(ptr->shared_from_this());
+    _insert(ptr->rowset_id_str(), weak_ptr, ptr->segment_memory_usage());
 }
 
 void MetadataCache::evict_rowset(Rowset* ptr) {
     _erase(ptr->rowset_id_str());
 }
 
+void MetadataCache::refresh_rowset(Rowset* ptr) {
+    _warmup(ptr->rowset_id_str());
+}
+
 size_t MetadataCache::get_memory_usage() const {
     return _cache->get_memory_usage();
 }
 
-void MetadataCache::_insert(const std::string& key, Rowset* ptr, size_t size) {
-    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, _cache_value_deleter);
+void MetadataCache::set_capacity(size_t capacity) {
+    _cache->set_capacity(capacity);
+}
+
+void MetadataCache::_insert(const std::string& key, std::weak_ptr<Rowset>* ptr, size_t size) {
+    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, size, _cache_value_deleter);
     _cache->release(handle);
 }
 
@@ -52,9 +61,26 @@ void MetadataCache::_erase(const std::string& key) {
     _cache->erase(CacheKey(key));
 }
 
+// This function is used as a deleter for the cache values.
+// It is called when a cache entry is evicted or removed.
+// The function takes a CacheKey and a void pointer to the value.
+// The value is expected to be a std::weak_ptr<Rowset>.
+// If the weak_ptr can be locked to a shared_ptr, it calls the close() method on the Rowset.
+// Finally, it deletes the weak_ptr.
 void MetadataCache::_cache_value_deleter(const CacheKey& /*key*/, void* value) {
-    // close this rowset, release metadata memory
-    reinterpret_cast<Rowset*>(value)->close();
+    std::weak_ptr<Rowset>* weak_ptr = reinterpret_cast<std::weak_ptr<Rowset>*>(value);
+    auto rowset = weak_ptr->lock();
+    if (rowset != nullptr) {
+        rowset->close();
+    }
+    delete weak_ptr;
+}
+
+void MetadataCache::_warmup(const std::string& key) {
+    Cache::Handle* handle = _cache->lookup(CacheKey(key));
+    if (handle != nullptr) {
+        _cache->release(handle);
+    }
 }
 
 } // namespace starrocks

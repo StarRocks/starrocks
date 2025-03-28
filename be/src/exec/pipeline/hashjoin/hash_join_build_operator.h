@@ -59,6 +59,7 @@ public:
     }
 
     size_t output_amplification_factor() const override;
+    void update_exec_stats(RuntimeState* state) override {}
 
 protected:
     HashJoinerPtr _join_builder;
@@ -77,6 +78,8 @@ public:
                                  TJoinDistributionMode::type distribution_mode,
                                  SpillProcessChannelFactoryPtr spill_channel_factory);
     ~HashJoinBuildOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
+
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;

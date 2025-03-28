@@ -18,12 +18,14 @@ import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,9 +53,9 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
     private static final Set<Long> FORBIDDEN_DICT_TABLE_IDS = Sets.newConcurrentHashSet();
 
-    public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
+    public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
 
-    private CacheDictManager() {
+    public CacheDictManager() {
     }
 
     private static final CacheDictManager INSTANCE = new CacheDictManager();
@@ -105,6 +108,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
             .maximumSize(Config.statistic_dict_columns)
+            .executor(ThreadPoolManager.getDictCacheThread())
             .buildAsync(dictLoader);
 
     private Optional<ColumnDict> deserializeColumnDict(long tableId, ColumnId columnName, TStatisticData statisticData) {
@@ -188,7 +192,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             if (!realResult.isPresent()) {
                 LOG.debug("Invalidate column {} dict cache because don't present", columnName);
                 dictStatistics.synchronous().invalidate(columnIdentifier);
-            } else if (realResult.get().getVersionTime() < versionTime) {
+            } else if (realResult.get().getVersion() < versionTime) {
                 LOG.debug("Invalidate column {} dict cache because out of date", columnName);
                 dictStatistics.synchronous().invalidate(columnIdentifier);
             } else {
@@ -262,14 +266,14 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 Optional<ColumnDict> columnOptional = future.get();
                 if (columnOptional.isPresent()) {
                     ColumnDict columnDict = columnOptional.get();
-                    long lastVersion = columnDict.getVersionTime();
-                    long dictCollectVersion = columnDict.getCollectedVersionTime();
+                    long lastVersion = columnDict.getVersion();
+                    long dictCollectVersion = columnDict.getCollectedVersion();
                     if (collectVersion != dictCollectVersion) {
                         LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
                         removeGlobalDict(tableId, columnName);
                         return;
                     }
-                    columnDict.updateVersionTime(versionTime);
+                    columnDict.updateVersion(versionTime);
                     LOG.info("update dict for table {} column {} from version {} to {}", tableId, columnName,
                             lastVersion, versionTime);
                 }
@@ -296,5 +300,35 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("ColumnDict", (long) dictStatistics.asMap().size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = new ArrayList<>();
+        dictStatistics.asMap().values().stream().findAny().ifPresent(future -> {
+            if (future.isDone()) {
+                try {
+                    future.get().ifPresent(samples::add);
+                } catch (Exception e) {
+                    LOG.warn("get samples failed", e);
+                }
+            }
+        });
+
+        return Lists.newArrayList(Pair.create(samples, (long) dictStatistics.asMap().size()));
+    }
+
+    private List<ColumnDict> getSamplesForMemoryTracker() {
+        List<ColumnDict> result = new ArrayList<>();
+        dictStatistics.asMap().values().stream().findAny().ifPresent(future -> {
+            if (future.isDone()) {
+                try {
+                    future.get().ifPresent(result::add);
+                } catch (Exception e) {
+                    LOG.warn("get samples failed", e);
+                }
+            }
+        });
+        return result;
     }
 }

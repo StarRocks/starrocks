@@ -39,7 +39,7 @@ struct TWorkGroup {
   13: optional i64 big_query_cpu_second_limit
   14: optional double spill_mem_limit_threshold
 
-  15: optional i32 dedicated_cpu_cores
+  15: optional i32 exclusive_cpu_cores
 
   100: optional i32 max_cpu_cores
 }

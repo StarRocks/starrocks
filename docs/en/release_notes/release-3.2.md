@@ -4,6 +4,123 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.15
+
+Release date: February 14, 2025
+
+### New Features
+
+- Window functions support `max_by` and `min_by`. [#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### Improvements
+
+- Added StarClient timeout parameters. [#54496](https://github.com/StarRocks/starrocks/pull/54496)
+  - star_client_read_timeout_seconds
+  - star_client_list_timeout_seconds
+  - star_client_write_timeout_seconds
+- Tables with List partitioning strategies support partition pruning for DELETE statements. [#55400](https://github.com/StarRocks/starrocks/pull/55400)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Stream Load fails when a node with an Alive status of false was scheduled. [#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- An error is returned during partial updates on Primary Key tables with Stream Load. [#53403](https://github.com/StarRocks/starrocks/pull/55430)
+- bRPC error persists after BE node restart. [#40229](https://github.com/StarRocks/starrocks/pull/40229)
+
+## 3.2.14
+
+Release date: January 8, 2025
+
+### Improvements
+
+- Supports collecting statistics of Paimon tables. [#52858](https://github.com/StarRocks/starrocks/pull/52858)
+- Included node information and histogram metrics in JSON metrics. [#53735](https://github.com/StarRocks/starrocks/pull/53735)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The score of the Primary Key table index was not updated in the Commit phase. [#41737](https://github.com/StarRocks/starrocks/pull/41737)
+- Incorrect execution plans for `max(count(distinct))` when low-cardinality optimization is enabled. [#53403](https://github.com/StarRocks/starrocks/pull/53403)
+- When the List partition column has NULL values, queries against the Min/Max value of the partition column will lead to incorrect partition pruning. [#53235](https://github.com/StarRocks/starrocks/pull/53235)
+- Upload retries fail when backing up data to HDFS. [#53679](https://github.com/StarRocks/starrocks/pull/53679)
+
+## 3.2.13
+
+Release date: December 13, 2024
+
+### Improvements
+
+- Supports setting a time range within which Base Compaction is forbidden for a specific table. [#50120](https://github.com/StarRocks/starrocks/pull/50120)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The `loadRowsRate` field returned `0` after executing SHOW ROUTINE LOAD. [#52151](https://github.com/StarRocks/starrocks/pull/52151)
+- The `Files()` function read columns that were not queried. [#52210](https://github.com/StarRocks/starrocks/pull/52210)
+- Prometheus failed to parse materialized view metrics with special characters in their names. (Now materialized view metrics support tags.) [#52782](https://github.com/StarRocks/starrocks/pull/52782)
+- The `array_map` function caused BE to crash. [#52909](https://github.com/StarRocks/starrocks/pull/52909)
+- Metadata Cache issues caused BE to crash. [#52968](https://github.com/StarRocks/starrocks/pull/52968)
+- Routine Load tasks were canceled due to expired transactions. (Now tasks are canceled only if the database or table no longer exists). [#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- Stream Load failures when submitted using HTTP 1.0. [#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Issues related to Glue and S3 integration: [#48433](https://github.com/StarRocks/starrocks/pull/48433)
+  - Some error messages did not display the root cause.
+  - Error messages for writing to a Hive partitioned table with the partition column of type STRING when Glue was used as the metadata service.
+  - Dropping Hive tables failed without proper error messages when the user lacked sufficient permissions.
+- The `storage_cooldown_time` property for materialized views did not take effect when set to `maximum`. [#52079](https://github.com/StarRocks/starrocks/pull/52079)
+
+## 3.2.12
+
+Release date: October 23, 2024
+
+### Improvements
+
+- Optimized memory allocation and statistics in BE for certain complex query scenarios to avoid OOM. [#51382](https://github.com/StarRocks/starrocks/pull/51382)
+- Optimized memory usage in FE in Schema Change scenarios. [#50855](https://github.com/StarRocks/starrocks/pull/50855)
+- Optimized the job status display when querying the system-defined view `information_schema.routine_load_jobs` from Follower FE nodes. [#51763](https://github.com/StarRocks/starrocks/pull/51763)
+- Supports Backup and Restore of with the List partitioned tables. [#51993](https://github.com/StarRocks/starrocks/pull/51993)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The error message was lost after writing to Hive failed. [#33167](https://github.com/StarRocks/starrocks/pull/33167)
+- The `array_map` function causes a crash when excessive constant parameters are used. [#51244](https://github.com/StarRocks/starrocks/pull/51244)
+- Special characters in the PARTITION BY columns of expression partitioned tables cause FE CheckPoint failures. [#51677](https://github.com/StarRocks/starrocks/pull/51677)
+- Accessing the system-defined view `information_schema.fe_locks` causes a crash. [#51742](https://github.com/StarRocks/starrocks/pull/51742)
+- Querying generated columns causes an error. [#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- Optimize Table fails when the table name contains special characters. [#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- Tablets could not be balanced in certain scenarios. [#51828](https://github.com/StarRocks/starrocks/pull/51828)
+
+### Behavior Changes
+
+- Supports dynamic modification of Backup and Restore-related parameters.[#52111](https://github.com/StarRocks/starrocks/pull/52111)
+
+## 3.2.11
+
+Release date: September 9, 2024
+
+### Improvements
+
+- Supports masking authentication information for Files() and PIPE. [#47629](https://github.com/StarRocks/starrocks/pull/47629)
+- Support automatic inference for the STRUCT type when reading Parquet files through Files(). [#50481](https://github.com/StarRocks/starrocks/pull/50481)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error is returned for equi-join queries because they failed to be rewritten by the global dictionary. [#50690](https://github.com/StarRocks/starrocks/pull/50690)
+- The error "version has been compacted" caused by an infinite loop on the FE side during Tablet Clone. [#50561](https://github.com/StarRocks/starrocks/pull/50561)
+- Incorrect scheduling for unhealthy replica repairs after distributing data based on labels. [#50331](https://github.com/StarRocks/starrocks/pull/50331)
+- An error in the statistics collection log: "Unknown column '%s' in '%s." [#50785](https://github.com/StarRocks/starrocks/pull/50785)
+- Incorrect timezone usage when reading complex types like TIMESTAMP from Parquet files via Files(). [#50448](https://github.com/StarRocks/starrocks/pull/50448)
+
+### Behavior Changes
+
+- When downgrading StarRocks from v3.3.x to v3.2.11, the system will ignore it if there is incompatible metadata. [#49636](https://github.com/StarRocks/starrocks/pull/49636)
+
 ## 3.2.10
 
 Release date: August 23, 2024

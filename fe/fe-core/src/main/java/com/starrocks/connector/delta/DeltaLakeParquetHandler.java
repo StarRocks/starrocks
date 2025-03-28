@@ -39,9 +39,9 @@ import static java.lang.String.format;
 
 public class DeltaLakeParquetHandler extends DefaultParquetHandler {
     private final Configuration hadoopConf;
-    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
 
-    public DeltaLakeParquetHandler(Configuration hadoopConf, LoadingCache<Pair<String, StructType>,
+    public DeltaLakeParquetHandler(Configuration hadoopConf, LoadingCache<Pair<DeltaLakeFileStatus, StructType>,
             List<ColumnarBatch>> checkpointCache) {
         super(hadoopConf);
         this.hadoopConf = hadoopConf;
@@ -121,9 +121,10 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
 
             private void tryGetNextFileColumnarBatch() throws ExecutionException {
                 if (fileIter.hasNext()) {
-                    currentFile = fileIter.next().getPath();
+                    DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(fileIter.next());
+                    currentFile = deltaLakeFileStatus.getPath();
                     if (LogReplay.containsAddOrRemoveFileActions(physicalSchema)) {
-                        Pair<String, StructType> key = Pair.create(currentFile, physicalSchema);
+                        Pair<DeltaLakeFileStatus, StructType> key = Pair.create(deltaLakeFileStatus, physicalSchema);
                         if (checkpointCache.getIfPresent(key) != null || predicate.isEmpty()) {
                             currentColumnarBatchList = checkpointCache.get(key);
                         } else {

@@ -23,7 +23,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -384,15 +384,15 @@ public class ReportHandlerTest {
             }
             OlapTable table = null;
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getId(), tabletMeta.getTableId());
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
-            Partition partition = table.getPartition(tabletMeta.getPartitionId());
+            PhysicalPartition partition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
             MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
             LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
 
@@ -421,7 +421,7 @@ public class ReportHandlerTest {
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                .getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
                 allTablets.add(tablet.getId());
@@ -468,5 +468,17 @@ public class ReportHandlerTest {
         Thread.sleep(4000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
         Assert.assertTrue(ready);
+    }
+
+    @Test
+    public void testGetPendingTabletReportTaskCnt() throws Exception {
+        ReportHandler reportHandler = new ReportHandler();
+        Assert.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
+        Assert.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
+        Assert.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(2L, 1L, new HashMap<>());
+        Assert.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
     }
 }

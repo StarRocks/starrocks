@@ -1,3 +1,5 @@
+---
+---
 
 We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
 
@@ -68,6 +70,22 @@ You can only write data into Iceberg tables (since v3.1) and Hive tables (since 
    SET CATALOG iceberg_catalog;
    -- Grant the privilege to write data into Iceberg tables.
    GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
+   ```
+
+#### Grant admin privileges on a specific database
+
+   ```SQL
+   -- Create a role.
+   CREATE ROLE db1_admin;
+   -- Grant ALL privileges on the destination database to the role. This role can create tables, views, materialized views, and UDFs in this database. And it also can drop or modify this database.
+   GRANT ALL ON DATABASE db1 TO ROLE db1_admin;
+   -- Switch to the corresponding catalog.
+   SET CATALOG iceberg_catalog;
+   -- Grant all privileges on tables, views, materialized views, and UDFs in this database to the role.
+   GRANT ALL ON ALL TABLES IN DATABASE db1 TO ROLE db1_admin;
+   GRANT ALL ON ALL VIEWS IN DATABASE db1 TO ROLE db1_admin;
+   GRANT ALL ON ALL MATERIALIZED VIEWS IN DATABASE db1 TO ROLE db1_admin;
+   GRANT ALL ON ALL FUNCTIONS IN DATABASE db1 TO ROLE db1_admin;
    ```
 
 #### Grant privileges to perform backup and restore operations on global, database, table, and partition levels

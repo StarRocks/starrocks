@@ -35,70 +35,36 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.AuthenticationProviderFactory;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
-
 // MySQL protocol util
 public class MysqlProto {
     private static final Logger LOG = LogManager.getLogger(MysqlProto.class);
 
-    // scramble: data receive from server.
-    // randomString: data send by server in plug-in data field
-    // user_name#HIGH@cluster_name
-    private static boolean authenticate(ConnectContext context, byte[] scramble, byte[] randomString, String user) {
-        String usePasswd = scramble.length == 0 ? "NO" : "YES";
-
-        if (user == null || user.isEmpty()) {
-            ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
-            return false;
-        }
-
-        String remoteIp = context.getMysqlChannel().getRemoteIp();
-
-        AuthenticationMgr authenticationManager = context.getGlobalStateMgr().getAuthenticationMgr();
-        UserIdentity currentUser = null;
-        if (Config.enable_auth_check) {
-            currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
-            if (currentUser == null) {
-                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
-                return false;
-            }
-        } else {
-            Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                    authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
-            if (matchedUserIdentity == null) {
-                LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
-                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
-                return false;
-            } else {
-                currentUser = matchedUserIdentity.getKey();
-            }
-        }
-
-        context.setCurrentUserIdentity(currentUser);
-        if (!currentUser.isEphemeral()) {
-            context.setCurrentRoleIds(currentUser);
-            context.setAuthDataSalt(randomString);
-        }
-        context.setQualifiedUser(user);
-        return true;
-    }
+    private static final String LOCALHOST = "127.0.0.1";
 
     // send response packet(OK/EOF/ERR).
     // before call this function, should set information in state of ConnectContext
@@ -128,8 +94,10 @@ public class MysqlProto {
 
         // Server send handshake packet to client.
         serializer.reset();
+
+        byte[] randomString = MysqlPassword.createRandomString();
         MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId(),
-                context.supportSSL());
+                SSLContextLoader.getSslContext() != null, randomString);
         handshakePacket.writeTo(serializer);
         channel.sendAndFlush(serializer.toByteBuffer());
 
@@ -155,6 +123,15 @@ public class MysqlProto {
             if (authPacket == null) {
                 return new NegotiateResult(null, NegotiateState.READ_SSL_AUTH_PKG_FAILED);
             }
+        } else if (Config.ssl_force_secure_transport) {
+            if (!isRemoteIPLocalhost(context.getRemoteIP())) {
+                LOG.warn("Connections using insecure transport are prohibited");
+                ErrorReport.report(ErrorCode.ERR_SECURE_TRANSPORT_REQUIRED);
+                sendResponsePacket(context);
+                return new NegotiateResult(null, NegotiateState.INSECURE_TRANSPORT_PROHIBITED);
+            } else {
+                LOG.info("Connection made from a localhost, no secure transport enforced");
+            }
         }
 
         // check capability
@@ -165,60 +142,23 @@ public class MysqlProto {
             return new NegotiateResult(authPacket, NegotiateState.NOT_SUPPORTED_AUTH_MODE);
         }
 
-        // Starting with MySQL 8.0.4, MySQL changed the default authentication plugin for MySQL client
-        // from mysql_native_password to caching_sha2_password.
-        // ref: https://mysqlserverteam.com/mysql-8-0-4-new-default-authentication-plugin-caching_sha2_password/
-        // So, User use mysql client or ODBC Driver after 8.0.4 have problem to connect to StarRocks
-        // with password.
-        // So StarRocks support the Protocol::AuthSwitchRequest to tell client to keep the default password plugin
-        // which StarRocks is using now.
-        //
-        // Older version mysql client does not send auth plugin info, like 5.1 version.
-        // So we check if auth plugin name is null and treat as mysql_native_password if is null.
-        String authPluginName = authPacket.getPluginName();
-        if (authPluginName != null && !handshakePacket.checkAuthPluginSameAsStarRocks(authPluginName)) {
-            // 1. clear the serializer
-            serializer.reset();
-            // 2. build the auth switch request and send to the client
-            if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
-                    try {
-                        handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
-                    } catch (Exception e) {
-                        ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
-                        sendResponsePacket(context);
-                        return new NegotiateResult(authPacket, NegotiateState.KERBEROS_HANDSHAKE_FAILED);
-                    }
-                } else {
-                    ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
-                    sendResponsePacket(context);
-                    return new NegotiateResult(authPacket, NegotiateState.KERBEROS_PLUGIN_NOT_LOADED);
-                }
-            } else {
-                handshakePacket.buildAuthSwitchRequest(serializer);
-            }
-            channel.sendAndFlush(serializer.toByteBuffer());
-            // Server receive auth switch response packet from client.
-            ByteBuffer authSwitchResponse = channel.fetchOnePacket();
-            if (authSwitchResponse == null) {
-                // receive response failed.
-                LOG.error("Building handshake with kerberos error, msg: Failed to get a valid service ticket for" +
-                        " {} from the client", authPacket.getUser());
-                return new NegotiateResult(authPacket, NegotiateState.KERBEROS_HANDSHAKE_FAILED);
-            }
-            // 3. the client use default password plugin of StarRocks to dispose
-            // password
-            authPacket.setAuthResponse(readEofString(authSwitchResponse));
+        // StarRocks support the Protocol::AuthSwitchRequest to tell client which auth plugin is using
+        try {
+            switchAuthPlugin(authPacket, context, randomString);
+        } catch (AuthenticationException e) {
+            // receive response failed.
+            LOG.warn("read auth switch response failed for user {}", authPacket.getUser());
+            return new NegotiateResult(authPacket, NegotiateState.READ_AUTH_SWITCH_PKG_FAILED);
         }
 
         // change the capability of serializer
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
 
-        // NOTE: when we behind proxy, we need random string sent by proxy.
-        byte[] randomString = handshakePacket.getAuthPluginData();
-        // check authenticate
-        if (!authenticate(context, authPacket.getAuthResponse(), randomString, authPacket.getUser())) {
+        try {
+            AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
+                    authPacket.getAuthResponse(), randomString);
+        } catch (AuthenticationException e) {
             sendResponsePacket(context);
             return new NegotiateResult(authPacket, NegotiateState.AUTHENTICATION_FAILED);
         }
@@ -273,8 +213,11 @@ public class MysqlProto {
         String previousQualifiedUser = context.getQualifiedUser();
         String previousResourceGroup = context.getSessionVariable().getResourceGroup();
         // do authenticate again
-        if (!authenticate(context, changeUserPacket.getAuthResponse(), context.getAuthDataSalt(),
-                changeUserPacket.getUser())) {
+
+        try {
+            AuthenticationHandler.authenticate(context, changeUserPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
+                    changeUserPacket.getAuthResponse(), context.getAuthDataSalt());
+        } catch (AuthenticationException e) {
             LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
                     changeUserPacket.getUser());
             sendResponsePacket(context);
@@ -308,106 +251,86 @@ public class MysqlProto {
         return true;
     }
 
-    public static byte readByte(ByteBuffer buffer) {
-        return buffer.get();
-    }
-
-    public static int readInt1(ByteBuffer buffer) {
-        return readByte(buffer) & 0XFF;
-    }
-
-    public static int readInt2(ByteBuffer buffer) {
-        return (readByte(buffer) & 0xFF) | ((readByte(buffer) & 0xFF) << 8);
-    }
-
-    public static int readInt3(ByteBuffer buffer) {
-        return (readByte(buffer) & 0xFF) | ((readByte(buffer) & 0xFF) << 8) | ((readByte(
-                buffer) & 0xFF) << 16);
-    }
-
-    public static int readInt4(ByteBuffer buffer) {
-        return (readByte(buffer) & 0xFF) | ((readByte(buffer) & 0xFF) << 8) | ((readByte(
-                buffer) & 0xFF) << 16) | ((readByte(buffer) & 0XFF) << 24);
-    }
-
-    public static long readInt6(ByteBuffer buffer) {
-        return (readInt4(buffer) & 0XFFFFFFFFL) | (((long) readInt2(buffer)) << 32);
-    }
-
-    public static long readInt8(ByteBuffer buffer) {
-        return (readInt4(buffer) & 0XFFFFFFFFL) | (((long) readInt4(buffer)) << 32);
-    }
-
-    public static long readVInt(ByteBuffer buffer) {
-        int b = readInt1(buffer);
-
-        if (b < 251) {
-            return b;
+    public static boolean isRemoteIPLocalhost(String remoteIP) {
+        if (remoteIP == null) {
+            return false;
         }
-        if (b == 252) {
-            return readInt2(buffer);
-        }
-        if (b == 253) {
-            return readInt3(buffer);
-        }
-        if (b == 254) {
-            return readInt8(buffer);
-        }
-        if (b == 251) {
-            throw new NullPointerException();
-        }
-        return 0;
+        //Using "String.contains" here because the remote IP address starts with a forward slash, like “/127.0.0.1”.
+        return remoteIP.contains(LOCALHOST);
     }
 
-    public static byte[] readFixedString(ByteBuffer buffer, int len) {
-        byte[] buf = new byte[len];
-        buffer.get(buf);
-        return buf;
+    public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
     }
 
-    public static byte[] readEofString(ByteBuffer buffer) {
-        byte[] buf = new byte[buffer.remaining()];
-        buffer.get(buf);
-        return buf;
-    }
+    public static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context, byte[] randomString)
+            throws AuthenticationException, IOException {
+        String user = mysqlAuthPacket.getUser();
+        String authPluginName = mysqlAuthPacket.getPluginName();
 
-    public static byte[] readLenEncodedString(ByteBuffer buffer) {
-        long length = readVInt(buffer);
-        byte[] buf = new byte[(int) length];
-        buffer.get(buf);
-        return buf;
-    }
+        // Older version mysql client does not send auth plugin info, like 5.1 version.
+        if (authPluginName == null) {
+            return;
+        }
 
-    public static byte[] readNulTerminateString(ByteBuffer buffer) {
-        int oldPos = buffer.position();
-        int nullPos;
-        for (nullPos = oldPos; nullPos < buffer.limit(); ++nullPos) {
-            if (buffer.get(nullPos) == 0) {
+        String switchAuthPlugin = null;
+        AuthenticationProvider provider = null;
+
+        Map.Entry<UserIdentity, UserAuthenticationInfo> localUser = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                .getBestMatchedUserIdentity(user, context.getMysqlChannel().getRemoteIp());
+        if (localUser != null) {
+            UserAuthenticationInfo authInfo = localUser.getValue();
+            switchAuthPlugin = AuthPlugin.covertFromServerToClient(authInfo.getAuthPlugin());
+            provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin());
+        } else {
+            for (String authMechanism : Config.authentication_chain) {
+                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                    continue;
+                }
+
+                //Because we only support Security Integration of the same type, we use the first non-Native type here.
+                SecurityIntegration securityIntegration =
+                        GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration(authMechanism);
+                switchAuthPlugin = AuthPlugin.covertFromServerToClient(securityIntegration.getType());
+                provider = securityIntegration.getAuthenticationProvider();
                 break;
             }
         }
-        byte[] buf = new byte[nullPos - oldPos];
-        buffer.get(buf);
-        // skip null byte.
-        buffer.get();
-        return buf;
-    }
 
-    public static class NegotiateResult {
-        private final MysqlAuthPacket authPacket;
-        private final NegotiateState state;
-
-        public NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
-            this.authPacket = authPacket;
-            this.state = state;
+        if (provider == null) {
+            return;
         }
 
-        public MysqlAuthPacket getAuthPacket() {
-            return authPacket;
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        if (!authPluginName.equalsIgnoreCase(switchAuthPlugin)) {
+            // AuthSwitchRequest Packet
+            MysqlCodec.writeInt1(outputStream, (byte) 0xfe);
+            MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
+
+            byte[] authSwitchRequestPacket =
+                    provider.authSwitchRequestPacket(user, context.getMysqlChannel().getRemoteIp(), randomString);
+            if (authSwitchRequestPacket != null) {
+                MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
+            }
+            MysqlCodec.writeInt1(outputStream, 0);
+
+            mysqlAuthPacket.setPluginName(switchAuthPlugin);
+        } else {
+            // AuthMoreData Packet
+            byte[] authMoreDataPacket = provider.authMoreDataPacket(user, context.getMysqlChannel().getRemoteIp());
+            if (authMoreDataPacket != null) {
+                MysqlCodec.writeInt1(outputStream, (byte) 0x01);
+                MysqlCodec.writeBytes(outputStream, authMoreDataPacket);
+            }
         }
 
-        public NegotiateState getState() {
-            return state;
+        if (outputStream.size() > 0) {
+            MysqlChannel channel = context.getMysqlChannel();
+            channel.sendAndFlush(ByteBuffer.wrap(outputStream.toByteArray()));
+            ByteBuffer authSwitchResponse = channel.fetchOnePacket();
+            if (authSwitchResponse == null) {
+                throw new AuthenticationException("read auth switch response failed for user " + user);
+            }
+            mysqlAuthPacket.setAuthResponse(MysqlCodec.readEofString(authSwitchResponse));
         }
     }
 }

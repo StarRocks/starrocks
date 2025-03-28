@@ -35,7 +35,7 @@ public class InsertOverwriteStateChangeInfoTest {
         List<Long> newPartitionNames = Lists.newArrayList(1000L, 1001L);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
-                sourcePartitionNames, newPartitionNames);
+                sourcePartitionNames, null, newPartitionNames);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         stateChangeInfo.write(dataOutputStream);
@@ -49,21 +49,20 @@ public class InsertOverwriteStateChangeInfoTest {
         Assert.assertEquals(sourcePartitionNames, newStateChangeInfo.getSourcePartitionIds());
         Assert.assertEquals(newPartitionNames, newStateChangeInfo.getTmpPartitionIds());
 
-        JournalEntity journalEntity = new JournalEntity();
-        journalEntity.setOpCode(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE);
-        journalEntity.setData(stateChangeInfo);
+        JournalEntity journalEntity = new JournalEntity(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, stateChangeInfo);
         ByteArrayOutputStream outputStream2 = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream2 = new DataOutputStream(outputStream2);
-        journalEntity.write(dataOutputStream2);
+        dataOutputStream2.writeShort(journalEntity.opCode());
+        journalEntity.data().write(dataOutputStream2);
 
         ByteArrayInputStream inputStream2 = new ByteArrayInputStream(outputStream2.toByteArray());
         DataInputStream dataInputStream2 = new DataInputStream(inputStream2);
-        JournalEntity journalEntity2 = new JournalEntity();
-        journalEntity2.readFields(dataInputStream2);
+        short opCode = dataInputStream2.readShort();
+        JournalEntity journalEntity2 = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dataInputStream2));
 
-        Assert.assertEquals(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, journalEntity2.getOpCode());
-        Assert.assertTrue(journalEntity2.getData() instanceof InsertOverwriteStateChangeInfo);
-        InsertOverwriteStateChangeInfo newStateChangeInfo2 = (InsertOverwriteStateChangeInfo) journalEntity2.getData();
+        Assert.assertEquals(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, journalEntity2.opCode());
+        Assert.assertTrue(journalEntity2.data() instanceof InsertOverwriteStateChangeInfo);
+        InsertOverwriteStateChangeInfo newStateChangeInfo2 = (InsertOverwriteStateChangeInfo) journalEntity2.data();
         Assert.assertEquals(100L, newStateChangeInfo2.getJobId());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, newStateChangeInfo2.getFromState());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, newStateChangeInfo2.getToState());

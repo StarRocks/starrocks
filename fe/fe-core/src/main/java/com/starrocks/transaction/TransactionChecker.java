@@ -106,10 +106,10 @@ public class TransactionChecker {
 
             Locker locker = new Locker();
             try {
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
 
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                    long partitionId = partitionCommitInfo.getPartitionId();
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                     PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     if (partition == null) {
                         continue;
@@ -126,7 +126,7 @@ public class TransactionChecker {
                     partitions.add(partitionChecker);
                 }
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
             }
         }
         return new TransactionChecker(partitions);

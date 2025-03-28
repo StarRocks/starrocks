@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -169,12 +170,21 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         this.type = type;
     }
 
+    @VisibleForTesting
+    public List<ColumnIdExpr> getPartitionExprs() {
+        return partitionExprs;
+    }
+
     public List<Expr> getPartitionExprs(Map<ColumnId, Column> idToColumn) {
         List<Expr> result = new ArrayList<>(partitionExprs.size());
         for (ColumnIdExpr columnIdExpr : partitionExprs) {
             result.add(columnIdExpr.convertToColumnNameExpr(idToColumn));
         }
         return result;
+    }
+
+    public List<ColumnIdExpr> getPartitionColumnIdExprs() {
+        return partitionExprs;
     }
 
     @Override

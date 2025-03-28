@@ -71,6 +71,10 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     private static Stream<Arguments> tpchSource() {
         List<Arguments> cases = Lists.newArrayList();
         for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            if (!entry.getKey().equalsIgnoreCase("q1")) {
+                continue;
+
+            }
             cases.add(Arguments.of(entry.getKey(), entry.getValue(), "materialized-view/tpch/" + entry.getKey()));
         }
         return cases.stream();

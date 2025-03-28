@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -25,6 +26,7 @@ import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
@@ -39,7 +41,7 @@ public class ResourceGroup {
     public static final String PLAN_MEM_COST_RANGE = "plan_mem_cost_range";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String CPU_WEIGHT = "cpu_weight";
-    public static final String DEDICATED_CPU_CORES = "dedicated_cpu_cores";
+    public static final String EXCLUSIVE_CPU_CORES = "exclusive_cpu_cores";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
@@ -51,20 +53,18 @@ public class ResourceGroup {
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
 
-    public static final long DEFAULT_WG_ID = 0;
-    public static final long DEFAULT_MV_WG_ID = 1;
-    public static final long DEFAULT_MV_VERSION = 1;
+    /**
+     * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
+     * BE. Its ID is 0 and 1. To distinguish it from the old version, a new ID 2 and 3 is used here.
+     */
+    public static final long DEFAULT_WG_ID = 2;
+    public static final long DEFAULT_MV_WG_ID = 3;
 
-    public static final ResourceGroup DEFAULT_WG = new ResourceGroup();
-    public static final ResourceGroup DEFAULT_MV_WG = new ResourceGroup();
+    public static final Set<String> BUILTIN_WG_NAMES =
+            ImmutableSet.of(DEFAULT_RESOURCE_GROUP_NAME, DEFAULT_MV_RESOURCE_GROUP_NAME);
 
-    static {
-        DEFAULT_WG.setId(DEFAULT_WG_ID);
-        DEFAULT_WG.setName(DEFAULT_RESOURCE_GROUP_NAME);
-
-        DEFAULT_MV_WG.setId(DEFAULT_MV_WG_ID);
-        DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
-    }
+    // BE actually stores nanoseconds, so the maximum value needs to be limited to prevent overflow.
+    public static final long MAX_BIG_QUERY_CPU_SECOND_LIMIT = Long.MAX_VALUE / 1_000_000_000L;
 
     private static class ColumnMeta {
         public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier) {
@@ -92,10 +92,10 @@ public class ResourceGroup {
                     (rg, classifier) -> "" + rg.getId()),
             new ColumnMeta(
                     new Column(CPU_WEIGHT, ScalarType.createVarchar(200)),
-                    (rg, classifier) -> "" + rg.getCpuWeight()),
+                    (rg, classifier) -> "" + rg.geNormalizedCpuWeight()),
             new ColumnMeta(
-                    new Column(DEDICATED_CPU_CORES, ScalarType.createVarchar(200)),
-                    (rg, classifier) -> "" + rg.getNormalizedDedicatedCpuCores()),
+                    new Column(EXCLUSIVE_CPU_CORES, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores()),
             new ColumnMeta(
                     new Column(MEM_LIMIT, ScalarType.createVarchar(200)),
                     (rg, classifier) -> (rg.getMemLimit() * 100) + "%"),
@@ -150,8 +150,8 @@ public class ResourceGroup {
 
     @SerializedName(value = "cpuCoreLimit")
     private Integer cpuWeight;
-    @SerializedName(value = "dedicatedCpuCores")
-    private Integer dedicatedCpuCores;
+    @SerializedName(value = "exclusiveCpuCores")
+    private Integer exclusiveCpuCores;
 
     @SerializedName(value = "maxCpuCores")
     private Integer maxCpuCores;
@@ -261,13 +261,13 @@ public class ResourceGroup {
             twg.setWorkgroup_type(resourceGroupType);
         }
 
-        twg.setDedicated_cpu_cores(getNormalizedDedicatedCpuCores());
+        twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());
 
         twg.setVersion(version);
         return twg;
     }
 
-    public Integer getCpuWeight() {
+    public Integer getRawCpuWeight() {
         return cpuWeight;
     }
 
@@ -275,13 +275,30 @@ public class ResourceGroup {
         this.cpuWeight = cpuWeight;
     }
 
-    public Integer getDedicatedCpuCores() {
-        return dedicatedCpuCores;
+    public int geNormalizedCpuWeight() {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return 0;
+        }
+        return cpuWeight;
     }
 
-    public int getNormalizedDedicatedCpuCores() {
-        if (dedicatedCpuCores != null && dedicatedCpuCores > 0) {
-            return dedicatedCpuCores;
+    /**
+     * The old version considers cpu_weight as a positive integer, but now it can be non-positive.
+     * To be compatible with the old version, if cpu_weight is non-positive, it is stored as 1.
+     * And use geNormalizedCpuWeight() to get the normalized value when using cpu_weight.
+     */
+    public void normalizeCpuWeight() {
+        if (cpuWeight == null || cpuWeight <= 0) {
+            cpuWeight = 1;
+        }
+    }
+
+    public Integer getExclusiveCpuCores() {
+        return exclusiveCpuCores;
+    }
+    public int getNormalizedExclusiveCpuCores() {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return exclusiveCpuCores;
         }
         // For compatibility, resource group of deprecated type `short_query` uses `cpu_weight` (the original `cpu_core_limit`)
         // as the reserved cores.
@@ -291,8 +308,8 @@ public class ResourceGroup {
         return 0;
     }
 
-    public void setDedicatedCpuCores(Integer dedicatedCpuCores) {
-        this.dedicatedCpuCores = dedicatedCpuCores;
+    public void setExclusiveCpuCores(Integer exclusiveCpuCores) {
+        this.exclusiveCpuCores = exclusiveCpuCores;
     }
 
     public boolean isMaxCpuCoresEffective() {
@@ -392,15 +409,15 @@ public class ResourceGroup {
         return Objects.hash(id, version);
     }
 
-    public static void validateCpuParameters(Integer cpuWeight, Integer dedicatedCpuCores) {
-        if ((cpuWeight == null || cpuWeight <= 0) && (dedicatedCpuCores == null || dedicatedCpuCores <= 0)) {
+    public static void validateCpuParameters(Integer cpuWeight, Integer exclusiveCpuCores) {
+        if ((cpuWeight == null || cpuWeight <= 0) && (exclusiveCpuCores == null || exclusiveCpuCores <= 0)) {
             throw new SemanticException(String.format("property '%s' or '%s' must be positive",
-                    ResourceGroup.CPU_WEIGHT, ResourceGroup.DEDICATED_CPU_CORES));
+                    ResourceGroup.CPU_WEIGHT, ResourceGroup.EXCLUSIVE_CPU_CORES));
         }
-        if ((cpuWeight != null && cpuWeight > 0) && (dedicatedCpuCores != null && dedicatedCpuCores > 0)) {
+        if ((cpuWeight != null && cpuWeight > 0) && (exclusiveCpuCores != null && exclusiveCpuCores > 0)) {
             throw new SemanticException(
                     String.format("property '%s' and '%s' cannot be present and positive at the same time",
-                            ResourceGroup.CPU_WEIGHT, ResourceGroup.DEDICATED_CPU_CORES));
+                            ResourceGroup.CPU_WEIGHT, ResourceGroup.EXCLUSIVE_CPU_CORES));
         }
     }
 

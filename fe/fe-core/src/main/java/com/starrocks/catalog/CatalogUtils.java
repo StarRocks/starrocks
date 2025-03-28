@@ -72,7 +72,8 @@ public class CatalogUtils {
 
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
     }
@@ -424,7 +425,7 @@ public class CatalogUtils {
         List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
         boolean dataImported = true;
         for (Partition partition : partitions) {
-            if (partition.getVisibleVersion() == 1) {
+            if (partition.getDefaultPhysicalPartition().getVisibleVersion() == 1) {
                 dataImported = false;
                 break;
             }

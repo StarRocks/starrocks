@@ -15,10 +15,13 @@
 package com.starrocks.server;
 
 import com.google.common.base.Strings;
+import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -28,6 +31,9 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.lake.StorageInfo;
+import com.starrocks.persist.TableStorageInfo;
+import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
@@ -36,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -89,7 +96,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     protected String createInternalNoLock(String name, String svType, List<String> locations,
-                                          Map<String, String> params, Optional<Boolean> enabled, String comment)
+            Map<String, String> params, Optional<Boolean> enabled, String comment)
             throws DdlException {
         FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
                 locations, params, enabled.orElse(true), comment);
@@ -99,6 +106,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected void updateInternalNoLock(StorageVolume sv) throws DdlException {
         GlobalStateMgr.getCurrentState().getStarOSAgent().updateFileStore(sv.toFileStoreInfo());
+    }
+
+    @Override
+    protected void replaceInternalNoLock(StorageVolume sv) throws DdlException {
+        GlobalStateMgr.getCurrentState().getStarOSAgent().replaceFileStore(sv.toFileStoreInfo());
     }
 
     @Override
@@ -313,9 +325,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 // validate azure_blob_path configuration
                 normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
                 break;
+            case "adls2":
+                if (Config.azure_adls2_endpoint.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"azure_adls2_endpoint\" is empty.");
+                }
+                // validate azure_adls2_path configuration
+                normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
+                break;
             default:
                 throw new InvalidConfException(String.format(
-                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS or S3 or AZBLOB.",
+                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS S3 AZBLOB or ADLS2.",
                         Config.cloud_native_storage_type));
         }
     }
@@ -330,7 +349,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
@@ -344,7 +363,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         bindings.add(dbBindings);
@@ -352,15 +371,97 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         return bindings;
     }
 
-    private static URI normalizeConfigPath(String uriStr, String defaultScheme, String configNameInErrMsg, boolean matchScheme)
+    @Override
+    public void replayUpdateTableStorageInfos(TableStorageInfos tableStorageInfos) {
+        for (Map.Entry<Long, List<TableStorageInfo>> entry : tableStorageInfos.getDbToTableStorageInfos().entrySet()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(entry.getKey());
+            if (db == null) {
+                continue;
+            }
+            for (TableStorageInfo tableStorageInfo : entry.getValue()) {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTableIncludeRecycleBin(db,
+                        tableStorageInfo.getTableId());
+                if (table == null) {
+                    continue;
+                }
+                OlapTable olapTable = ((OlapTable) table);
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty != null) {
+                    StorageInfo storageInfo = tableProperty.getStorageInfo();
+                    if (storageInfo != null) {
+                        // Update file path info, do not need to lock
+                        storageInfo.setFilePathInfo(tableStorageInfo.getFilePathInfo());
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void updateTableStorageInfo(String storageVolumeId) throws DdlException {
+        Map<Long, List<TableStorageInfo>> dbToTableStorageInfos = new HashMap<>();
+        for (Map.Entry<Database, List<Table>> entry : getBindedTablesOfStorageVolume(storageVolumeId).entrySet()) {
+            Database db = entry.getKey();
+            List<Table> tables = entry.getValue();
+            List<TableStorageInfo> tableStorageInfos = new ArrayList<>(tables.size());
+            for (Table table : tables) {
+                OlapTable olapTable = ((OlapTable) table);
+                FilePathInfo filePathInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .allocateFilePath(storageVolumeId, db.getId(), table.getId());
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty != null) {
+                    StorageInfo storageInfo = tableProperty.getStorageInfo();
+                    if (storageInfo != null) {
+                        // Update file path info, do not need to lock
+                        storageInfo.setFilePathInfo(filePathInfo);
+                        tableStorageInfos.add(new TableStorageInfo(table.getId(), filePathInfo));
+                    }
+                }
+            }
+            dbToTableStorageInfos.put(db.getId(), tableStorageInfos);
+        }
+
+        TableStorageInfos tableStorageInfos = new TableStorageInfos(dbToTableStorageInfos);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTableStorageInfos(tableStorageInfos);
+    }
+
+    private Map<Database, List<Table>> getBindedTablesOfStorageVolume(String storageVolumeId) {
+        Map<Database, List<Table>> bindedTables = new HashMap<>();
+
+        Set<Long> tableIds = new HashSet<>();
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            tableIds.addAll(storageVolumeToTables.getOrDefault(storageVolumeId, Collections.emptySet()));
+        }
+
+        for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            if (db == null) {
+                continue;
+            }
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTablesIncludeRecycleBin(db).stream().filter(table -> tableIds.contains(table.getId()))
+                    .collect(Collectors.toList());
+
+            bindedTables.put(db, tables);
+        }
+
+        return bindedTables;
+    }
+
+    private static URI normalizeConfigPath(String uriStr, String defaultScheme, String configNameInErrMsg,
+            boolean matchScheme)
             throws InvalidConfException {
         try {
             URI uri = new URI(uriStr);
             if (!uri.isAbsolute()) {
                 uri = new URI(defaultScheme + "://" + uriStr);
             }
-            if (Strings.isNullOrEmpty(uri.getAuthority()) || uri.getPort() != -1) {
-                // no bucket or bucket name contains ':'
+            if (Strings.isNullOrEmpty(uri.getAuthority())) {
+                throw new InvalidConfException("");
+            }
+            if (uri.getPort() != -1 && "s3".equals(defaultScheme)) {
+                // s3 uri, not allow `:` in authority, e.g. the following url is invalid
+                // - s3://{bucket}:3020/b/c
                 throw new InvalidConfException("");
             }
             if (matchScheme && !uri.getScheme().equals(defaultScheme)) {
@@ -380,7 +481,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             // remove leading '/' for backwards compatibility
             path = path.substring(1);
         }
-        return new String[] {uri.getAuthority(), path};
+        return new String[] { uri.getAuthority(), path };
     }
 
     private String getAwsCredentialType() {
@@ -405,7 +506,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             return "simple";
         }
 
-        //assume_role with ak sk, not supported now, just return null
+        // assume_role with ak sk, not supported now, just return null
         return null;
     }
 
@@ -424,6 +525,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 break;
             case "azblob":
                 uri = normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
+                locations.add(uri.toString());
+                break;
+            case "adls2":
+                uri = normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
                 locations.add(uri.toString());
                 break;
             default:
@@ -454,6 +559,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 params.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, Config.azure_blob_shared_key);
                 params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, Config.azure_blob_sas_token);
                 params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, Config.azure_blob_endpoint);
+                break;
+            case "adls2":
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, Config.azure_adls2_shared_key);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, Config.azure_adls2_sas_token);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, Config.azure_adls2_endpoint);
                 break;
             default:
                 return params;

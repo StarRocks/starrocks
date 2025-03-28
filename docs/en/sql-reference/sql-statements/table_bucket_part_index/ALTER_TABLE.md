@@ -106,7 +106,7 @@ Currently, column comments cannot be modified.
 
 #### ADD PARTITION(S)
 
-You can choose to add range partitions or list partitions.
+You can choose to add range partitions or list partitions. Adding expression partitions is not supported.
 
 Syntax：
 
@@ -213,7 +213,7 @@ DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
 
-partion_name_list ::= ( <partition_name> [, ... ] )
+partition_name_list ::= ( <partition_name> [, ... ] )
 
 multi_range_partitions ::=
     { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
@@ -222,9 +222,30 @@ multi_range_partitions ::=
 
 Notes for `multi_range_partitions`:
 
-- It only appiles to Range Partitioning.
+- It only applies to Range Partitioning.
 - The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
 - It only supports partitions with a single Partition Key.
+
+- Drop partitions with Common Partition Expression (Supported from v3.4.1):
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS WHERE <expr>
+```
+
+From v3.4.1 onwards, StarRocks supports dropping partitions using Common Partition Expression. You can specify a WHERE clause with an expression to filter the partitions to drop.
+- The expression declares the partitions to be dropped. Partitions that meet the condition in the expression will be dropped in batch. Be cautious when proceeding.
+- The expression can only contain partition columns and constants. Non-partition columns are not supported.
+- Common Partition Expression applies to List partitions and Range partitions differently:
+  - For tables with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
+  - For tables with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
+
+Example:
+
+```sql
+-- Drop the data earlier than the last three months. Column `dt` is the partition column of the table.
+ALTER TABLE t1 DROP PARTITIONS WHERE dt < CURRENT_DATE() - INTERVAL 3 MONTH;
+```
 
 :::note
 
@@ -573,18 +594,49 @@ Syntax:
 
 ```sql
 -- Add a field
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+ADD FIELD field_path field_desc
 
 -- Drop a field
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> DROP FIELD <field_name>
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+DROP FIELD field_path
+
+field_path ::= [ { <field_name>. | [*]. } [ ... ] ]<field_name>
+
+  -- Note that here `[*]` as a whole is a pre-defined symbol and represents all elements in the ARRAY field 
+  -- when adding or removing a field in a STRUCT type nested within an ARRAY type.
+  -- For detailed information, see the parameter description and examples of `field_path`.
+
+field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```
 
 Parameters:
 
-- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
-- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
+- `field_path`: The field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path that represents a nested field, for example, `lv1_k1.lv2_k2.[*].new_field_name`.
+- `[*]`: When a STRUCT type is nested within an ARRAY type, `[*]` represents all elements in the ARRAY field. It is used to add or remove a field in all STRUCT elements nested under the ARRAY field.
+- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_path` (specifically, the part preceding `new_field_name`, that is, `level1_k1.level2_k2.[*]`) and does not need to be specified explicitly.
+
+Examples of `field_path`:
+
+- Add or drop a sub-field in a STRUCT field nested within a STRUCT column.
+
+  Suppose there is a column `fx stuct<c1 int, c2 struct <v1 int, v2 int>>`. The syntax to add a `v3` field under `c2` is:
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.v3 INT
+  ```
+
+  After the operation, the column becomes `fx stuct<c1 int, c2 struct <v1 int, v2 int, v3 int>>`.
+
+- Add or drop a sub-field in every STRUCT field nested within a ARRAY field.
+
+  Suppose there is a column `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`. The field `c2` is an ARRAY type, which contains a STRUCT with two fields `v1` and `v2`. The syntax to add a `v3` field to the nested STRUCT is:
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT
+  ```
+
+  After the operation, the column becomes `fx struct<c1 int, c2 array<struct <v1 int, v2 int, v3 int>>>`.
 
 For more usage instructions, see [Example - Column -14](#column).
 
@@ -711,7 +763,7 @@ Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+SET ("key" = "value")
 ```
 
 Currently, StarRocks supports modifying the following table properties:
@@ -725,9 +777,14 @@ Currently, StarRocks supports modifying the following table properties:
 - `bloom_filter_columns`
 - `colocate_with`
 - `bucket_size` (supported since 3.2)
+- `base_compaction_forbidden_time_ranges` (supported since v3.2.13)
 
-Note:
-You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
+:::note
+
+- In most cases, you are only allowed to modify one property at a time. You can only modify multiple properties at a time only if these properties have the same prefix. Currently, only `dynamic_partition.` and `binlog.` are supported.
+- You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
+
+:::
 
 ### Swap
 
@@ -739,6 +796,11 @@ Syntax:
 ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
+
+:::note
+- Unique Key and Foreign Key constraints between OLAP tables will be validated during Swap to ensure that the constraints of the two tables being swapped are consistent. An error will be returned if inconsistencies are detected. If no inconsistencies are detected, Unique Key and Foreign Key constraints will be automatically swapped.
+- Materialized views that are depended on the tables being swapped will be automatically set to inactive, and their Unique Key and Foreign Key constraints will be removed and no longer available.
+:::
 
 ### Manual compaction (from 3.1)
 
@@ -752,6 +814,10 @@ Before v3.1, compaction is performed in two ways:
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
 Shared-data clusters support this feature from v3.3.0 onwards.
+
+> **NOTE**
+>
+> From v3.2.13 onwards, you can forbid Base Compaction within certain time range using the property [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction).
 
 Syntax:
 

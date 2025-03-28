@@ -184,11 +184,13 @@ public class MysqlTable extends Table {
         return getPropertyFromResource(MYSQL_PASSWORD);
     }
 
-    public String getMysqlDatabaseName() {
+    @Override
+    public String getCatalogDBName() {
         return mysqlDatabaseName;
     }
 
-    public String getMysqlTableName() {
+    @Override
+    public String getCatalogTableName() {
         return mysqlTableName;
     }
 

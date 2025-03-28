@@ -17,6 +17,7 @@
 #include "storage/rowset/column_writer.h"
 
 namespace starrocks {
+class BloomFilter;
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
                                                                   TypeInfoPtr type_info, WritableFile* wfile,
@@ -53,7 +54,7 @@ protected:
     Status _write_flat_column();
 
 private:
-    Status _flat_column(std::vector<ColumnPtr>& json_datas);
+    Status _flat_column(Columns& json_datas);
 
 protected:
     ColumnMetaPB* _json_meta;
@@ -63,12 +64,13 @@ protected:
     std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
-    std::vector<ColumnPtr> _flat_columns;
+    Columns _flat_columns;
 
-    std::vector<ColumnPtr> _json_datas;
+    Columns _json_datas;
     size_t _estimate_size = 0;
 
     bool _has_remain;
+    std::shared_ptr<BloomFilter> _remain_filter;
     bool _is_flat = false;
 };
 } // namespace starrocks

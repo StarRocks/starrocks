@@ -2,13 +2,14 @@
 displayed_sidebar: docs
 keywords: ['suoyin']
 toc_max_heading_level: 4
+sidebar_position: 50
 ---
 
 # [Preview] 全文倒排索引
 
 自 3.3.0 起，StarRocks 支持全文倒排索引，将文本中的每个单词进行分词处理，并为每个词建立一个索引项，记录该单词与其所在数据文件行号的映射关系。进行全文检索时，StarRocks 会根据查询的关键词对倒排索引进行查询，快速定位到与关键词匹配的数据行。
 
-StarRocks 存算分离集群暂时不支持全文倒排索引。
+StarRocks 存算分离集群以及主键表暂时不支持全文倒排索引。
 
 ## 功能简介
 
@@ -95,7 +96,7 @@ PROPERTIES (
 执行 `ALTER TABLE ADD INDEX`或者 `DROP INDEX` 删除全文倒排索引。
 
 ```SQL
-DROP INDEX index idx on t;
+DROP INDEX idx on t;
 ALTER TABLE t DROP index idx;
 ```
 

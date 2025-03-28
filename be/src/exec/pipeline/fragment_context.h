@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <unordered_map>
 
 #include "exec/exec_node.h"
@@ -25,6 +26,9 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -118,6 +122,8 @@ public:
     void destroy_pass_through_chunk_buffer();
 
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
+    Status set_pipeline_timer(PipelineTimer* pipeline_timer);
+    void clear_pipeline_timer();
 
     query_cache::CacheParam& cache_param() { return _cache_param; }
 
@@ -171,7 +177,20 @@ public:
 
     void set_report_when_finish(bool report) { _report_when_finish = report; }
 
+    // acquire runtime filter from cache
+    void acquire_runtime_filters();
+
+    bool enable_event_scheduler() const { return event_scheduler() != nullptr; }
+    EventScheduler* event_scheduler() const { return _event_scheduler.get(); }
+    void init_event_scheduler();
+
+    PipelineTimer* pipeline_timer() { return _pipeline_timer; }
+    void add_timer_observer(PipelineObserver* observer, uint64_t timeout);
+    Status submit_all_timer();
+
 private:
+    void _close_stream_load_contexts();
+
     bool _enable_group_execution = false;
     // Id of this query
     TUniqueId _query_id;
@@ -196,6 +215,12 @@ private:
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
 
+    std::unique_ptr<EventScheduler> _event_scheduler;
+    PipelineTimer* _pipeline_timer = nullptr;
+    PipelineTimerTask* _timeout_task = nullptr;
+    PipelineTimerTask* _report_state_task = nullptr;
+    std::unordered_map<uint64_t, PipelineTimerTask*> _rf_timeout_tasks;
+
     RuntimeFilterHub _runtime_filter_hub;
 
     MorselQueueFactoryMap _morsel_queue_factories;
@@ -209,7 +234,6 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
-    bool _channel_stream_load = false;
 
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
@@ -250,6 +274,14 @@ public:
     void unregister(const TUniqueId& fragment_id);
 
     void cancel(const Status& status);
+
+    template <class Caller>
+    void for_each_fragment(Caller&& caller) {
+        std::lock_guard guard(_lock);
+        for (auto& [_, fragment] : _fragment_contexts) {
+            caller(fragment);
+        }
+    }
 
 private:
     std::mutex _lock;

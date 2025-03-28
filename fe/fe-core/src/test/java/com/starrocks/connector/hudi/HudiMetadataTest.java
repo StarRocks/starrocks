@@ -18,10 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -71,7 +73,8 @@ public class HudiMetadataTest {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+                metastore, executorForHmsRefresh, executorForHmsRefresh,
+                100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hudiRemoteFileIO = new HudiRemoteFileIO(new Configuration());
@@ -86,7 +89,8 @@ public class HudiMetadataTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
         hudiMetadata =
-                new HudiMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider, Optional.empty());
+                new HudiMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
+                        Optional.empty(), new ConnectorProperties(ConnectorType.HUDI));
     }
 
     @After
@@ -98,7 +102,7 @@ public class HudiMetadataTest {
 
     @Test
     public void testListDbNames() {
-        List<String> databaseNames = hudiMetadata.listDbNames();
+        List<String> databaseNames = hudiMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
         CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
@@ -106,25 +110,26 @@ public class HudiMetadataTest {
 
     @Test
     public void testListTableNames() {
-        List<String> databaseNames = hudiMetadata.listTableNames("db1");
+        List<String> databaseNames = hudiMetadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
     }
 
     @Test
     public void testTableExists() {
-        boolean exists = hudiMetadata.tableExists("db1", "table1");
+        boolean exists = hudiMetadata.tableExists(new ConnectContext(), "db1", "table1");
         Assert.assertTrue(exists);
     }
 
     @Test
     public void testGetPartitionKeys() {
         Assert.assertEquals(
-                Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1", TableVersionRange.empty()));
+                Lists.newArrayList("col1"),
+                hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
     }
 
     @Test
     public void testGetDb() {
-        Database database = hudiMetadata.getDb("db1");
+        Database database = hudiMetadata.getDb(new ConnectContext(), "db1");
         Assert.assertEquals("db1", database.getFullName());
 
     }

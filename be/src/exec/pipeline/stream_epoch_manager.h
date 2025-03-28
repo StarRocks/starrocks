@@ -23,8 +23,7 @@ class TMVStartEpochTask;
 } // namespace starrocks
 
 namespace starrocks::pipeline {
-
-using FragmentContext = pipeline::FragmentContext;
+class FragmentContext;
 using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
 using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
 

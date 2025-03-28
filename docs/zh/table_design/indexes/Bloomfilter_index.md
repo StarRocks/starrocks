@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['suoyin']
+sidebar_position: 30
 ---
 
 # Bloom filter 索引

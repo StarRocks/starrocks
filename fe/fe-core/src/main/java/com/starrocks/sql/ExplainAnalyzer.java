@@ -91,8 +91,21 @@ public class ExplainAnalyzer {
         return Integer.parseInt(matcher.group(1));
     }
 
-    public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile, List<Integer> planNodeIds) {
-        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds);
+    public static String analyze(ProfilingExecPlan plan,
+                                 RuntimeProfile profile,
+                                 List<Integer> planNodeIds,
+                                 boolean colorExplainOutput) {
+        LOG.debug("plan {} profile {} planNodeIds {}", plan, profile, planNodeIds);
+        if (plan == null && profile.getChild("Summary") != null) {
+            String loadType = profile.getChild("Summary").getInfoString(ProfileManager.LOAD_TYPE);
+            if (loadType != null && (loadType.equals(ProfileManager.LOAD_TYPE_STREAM_LOAD)
+                    || loadType.equals(ProfileManager.LOAD_TYPE_ROUTINE_LOAD))) {
+                StringBuilder builder = new StringBuilder();
+                profile.prettyPrint(builder, "");
+                return builder.toString();
+            }
+        }
+        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds, colorExplainOutput);
         return analyzer.analyze();
     }
 
@@ -140,14 +153,19 @@ public class ExplainAnalyzer {
     private boolean isFinishedIdentical;
 
     private String color = ANSI_RESET;
+    private boolean colorExplainOutput = true;
 
     private long cumulativeOperatorTime;
     private Counter cumulativeScanTime;
     private Counter cumulativeNetworkTime;
     private Counter scheduleTime;
 
-    public ExplainAnalyzer(ProfilingExecPlan plan, RuntimeProfile queryProfile, List<Integer> planNodeIds) {
+    public ExplainAnalyzer(ProfilingExecPlan plan,
+                           RuntimeProfile queryProfile,
+                           List<Integer> planNodeIds,
+                           boolean colorExplainOutput) {
         this.plan = plan;
+        this.colorExplainOutput = colorExplainOutput;
         if (this.plan == null) {
             this.summaryProfile = null;
             this.plannerProfile = null;
@@ -326,13 +344,13 @@ public class ExplainAnalyzer {
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         if (plan.getFragments().stream()
                 .anyMatch(fragment -> fragment.getSink().instanceOf(OlapTableSink.class))) {
-            appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
+            appendSummaryLine("Attention: ", getAnsiColor(ANSI_BOLD + ANSI_BLACK_ON_RED),
                     "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
-                    ANSI_RESET);
+                    getAnsiColor(ANSI_RESET));
         }
         if (!isFinishedIdentical) {
-            appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
-                    "Profile is not identical!!!", ANSI_RESET);
+            appendSummaryLine("Attention: ", getAnsiColor(ANSI_BOLD + ANSI_BLACK_ON_RED),
+                    "Profile is not identical!!!", getAnsiColor(ANSI_RESET));
         }
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
         appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
@@ -437,10 +455,12 @@ public class ExplainAnalyzer {
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         for (int i = 0; i < topCpuNodes.size(); i++) {
             NodeInfo nodeInfo = topCpuNodes.get(i);
-            if (nodeInfo.isMostConsuming) {
-                setRedColor();
-            } else if (nodeInfo.isSecondMostConsuming) {
-                setCoralColor();
+            if (colorExplainOutput) {
+                if (nodeInfo.isMostConsuming) {
+                    setRedColor();
+                } else if (nodeInfo.isSecondMostConsuming) {
+                    setCoralColor();
+                }
             }
             appendSummaryLine(String.format("%d. ", i + 1), nodeInfo.getTitle(),
                     ": ", nodeInfo.totalTime, String.format(" (%.2f%%)", nodeInfo.totalTimePercentage));
@@ -504,10 +524,12 @@ public class ExplainAnalyzer {
                 // at the receiver side fragment through exchange node
                 sinkInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 sinkInfo.computeTimeUsage(cumulativeOperatorTime);
-                if (sinkInfo.isMostConsuming) {
-                    setRedColor();
-                } else if (sinkInfo.isSecondMostConsuming) {
-                    setCoralColor();
+                if (colorExplainOutput) {
+                    if (sinkInfo.isMostConsuming) {
+                        setRedColor();
+                    } else if (sinkInfo.isSecondMostConsuming) {
+                        setCoralColor();
+                    }
                 }
             } else {
                 sinkInfo = allNodeInfos.get(sink.getId());
@@ -553,10 +575,12 @@ public class ExplainAnalyzer {
 
         nodeInfo.computeTimeUsage(cumulativeOperatorTime);
         nodeInfo.computeMemoryUsage();
-        if (nodeInfo.isMostConsuming) {
-            setRedColor();
-        } else if (nodeInfo.isSecondMostConsuming) {
-            setCoralColor();
+        if (colorExplainOutput) {
+            if (nodeInfo.isMostConsuming) {
+                setRedColor();
+            } else if (nodeInfo.isSecondMostConsuming) {
+                setCoralColor();
+            }
         }
 
         boolean isMiddleChild = (parent != null && index < parent.getChildren().size() - 1);
@@ -897,7 +921,7 @@ public class ExplainAnalyzer {
         }
         Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
         Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
-        boolean needHighlight = enableHighlight && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+        boolean needHighlight = enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
         List<Object> items = Lists.newArrayList();
         if (needHighlight) {
             items.add(getBackGround());
@@ -1047,7 +1071,7 @@ public class ExplainAnalyzer {
         }
         boolean isColorAppended = false;
         for (Object content : contents) {
-            if (!isColorAppended && !(content instanceof GraphElement)) {
+            if (colorExplainOutput && !isColorAppended && !(content instanceof GraphElement)) {
                 buffer.append(color);
                 isColorAppended = true;
             }
@@ -1064,7 +1088,9 @@ public class ExplainAnalyzer {
                 buffer.append(content);
             }
         }
-        buffer.append(ANSI_RESET);
+        if (colorExplainOutput) {
+            buffer.append(ANSI_RESET);
+        }
         buffer.append('\n');
     }
 
@@ -1095,6 +1121,13 @@ public class ExplainAnalyzer {
 
     private void resetColor() {
         color = ANSI_RESET;
+    }
+
+    private String getAnsiColor(String color) {
+        if (!colorExplainOutput) {
+            return "";
+        }
+        return color;
     }
 
     private enum NodeState {

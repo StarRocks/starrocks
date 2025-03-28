@@ -54,8 +54,8 @@ public:
     explicit RuntimeFilterCache(size_t log2_num_slots);
     ~RuntimeFilterCache();
     Status init();
-    void put_if_absent(const TUniqueId& query_id, int filter_id, const JoinRuntimeFilterPtr& filter);
-    JoinRuntimeFilterPtr get(const TUniqueId& query_id, int filter_id);
+    void put_if_absent(const TUniqueId& query_id, int filter_id, const RuntimeFilterPtr& filter);
+    RuntimeFilterPtr get(const TUniqueId& query_id, int filter_id);
     void remove(const TUniqueId& query_id);
     size_t cache_times() const { return _cache_times; }
     size_t use_times() const { return _use_times; }

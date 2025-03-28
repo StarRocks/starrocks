@@ -16,7 +16,6 @@
 
 #include "butil/file_util.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
@@ -26,6 +25,7 @@
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -70,14 +70,13 @@ int init_test_env(int argc, char** argv) {
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
     date::init_date_cache();
-    TimezoneUtils::init_time_zones();
+    // Disable global cache of timezone info when running unit tests
+    // Save tons of time in parallel unit test mode
+    // TimezoneUtils::init_time_zones();
 
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
 
-    auto metadata_mem_tracker = std::make_unique<MemTracker>();
-    auto tablet_schema_mem_tracker = std::make_unique<MemTracker>(-1, "tablet_schema", metadata_mem_tracker.get());
-    auto schema_change_mem_tracker = std::make_unique<MemTracker>();
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
     auto update_mem_tracker = std::make_unique<MemTracker>();
     StorageEngine* engine = nullptr;
@@ -97,11 +96,17 @@ int init_test_env(int argc, char** argv) {
     config::disable_storage_page_cache = true;
     auto st = global_env->init();
     CHECK(st.ok()) << st;
-    auto* exec_env = ExecEnv::GetInstance();
-    // Pagecache is turned on by default, and some test cases require cache to be turned on,
+
+    // Pagecache is turned off by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
+    auto* cache_env = CacheEnv::GetInstance();
+    config::datacache_enable = false;
+    st = cache_env->init(paths);
+    CHECK(st.ok()) << st;
+
+    auto* exec_env = ExecEnv::GetInstance();
     st = exec_env->init(paths);
     CHECK(st.ok()) << st;
 
@@ -110,13 +115,19 @@ int init_test_env(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     CHECK(StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
-    TEST_clear_all_columns_this_thread();
+    exec_env->wait_for_finish();
     // delete engine
     StorageEngine::instance()->stop();
     // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
     exec_env->destroy();
+    cache_env->destroy();
     global_env->stop();
 
     shutdown_tracer();

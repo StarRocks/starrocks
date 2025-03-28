@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -47,7 +48,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -85,7 +85,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
 
         JSONObject root = new JSONObject();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             List<Table> tbls = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table tbl : tbls) {
@@ -104,7 +104,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
                 root.put(tbl.getName(), indexObj);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // to json response

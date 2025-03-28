@@ -24,15 +24,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
-    private static final Logger LOG = LogManager.getLogger(MVPCTRefreshNonPartitioner.class);
-
     public MVPCTRefreshNonPartitioner(MvTaskRunContext mvContext,
                                       TaskRunContext context,
                                       Database db,
@@ -48,22 +45,23 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Expr generatePartitionPredicate(Table table, Set<String> refBaseTablePartitionNames,
-                                           Expr mvPartitionSlotRef) {
+                                           List<Expr> mvPartitionSlotRefs) {
         // do nothing
         return null;
     }
+
     @Override
-    public Set<String> getMVPartitionsToRefreshWithForce(int partitionTTLNumber) {
+    public Set<String> getMVPartitionsToRefreshWithForce() {
         return mv.getVisiblePartitionNames();
     }
 
     @Override
     public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                 Map<Long, TableSnapshotInfo> snapshotBaseTables,
-                                                String start, String end, boolean force,
+                                                MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) {
         // non-partitioned materialized view
-        if (force || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
+        if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
             return mv.getVisiblePartitionNames();
         }
         return Sets.newHashSet();
@@ -71,8 +69,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                  String start, String end,
-                                                  int partitionTTLNumber,
+                                                  MVRefreshParams mvRefreshParams,
                                                   boolean isAutoRefresh) {
         return Sets.newHashSet();
     }

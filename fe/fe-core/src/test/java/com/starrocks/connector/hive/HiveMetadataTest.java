@@ -31,6 +31,9 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
@@ -48,8 +51,8 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -113,7 +116,8 @@ public class HiveMetadataTest {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+                metastore, executorForHmsRefresh, executorForHmsRefresh,
+                100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
@@ -129,9 +133,10 @@ public class HiveMetadataTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
-        optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
+        optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
         hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
-                Optional.empty(), executorForHmsRefresh, executorForHmsRefresh);
+                Optional.empty(), executorForHmsRefresh, executorForHmsRefresh,
+                new ConnectorProperties(ConnectorType.HIVE));
     }
 
     @After
@@ -143,7 +148,7 @@ public class HiveMetadataTest {
 
     @Test
     public void testListDbNames() {
-        List<String> databaseNames = hiveMetadata.listDbNames();
+        List<String> databaseNames = hiveMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
         CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
@@ -151,29 +156,30 @@ public class HiveMetadataTest {
 
     @Test
     public void testListTableNames() {
-        List<String> databaseNames = hiveMetadata.listTableNames("db1");
+        List<String> databaseNames = hiveMetadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
     }
 
     @Test
     public void testGetPartitionKeys() {
         Assert.assertEquals(
-                Lists.newArrayList("col1"), hiveMetadata.listPartitionNames("db1", "tbl1", TableVersionRange.empty()));
+                Lists.newArrayList("col1"),
+                hiveMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
     }
 
     @Test
     public void testGetDb() {
-        Database database = hiveMetadata.getDb("db1");
+        Database database = hiveMetadata.getDb(new ConnectContext(), "db1");
         Assert.assertEquals("db1", database.getFullName());
 
     }
 
     @Test
     public void testGetTable() {
-        com.starrocks.catalog.Table table = hiveMetadata.getTable("db1", "tbl1");
+        com.starrocks.catalog.Table table = hiveMetadata.getTable(new ConnectContext(), "db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
-        Assert.assertEquals("db1", hiveTable.getDbName());
-        Assert.assertEquals("tbl1", hiveTable.getTableName());
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
@@ -193,12 +199,12 @@ public class HiveMetadataTest {
         };
 
         Assert.assertThrows(StarRocksConnectorException.class,
-                () -> hiveMetadata.getTable("acid_db", "acid_table"));
+                () -> hiveMetadata.getTable(new ConnectContext(), "acid_db", "acid_table"));
     }
 
     @Test
     public void testTableExists() {
-        boolean exists = hiveMetadata.tableExists("db1", "tbl1");
+        boolean exists = hiveMetadata.tableExists(new ConnectContext(), "db1", "tbl1");
         Assert.assertTrue(exists);
     }
 
@@ -210,7 +216,7 @@ public class HiveMetadataTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
 
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
@@ -279,19 +285,24 @@ public class HiveMetadataTest {
 
     @Test
     public void testShowCreateHiveTbl() {
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
         Assert.assertEquals("CREATE TABLE `table1` (\n" +
-                "  `col2` int(11) DEFAULT NULL,\n" +
-                "  `col1` int(11) DEFAULT NULL\n" +
-                ")\n" +
-                "PARTITION BY (col1)\n" +
-                "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
+                        "  `col2` int(11) DEFAULT NULL,\n" +
+                        "  `col1` int(11) DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY (col1)\n" +
+                        "PROPERTIES (\"hive.table.serde.lib\" = \"org.apache.hadoop.hive.ql.io.orc.OrcSerde\",\"totalSize\" = " +
+                        "\"100\"," +
+                        "\"hive.table.column.names\" = \"col2\",\"numRows\" = \"50\",\"hive.table.column.types\" = \"INT\"," +
+                        "\"hive.table" +
+                        ".input.format\" = \"org.apache.hadoop.hive.ql.io.orc.OrcInputFormat\",\"location\" = \"hdfs://127.0.0" +
+                        ".1:10000/hive\");",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 
     @Test
     public void testGetTableStatisticsNormal() throws AnalysisException {
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
         ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
         ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
@@ -354,11 +365,11 @@ public class HiveMetadataTest {
     public void dropDbTest() {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Database d1 not empty",
-                () -> hiveMetadata.dropDb("d1", true));
+                () -> hiveMetadata.dropDb(new ConnectContext(), "d1", true));
 
         ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
                 "Failed to access database empty_db",
-                () -> hiveMetadata.dropDb("empty_db", true));
+                () -> hiveMetadata.dropDb(new ConnectContext(), "empty_db", true));
     }
 
     @Test
@@ -723,7 +734,7 @@ public class HiveMetadataTest {
         starRocksAssert.withCatalog(sql);
         new MockUp<HiveMetadata>() {
             @Mock
-            public Database getDb(String dbName) {
+            public Database getDb(ConnectContext context, String dbName) {
                 return new Database();
             }
         };
@@ -736,7 +747,7 @@ public class HiveMetadataTest {
 
             @Mock
             public boolean tableExists(String dbName, String tableName) {
-                return true;
+                return false;
             }
         };
 
@@ -757,6 +768,12 @@ public class HiveMetadataTest {
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
 
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
         Assert.assertTrue(hiveMetadata.createTable(createTableStmt));
     }
 

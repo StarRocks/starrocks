@@ -48,7 +48,7 @@ public class MultiUserLock extends Lock {
     @Override
     public LockGrantType lock(Locker locker, LockType lockType) throws LockException {
         LockHolder lockHolderRequest = new LockHolder(locker, lockType);
-        LockGrantType lockGrantType = tryLock(lockHolderRequest);
+        LockGrantType lockGrantType = tryLock(lockHolderRequest, waiterNum() == 0);
         if (lockGrantType == LockGrantType.NEW) {
             addOwner(lockHolderRequest);
         } else if (lockGrantType == LockGrantType.WAIT) {
@@ -58,7 +58,17 @@ public class MultiUserLock extends Lock {
         return lockGrantType;
     }
 
-    private LockGrantType tryLock(LockHolder lockHolderRequest) throws LockException {
+    /**
+     * @param noWaiters indicates whether there are other waiters. This will determine whether the lock
+     *                  can be directly acquired. If there are other waiters, the current locker cannot jump in
+     *                  line to acquire the lock first. A special scenario is to notify waiters in the
+     *                  existing wait list during release. At this time, the wait list needs to be ignored and
+     *                  as many waiters as possible need to be awakened.
+     * @return LockGrantType.NEW means that the lock ownership can be obtained.
+     * LockGrantType.EXISTING means that the current lock already exists and needs to be re-entered.
+     * LockGrantType.WAIT means that there is a lock conflict with the current owner and it is necessary to wait.
+     */
+    private LockGrantType tryLock(LockHolder lockHolderRequest, boolean noWaiters) throws LockException {
         if (ownerNum() == 0) {
             return LockGrantType.NEW;
         }
@@ -86,11 +96,6 @@ public class MultiUserLock extends Lock {
              * whether there are other Lockers with the same LockType.
              */
             if (lockHolderRequest.getLocker().equals(lockOwner.getLocker())) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Locker {} already holds lock on {} with type {}/{}, detail:{}", lockOwner.getLocker(),
-                            lockOwner.getLocker(), lockOwner.getLockType(), lockHolderRequest.getLockType(), this);
-                }
-
                 LockType lockOwnerLockType = lockOwner.getLockType();
                 LockType lockRequestLockType = lockHolderRequest.getLockType();
 
@@ -105,10 +110,10 @@ public class MultiUserLock extends Lock {
                      */
 
                     if (lockOwnerLockType.isIntentionLock() && !lockRequestLockType.isIntentionLock()) {
-                        throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock ("
-                                + lockHolderRequest.getLocker().getLockerStackTrace() + ")"
+                        throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock "
+                                + lockHolderRequest.getLocker()
                                 + " in the scope of Database " + lockOwnerLockType
-                                + " Lock (" + lockOwner.getLocker().getLockerStackTrace() + ")");
+                                + " Lock " + lockOwner.getLocker());
                     }
 
                     /*
@@ -136,7 +141,7 @@ public class MultiUserLock extends Lock {
             }
         }
 
-        if (!hasConflicts && (hasSameLockerWithDifferentLockType || waiterNum() == 0)) {
+        if (!hasConflicts && (hasSameLockerWithDifferentLockType || noWaiters)) {
             return LockGrantType.NEW;
         } else {
             return LockGrantType.WAIT;
@@ -210,7 +215,7 @@ public class MultiUserLock extends Lock {
         }
 
         while (lockWaiter != null) {
-            LockGrantType lockGrantType = tryLock(lockWaiter);
+            LockGrantType lockGrantType = tryLock(lockWaiter, true);
 
             if (lockGrantType == LockGrantType.NEW
                     || lockGrantType == LockGrantType.EXISTING) {
@@ -232,6 +237,7 @@ public class MultiUserLock extends Lock {
 
             if (lockWaiterIterator != null && lockWaiterIterator.hasNext()) {
                 lockWaiter = lockWaiterIterator.next();
+                isFirstWaiter = false;
             } else {
                 break;
             }

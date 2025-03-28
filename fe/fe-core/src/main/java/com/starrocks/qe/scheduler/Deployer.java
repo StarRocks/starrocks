@@ -17,8 +17,8 @@ package com.starrocks.qe.scheduler;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -96,7 +96,7 @@ public class Deployer {
     }
 
     public void deployFragments(DeployState deployState)
-            throws RpcException, UserException {
+            throws RpcException, StarRocksException {
 
         if (!needDeploy) {
             return;
@@ -124,7 +124,8 @@ public class Deployer {
     }
 
     public interface FailureHandler {
-        void apply(Status status, FragmentInstanceExecState execution, Throwable failure) throws RpcException, UserException;
+        void apply(Status status, FragmentInstanceExecState execution, Throwable failure) throws RpcException,
+                StarRocksException;
     }
 
     private void createFragmentInstanceExecStates(ExecutionFragment fragment,
@@ -204,6 +205,7 @@ public class Deployer {
                         fragment.getFragmentIndex(),
                         request,
                         instance.getWorker());
+                execution.setFragmentInstance(instance);
 
                 threeStageExecutionsToDeploy.get(stageIndex).add(execution);
 
@@ -221,7 +223,8 @@ public class Deployer {
         }
     }
 
-    private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException, UserException {
+    private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException,
+            StarRocksException {
         if (executions.isEmpty()) {
             return;
         }
@@ -249,6 +252,10 @@ public class Deployer {
         if (firstErrResult != null) {
             failureHandler.apply(firstErrResult.getStatus(), firstErrExecution, firstErrResult.getFailure());
         }
+    }
+
+    public TExecPlanFragmentParams createIncrementalScanRangesRequest(FragmentInstance instance) {
+        return tFragmentInstanceFactory.createIncrementalScanRanges(instance);
     }
 }
 

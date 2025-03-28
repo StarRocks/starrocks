@@ -34,25 +34,21 @@
 
 #pragma once
 
-#include <algorithm>
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "column/datum.h"
-#include "column/fixed_length_column.h"
-#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/common.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
@@ -68,6 +64,7 @@ class ColumnPredicate;
 class Column;
 class ZoneMapDetail;
 
+class BloomFilter;
 class BitmapIndexIterator;
 class BitmapIndexReader;
 class ColumnIterator;
@@ -153,12 +150,18 @@ public:
 
     int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
-    // page-level zone map filter.
+    // Return the ordinal range of a page
+    std::pair<ordinal_t, ordinal_t> get_page_range(size_t page_index);
 
+    // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
                            const IndexReadOptions& opts, CompoundNodeType pred_relation);
+
+    // NOTE: RAW interface should be used carefully
+    // Return all page-level zonemap
+    StatusOr<std::vector<ZoneMapDetail>> get_raw_zone_map(const IndexReadOptions& opts);
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
@@ -197,6 +200,9 @@ public:
     bool has_remain_json() const { return _has_remain; }
 
 private:
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_json_iterator(ColumnAccessPath* path = nullptr,
+                                                                 const TabletColumn* column = nullptr);
+
     const std::string& file_name() const { return _segment->file_name(); }
     template <bool is_original_bf>
     Status bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
@@ -298,6 +304,7 @@ private:
     std::string _name;
     bool _is_flat_json = false;
     bool _has_remain = false;
+    std::unique_ptr<BloomFilter> _remain_filter;
 
     // only used for inverted index load
     OnceFlag _inverted_index_load_once;

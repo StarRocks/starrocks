@@ -45,6 +45,7 @@ public class CurrentQueryStatisticsProcDirTest {
                 .customQueryId("abc1")
                 .queryId("queryId1")
                 .warehouseName("wh1")
+                .resourceGroupName("wg1")
                 .build()
         );
         statistic.put("queryId2", new QueryStatisticsItem.Builder()
@@ -52,6 +53,7 @@ public class CurrentQueryStatisticsProcDirTest {
                 .customQueryId("abc2")
                 .queryId("queryId2")
                 .warehouseName("wh1")
+                .resourceGroupName("wg2")
                 .build()
         );
         new MockUp<QeProcessorImpl>() {
@@ -80,6 +82,8 @@ public class CurrentQueryStatisticsProcDirTest {
         Assert.assertEquals("wh1", list1.get(12));
         // CustomQueryId
         Assert.assertEquals("abc1", list1.get(13));
+        // ResourceGroupName
+        Assert.assertEquals("wg1", list1.get(14));
 
         List<String> list2 = rows.get(1);
         Assert.assertEquals(list2.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());
@@ -89,6 +93,8 @@ public class CurrentQueryStatisticsProcDirTest {
         Assert.assertEquals("wh1", list2.get(12));
         // CustomQueryId
         Assert.assertEquals("abc2", list2.get(13));
+        // ResourceGroupName
+        Assert.assertEquals("wg2", list2.get(14));
     }
 
     @Test

@@ -491,7 +491,7 @@ public class ConstantExpressionTest extends PlanTestBase {
 
             // Non-constant arguments.
             {
-                String sql = "SELECT get_query_dump(lower('select count(v1) from t0')) from t0";
+                String sql = "SELECT get_query_dump(rtrim('select count(v1) from t0')) from t0";
                 Assert.assertThrows("Meta function get_query_dump does not support non-constant arguments",
                         SemanticException.class, () -> getFragmentPlan(sql));
             }
@@ -542,6 +542,40 @@ public class ConstantExpressionTest extends PlanTestBase {
 
         } finally {
             connectContext.setDumpInfo(prevDumpInfo);
+        }
+
+    }
+
+    @Test
+    public void testReplace() throws Exception {
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', '', '1234')");
+            assertContains(plan, "<slot 2> : 'abc def ghi abc'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : '1234 def ghi 1234'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : ''");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE(NULL, 'abc', '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', NULL, '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', NULL)");
+            assertContains(plan, "<slot 2> : NULL");
         }
 
     }

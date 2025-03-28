@@ -26,8 +26,9 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
@@ -40,6 +41,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -56,10 +59,13 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -69,16 +75,19 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class TableFunctionTable extends Table {
-    public static final String PARQUET = "parquet";
-    public static final String ORC = "orc";
-    public static final String CSV = "csv";
+    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
-    public static final Set<String> SUPPORTED_FORMATS;
+    private static final String PARQUET = "parquet";
+    private static final String ORC = "orc";
+    private static final String CSV = "csv";
+
+    private static final Set<String> SUPPORTED_FORMATS;
     static {
         SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         SUPPORTED_FORMATS.add(PARQUET);
@@ -86,10 +95,15 @@ public class TableFunctionTable extends Table {
         SUPPORTED_FORMATS.add(CSV);
     }
 
-    private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
-    private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
+    private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
+            .column("PATH", Type.STRING)
+            .column("SIZE", Type.BIGINT)
+            .column("IS_DIR", Type.BOOLEAN)
+            .column("MODIFICATION_TIME", Type.DATETIME)
+            .build();
 
-    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
+    private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 2;
+    private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
 
     public static final String FAKE_PATH = "fake://";
     public static final String PROPERTY_PATH = "path";
@@ -105,6 +119,8 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
 
+    private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
+
     public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
     public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
     public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
@@ -113,17 +129,53 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
     public static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
 
+    private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
+    private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
+
+    public enum MisMatchFillValue {
+        NONE,       // error
+        NULL;
+
+        public static MisMatchFillValue fromString(String value) {
+            for (MisMatchFillValue fillValue : values()) {
+                if (fillValue.name().equalsIgnoreCase(value)) {
+                    return fillValue;
+                }
+            }
+            return null;
+        }
+
+        public static List<String> getCandidates() {
+            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
+        }
+    }
+
+    public enum FilesTableType {
+        LOAD,
+        UNLOAD,
+        QUERY,
+        LIST
+    }
+
     private String path;
     private String format;
-    private String compressionType;
 
-    private int autoDetectSampleFiles;
-    private int autoDetectSampleRows;
+    private FilesTableType filesTableType = FilesTableType.QUERY;
+
+    // for load/query data
+    private int autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
+    private int autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
 
     private List<String> columnsFromPath = new ArrayList<>();
     private boolean strictMode = false;
     private final Map<String, String> properties;
 
+    private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
+
+    private MisMatchFillValue misMatchFillValue = MisMatchFillValue.NONE;
+
+    // for unload data
+    private String compressionType;
     private Optional<List<Integer>> partitionColumnIDs = Optional.empty();
     private boolean writeSingleFile;
     private long targetMaxFileSize;
@@ -139,30 +191,36 @@ public class TableFunctionTable extends Table {
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
 
-    private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
+    // for list files
+    private boolean listFilesOnly = false;
+    private boolean listRecursively = false;
 
-    // Ctor for load data via table function
+    // Ctor for load data / query data / list files via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
+        this(properties, null);
+    }
+
+    // Ctor for load data / query data / list files via table function
+    public TableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc)
+            throws DdlException {
         super(TableType.TABLE_FUNCTION);
         super.setId(-1);
         super.setName("table_function_table");
         this.properties = properties;
 
         parseProperties();
-        parseFiles();
 
-
-        List<Column> columns = new ArrayList<>();
-        if (path.startsWith(FAKE_PATH)) {
-            columns.add(new Column("col_int", Type.INT));
-            columns.add(new Column("col_string", Type.VARCHAR));
+        if (listFilesOnly) {
+            this.filesTableType = FilesTableType.LIST;
+            setSchemaForListFiles();
         } else {
-            columns = getFileSchema();
+            // set filesTableType as LOAD in insert analyzer, and default is QUERY
+            setSchemaForLoadAndQuery();
         }
 
-        columns.addAll(getSchemaFromPath());
-
-        setNewFullSchema(columns);
+        if (pushDownSchemaFunc != null) {
+            pushDownSchemaFunc.accept(this);
+        }
     }
 
     // Ctor for unload data via table function
@@ -171,8 +229,28 @@ public class TableFunctionTable extends Table {
         checkNotNull(properties, "properties is null");
         checkNotNull(sessionVariable, "sessionVariable is null");
         this.properties = properties;
+        this.filesTableType = FilesTableType.UNLOAD;
         parsePropertiesForUnload(columns, sessionVariable);
-        super.setNewFullSchema(columns);
+        setNewFullSchema(columns);
+    }
+
+    private void setSchemaForLoadAndQuery() throws DdlException {
+        parseFilesForLoadAndQuery();
+
+        // infer schema from files
+        List<Column> columns = new ArrayList<>();
+        if (path.startsWith(FAKE_PATH)) {
+            columns.add(new Column("col_int", Type.INT));
+            columns.add(new Column("col_string", Type.VARCHAR));
+        } else {
+            columns = getFileSchema();
+        }
+        columns.addAll(getSchemaFromPath());
+        setNewFullSchema(columns);
+    }
+
+    private void setSchemaForListFiles() {
+        setNewFullSchema(LIST_FILES_COLUMNS);
     }
 
     @Override
@@ -180,8 +258,76 @@ public class TableFunctionTable extends Table {
         return true;
     }
 
-    public List<TBrokerFileStatus> fileList() {
+    // for load
+    public List<TBrokerFileStatus> loadFileList() {
         return fileStatuses;
+    }
+
+    // for list files
+    // must be consistent with list files schema
+    public List<List<String>> listFilesAndDirs() {
+        List<List<String>> files = Lists.newArrayList();
+        try {
+            List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
+            for (String piece : ListUtils.emptyIfNull(pieces)) {
+                List<FileStatus> fileStatuses = Lists.newArrayList();
+                fileStatuses.addAll(listFilesAndDirs(piece, listRecursively, properties));
+
+                if (!listRecursively && !fileStatuses.isEmpty()) {
+                    List<FileStatus> newFileStatuses = Lists.newArrayList();
+                    for (FileStatus fStatus : fileStatuses) {
+                        if (!fStatus.isDirectory()) {
+                            newFileStatuses.add(fStatus);
+                            continue;
+                        }
+
+                        // if the path is directory, return files and sub directories in this directory
+                        String dirPath = fStatus.getPath().toString() + "/*";
+                        newFileStatuses.addAll(listFilesAndDirs(dirPath, false, properties));
+                    }
+
+                    fileStatuses.clear();
+                    fileStatuses.addAll(newFileStatuses);
+                }
+
+                for (FileStatus fStatus : fileStatuses) {
+                    List<String> fileInfo = Lists.newArrayList(
+                            fStatus.getPath().toString(),
+                            String.valueOf(fStatus.getLen()),
+                            String.valueOf(fStatus.isDirectory()),
+                            ScalarOperatorFunctions.fromUnixTime(
+                                    ConstantOperator.createBigint(fStatus.getModificationTime() / 1000)).getVarchar());
+                    files.add(fileInfo);
+                }
+            }
+
+            if (files.isEmpty()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_NO_FILES_FOUND, path);
+            }
+            return files;
+        } catch (StarRocksException e) {
+            LOG.warn("failed to parse files", e);
+            throw new SemanticException("failed to parse files: " + e.getMessage());
+        }
+    }
+
+    private static List<FileStatus> listFilesAndDirs(String path, boolean listRecursively, Map<String, String> properties)
+            throws StarRocksException {
+        URI uri = null;
+        try {
+            uri = new URI(path);
+        } catch (URISyntaxException e) {
+            throw new StarRocksException(e);
+        }
+
+        List<FileStatus> files = Lists.newArrayList();
+        for (FileStatus fStatus : HdfsUtil.listFileMeta(uri.normalize().toString(), new BrokerDesc(properties), false)) {
+            files.add(fStatus);
+            if (listRecursively && fStatus.isDirectory()) {
+                files.addAll(listFilesAndDirs(fStatus.getPath().toString() + "/*", true, properties));
+            }
+        }
+        return files;
     }
 
     @Override
@@ -226,6 +372,18 @@ public class TableFunctionTable extends Table {
         return path;
     }
 
+    public void setFilesTableType(FilesTableType filesTableType) {
+        this.filesTableType = filesTableType;
+    }
+
+    public boolean isLoadType() {
+        return filesTableType == FilesTableType.LOAD;
+    }
+
+    public boolean isListFilesOnly() {
+        return listFilesOnly;
+    }
+
     private void parseProperties() throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of table function");
@@ -236,6 +394,26 @@ public class TableFunctionTable extends Table {
             throw new DdlException("path is null. Please add properties(path='xxx') when create table");
         }
 
+        if (properties.containsKey(PROPERTY_LIST_FILES_ONLY)) {
+            String property = properties.get(PROPERTY_LIST_FILES_ONLY);
+            listFilesOnly = ParseUtil.parseBooleanValue(property, PROPERTY_LIST_FILES_ONLY);
+        }
+
+        if (listFilesOnly) {
+            parsePropertiesForListFiles(properties);
+        } else {
+            parsePropertiesForLoad(properties);
+        }
+    }
+
+    private void parsePropertiesForListFiles(Map<String, String> properties) {
+        if (properties.containsKey(PROPERTY_LIST_RECURSIVELY)) {
+            String property = properties.get(PROPERTY_LIST_RECURSIVELY);
+            listRecursively = ParseUtil.parseBooleanValue(property, PROPERTY_LIST_RECURSIVELY);
+        }
+    }
+
+    private void parsePropertiesForLoad(Map<String, String> properties) throws DdlException {
         format = properties.get(PROPERTY_FORMAT);
         if (Strings.isNullOrEmpty(format)) {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
@@ -257,23 +435,34 @@ public class TableFunctionTable extends Table {
             strictMode = Boolean.parseBoolean(properties.get(PROPERTY_STRICT_MODE));
         }
 
-        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
-            autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
-        } else {
+        if (properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
+            String property = properties.get(PROPERTY_AUTO_DETECT_SAMPLE_FILES);
             try {
-                autoDetectSampleFiles = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_FILES));
+                autoDetectSampleFiles = Integer.parseInt(property);
             } catch (NumberFormatException e) {
-                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+                ErrorReport.reportDdlException(
+                        ErrorCode.ERR_INVALID_VALUE, PROPERTY_AUTO_DETECT_SAMPLE_FILES, property, "int number");
             }
         }
 
-        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_ROWS)) {
-            autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
-        } else {
+        if (properties.containsKey(PROPERTY_FILL_MISMATCH_COLUMN_WITH)) {
+            String property = properties.get(PROPERTY_FILL_MISMATCH_COLUMN_WITH);
+            misMatchFillValue = MisMatchFillValue.fromString(property);
+            if (misMatchFillValue == null) {
+                String msg = String.format("%s (case insensitive)", String.join(", ", MisMatchFillValue.getCandidates()));
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INVALID_VALUE, PROPERTY_FILL_MISMATCH_COLUMN_WITH, property, msg);
+            }
+        }
+
+        // csv properties
+        if (properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_ROWS)) {
+            String property = properties.get(PROPERTY_AUTO_DETECT_SAMPLE_ROWS);
             try {
-                autoDetectSampleRows = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_ROWS));
+                autoDetectSampleRows = Integer.parseInt(property);
             } catch (NumberFormatException e) {
-                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+                ErrorReport.reportDdlException(
+                        ErrorCode.ERR_INVALID_VALUE, PROPERTY_AUTO_DETECT_SAMPLE_ROWS, property, "int number");
             }
         }
 
@@ -331,7 +520,7 @@ public class TableFunctionTable extends Table {
         }
     }
 
-    private void parseFiles() throws DdlException {
+    private void parseFilesForLoadAndQuery() throws DdlException {
         try {
             // fake:// is a faked path, for testing purpose
             if (path.startsWith("fake://")) {
@@ -352,7 +541,7 @@ public class TableFunctionTable extends Table {
             for (String piece : ListUtils.emptyIfNull(pieces)) {
                 HdfsUtil.parseFile(piece, new BrokerDesc(properties), fileStatuses);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.error("parse files error", e);
             throw new DdlException("failed to parse files", e);
         }
@@ -390,7 +579,7 @@ public class TableFunctionTable extends Table {
             THdfsProperties hdfsProperties = new THdfsProperties();
             HdfsUtil.getTProperties(filelist.get(0).path, new BrokerDesc(properties), hdfsProperties);
             params.setHdfs_properties(hdfsProperties);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new TException("failed to parse files: " + e.getMessage());
         }
 
@@ -481,11 +670,12 @@ public class TableFunctionTable extends Table {
         return columns;
     }
 
-    public List<ImportColumnDesc> getColumnExprList() {
+    public List<ImportColumnDesc> getColumnExprList(Set<String> scanColumns) {
         List<ImportColumnDesc> exprs = new ArrayList<>();
         List<Column> columns = super.getFullSchema();
         for (Column column : columns) {
-            exprs.add(new ImportColumnDesc(column.getName()));
+            String colName = column.getName();
+            exprs.add(new ImportColumnDesc(colName, scanColumns.contains(colName)));
         }
         return exprs;
     }
@@ -496,6 +686,10 @@ public class TableFunctionTable extends Table {
 
     public boolean isStrictMode() {
         return strictMode;
+    }
+
+    public boolean isFlexibleColumnMapping() {
+        return misMatchFillValue != MisMatchFillValue.NONE;
     }
 
     @Override
@@ -646,10 +840,21 @@ public class TableFunctionTable extends Table {
 
         // csv options
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
-            this.csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            csvColumnSeparator = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_COLUMN_SEPARATOR));
+            int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
+                throw new SemanticException("The valid bytes length for '%s' is [%d, %d]",
+                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
+            }
         }
+
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
-            this.csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            csvRowDelimiter = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_ROW_DELIMITER));
+            int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
+                throw new SemanticException("The valid bytes length for '%s' is [%d, %d]", PROPERTY_CSV_ROW_DELIMITER,
+                        1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
+            }
         }
 
         // parquet options
@@ -660,6 +865,23 @@ public class TableFunctionTable extends Table {
                         "expect a boolean value (true or false).", useLegacyEncoding);
             }
             this.parquetUseLegacyEncoding = useLegacyEncoding.equalsIgnoreCase("true");
+        }
+    }
+
+    private static class SchemaBuilder {
+        private List<Column> columns;
+
+        public SchemaBuilder() {
+            columns = Lists.newArrayList();
+        }
+
+        public SchemaBuilder column(String name, Type type) {
+            columns.add(new Column(name, type, false, null, true, null, ""));
+            return this;
+        }
+
+        public List<Column> build() {
+            return columns;
         }
     }
 }

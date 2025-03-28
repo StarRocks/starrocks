@@ -96,7 +96,7 @@ public:
 
         res_data_col->resize(cur_size);
         res_offset_col->append(cur_size);
-        return std::make_pair(Columns{std::move(res_data_col)}, res_offset_col);
+        return std::make_pair(Columns{std::move(res_data_col)}, std::move(res_offset_col));
     }
 };
 } // namespace starrocks

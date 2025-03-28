@@ -38,14 +38,16 @@ public class BackendResourceStat {
 
     private static final int DEFAULT_CORES_OF_BE = 1;
     private static final long DEFAULT_MEM_LIMIT_BYTES = 0L;
+    private static final int ABSENT_CACHE_VALUE = -1;
 
     private final ReentrantLock lock = new ReentrantLock();
 
     private final ConcurrentHashMap<Long, Integer> numHardwareCoresPerBe = new ConcurrentHashMap<>();
-    private final AtomicInteger cachedAvgNumHardwareCores = new AtomicInteger(-1);
+    private final AtomicInteger cachedAvgNumHardwareCores = new AtomicInteger(ABSENT_CACHE_VALUE);
+    private final AtomicInteger cachedMinNumCores = new AtomicInteger(ABSENT_CACHE_VALUE);
 
     private final ConcurrentHashMap<Long, Long> memLimitBytesPerBe = new ConcurrentHashMap<>();
-    private final AtomicLong cachedAvgMemLimitBytes = new AtomicLong(-1L);
+    private final AtomicLong cachedAvgMemLimitBytes = new AtomicLong(ABSENT_CACHE_VALUE);
 
     private static class SingletonHolder {
         private static final BackendResourceStat INSTANCE = new BackendResourceStat();
@@ -62,7 +64,8 @@ public class BackendResourceStat {
         Integer previous = numHardwareCoresPerBe.put(be, numCores);
         LOG.info("set numHardwareCores [{}] of be [{}], current cpuCores stats: {}", numCores, be, numHardwareCoresPerBe);
         if (previous == null || previous != numCores) {
-            cachedAvgNumHardwareCores.set(-1);
+            cachedAvgNumHardwareCores.set(ABSENT_CACHE_VALUE);
+            cachedMinNumCores.set(ABSENT_CACHE_VALUE);
         }
     }
 
@@ -79,21 +82,23 @@ public class BackendResourceStat {
 
     public void removeBe(long be) {
         if (numHardwareCoresPerBe.remove(be) != null) {
-            cachedAvgNumHardwareCores.set(-1);
+            cachedAvgNumHardwareCores.set(ABSENT_CACHE_VALUE);
+            cachedMinNumCores.set(ABSENT_CACHE_VALUE);
         }
         LOG.info("remove numHardwareCores of be [{}], current cpuCores stats: {}", be, numHardwareCoresPerBe);
 
         if (memLimitBytesPerBe.remove(be) != null) {
-            cachedAvgMemLimitBytes.set(-1);
+            cachedAvgMemLimitBytes.set(ABSENT_CACHE_VALUE);
         }
     }
 
     public void reset() {
         numHardwareCoresPerBe.clear();
-        cachedAvgNumHardwareCores.set(-1);
+        cachedAvgNumHardwareCores.set(ABSENT_CACHE_VALUE);
+        cachedMinNumCores.set(ABSENT_CACHE_VALUE);
 
         memLimitBytesPerBe.clear();
-        cachedAvgMemLimitBytes.set(-1);
+        cachedAvgMemLimitBytes.set(ABSENT_CACHE_VALUE);
     }
 
     public int getAvgNumHardwareCoresOfBe() {
@@ -113,6 +118,26 @@ public class BackendResourceStat {
             LOG.info("update avgNumHardwareCoresOfBe to {}, current cpuCores stats: {}", avg, numHardwareCoresPerBe);
 
             return avg;
+        }
+    }
+
+    public int getMinNumHardwareCoresOfBe() {
+        int snapshot = cachedMinNumCores.get();
+        if (snapshot > 0) {
+            return snapshot;
+        }
+
+        try (CloseableLock ignored = CloseableLock.lock(lock)) {
+            if (numHardwareCoresPerBe.isEmpty()) {
+                return DEFAULT_CORES_OF_BE;
+            }
+
+            int min = numHardwareCoresPerBe.values().stream().reduce(Integer::min).orElse(DEFAULT_CORES_OF_BE);
+            min = Math.max(min, 1);
+            cachedMinNumCores.set(min);
+            LOG.info("update minNumHardwareCoresOfBe to {}, current cpuCores stats: {}", min, numHardwareCoresPerBe);
+
+            return min;
         }
     }
 

@@ -67,6 +67,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
@@ -79,9 +80,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.metric.GaugeMetric;
-import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
@@ -123,11 +121,15 @@ import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PartitionCommitInfo;
+import com.starrocks.transaction.TableCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -138,21 +140,36 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon implements MemoryTrackable {
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(reportQueue) + SizeEstimator.estimate(pendingTaskMap);
+    public List<Pair<List<Object>, Long>> getSamples() {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
+            List<Pair<List<Object>, Long>> result = new ArrayList<>();
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                result.add(Pair.create(taskMap.values()
+                        .stream()
+                        .limit(1)
+                        .collect(Collectors.toList()),
+                        (long) taskMap.size()));
+            }
+            return result;
+        }
     }
 
     @Override
     public Map<String, Long> estimateCount() {
-        long count = 0;
-        for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
-            count += taskMap.size();
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
+            long count = 0;
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                count += taskMap.size();
+            }
+            return ImmutableMap.of("PendingTask", count,
+                    "ReportQueue", (long) reportQueue.size());
         }
-        return ImmutableMap.of("PendingTask", count, "ReportQueue", (long) reportQueue.size());
     }
 
     public enum ReportType {
@@ -172,9 +189,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
 
-    private BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
+    private final BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
 
-    private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
+    private final Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
+
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     /**
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
@@ -191,14 +210,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     public ReportHandler() {
         super("ReportHandler");
-        GaugeMetric<Long> gaugeQueueSize = new GaugeMetric<Long>(
-                "report_queue_size", MetricUnit.NOUNIT, "report queue size") {
-            @Override
-            public Long getValue() {
-                return (long) reportQueue.size();
-            }
-        };
-        MetricRepo.addMetric(gaugeQueueSize);
         pendingTaskMap.put(ReportType.TABLET_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.DISK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
@@ -356,7 +367,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private void putToQueue(ReportTask reportTask) throws Exception {
-        synchronized (pendingTaskMap) {
+        try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
             if (!pendingTaskMap.containsKey(reportTask.type)) {
                 throw new Exception("Unknown report task type" + reportTask.toString());
             }
@@ -408,6 +419,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             this.activeWorkGroups = activeWorkGroups;
             this.resourceUsage = resourceUsage;
             this.dataCacheMetrics = dataCacheMetrics;
+        }
+
+        public ReportTask(long beId, ReportType type, Map<Long, TTablet> tablets, long reportVersion) {
+            this.beId = beId;
+            this.type = type;
+            this.tablets = tablets;
+            this.reportVersion = reportVersion;
         }
 
         @Override
@@ -468,7 +486,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         Set<Long> tabletWithoutPartitionId = Sets.newHashSet();
 
         // 1. do the diff. find out (intersection) / (be - meta) / (meta - be)
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().tabletReport(backendId, backendTablets, storageMediumMap,
+        tabletReport(backendId, backendTablets, storageMediumMap,
                 tabletSyncMap,
                 tabletDeleteFromMeta,
                 foundTabletsWithValidSchema,
@@ -531,6 +549,280 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
             LOG.info("tablet report from backend[{}] cost: {} ms", backendId, cost);
         }
+    }
+
+    public static void tabletReport(long backendId, Map<Long, TTablet> backendTablets,
+                                    final HashMap<Long, TStorageMedium> storageMediumMap,
+                                    ListMultimap<Long, Long> tabletSyncMap,
+                                    ListMultimap<Long, Long> tabletDeleteFromMeta,
+                                    Set<Long> foundTabletsWithValidSchema,
+                                    Map<Long, TTabletInfo> foundTabletsWithInvalidSchema,
+                                    ListMultimap<TStorageMedium, Long> tabletMigrationMap,
+                                    Map<Long, Map<Long, Map<Long, TPartitionVersionInfo>>> transactionsToPublish,
+                                    Map<Long, Long> transactionsToCommitTime,
+                                    ListMultimap<Long, Long> transactionsToClear,
+                                    ListMultimap<Long, Long> tabletRecoveryMap,
+                                    Set<Long> tabletWithoutPartitionId) {
+
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetPartition_id() || tabletInfo.getPartition_id() < 1) {
+                    tabletWithoutPartitionId.add(tabletInfo.getTablet_id());
+                }
+            }
+        }
+
+        int backendStorageTypeCnt = -1;
+        Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+        if (be != null) {
+            backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
+        }
+
+        TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        tabletInvertedIndex.readLock();
+        long start = System.currentTimeMillis();
+        try {
+            LOG.debug("begin to do tablet diff with backend[{}]. num: {}", backendId, backendTablets.size());
+            // backingReplicaMetaTable.row(backendId) won't return null
+            Map<Long, Replica> replicaMetaWithBackend = tabletInvertedIndex.getReplicaMetaWithBackend(backendId);
+            // traverse replicas in meta with this backend
+            for (Map.Entry<Long, Replica> entry : replicaMetaWithBackend.entrySet()) {
+                long tabletId = entry.getKey();
+                TabletMeta tabletMeta = tabletInvertedIndex.getTabletMeta(tabletId);
+                Preconditions.checkState(tabletMeta != null);
+
+                if (tabletMeta.isLakeTablet()) {
+                    continue;
+                }
+
+                if (backendTablets.containsKey(tabletId)) {
+                    TTablet backendTablet = backendTablets.get(tabletId);
+                    Replica replica = entry.getValue();
+                    for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
+                        if (backendTabletInfo.isSetIs_error_state()) {
+                            replica.setIsErrorState(backendTabletInfo.is_error_state);
+                        }
+                        if (backendTabletInfo.isSetMax_rowset_creation_time()) {
+                            replica.setMaxRowsetCreationTime(backendTabletInfo.max_rowset_creation_time);
+                        }
+                        if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
+                            foundTabletsWithValidSchema.add(tabletId);
+                            // 1. (intersection)
+                            if (needSync(replica, backendTabletInfo)) {
+                                // need sync
+                                tabletSyncMap.put(tabletMeta.getDbId(), tabletId);
+                            }
+
+                            // check and set path,
+                            // path info of replica is only saved in Leader FE
+                            if (backendTabletInfo.isSetPath_hash() &&
+                                    replica.getPathHash() != backendTabletInfo.getPath_hash()) {
+                                replica.setPathHash(backendTabletInfo.getPath_hash());
+                            }
+
+                            if (backendTabletInfo.isSetSchema_hash() && replica.getState() == ReplicaState.NORMAL
+                                    && replica.getSchemaHash() != backendTabletInfo.getSchema_hash()) {
+                                // update the schema hash only when replica is normal
+                                replica.setSchemaHash(backendTabletInfo.getSchema_hash());
+                            }
+
+                            if (!isRestoreReplica(replica, tabletMeta) &&
+                                    needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
+                                LOG.warn("replica {} of tablet {} on backend {} need recovery. "
+                                                + "replica in FE: {}, report version {}, report schema hash: {},"
+                                                + " is bad: {}",
+                                        replica.getId(), tabletId, backendId,
+                                        replica, backendTabletInfo.getVersion(), backendTabletInfo.getSchema_hash(),
+                                        backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown");
+                                tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
+                            }
+
+                            replica.setLastReportVersion(backendTabletInfo.getVersion());
+
+                            // check if tablet needs migration
+                            long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+                            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(tabletMeta.getDbId(), tabletMeta.getTableId());
+                            if (olapTable == null) {
+                                continue;
+                            }
+                            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                            if (physicalPartition == null) {
+                                continue;
+                            }
+
+                            TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
+                            if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
+                                if (storageMedium != backendTabletInfo.getStorage_medium()) {
+                                    // If storage medium is less than 1, there is no need to send migration tasks to BE.
+                                    // Because BE will ignore this request.
+                                    if (backendStorageTypeCnt <= 1) {
+                                        LOG.debug("available storage medium type count is less than 1, " +
+                                                        "no need to send migrate task. tabletId={}, backendId={}.",
+                                                tabletMeta, backendId);
+                                    } else {
+                                        tabletMigrationMap.put(storageMedium, tabletId);
+                                    }
+                                }
+                                if (storageMedium != tabletMeta.getStorageMedium()) {
+                                    tabletMeta.setStorageMedium(storageMedium);
+                                }
+                            }
+                            // check if we should clear transactions
+                            if (backendTabletInfo.isSetTransaction_ids()) {
+                                List<Long> transactionIds = backendTabletInfo.getTransaction_ids();
+                                GlobalTransactionMgr transactionMgr =
+                                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                                for (Long transactionId : transactionIds) {
+                                    TransactionState transactionState =
+                                            transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
+                                    if (transactionState == null ||
+                                            transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
+                                        transactionsToClear.put(transactionId, physicalPartitionId);
+                                        LOG.debug("transaction id [{}] is not valid any more, "
+                                                + "clear it from backend [{}]", transactionId, backendId);
+                                    } else if (transactionState.getTransactionStatus() ==
+                                            TransactionStatus.VISIBLE) {
+                                        TableCommitInfo tableCommitInfo =
+                                                transactionState.getTableCommitInfo(tabletMeta.getTableId());
+                                        PartitionCommitInfo partitionCommitInfo =
+                                                tableCommitInfo.getPartitionCommitInfo(physicalPartitionId);
+                                        if (partitionCommitInfo == null) {
+                                            /*
+                                             * This may happen as follows:
+                                             * 1. txn is committed on BE, and report commit info to FE
+                                             * 2. FE received report and begin to assemble partitionCommitInfos.
+                                             * 3. At the same time, some partitions have been dropped, so
+                                             *    partitionCommitInfos does not contain these partitions.
+                                             * 4. So we will not able to get partitionCommitInfo here.
+                                             *
+                                             * Just print a log to observe
+                                             */
+                                            LOG.info(
+                                                    "failed to find partition commit info. table: {}, " +
+                                                            "partition: {}, tablet: {}, txn_id: {}",
+                                                    tabletMeta.getTableId(), physicalPartitionId, tabletId,
+                                                    transactionState.getTransactionId());
+                                        } else {
+                                            TPartitionVersionInfo versionInfo =
+                                                    new TPartitionVersionInfo(physicalPartitionId,
+                                                            partitionCommitInfo.getVersion(), 0);
+                                            versionInfo.setGtid(transactionState.getGlobalTransactionId());
+                                            Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
+                                                    transactionsToPublish.computeIfAbsent(
+                                                            transactionState.getDbId(), k -> Maps.newHashMap());
+                                            Map<Long, TPartitionVersionInfo> partitionMap =
+                                                    txnMap.computeIfAbsent(transactionId, k -> Maps.newHashMap());
+                                            partitionMap.put(versionInfo.getPartition_id(), versionInfo);
+                                            transactionsToCommitTime.put(transactionId,
+                                                    transactionState.getCommitTime());
+                                        }
+                                    }
+                                }
+                            } // end for txn id
+
+                            // update replica's version count
+                            // no need to write log, and no need to get db lock.
+                            if (backendTabletInfo.isSetVersion_count()) {
+                                replica.setVersionCount(backendTabletInfo.getVersion_count());
+                            }
+                        } else {
+                            // tablet with invalid schema hash
+                            foundTabletsWithInvalidSchema.put(tabletId, backendTabletInfo);
+                        } // end for be tablet info
+                    }
+                } else {
+                    // 2. (meta - be)
+                    // may need delete from meta
+                    LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
+                    tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletId);
+                }
+            } // end for replicaMetaWithBackend
+        } finally {
+            tabletInvertedIndex.readUnlock();
+        }
+
+        long end = System.currentTimeMillis();
+        LOG.info("finished to do tablet diff with backend[{}]. sync: {}. metaDel: {}. foundValid: {}. foundInvalid: {}."
+                        + " migration: {}. found invalid transactions {}. found republish transactions {} "
+                        + " cost: {} ms", backendId, tabletSyncMap.size(),
+                tabletDeleteFromMeta.size(), foundTabletsWithValidSchema.size(), foundTabletsWithInvalidSchema.size(),
+                tabletMigrationMap.size(), transactionsToClear.size(), transactionsToPublish.size(), (end - start));
+    }
+
+    private static boolean needSync(Replica replicaInFe, TTabletInfo backendTabletInfo) {
+        if (backendTabletInfo.isSetUsed() && !backendTabletInfo.isUsed()) {
+            // tablet is bad, do not sync
+            // it will be handled in needRecovery()
+            return false;
+        }
+
+        if (replicaInFe.getState() == ReplicaState.ALTER) {
+            // ignore the replica is ALTER state. its version will be taken care by load process and alter table process
+            return false;
+        }
+
+        long versionInFe = replicaInFe.getVersion();
+
+        // backend replica's version is equal to replica in FE, but replica in FE is bad, while backend replica is good, sync it
+        if (backendTabletInfo.getVersion() > versionInFe) {
+            // backend replica's version is larger or newer than replica in FE, sync it.
+            return true;
+        } else {
+            return versionInFe == backendTabletInfo.getVersion() &&
+                    replicaInFe.isBad();
+        }
+    }
+
+    private static boolean isRestoreReplica(Replica replica, TabletMeta tabletMeta) {
+        if (tabletMeta != null) {
+            long dbId = tabletMeta.getDbId();
+            long tableId = tabletMeta.getTableId();
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null) {
+                // getTable is thread-safe for caller, lock free
+                com.starrocks.catalog.Table tbl = db.getTable(tableId);
+                if (tbl != null && tbl instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) tbl;
+                    if (olapTable.getState() == OlapTable.OlapTableState.RESTORE) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Be will set `used' to false for bad replicas and `version_miss' to true for replicas with hole
+     * in their version chain. In either case, those replicas need to be fixed by TabletScheduler.
+     */
+    private static boolean needRecover(Replica replicaInFe, int schemaHashInFe, TTabletInfo backendTabletInfo) {
+        if (replicaInFe.getState() != ReplicaState.NORMAL) {
+            // only normal replica need recover
+            // case:
+            // the replica's state is CLONE, which means this a newly created replica in clone process.
+            // and an old out-of-date replica reports here, and this report should not mark this replica as
+            // 'need recovery'.
+            // Other state such as ROLLUP/SCHEMA_CHANGE, the replica behavior is unknown, so for safety reason,
+            // also not mark this replica as 'need recovery'.
+            return false;
+        }
+
+        if (schemaHashInFe != backendTabletInfo.getSchema_hash()
+                || backendTabletInfo.getVersion() == -1) {
+            // no data file exist on BE, maybe this is a newly created schema change tablet. no need to recovery
+            return false;
+        }
+
+        if (backendTabletInfo.isSetUsed() && !backendTabletInfo.isUsed()) {
+            // tablet is bad
+            return true;
+        }
+
+        // lastReportVersion should be increased monotonically.
+        return backendTabletInfo.getVersion() < replicaInFe.getLastReportVersion();
     }
 
     private static void taskReport(long backendId, Map<TTaskType, Set<Long>> runningTasks) {
@@ -647,7 +939,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 int logSyncCounter = 0;
                 List<Long> tabletIds = allTabletIds.subList(offset, allTabletIds.size());
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.WRITE);
+                locker.lockDatabase(db.getId(), LockType.WRITE);
                 try {
                     List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                     for (int i = 0; i < tabletMetaList.size(); i++) {
@@ -772,7 +1064,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         }
                     } // end for tabletMetaSyncMap
                 } finally {
-                    locker.unLockDatabase(db, LockType.WRITE);
+                    locker.unLockDatabase(db.getId(), LockType.WRITE);
                 }
                 LOG.info("sync {} update {} in {} tablets in db[{}]. backend[{}]", syncCounter, logSyncCounter,
                         offset, dbId, backendId);
@@ -800,7 +1092,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 continue;
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             long lockStartTime = System.currentTimeMillis();
             try {
                 int deleteCounter = 0;
@@ -812,12 +1104,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     // acquire the db write lock (every MAX_DB_WLOCK_HOLDING_TIME_MS milliseconds).
                     long currentTime = System.currentTimeMillis();
                     if (currentTime - lockStartTime > MAX_DB_WLOCK_HOLDING_TIME_MS) {
-                        locker.unLockDatabase(db, LockType.WRITE);
+                        locker.unLockDatabase(db.getId(), LockType.WRITE);
                         db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
                         if (db == null) {
                             continue DB_TRAVERSE;
                         }
-                        locker.lockDatabase(db, LockType.WRITE);
+                        locker.lockDatabase(db.getId(), LockType.WRITE);
                         lockStartTime = currentTime;
                     }
 
@@ -837,11 +1129,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         continue;
                     }
 
-                    if (globalStateMgr.getLocalMetastore()
-                            .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId()) == null) {
-                        continue;
-                    }
-
                     PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                             .getPhysicalPartitionIncludeRecycleBin(olapTable, partitionId);
                     if (partition == null) {
@@ -850,7 +1137,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                     short replicationNum =
                             globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
-                                    tabletMeta.getPartitionId());
+                                    partition.getParentId());
                     if (replicationNum == (short) -1) {
                         continue;
                     }
@@ -929,7 +1216,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
-                                            .setIndexes(olapTable.getCopiedIndexes())
+                                            .setIndexes(indexId == olapTable.getBaseIndexId() ?
+                                                        olapTable.getCopiedIndexes() :
+                                                        OlapTable.getIndexesBySchema(
+                                                        olapTable.getCopiedIndexes(), indexMeta.getSchema()))
                                             .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                                             .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                                             .build().toTabletSchema();
@@ -999,7 +1289,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 } // end for tabletMetas
                 LOG.info("delete {} replica(s) from globalStateMgr in db[{}]", deleteCounter, dbId);
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         } // end for dbs
 
@@ -1149,7 +1439,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         return true;
     }
 
-    public static boolean migratableTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
+    public static boolean migrateTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
         if (tbl.getKeysType() != KeysType.PRIMARY_KEYS) {
             return true;
         }
@@ -1164,7 +1454,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             PhysicalPartition physicalPartition = tbl.getPhysicalPartition(physicalPartitionId);
             if (physicalPartition == null || physicalPartition.getVisibleVersionTime() > maxLastSuccessReportTabletsTime) {
@@ -1195,7 +1485,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
             return true;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
     }
 
@@ -1228,7 +1518,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                // 3. There are some limitations for primary table, details in migratableTablet()
+                // 3. There are some limitations for primary table, details in migrateTablet()
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
                 if (db == null) {
                     continue;
@@ -1239,7 +1529,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                if (!migratableTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
+                if (!migrateTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
                     continue;
                 }
 
@@ -1298,7 +1588,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 continue;
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 List<Long> tabletIds = tabletRecoveryMap.get(dbId);
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
@@ -1348,7 +1638,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         } // end for recovery map
 
@@ -1388,7 +1678,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long partitionId =
-                        tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                        tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                 if (db == null) {
@@ -1402,18 +1692,18 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    Partition partition = olapTable.getPartition(partitionId);
+                    PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
                     if (partition == null) {
                         continue;
                     }
-                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partitionId);
+                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partition.getParentId());
                     if (beIsInMemory != feIsInMemory) {
                         tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
                     }
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1464,14 +1754,14 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
                     boolean feEnablePersistentIndex = olapTable.enablePersistentIndex();
                     if (beEnablePersistentIndex != feEnablePersistentIndex) {
                         tabletToEnablePersistentIndex.add(new Pair<>(tabletId, feEnablePersistentIndex));
                     }
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1519,14 +1809,14 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
                     int fePrimaryIndexCacheExpireSec = olapTable.primaryIndexCacheExpireSec();
                     if (bePrimaryIndexCacheExpireSec != fePrimaryIndexCacheExpireSec) {
                         tabletToPrimaryCacheExpireSec.add(new Pair<>(tabletId, fePrimaryIndexCacheExpireSec));
                     }
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1581,7 +1871,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
                     if (olapTable.getMaxColUniqueId() <= Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
                         continue;
@@ -1604,7 +1894,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         tableToDb.put(tableId, dbId);
                     }
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1627,7 +1917,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 continue;
             }
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
                 MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                 if (indexMeta == null) {
@@ -1660,7 +1950,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 updateSchemaBatchTask.addTask(task);
                 indexMeta.addUpdateSchemaBackend(backendId);
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
         }
         // send agent batch task
@@ -1700,7 +1990,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
                     BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
                     // backward compatible
@@ -1721,7 +2011,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                 beBinlogConfigVersion, feBinlogConfigVersion);
                     }
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
 
                 if (needToCheck) {
@@ -1761,7 +2051,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-        long partitionId = tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long physicalPartitionId = tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
@@ -1780,22 +2069,22 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             throw new MetaNotFoundException("table[" + tableId + "] does not exist");
         }
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId) == null) {
-                throw new MetaNotFoundException("partition[" + partitionId + "] does not exist");
-            }
-            short replicationNum =
-                    globalStateMgr.getLocalMetastore()
-                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
-            if (replicationNum == (short) -1) {
-                throw new MetaNotFoundException("invalid replication number of partition [" + partitionId + "]");
-            }
-
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
                 throw new MetaNotFoundException("physical partition[" + physicalPartitionId + "] does not exist");
+            }
+
+            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partition.getParentId()) == null) {
+                throw new MetaNotFoundException("partition[" + partition.getParentId() + "] does not exist");
+            }
+            short replicationNum =
+                    globalStateMgr.getLocalMetastore()
+                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
+            if (replicationNum == (short) -1) {
+                throw new MetaNotFoundException("invalid replication number of partition [" + partition.getParentId() + "]");
             }
 
             MaterializedIndex materializedIndex = partition.getIndex(indexId);
@@ -1895,8 +2184,23 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         "replica is enough[" + tablet.getImmutableReplicas().size() + "-" + replicationNum + "]");
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
+    }
+
+    public int getPendingTabletReportTaskCnt() {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
+            Map<Long, ReportTask> tasks = pendingTaskMap.get(ReportType.TABLET_REPORT);
+            return tasks == null ? 0 : tasks.size();
+        }
+    }
+
+    public void putTabletReportTask(long beId, long reportVersion, Map<Long, TTablet> tablets) throws Exception {
+        putToQueue(new ReportTask(beId, ReportType.TABLET_REPORT, tablets, reportVersion));
+    }
+
+    public int getReportQueueSize() {
+        return reportQueue.size();
     }
 
     @Override
@@ -1905,7 +2209,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             try {
                 Pair<Long, ReportType> pair = reportQueue.take();
                 ReportTask task = null;
-                synchronized (pendingTaskMap) {
+                try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
                     // using the lastest task
                     task = pendingTaskMap.get(pair.second).get(pair.first);
                     if (task == null) {

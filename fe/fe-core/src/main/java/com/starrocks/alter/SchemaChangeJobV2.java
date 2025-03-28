@@ -99,6 +99,7 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
@@ -124,8 +125,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
 
 /*
  * Version 2 of SchemaChangeJob.
@@ -320,7 +319,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             long baseIndexId = tbl.getBaseIndexId();
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
@@ -353,7 +352,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
-                            .setIndexes(indexes)
+                            .setIndexes(originIndexId == baseIndexId ?
+                                        indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
                             .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
                             .addColumns(shadowSchema)
@@ -390,7 +390,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         if (!FeConstants.runningUnitTest) {
@@ -438,12 +438,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             addShadowIndexToCatalog(tbl);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
         this.watershedTxnId =
@@ -472,14 +472,22 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            List<Integer> sortKeyColumnIndexes = null;
+            List<Integer> sortKeyColumnUniqueIds = null;
+
             long orgIndexId = indexIdMap.get(shadowIdxId);
+            if (orgIndexId == tbl.getBaseIndexId()) {
+                sortKeyColumnIndexes = sortKeyIdxes;
+                sortKeyColumnUniqueIds = sortKeyUniqueIds;
+            }
+
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyIdxes,
-                    sortKeyUniqueIds);
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyColumnIndexes,
+                    sortKeyColumnUniqueIds);
             MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
             Preconditions.checkNotNull(orgIndexMeta);
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
@@ -519,8 +527,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
+        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
@@ -658,7 +667,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
-                    List<Column> originSchemaColumns = tbl.getSchemaByIndexId(originIdxId);
+                    List<TColumn> originSchemaTColumns = indexToThriftColumns.get(originIdxId);
+                    if (originSchemaTColumns == null) {
+                        originSchemaTColumns = tbl.getSchemaByIndexId(originIdxId).stream()
+                                .map(Column::toThrift)
+                                .collect(Collectors.toList());
+                        indexToThriftColumns.put(originIdxId, originSchemaTColumns);
+                    }
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -668,14 +683,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
                                     shadowSchemaHash, originSchemaHash, visibleVersion, jobId,
-                                    generatedColumnReq, originSchemaColumns);
+                                    generatedColumnReq, originSchemaTColumns);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }
                 }
             } // end for partitions
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         AgentTaskQueue.addBatchTask(schemaChangeBatchTask);
@@ -731,7 +746,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         JournalTask journalTask;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
@@ -780,7 +795,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
 
             pruneMeta();
             tbl.onReload();
@@ -789,7 +804,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             journalTask = editLog.logAlterJobNoWait(this);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
         EditLog.waitInfinity(journalTask);
@@ -848,7 +863,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
-            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
             // drop the origin index from partitions
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
@@ -940,7 +955,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                return cancelImpl(errMsg);
+                return cancelInternal(errMsg);
             }
         } finally {
             isCancelling.set(false);
@@ -979,7 +994,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl != null) {
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 try {
                     for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                         PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -999,7 +1014,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     tbl.setState(OlapTableState.NORMAL);
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 }
             }
         }
@@ -1032,7 +1047,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             for (Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
@@ -1056,7 +1071,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
         // to make sure that this job will run runPendingJob() again to create the shadow index replicas
@@ -1082,11 +1097,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             addShadowIndexToCatalog(tbl);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
         // should still be in WAITING_TXN state, so that the alter tasks will be resend again
@@ -1106,12 +1121,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl != null) {
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 try {
                     onFinished(tbl);
                     tbl.onReload();
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
                 }
             }
         }

@@ -288,6 +288,7 @@ public:
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
+    size_t field_index(std::string_view field_name, std::string_view extra_column_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
@@ -329,6 +330,8 @@ public:
         }
     }
     void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
+
+    bool has_separate_sort_key() const;
 
     std::string debug_string() const;
 

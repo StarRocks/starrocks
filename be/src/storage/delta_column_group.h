@@ -15,6 +15,8 @@
 #pragma once
 
 #include "common/status.h"
+#include "common/statusor.h"
+#include "fmt/format.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "storage/olap_common.h"
@@ -65,6 +67,14 @@ public:
             column_file = dir_path + "/" + column_file;
         }
         return column_files;
+    }
+
+    StatusOr<std::string> column_file_by_idx(const std::string& dir_path, uint32_t idx) const {
+        if (idx >= _column_files.size()) {
+            return Status::InvalidArgument(fmt::format("column_file_by_idx fail, path: {} column file cnt: {} idx: {}",
+                                                       dir_path, _column_files.size(), idx));
+        }
+        return dir_path + "/" + _column_files[idx];
     }
 
     // TODO: rename

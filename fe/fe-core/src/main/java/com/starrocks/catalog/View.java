@@ -39,9 +39,10 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -85,6 +86,9 @@ public class View extends Table {
     // for persist
     @SerializedName(value = "m")
     private long sqlMode = 0L;
+
+    @SerializedName(value = "s")
+    private boolean security = false;
 
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
@@ -132,13 +136,30 @@ public class View extends Table {
         return inlineViewDef;
     }
 
+    // show create view that from files() need remove the credential
+    public String getInlineViewDefWithoutCredential() {
+        return AstToSQLBuilder.toSQL(getQueryStatement());
+    }
+
+    public long getSqlMode() {
+        return sqlMode;
+    }
+
+    public void setSecurity(boolean security) {
+        this.security = security;
+    }
+
+    public boolean isSecurity() {
+        return security;
+    }
+
     /**
      * Initializes the originalViewDef, inlineViewDef, and queryStmt members
      * by parsing the expanded view definition SQL-string.
      * Throws a TableLoadingException if there was any error parsing the
      * SQL or if the view definition did not parse into a QueryStmt.
      */
-    public synchronized QueryStatement init() throws UserException {
+    public synchronized QueryStatement init() throws StarRocksException {
         Preconditions.checkNotNull(inlineViewDef);
         // Parse the expanded view definition SQL-string into a QueryStmt and
         // populate a view definition.
@@ -149,12 +170,12 @@ public class View extends Table {
             LOG.warn("view-definition: {}. got exception: {}", inlineViewDef, e.getMessage(), e);
             // Do not pass e as the exception cause because it might reveal the existence
             // of tables that the user triggering this load may not have privileges on.
-            throw new UserException(
+            throw new StarRocksException(
                     String.format("Failed to parse view: %s. Its definition is:%n%s ", name, inlineViewDef));
         }
         // Make sure the view definition parses to a query statement.
         if (!(node instanceof QueryStatement)) {
-            throw new UserException(String.format("View %s without query statement. Its definition is:%n%s",
+            throw new StarRocksException(String.format("View %s without query statement. Its definition is:%n%s",
                     name, inlineViewDef));
         }
         return (QueryStatement) node;

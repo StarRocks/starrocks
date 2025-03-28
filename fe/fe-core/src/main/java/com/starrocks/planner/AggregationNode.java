@@ -50,7 +50,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -153,7 +153,7 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
     }
 
     public void setStreamingPreaggregationMode(String mode) {
@@ -465,5 +465,10 @@ public class AggregationNode extends PlanNode {
         TupleId tupleId = needsFinalize ? aggInfo.getOutputTupleId() : aggInfo.getIntermediateTupleId();
         return descriptorTable.getTupleDesc(tupleId).getSlots().subList(0, numGroupingExprs + numAggExprs)
                 .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
     }
 }

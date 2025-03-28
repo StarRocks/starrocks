@@ -77,8 +77,8 @@ public class AlterResourceGroupStmt extends DdlStmt {
             if (changedProperties.getResourceGroupType() != null) {
                 throw new SemanticException("type of ResourceGroup is immutable");
             }
-            if (changedProperties.getCpuWeight() == null &&
-                    changedProperties.getDedicatedCpuCores() == null &&
+            if (changedProperties.getRawCpuWeight() == null &&
+                    changedProperties.getExclusiveCpuCores() == null &&
                     changedProperties.getMemLimit() == null &&
                     changedProperties.getConcurrencyLimit() == null &&
                     changedProperties.getMaxCpuCores() == null &&
@@ -86,11 +86,15 @@ public class AlterResourceGroupStmt extends DdlStmt {
                     changedProperties.getBigQueryMemLimit() == null &&
                     changedProperties.getBigQueryScanRowsLimit() == null &&
                     changedProperties.getSpillMemLimitThreshold() == null) {
-                throw new SemanticException("At least one of ('cpu_weight','dedicated_cpu_cores','mem_limit'," +
+                throw new SemanticException("At least one of ('cpu_weight','exclusive_cpu_cores','mem_limit'," +
                         "'max_cpu_cores','concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit'," +
                         "'big_query_cpu_second_limit','spill_mem_limit_threshold') " +
                         "should be specified");
             }
+        }
+
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterProperties)) {
+            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
         }
     }
 

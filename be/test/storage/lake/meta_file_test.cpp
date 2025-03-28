@@ -32,6 +32,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
@@ -61,16 +62,15 @@ public:
 
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 1638400000);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1638400000);
     }
 
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
     constexpr static const char* const kTestDir = "./lake_meta_test";
-    std::unique_ptr<lake::LocationProvider> _location_provider;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<UpdateManager> _update_manager;
@@ -124,8 +124,9 @@ TEST_F(MetaFileTest, test_delvec_rw) {
 
     // 3. read delvec
     DelVector after_delvec;
+    LakeIOOptions lake_io_opts;
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, true, &after_delvec).ok());
+    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, true, lake_io_opts, &after_delvec).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
 
     // 4. read meta
@@ -225,8 +226,9 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
 
         // 3. read delvec
         DelVector after_delvec;
+        LakeIOOptions lake_io_opts;
         ASSIGN_OR_ABORT(auto meta, _tablet_manager->get_tablet_metadata(tablet_id, version));
-        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, false, &after_delvec).ok());
+        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, false, lake_io_opts, &after_delvec).ok());
         EXPECT_EQ(before_delvec, after_delvec.save());
     };
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {
@@ -340,16 +342,22 @@ TEST_F(MetaFileTest, test_dcg) {
         EXPECT_TRUE(pdcgs.size() == 1);
         auto idx = pdcgs[0]->get_column_idx(3);
         EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first).value());
         idx = pdcgs[0]->get_column_idx(4);
         EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first).value());
         idx = pdcgs[0]->get_column_idx(5);
         EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first).value());
         idx = pdcgs[0]->get_column_idx(6);
         EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first).value());
         idx = pdcgs[0]->get_column_idx(7);
         EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first).value());
         idx = pdcgs[0]->get_column_idx(8);
         EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first).value());
     }
     // 4. compact (conflict)
     {
@@ -564,6 +572,32 @@ TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
     EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+}
+
+TEST_F(MetaFileTest, test_error_state) {
+    // generate metadata
+    const int64_t tablet_id = 10001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    // add rowset with segment
+    RowsetMetadataPB rowset_metadata;
+    rowset_metadata.set_id(110);
+    rowset_metadata.add_segments("aaa.dat");
+    rowset_metadata.add_segments("bbb.dat");
+    metadata->add_rowsets()->CopyFrom(rowset_metadata);
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
+    for (int i = 0; i < 10; i++) {
+        segment_id_to_add_dels[i] = 100;
+    }
+    // generate error state
+    MetaFileBuilder builder(*tablet, metadata);
+    Status st = builder.update_num_del_stat(segment_id_to_add_dels);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
 } // namespace starrocks::lake

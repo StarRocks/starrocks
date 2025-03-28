@@ -16,9 +16,10 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 |-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -179,6 +180,12 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: 30000<br/>
 **Description**: The timeout for establishing HTTP connection. Valid values: 100 to 60000. Unit: ms. Before Flink connector v1.2.9, the default value is `1000`.
 
+### sink.socket.timeout-ms
+
+**Required**: No<br/>
+**Default value**: -1<br/>
+**Description**: Supported since 1.2.10. The time duration for which the HTTP client waits for data. Unit: ms. The default value `-1` means there is no timeout.
+
 ### sink.wait-for-continue.timeout-ms
 
 **Required**: No<br/>
@@ -244,6 +251,12 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Required**: No<br/>
 **Default value**: false<br/>
 **Description**: Specifies whether to enable the strict mode for Stream Load. It affects the loading behavior when there are unqualified rows, such as inconsistent column values. Valid values: `true` and `false`. Default value: `false`. See [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) for details.
+
+### sink.properties.compression
+
+**Required**: No<br/>
+**Default value**: NONE<br/>
+**Description**: Supported since 1.2.10. The compression algorithm used for Stream Load. Currently, compression is only supported for the JSON format. Valid values: `lz4_frame`. Compression for the JSON format is supported only in StarRocks v3.2.7 and later.
 
 ## Data type mapping between Flink and StarRocks
 
@@ -747,7 +760,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
 
 ### Load data into columns of BITMAP type
 
-[`BITMAP`](../sql-reference/data-types/other-data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/Using_bitmap.md).
+[`BITMAP`](../sql-reference/data-types/other-data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/distinct_values/Using_bitmap.md).
 Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
 
 1. Create a StarRocks Aggregate table in MySQL client.
@@ -814,7 +827,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 ### Load data into columns of HLL type
 
-[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
+[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/distinct_values/Using_HLL.md).
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.
 

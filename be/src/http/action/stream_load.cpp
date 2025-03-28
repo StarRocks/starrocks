@@ -42,6 +42,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/http.h>
+#include <fmt/format.h>
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
@@ -57,6 +58,8 @@
 #include "http/http_request.h"
 #include "http/http_response.h"
 #include "http/utils.h"
+#include "runtime/batch_write/batch_write_mgr.h"
+#include "runtime/batch_write/batch_write_util.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -154,7 +157,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
     // status already set to fail
     if (ctx->status.ok()) {
-        ctx->status = _handle(ctx);
+        ctx->status = ctx->enable_batch_write ? _handle_batch_write(req, ctx) : _handle(ctx);
         if (!ctx->status.ok() && !ctx->status.is_publish_timeout()) {
             LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.message()
                          << " " << ctx->brief();
@@ -211,6 +214,13 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx));
     ctx->commit_and_publish_txn_cost_nanos = MonotonicNanos() - commit_and_publish_start_time;
     return Status::OK();
+}
+
+Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
+    ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
+    ctx->load_parameters = get_load_parameters_from_http(http_req);
+    ctx->buffer->flip();
+    return _exec_env->batch_write_mgr()->append_data(ctx);
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {
@@ -272,6 +282,17 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         LOG(WARNING) << "parse basic authorization failed." << ctx->brief();
         return Status::InternalError("no valid Basic authorization");
     }
+
+    if (!http_req->header(HTTP_ENABLE_MERGE_COMMIT).empty()) {
+        auto value = http_req->header(HTTP_ENABLE_MERGE_COMMIT);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        ctx->enable_batch_write = StringParser::string_to_bool(value.c_str(), value.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
+            return Status::InvalidArgument(fmt::format("Invalid parameter {}. The value must be bool type, but is {}",
+                                                       HTTP_ENABLE_MERGE_COMMIT, value));
+        }
+    }
+
     // check content length
     ctx->body_bytes = 0;
     size_t max_body_bytes = config::streaming_load_max_mb * 1024 * 1024;
@@ -290,6 +311,9 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
             ASSIGN_OR_RETURN(ctx->buffer,
                              ByteBuffer::allocate_with_tracker(ctx->body_bytes + simdjson::SIMDJSON_PADDING));
+        } else if (ctx->enable_batch_write) {
+            // batch write does not support parsing data in stream mode
+            ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(ctx->body_bytes));
         }
     } else {
 #ifndef BE_TEST
@@ -332,6 +356,10 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         ctx->timeout_second = timeout_second;
     }
 
+    if (ctx->enable_batch_write) {
+        return Status::OK();
+    }
+
     // begin transaction
     int64_t begin_txn_start_time = MonotonicNanos();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
@@ -353,19 +381,18 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
 
     int64_t start_read_data_time = MonotonicNanos();
 
+    bool processInBatchMode = ctx->format == TFileFormatType::FORMAT_JSON || ctx->enable_batch_write;
     size_t len = 0;
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
             ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
                     ctx->status, ctx->buffer,
-                    ByteBuffer::allocate_with_tracker(ctx->format == TFileFormatType::FORMAT_JSON
-                                                              ? std::max(len, ctx->kDefaultBufferSize)
-                                                              : len));
-
+                    ByteBuffer::allocate_with_tracker(processInBatchMode ? std::max(len, ctx->kDefaultBufferSize)
+                                                                         : len));
         } else if (ctx->buffer->remaining() < len) {
-            if (ctx->format == TFileFormatType::FORMAT_JSON) {
-                // For json format, we need build a complete json before we push the buffer to the pipe.
+            if (processInBatchMode) {
+                // For json format or batch write, we need build a complete data before we push the buffer to the pipe.
                 // buffer capacity is not enough, so we try to expand the buffer.
                 ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
                         ctx->status, ByteBufferPtr buf,
@@ -374,7 +401,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
                 std::swap(buf, ctx->buffer);
 
             } else {
-                // For non-json format, we could push buffer to the body_sink in streaming mode.
+                // Otherwise, we could push buffer to the body_sink in streaming mode.
                 // buffer capacity is not enough, so we push the buffer to the pipe and allocate new one.
                 ctx->buffer->flip();
                 auto st = ctx->body_sink->append(std::move(ctx->buffer));
@@ -413,7 +440,11 @@ void StreamLoadAction::free_handler_ctx(void* param) {
     if (ctx->body_sink != nullptr) {
         ctx->body_sink->cancel(Status::Cancelled("Cancelled"));
     }
-    _exec_env->load_stream_mgr()->remove(ctx->id);
+
+    if (!ctx->enable_batch_write) {
+        _exec_env->load_stream_mgr()->remove(ctx->id);
+    }
+
     if (ctx->unref()) {
         delete ctx;
     }

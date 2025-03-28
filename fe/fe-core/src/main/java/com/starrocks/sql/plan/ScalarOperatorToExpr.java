@@ -127,7 +127,6 @@ public class ScalarOperatorToExpr {
             this.colRefToExpr = variableToSlotRef;
             this.projectOperatorMap = projectOperatorMap;
         }
-
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {
@@ -480,6 +479,7 @@ public class ScalarOperatorToExpr {
                 case "user":
                 case "current_user":
                 case "current_role":
+                case "current_group":
                 case "session_id":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),

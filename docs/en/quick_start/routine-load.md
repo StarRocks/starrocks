@@ -3,7 +3,6 @@ displayed_sidebar: docs
 sidebar_position: 2
 toc_max_heading_level: 2
 description: Kafka routine load with shared-data storage
-keywords: ['Routine Load']
 ---
 
 # Kafka routine load StarRocks using shared-data storage
@@ -46,7 +45,7 @@ There is a lot of information in this document, and it is presented with step-by
 
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL-compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL-compatible clients will work, and this guide covers the configuration of DBeaver and MySQL Workbench.
 
 ### curl
 

@@ -40,7 +40,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.ImageWriter;
@@ -129,7 +129,7 @@ public class PluginMgr implements Writable {
 
     // install a plugin from user's command.
     // install should be successfully, or nothing should be left if failed to install.
-    public PluginInfo installPlugin(InstallPluginStmt stmt) throws IOException, UserException {
+    public PluginInfo installPlugin(InstallPluginStmt stmt) throws IOException, StarRocksException {
         PluginLoader pluginLoader = new DynamicPluginLoader(Config.plugin_dir, stmt.getPluginPath(), stmt.getMd5sum());
         pluginLoader.setStatus(PluginStatus.INSTALLING);
 
@@ -140,7 +140,7 @@ public class PluginMgr implements Writable {
             }
 
             if (checkDynamicPluginNameExist(info.getName())) {
-                throw new UserException("plugin " + info.getName() + " has already been installed.");
+                throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
             }
 
             // install plugin
@@ -148,7 +148,7 @@ public class PluginMgr implements Writable {
             pluginLoader.setStatus(PluginStatus.INSTALLED);
 
             if (!addDynamicPluginNameIfAbsent(info.getName())) {
-                throw new UserException("plugin " + info.getName() + " has already been installed.");
+                throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
             }
             plugins[info.getTypeId()].put(info.getName(), pluginLoader);
 
@@ -165,7 +165,7 @@ public class PluginMgr implements Writable {
      * Dynamic uninstall plugin.
      * If uninstall failed, the plugin should NOT be removed from plugin manager.
      */
-    public PluginInfo uninstallPlugin(String name) throws IOException, UserException {
+    public PluginInfo uninstallPlugin(String name) throws IOException, StarRocksException {
         if (!checkDynamicPluginNameExist(name)) {
             throw new DdlException("Plugin " + name + " does not exist");
         }
@@ -225,20 +225,20 @@ public class PluginMgr implements Writable {
      * It must add the plugin to the "plugins" and "dynamicPluginNames", even if the plugin
      * is not loaded successfully.
      */
-    public void replayLoadDynamicPlugin(PluginInfo info) throws IOException, UserException {
+    public void replayLoadDynamicPlugin(PluginInfo info) throws IOException {
         DynamicPluginLoader pluginLoader = new DynamicPluginLoader(Config.plugin_dir, info);
         try {
             // should add to "plugins" first before loading.
             PluginLoader checkLoader = plugins[info.getTypeId()].putIfAbsent(info.getName(), pluginLoader);
             if (checkLoader != null) {
-                throw new UserException("plugin " + info.getName() + " has already been installed.");
+                throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
             }
 
             pluginLoader.setStatus(PluginStatus.INSTALLING);
             // install plugin
             pluginLoader.reload();
             pluginLoader.setStatus(PluginStatus.INSTALLED);
-        } catch (IOException | UserException e) {
+        } catch (IOException | StarRocksException e) {
             pluginLoader.setStatus(PluginStatus.ERROR, e.getMessage());
             LOG.warn("fail to load plugin", e);
         } finally {
@@ -350,14 +350,6 @@ public class PluginMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            int pluginInfoSize = reader.readInt();
-            for (int i = 0; i < pluginInfoSize; ++i) {
-                PluginInfo pluginInfo = reader.readJson(PluginInfo.class);
-                replayLoadDynamicPlugin(pluginInfo);
-            }
-        } catch (UserException e) {
-            throw new RuntimeException(e);
-        }
+        reader.readCollection(PluginInfo.class, this::replayLoadDynamicPlugin);
     }
 }

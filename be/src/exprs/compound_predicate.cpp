@@ -16,10 +16,13 @@
 
 #include "common/object_pool.h"
 #include "exprs/binary_function.h"
-#include "exprs/jit/ir_helper.h"
 #include "exprs/predicate.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -52,7 +55,7 @@ public:
 
         // left all false and not null
         if (l_falses == l->size()) {
-            return l->clone();
+            return Column::mutate(std::move(l));
         }
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
@@ -60,6 +63,7 @@ public:
         return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
+#ifdef STARROCKS_JIT_ENABLE
     bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -94,6 +98,7 @@ public:
         return "{" + _children[0]->jit_func_name(state) + " & " + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -129,13 +134,15 @@ public:
         int l_trues = ColumnHelper::count_true_with_notnull(l);
         // left all true and not null
         if (l_trues == l->size()) {
-            return l->clone();
+            return Column::mutate(std::move(l));
         }
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
+
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
@@ -171,6 +178,7 @@ public:
         return "{" + _children[0]->jit_func_name(state) + " | " + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -195,6 +203,7 @@ public:
 
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);
     }
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
@@ -226,6 +235,7 @@ public:
         return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;

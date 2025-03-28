@@ -16,32 +16,32 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.sql.optimizer.validate.ValidateException;
-import io.delta.kernel.Operation;
-import io.delta.kernel.Snapshot;
-import io.delta.kernel.Table;
-import io.delta.kernel.TransactionBuilder;
 import io.delta.kernel.engine.Engine;
-import io.delta.kernel.exceptions.CheckpointAlreadyExistsException;
-import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
-import io.delta.kernel.internal.TableImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
+import io.delta.kernel.internal.util.ColumnMapping;
+import io.delta.kernel.types.DateType;
+import io.delta.kernel.types.IntegerType;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.io.IOException;
+import java.util.List;
 
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_KEY;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NAME;
+import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NONE;
 
 public class DeltaUtilsTest {
     @Rule
@@ -51,14 +51,11 @@ public class DeltaUtilsTest {
     public void testCheckTableFeatureSupported() {
         expectedEx.expect(ValidateException.class);
         expectedEx.expectMessage("Delta table is missing protocol or metadata information.");
-        DeltaUtils.checkTableFeatureSupported(null, null);
+        DeltaUtils.checkProtocolAndMetadata(null, null);
     }
 
     @Test
     public void testCheckTableFeatureSupported2(@Mocked Metadata metadata) {
-        expectedEx.expect(ValidateException.class);
-        expectedEx.expectMessage("Delta table feature [column mapping] is not supported");
-
         new Expectations(metadata) {
             {
                 metadata.getConfiguration();
@@ -67,75 +64,40 @@ public class DeltaUtilsTest {
             }
         };
 
-        DeltaUtils.checkTableFeatureSupported(new Protocol(3, 7, Lists.newArrayList(),
+        DeltaUtils.checkProtocolAndMetadata(new Protocol(3, 7, Lists.newArrayList(),
                 Lists.newArrayList()), metadata);
     }
 
     @Test
-    public void testConvertDeltaToSRTableWithException1() {
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Failed to find Delta table for catalog.db.tbl");
-
-        new MockUp<Table>() {
-            @mockit.Mock
-            public Table forPath(Engine deltaEngine, String path) throws TableNotFoundException {
-                throw new TableNotFoundException("Table not found");
+    public void testConvertDeltaSnapshotToSRTable(@Mocked SnapshotImpl snapshot) {
+        new Expectations() {
+            {
+                snapshot.getSchema((Engine) any);
+                result = new StructType(Lists.newArrayList(new StructField("col1", IntegerType.INTEGER, true),
+                        new StructField("col2", DateType.DATE, true)));
+                minTimes = 0;
             }
         };
 
-        DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
-                DeltaLakeEngine.create(new Configuration()), 0);
-    }
-
-    @Test
-    public void testConvertDeltaToSRTableWithException2() {
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Failed to get latest snapshot for catalog.db.tbl");
-        Table table = new Table() {
-            public Table forPath(Engine engine, String path) {
-                return this;
-            }
-
-            @Override
-            public String getPath(Engine engine) {
-                return null;
-            }
-
-            @Override
-            public SnapshotImpl getLatestSnapshot(Engine engine) {
-                throw new RuntimeException("Failed to get latest snapshot");
-            }
-
-            @Override
-            public Snapshot getSnapshotAsOfVersion(Engine engine, long versionId) throws TableNotFoundException {
-                return null;
-            }
-
-            @Override
-            public Snapshot getSnapshotAsOfTimestamp(Engine engine, long millisSinceEpochUTC)
-                    throws TableNotFoundException {
-                return null;
-            }
-
-            @Override
-            public TransactionBuilder createTransactionBuilder(Engine engine, String engineInfo, Operation operation) {
-                return null;
-            }
-
-            @Override
-            public void checkpoint(Engine engine, long version)
-                    throws TableNotFoundException, CheckpointAlreadyExistsException, IOException {
-            }
-        };
-
-        new MockUp<TableImpl>() {
+        new MockUp<ColumnMapping>() {
             @Mock
-            public Table forPath(Engine engine, String path) {
-                return table;
+            public String getColumnMappingMode(Configuration configuration) {
+                return COLUMN_MAPPING_MODE_NONE;
             }
         };
 
-        DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
-                DeltaLakeEngine.create(new Configuration()), 0);
+        new MockUp<DeltaUtils>() {
+            @Mock
+            public List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
+                return Lists.newArrayList();
+            }
+        };
+
+        DeltaLakeTable deltaLakeTable = DeltaUtils.convertDeltaSnapshotToSRTable("catalog0",
+                new DeltaLakeSnapshot("db0", "table0", null, snapshot, 123, "path"));
+        Assert.assertEquals(2, deltaLakeTable.getFullSchema().size());
+        Assert.assertEquals("catalog0", deltaLakeTable.getCatalogName());
+        Assert.assertEquals("db0", deltaLakeTable.getCatalogDBName());
+        Assert.assertEquals("table0", deltaLakeTable.getCatalogTableName());
     }
 }

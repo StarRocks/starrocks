@@ -18,6 +18,7 @@
 #include <arrow/status.h>
 #include <gutil/strings/substitute.h>
 
+#include <memory>
 #include <utility>
 
 #include "common/config.h"
@@ -27,6 +28,7 @@
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
+#include "util/byte_buffer.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -246,11 +248,11 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
             for (auto index : iter->second) {
                 _parquet_column_ids.emplace_back(index);
             }
-        } else {
+        } else if (!_invalid_as_null) {
             std::stringstream str_error;
             str_error << "Column: " << slot_desc->col_name() << " is not found in file: " << _filename;
             LOG(WARNING) << str_error.str();
-            return Status::InvalidArgument(str_error.str());
+            return Status::NotFound(str_error.str());
         }
     }
     return Status::OK();
@@ -419,16 +421,22 @@ arrow::Result<int64_t> ParquetChunkFile::Tell() const {
 }
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nbytes) {
-    auto buffer_res = arrow::AllocateBuffer(nbytes, arrow::default_memory_pool());
-    ARROW_RETURN_NOT_OK(buffer_res);
-    std::shared_ptr<arrow::Buffer> read_buf = std::move(buffer_res.ValueOrDie());
-    arrow::Result<int64_t> bytes_read_res = ReadAt(_pos, nbytes, read_buf->mutable_data());
-    ARROW_RETURN_NOT_OK(bytes_read_res);
+    auto tracker = CurrentThread::mem_tracker();
+    if (tracker == nullptr) {
+        return arrow::Status::ExecutionError("current thread memory tracker Not Found when allocate arrow Buffer");
+    }
+    std::unique_ptr<arrow::Buffer> buffer_res;
+    ARROW_RETURN_NOT_OK(arrow::AllocateBuffer(nbytes, arrow::default_memory_pool()).Value(&buffer_res));
+    std::shared_ptr<arrow::Buffer> read_buf(buffer_res.release(), MemTrackerDeleter(tracker));
+    int64_t bytes_read_res = 0;
+    ARROW_RETURN_NOT_OK(ReadAt(_pos, nbytes, read_buf->mutable_data()).Value(&bytes_read_res));
     // If bytes_read is equal with read_buf's capacity, we just assign
-    if (bytes_read_res.ValueOrDie() == nbytes) {
+    if (bytes_read_res == nbytes) {
         return std::move(read_buf);
     } else {
-        return arrow::SliceBuffer(read_buf, 0, bytes_read_res.ValueOrDie());
+        std::shared_ptr<arrow::Buffer> slice_buf(new arrow::Buffer(read_buf, 0, bytes_read_res),
+                                                 MemTrackerDeleter(tracker));
+        return slice_buf;
     }
 }
 

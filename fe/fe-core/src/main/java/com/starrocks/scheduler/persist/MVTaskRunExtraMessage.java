@@ -23,12 +23,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
@@ -56,6 +56,8 @@ public class MVTaskRunExtraMessage implements Writable {
     private String nextPartitionStart;
     @SerializedName("nextPartitionEnd")
     private String nextPartitionEnd;
+    @SerializedName("nextPartitionValues")
+    private String nextPartitionValues;
 
     // task run starts to process time
     // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
@@ -63,7 +65,11 @@ public class MVTaskRunExtraMessage implements Writable {
     private long processStartTime = 0;
 
     @SerializedName("executeOption")
-    private ExecuteOption executeOption = new ExecuteOption(true);
+    private ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+            false, Maps.newHashMap());
+
+    @SerializedName("planBuilderMessage")
+    public Map<String, String> planBuilderMessage = Maps.newHashMap();
 
     public MVTaskRunExtraMessage() {
     }
@@ -97,8 +103,11 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        this.mvPartitionsToRefresh = MvUtils.shrinkToSize(mvPartitionsToRefresh,
-                Config.max_mv_task_run_meta_message_values_length);
+        if (mvPartitionsToRefresh == null) {
+            return;
+        }
+        this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh,
+                Config.max_mv_task_run_meta_message_values_length));
     }
 
     public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
@@ -167,6 +176,14 @@ public class MVTaskRunExtraMessage implements Writable {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
+    }
+
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
+    }
+
     public long getProcessStartTime() {
         return processStartTime;
     }
@@ -175,11 +192,12 @@ public class MVTaskRunExtraMessage implements Writable {
         this.processStartTime = processStartTime;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+    public void setPlanBuilderMessage(Map<String, String> planBuilderMessage) {
+        this.planBuilderMessage = MvUtils.shrinkToSize(planBuilderMessage,
+                Config.max_mv_task_run_meta_message_values_length);
     }
+
+
 
     @Override
     public String toString() {

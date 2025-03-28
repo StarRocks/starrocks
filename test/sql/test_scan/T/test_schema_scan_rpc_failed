@@ -1,0 +1,5 @@
+-- name: test_schema_scan_rpc_failed
+
+admin enable failpoint 'schema_scan_rpc_failed';
+[UC] SHOW VARIABLES WHERE Variable_name ='language';
+admin disable failpoint 'schema_scan_rpc_failed';

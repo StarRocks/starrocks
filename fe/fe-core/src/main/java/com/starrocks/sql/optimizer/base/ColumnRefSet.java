@@ -196,7 +196,7 @@ public class ColumnRefSet implements Cloneable {
         return rhs.stream().anyMatch(this::contains);
     }
 
-    public boolean containsAll(List<Integer> rhs) {
+    public boolean containsAll(Collection<Integer> rhs) {
         return rhs.stream().allMatch(id -> bitSet.contains(id));
     }
 

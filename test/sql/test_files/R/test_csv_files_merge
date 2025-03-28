@@ -1,0 +1,135 @@
+-- name: test_csv_files_merge
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic0_column_mismatch.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 34. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 52. OK num: 1(upload 1 files).
+-- !result
+
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1");
+-- result:
+$1	bigint	YES
+$2	varchar(1048576)	YES
+$3	double	YES
+$4	boolean	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "null");
+-- result:
+4	Tom	30.4	None
+5	Jerry	40.8	0
+1	Julia	20.2	1
+2	Andy	21.3	0
+3	Joke	22.4	1
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "none");
+-- result:
+[REGEX].*Schema column count: 4 doesn't match source value column count: 3. Column separator: ',', Row delimiter: .*, Row: '4,Tom,30.4', File: .*basic0_column_mismatch.csv. Consider setting 'fill_mismatch_column_with' = 'null' property.*
+-- !result
+
+
+create table t1 (k1 bigint, k2 varchar(256), k3 double, k4 boolean);
+-- result:
+-- !result
+
+insert into t1 
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "none");
+-- result:
+[REGEX].*Insert has filtered data.*
+-- !result
+
+insert into t1 properties ("max_filter_ratio" = "0.5") 
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "none");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+1	Julia	20.2	1
+2	Andy	21.3	0
+3	Joke	22.4	1
+5	Jerry	40.8	0
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+insert into t1 
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "null");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+1	Julia	20.2	1
+2	Andy	21.3	0
+3	Joke	22.4	1
+4	Tom	30.4	None
+5	Jerry	40.8	0
+-- !result
+
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "xxx");
+-- result:
+[REGEX].*Invalid fill_mismatch_column_with: 'xxx'. Expected values should be none, null \(case insensitive\).
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

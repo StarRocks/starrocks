@@ -14,16 +14,19 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.hive.CatalogNameType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -34,12 +37,14 @@ public class DeltaLakeConnector implements Connector {
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
+    private final CatalogNameType catalogNameType;
     private final DeltaLakeInternalMgr internalMgr;
     private final DeltaLakeMetadataFactory metadataFactory;
     private IDeltaLakeMetastore metastore;
 
     public DeltaLakeConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
+        this.catalogNameType = new CatalogNameType(catalogName, "delta_lake");
         this.properties = context.getProperties();
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
@@ -73,12 +78,27 @@ public class DeltaLakeConnector implements Connector {
     public void shutdown() {
         internalMgr.shutdown();
         metadataFactory.metastoreCacheInvalidateCache();
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
     }
 
     public void onCreate() {
         Optional<DeltaLakeCacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
         updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                        .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+                        .registerCacheUpdateProcessor(catalogNameType, updateProcessor.get()));
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return metastore != null;
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return metastore.getSamples();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return metastore.estimateCount();
     }
 }

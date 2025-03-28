@@ -114,6 +114,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         isSplit = false;
     }
 
+    public boolean isOnlyLocalAggregate() {
+        return type.isLocal() && !isSplit;
+    }
+
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }

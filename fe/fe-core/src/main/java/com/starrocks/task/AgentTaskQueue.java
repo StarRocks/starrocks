@@ -50,6 +50,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -326,5 +327,18 @@ public class AgentTaskQueue {
         }
         return tasks;
     }
-}
 
+    public static synchronized List<Object> getSamplesForMemoryTracker() {
+        List<Object> result = new ArrayList<>();
+        // Get one task of each type
+        for (TTaskType type : TTaskType.values()) {
+            Map<Long, Map<Long, AgentTask>> tasksForType = tasks.column(type);
+            Optional<Map<Long, AgentTask>> beTasks = tasksForType.values().stream().findAny();
+            if (beTasks.isPresent()) {
+                Optional<AgentTask> task = beTasks.get().values().stream().findAny();
+                task.ifPresent(result::add);
+            }
+        }
+        return result;
+    }
+}

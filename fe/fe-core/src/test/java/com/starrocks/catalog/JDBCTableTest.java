@@ -97,7 +97,7 @@ public class JDBCTableTest {
         };
         JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
         Assert.assertEquals(this.resourceName, table.getResourceName());
-        Assert.assertEquals(this.table, table.getJdbcTable());
+        Assert.assertEquals(this.table, table.getCatalogTableName());
     }
 
     @Test

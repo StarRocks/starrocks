@@ -78,6 +78,8 @@ public class OptimizerTraceUtil {
     /**
      * NOTE: Carefully use it, because the log would be print into the query profile, to help understanding why a
      * materialized view is not chose to rewrite the query.
+     *
+     * Used for mv preprocessor log, the log would be print into the query profile.
      */
     public static void logMVRewriteFailReason(String mvName, String format, Object... objects) {
         String str = MessageFormatter.arrayFormat(format, objects).getMessage();
@@ -85,14 +87,27 @@ public class OptimizerTraceUtil {
         logMVRewrite(mvName, format, objects);
     }
 
+    /**
+     * Used for mv rewrite reason log, the log would be print into the query profile.
+     */
+    public static void logMVRewriteFailReason(MvRewriteContext mvContext, String format, Object... objects) {
+        final String mvName = mvContext.getMVName();
+        final String str = MessageFormatter.arrayFormat(format, objects).getMessage();
+        final OptimizerContext optimizerContext = mvContext.getMaterializationContext().getOptimizerContext();
+        final String memoPhase = optimizerContext.isInMemoPhase() ? "CBO" : "RBO";
+        final String stage = optimizerContext.getQueryMaterializationContext().getCurrentRewriteStage().name();
+        Tracers.reasoning(Tracers.Module.MV, "[{}] [{}] MV rewrite fail for {}: {} ", memoPhase, stage, mvName, str);
+        logMVRewrite(mvName, format, objects);
+    }
+
     public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    mvContext.getMv().getName(),
                     mvContext.getOptimizerContext().isInMemoPhase(),
+                    mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] {}",
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE] [InMemo:{}] [{}] {}",
                     args).getMessage();
         });
     }
@@ -102,11 +117,11 @@ public class OptimizerTraceUtil {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
                     mvRewriteContext.getRule().type().name(),
-                    mvContext.getMv().getName(),
                     mvRewriteContext.getMaterializationContext().getOptimizerContext().isInMemoPhase(),
+                    mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] [InMemo:{}] {}",
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] [{}] {}",
                     args).getMessage();
         });
     }
@@ -138,12 +153,19 @@ public class OptimizerTraceUtil {
                 args -> String.format("[TRACE QUERY %s] RULE %s exhausted \n", ctx.getQueryId(), rule));
     }
 
-    public static void logApplyRule(OptimizerContext ctx, Rule rule,
-                                    OptExpression oldExpression, List<OptExpression> newExpressions) {
+    public static void logApplyRuleBefore(OptimizerContext ctx, Rule rule,
+                                          OptExpression oldExpression) {
         Tracers.log(Tracers.Module.OPTIMIZER, args -> {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", ctx.getQueryId(), rule));
             sb.append("Original Expression:\n").append(oldExpression.debugString());
+            return sb.toString();
+        });
+    }
+
+    public static void logApplyRuleAfter(List<OptExpression> newExpressions) {
+        Tracers.log(Tracers.Module.OPTIMIZER, args -> {
+            StringBuilder sb = new StringBuilder();
             sb.append("\nNew Expression:");
             if (newExpressions.isEmpty()) {
                 sb.append("Empty");

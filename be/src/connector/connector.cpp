@@ -83,8 +83,8 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
     if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return Status::OK();
     for (const auto& item : _runtime_filters->descriptors()) {
         RuntimeFilterProbeDescriptor* probe = item.second;
-        DCHECK(runtime_bloom_filter_eval_context.driver_sequence != -1);
-        const JoinRuntimeFilter* filter = probe->runtime_filter(runtime_bloom_filter_eval_context.driver_sequence);
+        DCHECK(runtime_membership_filter_eval_context.driver_sequence != -1);
+        const RuntimeFilter* filter = probe->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
         if (filter == nullptr) continue;
         SlotId slot_id;
         if (!probe->is_probe_slot_ref(&slot_id)) continue;
@@ -114,14 +114,9 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
     peek_scan_ranges(scan_ranges);
 
     pipeline::Morsels morsels;
-    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
-    if (!accept_empty_scan_ranges() && scan_ranges.empty()) {
-        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
-    } else {
-        for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
-        }
-    }
+    bool has_more_morsel = false;
+    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+                                             &has_more_morsel);
 
     if (partition_order_hint().has_value()) {
         bool asc = partition_order_hint().value();
@@ -143,7 +138,7 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
         });
     }
 
-    auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
+    auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels), has_more_morsel);
     if (scan_parallelism > 0) {
         morsel_queue->set_max_degree_of_parallelism(scan_parallelism);
     }

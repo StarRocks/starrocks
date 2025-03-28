@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "storage/olap_define.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 
@@ -109,6 +110,7 @@ public:
         for (const RowsetMetaSharedPtr& rowset_meta : _tablet_meta->all_rs_metas()) {
             if (!rowset_meta->has_tablet_schema_pb()) {
                 rowset_meta->set_tablet_schema(tablet_schema());
+                rowset_meta->set_skip_tablet_schema(true);
                 flag = true;
             }
         }
@@ -117,9 +119,14 @@ public:
 
     virtual size_t num_rows() const = 0;
 
+    virtual StatusOr<bool> has_delete_predicates(const Version& version) = 0;
+
+    virtual bool belonged_to_cloud_native() const = 0;
+
 protected:
     virtual void on_shutdown() {}
 
+protected:
     void _gen_tablet_path();
 
     TabletState _state;

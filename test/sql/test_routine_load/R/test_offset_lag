@@ -1,0 +1,47 @@
+-- name: test_offset_lag
+create database test_routine_load_offset_lag;
+-- result:
+-- !result
+
+use test_routine_load_offset_lag;
+-- result:
+-- !result
+
+create table csv_file (
+    col_0 int not null,
+    col_1 double not null,
+    col_2 string not null,
+    col_3 date not null,
+    col_4 string not null
+) PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+
+CREATE ROUTINE LOAD rl_offset_lag on csv_file
+COLUMNS TERMINATED BY '|',
+COLUMNS (col_0, col_1, col_2, col_3, col_4)
+PROPERTIES (
+"format"="csv") 
+FROM KAFKA (
+"kafka_broker_list"="${broker_list}",
+"kafka_topic"="topic-csv-file2",
+"kafka_partitions"="0",
+"kafka_offsets"="OFFSET_BEGINNING"
+);
+-- result:
+-- !result
+
+SELECT sleep(30);
+-- result:
+1
+-- !result
+
+select latest_source_position from information_schema.routine_load_jobs where name = "rl_offset_lag" order by id desc limit 1;
+-- result:
+[REGEX].*{.*}.*
+-- !result
+
+select offset_lag from information_schema.routine_load_jobs where name = "rl_offset_lag" order by id desc limit 1;
+-- result:
+[REGEX].*{.*}.*
+-- !result

@@ -19,15 +19,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.catalog.Dictionary;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -36,7 +35,6 @@ import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -46,7 +44,6 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DictionaryCacheSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheRequestType;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
@@ -74,7 +71,6 @@ import com.starrocks.warehouse.Warehouse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -105,16 +101,18 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
     private final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(
-                Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool", true);
+                    Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool",
+                    true);
 
-    public DictionaryMgr() {}
+    public DictionaryMgr() {
+    }
 
     public void syncDictionaryMeta(List<Dictionary> dictionaries) {
         if (dictionaries.size() == 0 || !GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
 
-        logModify(this.nextTxnId, this.nextDictionaryId, dictionaries);        
+        logModify(this.nextTxnId, this.nextDictionaryId, dictionaries);
     }
 
     public void scheduleTasks() {
@@ -131,8 +129,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 // regular schedule
                 if ((dictionary.getNextSchedulableTime() <= System.currentTimeMillis() &&
                         !unfinishedRefreshTasks.contains(id)) ||
-                            // follower -> leader when dictionary is refreshing.
-                            (dictionary.isRefreshing() && !runningRefreshTasks.contains(id))) {
+                        // follower -> leader when dictionary is refreshing.
+                        (dictionary.isRefreshing() && !runningRefreshTasks.contains(id))) {
                     unfinishedRefreshTasks.add(id);
                     dictionary.setRefreshing();
                     dictionary.updateNextSchedulableTime(dictionary.getRefreshInterval());
@@ -167,7 +165,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             nodes.add(backend.getBrpcAddress());
         }
 
-        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        List<ComputeNode> computeNodes =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
         for (ComputeNode cn : computeNodes) {
             nodes.add(cn.getBrpcAddress());
         }
@@ -204,14 +203,14 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             }
         }
         LOG.info("finish processDictionaryCache dictionary id: {}, request type: {}",
-                 request.dictId, request.txnId, request.type);
+                request.dictId, request.txnId, request.type);
         return false;
     }
 
     public void createDictionary(CreateDictionaryStmt stmt, String catalogName, String dbName) throws DdlException {
         Dictionary dictionary = new Dictionary(getAndIncrementDictionaryId(), stmt.getDictionaryName(),
-                                               stmt.getQueryableObject(), catalogName, dbName, stmt.getDictionaryKeys(),
-                                               stmt.getDictionaryValues(), stmt.getProperties());
+                stmt.getQueryableObject(), catalogName, dbName, stmt.getDictionaryKeys(),
+                stmt.getDictionaryValues(), stmt.getProperties());
         dictionary.buildDictionaryProperties();
         GlobalStateMgr.getCurrentState().getEditLog().logCreateDictionary(dictionary);
         addDictionary(dictionary);
@@ -227,7 +226,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public void dropDictionary(String dictionaryName, boolean isCacheOnly, boolean isReplay) throws MetaNotFoundException {
+    public void dropDictionary(String dictionaryName, boolean isCacheOnly, boolean isReplay)
+            throws MetaNotFoundException {
         if (!isReplay && !isCacheOnly) {
             DropDictionaryInfo info = new DropDictionaryInfo(dictionaryName);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDictionary(info);
@@ -239,7 +239,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             if (dictionary == null) {
                 throw new MetaNotFoundException("refreshed dictionary not found");
             }
-            
+
             if (!isCacheOnly) {
                 dictionariesMapById.remove(dictionary.getDictionaryId());
                 dictionariesIdMapByName.remove(dictionary.getDictionaryName());
@@ -283,7 +283,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public void clearDictionaryCache(Dictionary dictionary, boolean cancel) {     
+    public void clearDictionaryCache(Dictionary dictionary, boolean cancel) {
         PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
         request.dictId = dictionary.getDictionaryId();
         request.isCancel = cancel;
@@ -443,7 +443,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 allInfo.add(dictionary.getInfo());
 
                 Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = getDictionaryStatistic(dictionary);
-                
+
                 String memoryUsage = "";
                 for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
                     TNetworkAddress address = result.getKey();
@@ -492,13 +492,18 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         // only replay for the follower sync
         if (!GlobalStateMgr.isCheckpointThread() &&
                 (GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.FOLLOWER ||
-                 GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.OBSERVER) &&
-                    dictionaries != null && !dictionaries.isEmpty()) {
+                        GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.OBSERVER) &&
+                dictionaries != null && !dictionaries.isEmpty()) {
             lock.lock();
             try {
                 for (Dictionary dictionary : dictionaries) {
                     // update dictionary object state
-                    dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    if (dictionariesMapById.containsKey(dictionary.getDictionaryId())) {
+                        dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    } else {
+                        LOG.warn("dictionary {}, id {} has been deleted",
+                                dictionary.getDictionaryName(), dictionary.getDictionaryId());
+                    }
                 }
             } finally {
                 lock.unlock();
@@ -511,7 +516,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         writer.writeJson(this);
         writer.close();
     }
-    
+
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         DictionaryMgr data = reader.readJson(DictionaryMgr.class);
@@ -522,10 +527,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         this.nextDictionaryId = data.getNextDictionaryId();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {
@@ -536,7 +538,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 entry.getValue().resetState();
             }
         } finally {
-            lock.unlock(); 
+            lock.unlock();
         }
     }
 
@@ -572,7 +574,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
 
         private ConnectContext buildConnectContext() {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setCurrentCatalog(dictionary.getCatalogName());
             context.setDatabase(dictionary.getDbName());
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -626,11 +628,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             List<PlanFragment> fragments = execPlan.getFragments();
             List<ScanNode> scanNodes = execPlan.getScanNodes();
             DescriptorTable descTable = execPlan.getDescTbl();
-            Coordinator coord = getCoordinatorFactory().createRefreshDictionaryCacheScheduler(context, queryId, descTable,
-                                                                                              fragments, scanNodes);
+            Coordinator coord =
+                    getCoordinatorFactory().createRefreshDictionaryCacheScheduler(context, queryId, descTable,
+                            fragments, scanNodes);
 
             QeProcessorImpl.INSTANCE.registerQuery(queryId, coord);
-            int leftTimeSecond = context.getSessionVariable().getQueryTimeoutS();
+            int leftTimeSecond = context.getExecTimeout();
             coord.setTimeoutSecond(leftTimeSecond);
             coord.exec();
 
@@ -639,10 +642,10 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 if (!status.ok()) {
                     error = true;
                     LOG.warn("execute dictionary cache sink failed " + status.getErrorMsg());
-                    throw new UserException(status.getErrorMsg());
+                    throw new StarRocksException(status.getErrorMsg());
                 }
             } else {
-                throw new UserException("refresh dictionary cache timeout");
+                throw new StarRocksException("refresh dictionary cache timeout");
             }
 
             LOG.info("execute dictionary cache sink success, dictionary id: {}", dictionary.getDictionaryId());
@@ -703,10 +706,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 GlobalStateMgr.getCurrentState().getDictionaryMgr().updateLastSuccessTxnId(dictionaryId, txnId);
                 dictionary.setFinished();
                 dictionary.setErrorMsg(""); // reset error msg
-            } else if (dictionary.getIgnoreFailedRefresh() && dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
+            } else if (dictionary.getIgnoreFailedRefresh() &&
+                    dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
                 dictionary.resetStateBeforeRefresh();
                 dictionary.setErrorMsg("Cancelled and rollback to previous state, errMsg: " +
-                                       errMsg);
+                        errMsg);
             } else {
                 dictionary.setCancelled();
                 dictionary.setErrorMsg(errMsg);

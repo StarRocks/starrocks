@@ -66,6 +66,7 @@ class JITContext;
 class JITExpr;
 struct JitScore;
 struct LLVMDatum;
+class LambdaFunction;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
@@ -119,6 +120,9 @@ public:
 
     bool is_monotonic() const { return _is_monotonic; }
     bool is_cast_expr() const { return _node_type == TExprNodeType::CAST_EXPR; }
+    virtual bool is_lambda_function() const { return false; }
+    virtual bool is_literal() const { return false; }
+    virtual bool is_dictmapping_expr() const { return false; }
 
     // In most time, this field is passed from FE
     // Sometimes we want to construct expr on BE implicitly and we have knowledge about `monotonicity`
@@ -145,6 +149,8 @@ public:
     virtual int get_slot_ids(std::vector<SlotId>* slot_ids) const;
 
     virtual int get_subfields(std::vector<std::vector<std::string>>* subfields) const;
+
+    virtual void for_each_slot_id(const std::function<void(SlotId)>& cb) const;
 
     /// Create expression tree from the list of nodes contained in texpr within 'pool'.
     /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
@@ -197,6 +203,7 @@ public:
     static void close(const std::vector<Expr*>& exprs);
 
     virtual std::string debug_string() const;
+
     static std::string debug_string(const std::vector<Expr*>& exprs);
     static std::string debug_string(const std::vector<ExprContext*>& ctxs);
 
@@ -215,6 +222,7 @@ public:
     // Get the first column ref in expr.
     ColumnRef* get_column_ref();
 
+#ifdef STARROCKS_JIT_ENABLE
     StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
 
     virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
@@ -246,6 +254,7 @@ public:
     // The valuable expressions get 1 score per expression, others get 0 score per expression, including
     // comparison expr, logical expr, branch expr, div and mod.
     virtual JitScore compute_jit_score(RuntimeState* state) const;
+#endif
 
     // Return true if this expr or any of its children support ngram bloom filter, otherwise return flase
     virtual bool support_ngram_bloom_filter(ExprContext* context) const;
@@ -259,6 +268,7 @@ public:
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
+    SlotId max_used_slot_id() const;
 
 protected:
     friend class MathFunctions;
@@ -268,6 +278,8 @@ protected:
     friend class Literal;
     friend class ExprContext;
     friend class ColumnPredicateRewriter;
+    friend class LambdaFunction;
+    friend class ArrayMapExpr;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);
@@ -357,8 +369,9 @@ protected:
         out << expr_name << "(" << Expr::debug_string() << ")";
         return out.str();
     }
-
+#ifdef STARROCKS_JIT_ENABLE
     Status prepare_jit_expr(RuntimeState* state, ExprContext* context);
+#endif
 
 private:
     // Create a new vectorized expr

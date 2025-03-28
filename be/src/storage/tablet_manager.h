@@ -59,7 +59,11 @@
 namespace starrocks {
 
 class Tablet;
+class BaseTablet;
+using BaseTabletSharedPtr = std::shared_ptr<BaseTablet>;
 class DataDir;
+class BaseRowset;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 struct TabletBasicInfo;
 class MetadataCache;
 
@@ -271,6 +275,9 @@ private:
     // make sure use this function to add shutdown tablets
     // caller should acquire _shutdown_tablets_lock
     void _add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info);
+    void sweep_shutdown_tablet(const DroppedTabletInfo& info, std::vector<DroppedTabletInfo>& finished_tablets);
+
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard);
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
@@ -282,11 +289,12 @@ private:
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _partition_tablet_map_lock;
-    // Protect _shutdown_tablets, should not be obtained before _tablet_map_lock to avoid deadlock
+    // Protect _shutdown_tablets/_shutdown_tablets_redundant_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
     std::map<int64_t, DroppedTabletInfo> _shutdown_tablets;
+    std::map<TabletUid, DroppedTabletInfo> _shutdown_tablets_redundant_map;
 
     std::mutex _tablet_stat_mutex;
     // cache to save tablets' statistics, such as data-size and row-count

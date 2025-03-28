@@ -21,6 +21,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "column_reader.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "formats/parquet/column_chunk_reader.h"
@@ -70,8 +71,7 @@ public:
 
     virtual Status get_dict_values(Column* column) = 0;
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                                   Column* column) = 0;
+    virtual Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) = 0;
 
     virtual Status load_dictionary_page() { return Status::InternalError("Not supported load_dictionary_page"); }
 
@@ -98,8 +98,7 @@ public:
 
     Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
@@ -149,7 +148,16 @@ private:
 
     virtual Status _lazy_skip_values(uint64_t begin) = 0;
     virtual Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
-                                          starrocks::Column* dst, bool append_default) = 0;
+                                          starrocks::Column* dst, bool append_default,
+                                          const FilterData* filter = nullptr) = 0;
+
+    virtual const FilterData* _convert_filter_row_to_value(const Filter* filter, size_t row_readed) {
+        if (!filter || !config::parquet_push_down_filter_to_decoder_enable) {
+            return nullptr;
+        }
+        // based on benchmark we added some threshold here, selectivity < 0.2
+        return SIMD::count_nonzero(*filter) * 1.0 / filter->size() < 0.2 ? filter->data() + row_readed : nullptr;
+    }
 };
 
 } // namespace starrocks::parquet

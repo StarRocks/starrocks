@@ -7,8 +7,8 @@ toc_max_heading_level: 5
 
 A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, Delta Lake, and Apache Kudu data sources as a unified data source without ingestion. With unified catalogs, you can:
 
-- Directly query data stored in Hive, Iceberg, Hudi, Delta Lake, and Kudu without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, Delta Lake, and Kudu and load the data into StarRocks.
+- Directly query data stored in Hive, Iceberg, Hudi, Delta Lake, Paimon, and Kudu without the need to manually create tables.
+- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, Delta Lake, Paimon, and Kudu and load the data into StarRocks.
 - Perform operations on StarRocks to create or drop Hive and Iceberg databases and tables.
 
 To ensure successful SQL workloads on your unified data source, your StarRocks cluster must be able to access the storage system and metastore of your unified data source. StarRocks supports the following storage systems and metastores:
@@ -27,7 +27,7 @@ One unified catalog supports integrations with only a single storage system and 
 
 ## Usage notes
 
-- See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md), and [Kudu catalog](../../data_source/catalog/kudu_catalog.md) to understand the file formats and data types supported.
+- See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](./iceberg/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md), [Paimon catalog](../catalog/paimon_catalog.md), and [Kudu catalog](../../data_source/catalog/kudu_catalog.md) to understand the file formats and data types supported.
 
 - Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
 
@@ -74,6 +74,7 @@ PROPERTIES
     MetastoreParams,
     StorageCredentialParams,
     MetadataUpdateParams,
+    PaimonCatalogParams,
     KuduCatalogParams
 )
 ```
@@ -433,6 +434,14 @@ However, if the frequency of data updates in Hive, Hudi, or Delta Lake is high, 
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+
+#### PaimonCatalogParams
+
+A set of parameters about how to connect Paimon Catalog. This parameter set is optional.
+
+| Parameter                | Required | Description                                     |
+|--------------------------|----------|-------------------------------------------------|
+| paimon.catalog.warehouse | No       | The warehouse storage path of your Paimon data. |
 
 #### KuduCatalogParams
 
@@ -913,7 +922,7 @@ ENGINE = {|hive|iceberg}
 [partition_desc]
 ```
 
-For more information, see [Create a Hive table](../catalog/hive_catalog.md#create-a-hive-table) and [Create an Iceberg table](../catalog/iceberg_catalog.md#create-an-iceberg-table).
+For more information, see [Create a Hive table](../catalog/hive_catalog.md#create-a-hive-table) and [Create an Iceberg table](./iceberg/iceberg_catalog.md#create-an-iceberg-table).
 
 The following example creates a Hive table named `hive_table`. The table consists of three columns `action`, `id`, and `dt`, of which `id` and `dt`are partition columns.
 
@@ -951,7 +960,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-For more information, see [Sink data to a Hive table ](../catalog/hive_catalog.md#sink-data-to-a-hive-table) and [Sink data to an Iceberg table](../catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
+For more information, see [Sink data to a Hive table ](../catalog/hive_catalog.md#sink-data-to-a-hive-table) and [Sink data to an Iceberg table](./iceberg/iceberg_catalog.md#sink-data-to-an-iceberg-table).
 
 The following example inserts three data rows to a Hive table named `hive_table`:
 
@@ -979,7 +988,7 @@ StarRocks supports dropping only Hive and Iceberg tables from unified catalogs.
 DROP TABLE <table_name>
 ```
 
-For more information, see [Drop a Hive table](../catalog/hive_catalog.md#drop-a-hive-table) and [Drop an Iceberg table](../catalog/iceberg_catalog.md#drop-an-iceberg-table).
+For more information, see [Drop a Hive table](../catalog/hive_catalog.md#drop-a-hive-table) and [Drop an Iceberg table](./iceberg/iceberg_catalog.md#drop-an-iceberg-table).
 
 The following example drops a Hive table named `hive_table`:
 

@@ -40,6 +40,7 @@ from lib import *
 
 
 CASE_DIR = "sql"
+LOG_FILTERED_WARN = "You can use `--log_filtered` to show the details..."
 
 
 class ChooseCase(object):
@@ -86,7 +87,7 @@ class ChooseCase(object):
     def __init__(self, case_dir=None, record_mode=False, file_regex=None, case_regex=None):
         """init"""
         super().__init__()
-        # self.sr_lib_obj = sr_sql_lib.StarrocksSQLApiLib()
+        self.sr_lib_obj = sr_sql_lib.StarrocksSQLApiLib()
 
         # case_dir = sql dir by default
         self.case_dir = os.path.join(sr_sql_lib.root_path, CASE_DIR) if case_dir is None else case_dir
@@ -98,6 +99,8 @@ class ChooseCase(object):
 
         self.list_t_r_files(file_regex)
         self.get_cases(record_mode, case_regex)
+        self.filter_cases_by_component_status()
+        self.filter_cases_by_data_status()
 
         # sort
         self.case_list.sort()
@@ -149,12 +152,145 @@ class ChooseCase(object):
         for file in file_list:
             base_file = os.path.basename(file)
             if base_file in skip.skip_files:
-                print('skip file {} because it is in skip_files'.format(file))
+                sr_sql_lib.self_print(f'skip file {file} because it is in skip_files', color=ColorEnum.YELLOW)
                 continue
 
             self.read_t_r_file(file, case_regex)
 
         self.case_list = list(filter(lambda x: x.name.strip() != "", self.case_list))
+
+    def filter_cases_by_component_status(self):
+        """ filter cases by component status """
+        new_case_list = []
+
+        filtered_cases_dict = {}
+
+        for each_case in self.case_list:
+            _case_sqls = []
+            for each_stat in each_case.sql:
+                if isinstance(each_stat, str):
+                    _case_sqls.append(each_stat)
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == LOOP_FLAG:
+                    tools.assert_in("stat", each_stat, "LOOP STATEMENT FORMAT ERROR!")
+                    _case_sqls.extend(each_stat["stat"])
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == CONCURRENCY_FLAG:
+                    tools.assert_in("thread", each_stat, "CONCURRENCY THREAD FORMAT ERROR!")
+                    for each_thread in each_stat["thread"]:
+                        _case_sqls.extend(each_thread["cmd"])
+                else:
+                    tools.ok_(False, "Init data error!")
+
+            is_pass = True
+
+            # check trino/spark/hive flag
+            for each_client_flag in [TRINO_FLAG, SPARK_FLAG, HIVE_FLAG]:
+                if any(_case_sql.lstrip().startswith(each_client_flag) for _case_sql in _case_sqls):
+                    # check client status
+                    client_name = each_client_flag.split(":")[0].lower() + "-client"
+                    if client_name not in self.sr_lib_obj.component_status:
+                        sr_sql_lib.self_print(f"[Config ERROR]: {client_name} config not found!")
+                        filtered_cases_dict.setdefault(client_name, []).append(each_case.name)
+                        is_pass = False
+                        break
+
+                    if not self.sr_lib_obj.component_status[client_name]["status"]:
+                        filtered_cases_dict.setdefault(client_name, []).append(each_case.name)
+                        is_pass = False
+                        break
+
+            if not is_pass:
+                # client check failed, no need to check component info
+                continue
+
+            # check ${} contains component info
+            _case_sqls = " ".join(_case_sqls)
+            _vars = re.findall(r"\${([a-zA-Z0-9._-]+)}", _case_sqls)
+            for _var in _vars:
+
+                if not is_pass:
+                    break
+
+                if _var not in self.sr_lib_obj.__dict__:
+                    continue
+
+                for each_component_name, each_component_info in self.sr_lib_obj.component_status.items():
+                    if _var in each_component_info["keys"] and not each_component_info["status"]:
+                        filtered_cases_dict.setdefault(each_component_name, []).append(each_case.name)
+                        is_pass = False
+                        break
+
+            if is_pass:
+                new_case_list.append(each_case)
+
+        if filtered_cases_dict:
+            if os.environ.get("log_filtered") == "True":
+                sr_sql_lib.self_print(f"\n{'-' * 60}\n[Component filter]\n{'-' * 60}", color=ColorEnum.BLUE,
+                                      logout=True, bold=True)
+                for k, cases in filtered_cases_dict.items():
+                    sr_sql_lib.self_print(f"▶ {k.upper()}", color=ColorEnum.BLUE, logout=True, bold=True)
+                    sr_sql_lib.self_print(f"    ▶ %s" % '\n    ▶ '.join(cases), logout=True)
+                    sr_sql_lib.self_print('-' * 60, color=ColorEnum.BLUE, logout=True, bold=True)
+            else:
+                filtered_count = sum([len(x) for x in filtered_cases_dict.values()])
+                sr_sql_lib.self_print(f"\n{'-' * 60}\n[Component filter]: {filtered_count}\n{LOG_FILTERED_WARN}\n{'-' * 60}",
+                                      color=ColorEnum.BLUE, logout=True, bold=True)
+
+        self.case_list = new_case_list
+
+    def filter_cases_by_data_status(self):
+        """ filter cases by data status """
+        new_case_list = []
+
+        filtered_cases_dict = {}
+
+        for each_case in self.case_list:
+            _case_sqls = []
+            for each_stat in each_case.sql:
+                if isinstance(each_stat, str):
+                    _case_sqls.append(each_stat)
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == LOOP_FLAG:
+                    tools.assert_in("stat", each_stat, "LOOP STATEMENT FORMAT ERROR!")
+                    _case_sqls.extend(each_stat["stat"])
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == CONCURRENCY_FLAG:
+                    tools.assert_in("thread", each_stat, "CONCURRENCY THREAD FORMAT ERROR!")
+                    for each_thread in each_stat["thread"]:
+                        _case_sqls.extend(each_thread["cmd"])
+                else:
+                    tools.ok_(False, "Init data error!")
+
+            is_pass = True
+            # check trino/spark/hive flag
+            function_stats = list(filter(lambda x: x.lstrip().startswith(FUNCTION_FLAG) and "prepare_data(" in x, _case_sqls))
+
+            for func_stat in function_stats:
+                if not is_pass:
+                    break
+
+                data_source_names = re.findall(r"prepare_data\(['|\"]([a-zA-Z_-]+)['|\"]", func_stat)
+                for data_source in data_source_names:
+
+                    if self.sr_lib_obj.data_status.get(data_source, False) is False:
+                        filtered_cases_dict.setdefault(data_source, []).append(each_case.name)
+                        is_pass = False
+                        break
+
+            if is_pass:
+                new_case_list.append(each_case)
+
+        if filtered_cases_dict:
+            if os.environ.get("log_filtered") == "True":
+                sr_sql_lib.self_print(f"\n{'-' * 60}\n[Data filter]\n{'-' * 60}", color=ColorEnum.BLUE, logout=True, bold=True)
+                for k in list(sorted(filtered_cases_dict.keys())):
+                    cases = filtered_cases_dict[k]
+                    sr_sql_lib.self_print(f"▶ {k.upper()}", color=ColorEnum.BLUE, logout=True, bold=True)
+                    sr_sql_lib.self_print(f"    ▶ %s" % '\n    ▶ '.join(cases), logout=True)
+                    sr_sql_lib.self_print('-' * 60, color=ColorEnum.BLUE, logout=True, bold=True)
+            else:
+                filtered_count = sum([len(x) for x in filtered_cases_dict.values()])
+                sr_sql_lib.self_print(f"\n{'-' * 60}\n[Data filter]: {filtered_count}\n{LOG_FILTERED_WARN}\n{'-' * 60}",
+                                      color=ColorEnum.BLUE, logout=True, bold=True)
+
+        self.case_list = new_case_list
 
     def read_t_r_file(self, file, case_regex):
         """read t r file and get case & result"""
@@ -316,7 +452,8 @@ class ChooseCase(object):
                        and not re.compile(f'}}(\\s)*{END_LOOP_FLAG}').fullmatch(f_lines[line_id].strip())):
                     # read loop stats, unnecessary to record result
                     line_content = f_lines[line_id].strip()
-                    line_id = __read_single_stat_and_result(line_content, line_id, tmp_sql, tmp_res, in_loop_flag, tmp_loop_stat)
+                    line_id = __read_single_stat_and_result(line_content, line_id, tmp_sql, tmp_res, in_loop_flag,
+                                                            tmp_loop_stat)
                 tools.assert_less(line_id, len(f_lines), "LOOP FORMAT ERROR!")
 
                 # reach the end loop line
@@ -328,7 +465,7 @@ class ChooseCase(object):
                     "type": LOOP_FLAG,
                     "stat": tmp_loop_stat,
                     "prop": tmp_loop_prop,
-                    "ori": f_lines[l_loop_line: r_loop_line+1]
+                    "ori": f_lines[l_loop_line: r_loop_line + 1]
                 })
                 tmp_res.append(None)
                 line_id += 1
@@ -378,7 +515,7 @@ class ChooseCase(object):
                         if len(_thread_sql_list) > _old_sql_size:
                             # new record was recorded
                             _ori_lines = f_lines[line_id: next_line_id]
-                            _thread_ori_sql_list.extend([_line.rstrip() for _line in _ori_lines])
+                            _thread_ori_sql_list.append("\n".join([_line.rstrip() for _line in _ori_lines]))
                         line_id = next_line_id
 
                         _next_line = f_lines[line_id].rstrip().lstrip()
@@ -439,9 +576,8 @@ def choose_cases(record_mode=False):
     filename_regex = os.environ.get("file_filter")
     case_name_regex = os.environ.get("case_filter")
 
-    run_info = f"""
-{'-' * 60}
-[DIR]: {confirm_case_dir}
+    run_info = f"""{'-' * 60}
+[DIR]: {"DEFAULT" if confirm_case_dir is None else confirm_case_dir}
 [Mode]: {"RECORD" if record_mode else "VALIDATE"}
 [file regex]: {filename_regex}
 [case regex]: {case_name_regex}
@@ -458,17 +594,3 @@ def choose_cases(record_mode=False):
         log.info("%s:%s" % (case.file, case.name))
 
     return cases
-
-
-def check_db_unique(case_list: List[ChooseCase.CaseTR]):
-    """check db unique in case list"""
-    db_and_case_dict = {}
-
-    # get info dict, key: db value: [..case_names]
-    for case in case_list:
-        for each_db in case.db:
-            db_and_case_dict.setdefault(each_db, []).append(case.name)
-
-    error_info_dict = {db: cases for db, cases in db_and_case_dict.items() if len(cases) > 1}
-
-    tools.assert_true(len(error_info_dict) <= 0, "Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))

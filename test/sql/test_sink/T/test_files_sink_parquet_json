@@ -1,0 +1,59 @@
+-- name: test_files_sink_parquet_json
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- json type
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/parquet_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create table t1 (k1 int, k2 json);
+insert into t1 values (1, parse_json('{"a": 1, "b": true}')), (2, null), (3, parse_json('{"a": 3, "b": false}'));
+insert into files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/",
+    "format" = "parquet",
+    "compression" = "zstd",
+    "single" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}") select * from t1;
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null
+
+
+-- array<json> type
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/parquet_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create table t2 (k1 int, k2 array<json>);
+insert into t2 values (1, [parse_json('{"a": 1, "b": "b1"}'), parse_json('{"a": 2, "b": "b2"}')]), (2, null), (3, [parse_json('{"a": 3, "b": "b3"}')]);
+insert into files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}") select * from t2;
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

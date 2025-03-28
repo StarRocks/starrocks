@@ -40,7 +40,6 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -68,7 +67,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -95,7 +93,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final TAlterTabletMaterializedColumnReq generatedColumnReq;
-    private List<Column> baseSchemaColumns;
+    private List<TColumn> baseSchemaColumns;
     private RollupJobV2Params rollupJobV2Params;
 
     public static class RollupJobV2Params {
@@ -135,27 +133,38 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                                                     long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
                                                     int baseSchemaHash, long version, long jobId,
                                                     TAlterTabletMaterializedColumnReq generatedColumnReq,
-                                                    List<Column> baseSchemaColumns) {
+                                                    List<TColumn> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
                 TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq, baseSchemaColumns, null);
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
-                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
+                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId,
+                                                   TAlterTabletMaterializedColumnReq generatedColumnReq) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                TTabletType.TABLET_TYPE_LAKE, txnId, null, Collections.emptyList(), null);
+                TTabletType.TABLET_TYPE_LAKE, txnId, generatedColumnReq, Collections.emptyList(), null);
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
                                                      long rollupIndexId, long rollupTabletId, long baseTabletId,
                                                      long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                                                      long jobId, RollupJobV2Params rollupJobV2Params,
-                                                     List<Column> baseSchemaColumns) {
+                                                     List<TColumn> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
+                baseSchemaColumns, rollupJobV2Params);
+    }
+
+    public static AlterReplicaTask rollupLakeTablet(long backendId, long dbId, long tableId, long partitionId,
+                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
+                                                     long version, long jobId, RollupJobV2Params rollupJobV2Params,
+                                                    List<TColumn> baseSchemaColumns, long txnId) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.ROLLUP,
+                TTabletType.TABLET_TYPE_LAKE, txnId, null,
                 baseSchemaColumns, rollupJobV2Params);
     }
 
@@ -163,7 +172,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType,
                              TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq,
-                             List<Column> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
+                             List<TColumn> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -270,11 +279,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         req.setJob_id(jobId);
 
         if (baseSchemaColumns != null) {
-            List<TColumn> columns = new ArrayList<TColumn>();
-            for (Column column : baseSchemaColumns) {
-                columns.add(column.toThrift());
-            }
-            req.setColumns(columns);
+            req.setColumns(baseSchemaColumns);
         }
         return req;
     }
@@ -312,7 +317,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             PhysicalPartition partition = tbl.getPhysicalPartition(getPartitionId());
             if (partition == null) {
@@ -353,7 +358,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
         setFinished(true);
     }

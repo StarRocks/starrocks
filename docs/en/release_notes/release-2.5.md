@@ -292,7 +292,7 @@ Release date: August 28, 2023
 
 ### Improvements
 
-- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/en-us/3.1/reference/System_variable) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/docs/sql-reference/System_variable/#enable_strict_type) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - Optimized the prompt returned if users do not specify `hive.metastore.uri` when they create an Iceberg Catalog. The error prompt is more accurate. [#16543](https://github.com/StarRocks/starrocks/issues/16543)
 - Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - Dynamic partitioning further supports the partitioning unit to be `year`. [#28386](https://github.com/StarRocks/starrocks/pull/28386)

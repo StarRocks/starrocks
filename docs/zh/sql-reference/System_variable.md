@@ -141,6 +141,17 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+### 设置变量为用户属性
+
+您可以通过 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
+
+示例：
+
+```SQL
+-- 设置用户 jack 的 Session 变量 `query_timeout` 为 `600`。
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
 ## 支持的变量
 
 本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
@@ -252,7 +263,7 @@ SELECT /*+ SET_VAR
 
 ### enable_materialized_view_agg_pushdown_rewrite
 
-* 描述：是否为物化视图查询改写启用聚合函数下推。如果设置为 `true`，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。有关此功能的具体场景和限制的详细信息，请参见 [聚合函数下推](../using_starrocks/query_rewrite_with_materialized_views.md#聚合下推)。
+* 描述：是否为物化视图查询改写启用聚合函数下推。如果设置为 `true`，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。有关此功能的具体场景和限制的详细信息，请参见 [聚合函数下推](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#聚合下推)。
 * 默认值：false
 * 引入版本：v3.3.0
 
@@ -291,6 +302,18 @@ SELECT /*+ SET_VAR
 * 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
 * 默认值：true
 * 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
+
+### enable_plan_advisor
+
+* 描述：是否为慢查询或手动标记查询开启 Query Feedback 功能。
+* 默认值：true
+* 引入版本：v3.4.0
+
+### enable_plan_analyzer
+
+* 描述：是否为所有查询开启 Query Feedback 功能。该变量仅在 `enable_plan_advisor` 为 `true` 是生效。
+* 默认值：false
+* 引入版本：v3.4.0
 
 ### follower_query_forward_mode
 
@@ -363,6 +386,15 @@ SELECT /*+ SET_VAR
 * 描述：用于兼容 MySQL 客户端，无实际作用。
 * 默认值：4
 * 类型：Int
+
+### dynamic_overwrite
+
+* 描述：是否为 INSERT OVERWRITE 语句覆盖写分区表时启用 [Dynamic Overwrite](./sql-statements/loading_unloading/INSERT.md#dynamic-overwrite) 语义。有效值：
+  * `true`：启用 Dynamic Overwrite。
+  * `false`：禁用 Dynamic Overwrite 并使用默认语义。
+* 默认值：false
+* 引入版本：v3.4.0
+
 <!--
 ### enable_collect_table_level_scan_stats (Invisible to users)
 
@@ -404,11 +436,44 @@ SELECT /*+ SET_VAR
 * 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 * 引入版本：v3.2.1
 
+### enable_metadata_profile
+
+* 描述：是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* 默认值：true
+* 引入版本：v3.3.3
+
+### plan_mode
+
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
+  * `auto`：系统自动选择方案。
+  * `local`：使用本地缓存方案。
+  * `distributed`：使用分布式方案。
+* 默认值：auto
+* 引入版本：v3.3.3
+
+### metadata_collect_query_timeout
+
+* 描述：Iceberg Catalog 元数据收集阶段的超时时间。
+* 单位： 秒
+* 默认值：60
+* 引入版本：v3.3.3
+
 ### enable_insert_strict
 
-* 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
-默认值为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
+* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
+
+### insert_max_filter_ratio
+
+* 描述：INSERT 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。
+* 默认值：0
+* 引入版本：v3.4.0
+
+### insert_timeout
+
+* 描述：INSERT 作业的超时时间。单位：秒。从 v3.4.0 版本开始，`insert_timeout` 作用于所有涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计信息收集和 PIPE），替代原本的 `query_timeout`。
+* 默认值：14400
+* 引入版本：v3.4.0
 
 ### enable_materialized_view_for_insert
 
@@ -436,7 +501,7 @@ SELECT /*+ SET_VAR
 
 ### enable_spill_to_remote_storage
 
-* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
 * 默认值：false
 * 引入版本：v3.3.0
 
@@ -530,7 +595,7 @@ SELECT /*+ SET_VAR
 
 ### enable_query_cache
 
-* 描述：是否开启 Query Cache。取值范围：true 和 false。true 表示开启，false 表示关闭（默认值）。开启该功能后，只有当查询满足[Query Cache](../using_starrocks/query_cache.md#应用场景) 所述条件时，才会启用 Query Cache。
+* 描述：是否开启 Query Cache。取值范围：true 和 false。true 表示开启，false 表示关闭（默认值）。开启该功能后，只有当查询满足[Query Cache](../using_starrocks/caching/query_cache.md#应用场景) 所述条件时，才会启用 Query Cache。
 * 默认值：false
 * 引入版本：v2.5
 
@@ -577,6 +642,14 @@ SELECT /*+ SET_VAR
 * 描述：是否开启往 Hive 的 External Table 写数据的功能。
 * 默认值：false
 * 引入版本：v3.2
+
+### enable_query_trigger_analyze
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否开启查询触发 ANALYZE 任务。
+* 引入版本：v3.4.0
 
 ### event_scheduler
 
@@ -647,6 +720,16 @@ SELECT /*+ SET_VAR
 * 默认值：4
 * 类型：Int
 * 引入版本：v2.5
+
+### jit_level
+
+* 描述：表达式 JIT 编译的启用级别。有效值：
+  * `1`：系统为可编译表达式自适应启用 JIT 编译。
+  * `-1`：对所有可编译的非常量表达式启用 JIT 编译。
+  * `0`：禁用 JIT 编译。如果该功能返回任何错误，您可以手动禁用。
+* 默认值：1
+* 数据类型：Int
+* 引入版本：-
 
 ### language (global)
 
@@ -826,31 +909,31 @@ SELECT /*+ SET_VAR
 
 ### query_mem_limit
 
-* 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。
+* 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。设置为 `0` 表示没有限制。
 * 单位：字节
-* 默认值：`0`，表示没有限制。
+* 默认值：`0`
 
 ### query_queue_concurrency_limit (global)
 
-* 描述：单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。
+* 描述：单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：`0`
 * 单位：-
 * 类型：Int
 
 ### query_queue_cpu_used_permille_limit (global)
 
-* 描述：单个 BE 节点中内存使用千分比上限（即 CPU 使用率）。仅在设置为大于 `0` 后生效。
+* 描述：单个 BE 节点中内存使用千分比上限（即 CPU 使用率）。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：0。
 * 取值范围：[0, 1000]
 
 ### query_queue_max_queued_queries (global)
 
-* 描述：队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。
+* 描述：队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：1024。
 
 ### query_queue_mem_used_pct_limit (global)
 
-* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。
+* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
 * 默认值：`0`
 * 取值范围：[0, 1]
 
@@ -862,7 +945,7 @@ SELECT /*+ SET_VAR
 
 ### query_timeout
 
-* 描述：用于设置查询超时时间，单位为秒。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。
+* 描述：用于设置查询超时时间，单位为秒。该变量会作用于当前连接中所有的查询语句。自 v3.4.0 起，`query_timeout` 不再作用于 INSERT 语句。
 * 默认值：300 （5 分钟）
 * 单位：秒
 * 类型：Int
@@ -903,6 +986,12 @@ SELECT /*+ SET_VAR
 * 类型：Int
 * 引入版本：v3.1.0
 
+### scan_olap_partition_num_limit
+
+* 描述：在SQL执行计划中, 单表允许的最大扫描分区数.
+* 默认值：0 (无限制)
+* 引入版本：v3.3.9
+
 ### spill_mode (3.0 及以后)
 
 中间结果落盘的执行方式。默认值：`auto`。有效值包括：
@@ -914,7 +1003,7 @@ SELECT /*+ SET_VAR
 
 ### spill_storage_volume
 
-* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
 * 默认值：空字符串
 * 引入版本：v3.3.0
 
@@ -964,7 +1053,9 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### sql_select_limit
 
-用于兼容 MySQL 客户端。无实际作用。
+* 描述：用于限制查询返回的结果集的最大行数，可以防止因查询返回过多的数据而导致内存不足或网络拥堵等问题。
+* 默认值：无限制
+* 类型：Long
 
 ### statistic_collect_parallel
 

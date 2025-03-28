@@ -4,6 +4,123 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.15
+
+发布日期：2025 年 2 月 14 日
+
+### 新增特性
+
+- 窗口函数支持 `max_by` 和 `min_by`。[#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### 功能优化
+
+- 新增 StarClient 超时参数。[#54496](https://github.com/StarRocks/starrocks/pull/54496)
+  - star_client_read_timeout_seconds
+  - star_client_list_timeout_seconds
+  - star_client_write_timeout_seconds
+- List 分区表在执行 DELETE 语句时支持分区裁剪。[#55400](https://github.com/StarRocks/starrocks/pull/55400)
+
+### 问题修复
+
+修复了如下问题：
+
+- Stream Load 调度到 Alive 状态为 false 的节点时，导入失败。[#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- Stream Load 部分列写入主键表报错。[#53403](https://github.com/StarRocks/starrocks/pull/55430)
+- BE 节点重启后 bRPC 持续报错。[#40229](https://github.com/StarRocks/starrocks/pull/40229)
+
+## 3.2.14
+
+发布日期：2025 年 1 月 8 日
+
+### 功能优化
+
+- 支持收集 Paimon 表的统计信息。[#52858](https://github.com/StarRocks/starrocks/pull/52858)
+- JSON 指标中添加节点信息和直方图指标。[#53735](https://github.com/StarRocks/starrocks/pull/53735)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键表索引的 Score 没有在 Commit 阶段进行更新。[#41737](https://github.com/StarRocks/starrocks/pull/41737)
+- 在启用低基数优化时，`max(count(distinct))` 执行计划错误。[#53403](https://github.com/StarRocks/starrocks/pull/53403)
+- 当 List 分区列含有 NULL 值时，查询分区列的 Min/Max 值会导致分区裁剪错误。[#53235](https://github.com/StarRocks/starrocks/pull/53235)
+- 使用 HDFS 备份数据时上传重试失败。[#53679](https://github.com/StarRocks/starrocks/pull/53679)
+
+## 3.2.13
+
+发布日期：2024 年 12 月 13 日
+
+### 功能优化
+
+- 支持对单个表设置禁止进行 Base Compaction 的时间范围。[#50120](https://github.com/StarRocks/starrocks/pull/50120)
+
+### 问题修复
+
+修复了如下问题：
+
+- 执行 SHOW ROUTINE LOAD 后 `loadRowsRate` 字段返回为 `0`。[#52151](https://github.com/StarRocks/starrocks/pull/52151)
+- 函数 `Files()` 读取文件时读取未被查询的列。 [#52210](https://github.com/StarRocks/starrocks/pull/52210)
+- Prometheus 不能解析含有特殊符号名称的物化视图相关指标（当前物化视图统计指标支持 Tag）。[#52782](https://github.com/StarRocks/starrocks/pull/52782)
+- 函数 `array_map` 导致 BE Crash。[#52909](https://github.com/StarRocks/starrocks/pull/52909)
+- Metadata Cache 导致 BE Crash 问题。[#52968](https://github.com/StarRocks/starrocks/pull/52968)
+- Routine Load 因事务过期而导致任务取消（当前仅有数据库或表不存在任务才会被取消）。[#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- 一些和 Glue、S3 集成相关的问题：[#48433](https://github.com/StarRocks/starrocks/pull/48433)
+  - 部分报错信息未能展示根源报错原因。
+  - 使用 Glue 作为元数据服务时，写入分区列为 SRTING 类型的 Hive 分区表的报错。
+  - 删除 Hive 表时，用户权限不足但系统并未报错。
+- 物化视图属性 `storage_cooldown_time` 设置为 `maximum` 不生效。[#52079](https://github.com/StarRocks/starrocks/pull/52079)
+
+## 3.2.12
+
+发布日期：2024 年 10 月 23 日
+
+### 功能优化
+
+- 优化在部分复杂查询场景下 BE 内存分配和统计，避免 OOM。[#51382](https://github.com/StarRocks/starrocks/pull/51382)
+- 优化在 Schema Change 场景下 FE 的内存使用。[#50855](https://github.com/StarRocks/starrocks/pull/50855)
+- 优化从 Follower FE 节点查询系统定义视图 `information_schema.routine_load_jobs` 时 Job 状态的展示。[#51763](https://github.com/StarRocks/starrocks/pull/51763)
+- 支持备份还原 List 分区表。[#51993](https://github.com/StarRocks/starrocks/pull/51993)
+
+### 问题修复
+
+修复了如下问题：
+
+- 写入 Hive 失败后，报错信息丢失。[#33167](https://github.com/StarRocks/starrocks/pull/33167)
+- 函数 `array_map` 在常量参数过多时导致 Crash。[#51244](https://github.com/StarRocks/starrocks/pull/51244)
+- 表达式分区表的分区列里有特殊字符会导致 FE CheckPoint 失败。[#51677](https://github.com/StarRocks/starrocks/pull/51677)
+- 访问系统定义视图 `information_schema.fe_locks` 导致 Crash。[#51742](https://github.com/StarRocks/starrocks/pull/51742)
+- 查询生成列报错。[#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- 表名存在特殊字符时执行 Optimize Table 失败。[#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- 某些场景下 Tablet 无法 Balance。[#51828](https://github.com/StarRocks/starrocks/pull/51828)
+
+### 行为变更
+
+- 支持动态修改备份还原相关的参数。[#52111](https://github.com/StarRocks/starrocks/pull/52111)
+
+## 3.2.11
+
+发布日期：2024 年 9 月 9 日
+
+### 功能优化
+
+- 对 Files()、PIPE 相关操作中的敏感信息进行脱敏。[#47629](https://github.com/StarRocks/starrocks/pull/47629)
+- 通过 Files() 读取 Parquet 文件支持自动推导 STRUCT 类型。[#50481](https://github.com/StarRocks/starrocks/pull/50481)
+
+### 问题修复
+
+修复了如下问题：
+
+- Equi-join 查询由于全局字典未改写导致报错。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+- Tablet Clone 时 FE 侧死循环导致报错 "version has been compacted"。[#50561](https://github.com/StarRocks/starrocks/pull/50561)
+- 数据副本基于 Label 分布后，不健康副本修复调度错误。[#50331](https://github.com/StarRocks/starrocks/pull/50331)
+- 统计信息收集日志中报错 "Unknown column '%s' in '%s"。[#50785](https://github.com/StarRocks/starrocks/pull/50785)
+- Files() 读取 Parquet 格式文件中复杂类型 TIMESTAMP 时使用的 Timezone 不正确。[#50448](https://github.com/StarRocks/starrocks/pull/50448)
+
+### 行为变更
+
+- 从 v3.3.x 版本降级至 v3.2.11 版本，如果存在不兼容的元数据信息，系统将直接忽略。[#49636](https://github.com/StarRocks/starrocks/pull/49636)
+
 ## 3.2.10
 
 发布日期：2024 年 8 月 23 日
@@ -25,7 +142,7 @@ displayed_sidebar: docs
 - 在旧版本中为主键表关闭索引压缩功能后，升级至 v3.1.13 或 v3.2.9，访问索引的 `page_off` 信息时数组越界导致 Crash。[#48230](https://github.com/StarRocks/starrocks/pull/48230)
 - 并发执行 ADD/DROP COLUMN 操作导致 BE Crash。[#49355](https://github.com/StarRocks/starrocks/pull/49355)
 - 在 aarch64 架构下查询 ORC 格式文件中的 TINYINT 类型负数显示为 None。[#49517](https://github.com/StarRocks/starrocks/pull/49517)
-- 当写盘失败时，主键表持久化主键索引的 `l``0` 可能会因为无法捕捉错误导致数据丢失。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- 当写盘失败时，主键表持久化主键索引的 `l0` 可能会因为无法捕捉错误导致数据丢失。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
 - 主键表部分列更新在大量数据更新的场景下写入失败。[#49054](https://github.com/StarRocks/starrocks/pull/49054)
 -  v3.3.0 存算分离集群降级到 v3.2.9 后，Fast Schema Evolution 导致 BE Crash。[#42737](https://github.com/StarRocks/starrocks/pull/42737)
 - `partition_linve_nubmer` 不生效。[#49213](https://github.com/StarRocks/starrocks/pull/49213)

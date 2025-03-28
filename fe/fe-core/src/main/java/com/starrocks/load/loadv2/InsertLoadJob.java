@@ -37,7 +37,6 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
@@ -46,7 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
@@ -61,9 +60,6 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -89,15 +85,16 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
-            TLoadJobType type, long timeout, Coordinator coordinator) throws MetaNotFoundException {
+                         long timeout, long warehouseId, Coordinator coordinator) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
         this.loadStartTimestamp = createTimestamp;
         this.state = JobState.LOADING;
         this.jobType = EtlJobType.INSERT;
-        this.loadType = type;
+        this.loadType = coordinator.getLoadJobType();
         this.timeoutSecond = timeout;
+        this.warehouseId = warehouseId;
         this.coordinator = coordinator;
         this.loadIds.add(loadId);
         this.transactionId = txnId;
@@ -122,13 +119,12 @@ public class InsertLoadJob extends LoadJob {
         }
         this.jobType = EtlJobType.INSERT;
         this.timeoutSecond = Config.insert_load_default_timeout_second;
-        this.authorizationInfo = gatherAuthInfo();
         this.loadingStatus.setTrackingUrl(trackingUrl);
         this.loadType = TLoadJobType.INSERT_QUERY;
         this.coordinator = coordinator;
     }
 
-    public void setLoadFinishOrCancel(String failMsg, String trackingUrl) throws UserException {
+    public void setLoadFinishOrCancel(String failMsg, String trackingUrl) {
         writeLock();
         try {
             this.finishTimestamp = System.currentTimeMillis();
@@ -140,24 +136,16 @@ public class InsertLoadJob extends LoadJob {
                 this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
                 this.progress = 0;
             }
-            this.authorizationInfo = gatherAuthInfo();
             this.loadingStatus.setTrackingUrl(trackingUrl);
             this.coordinator = null;
         } finally {
             writeUnlock();
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
                 new LoadJobFinalOperation(this.id, this.loadingStatus, this.progress, 
                 this.loadStartTimestamp, this.finishTimestamp, this.state, this.failMsg));
-    }
-
-    public AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (database == null) {
-            throw new MetaNotFoundException("Database " + dbId + "has been deleted");
-        }
-        return new AuthorizationInfo(database.getFullName(), getTableNames(false));
     }
 
     @Override
@@ -254,17 +242,6 @@ public class InsertLoadJob extends LoadJob {
         return Coordinator.getFailInfos(coordinator);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeLong(tableId);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        tableId = in.readLong();
-    }
-
     public void setEstimateScanRow(long rows) {
         this.estimateScanRow = rows;
     }
@@ -282,7 +259,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }
@@ -307,5 +284,9 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void replayOnVisible(TransactionState txnState) {
+    }
+
+    public long getTableId() {
+        return tableId;
     }
 }

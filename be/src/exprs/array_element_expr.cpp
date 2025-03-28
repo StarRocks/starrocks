@@ -74,7 +74,7 @@ public:
             }
         }
 
-        std::vector<uint8_t> null_flags;
+        NullData null_flags;
         raw::make_room(&null_flags, num_rows);
 
         // Construct null flags.
@@ -125,7 +125,7 @@ public:
 
         // Construct the final result column;
         ColumnPtr result_data = array_elements_data->clone_empty();
-        NullColumnPtr result_null = NullColumn::create();
+        NullColumn::MutablePtr result_null = NullColumn::create();
         result_null->get_data().swap(null_flags);
 
         if (!array_elements_data->empty()) {

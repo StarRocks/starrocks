@@ -19,6 +19,7 @@
 #include <string_view>
 
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/base_tablet.h"
 #include "storage/lake/metadata_iterator.h"
@@ -48,7 +49,25 @@ enum WriterType : int;
 
 class Tablet : public BaseTablet {
 public:
-    explicit Tablet(TabletManager* mgr, int64_t id) : _mgr(mgr), _id(id) {}
+    explicit Tablet(TabletManager* mgr, int64_t id) : _mgr(mgr), _id(id) {
+        if (_mgr != nullptr) {
+            _location_provider = _mgr->location_provider();
+        }
+    }
+
+    explicit Tablet(TabletManager* mgr, int64_t id, std::shared_ptr<LocationProvider> location_provider,
+                    TabletMetadataPtr tablet_metadata)
+            : _mgr(mgr), _id(id) {
+        _location_provider = std::move(location_provider);
+        _tablet_metadata = tablet_metadata;
+    }
+
+    explicit Tablet(TabletManager* mgr, int64_t id, std::shared_ptr<LocationProvider> location_provider,
+                    std::shared_ptr<TabletSchema> tablet_schema)
+            : _mgr(mgr), _id(id) {
+        _location_provider = std::move(location_provider);
+        _tablet_schema = tablet_schema;
+    }
 
     ~Tablet() override = default;
 
@@ -65,6 +84,8 @@ public:
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
     Status delete_metadata(int64_t version);
+
+    Status metadata_exists(int64_t version);
 
     Status put_txn_log(const TxnLog& log);
 
@@ -119,6 +140,18 @@ public:
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
+    StatusOr<bool> has_delete_predicates(const Version& version) override {
+        for (int64_t current_version = version.first; current_version < version.second; current_version++) {
+            ASSIGN_OR_RETURN(auto metadata, get_metadata(current_version));
+            for (const auto& rowset : metadata->rowsets()) {
+                if (rowset.has_delete_predicate() && rowset.delete_predicate().version() >= version.first) {
+                    return true;
+                }
+            }
+        };
+        return false;
+    }
+
     UpdateManager* update_mgr() const { return _mgr->update_mgr(); }
 
     TabletManager* tablet_mgr() const { return _mgr; }
@@ -135,12 +168,19 @@ public:
 
     int64_t data_size();
 
+    const std::shared_ptr<LocationProvider>& location_provider() const { return _location_provider; }
+
     size_t num_rows() const override;
+
+    bool belonged_to_cloud_native() const override { return true; }
 
 private:
     TabletManager* _mgr;
     int64_t _id;
     int64_t _version_hint = 0;
+    std::shared_ptr<LocationProvider> _location_provider;
+    TabletMetadataPtr _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
 };
 
 } // namespace starrocks::lake

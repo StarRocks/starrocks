@@ -20,5 +20,5 @@ import javax.validation.constraints.NotNull;
 
 public interface Sorter {
     @NotNull
-    List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics);
+    List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics);
 }

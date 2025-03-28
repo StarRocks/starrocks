@@ -14,9 +14,12 @@
 
 package com.starrocks.persist.metablock;
 
+import com.google.gson.internal.Primitives;
 import com.google.gson.stream.JsonReader;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -98,15 +101,6 @@ public class SRMetaBlockReaderV1 implements SRMetaBlockReader {
     }
 
     @Override
-    public <T> T readJson(Class<T> returnClass) throws IOException, SRMetaBlockEOFException {
-        byte[] bytes = readJsonBytes();
-        try (JsonReader jsonReader = new JsonReader(new InputStreamReader(new ByteArrayInputStream(bytes),
-                StandardCharsets.UTF_8))) {
-            return GsonUtils.GSON.fromJson(jsonReader, returnClass);
-        }
-    }
-
-    @Override
     public int readInt() throws IOException, SRMetaBlockEOFException {
         return readJson(int.class);
     }
@@ -117,11 +111,111 @@ public class SRMetaBlockReaderV1 implements SRMetaBlockReader {
     }
 
     @Override
-    public Object readJson(Type returnType) throws IOException, SRMetaBlockEOFException {
+    public byte readByte() throws IOException, SRMetaBlockEOFException {
+        return readJson(byte.class);
+    }
+
+    @Override
+    public short readShort() throws IOException, SRMetaBlockEOFException {
+        return readJson(short.class);
+    }
+
+    @Override
+    public double readDouble() throws IOException, SRMetaBlockEOFException {
+        return readJson(double.class);
+    }
+
+    @Override
+    public float readFloat() throws IOException, SRMetaBlockEOFException {
+        return readJson(float.class);
+    }
+
+    @Override
+    public char readChar() throws IOException, SRMetaBlockEOFException {
+        return readJson(char.class);
+    }
+
+    @Override
+    public boolean readBoolean() throws IOException, SRMetaBlockEOFException {
+        return readJson(boolean.class);
+    }
+
+    @Override
+    public String readString() throws IOException, SRMetaBlockEOFException {
+        return readJson(String.class);
+    }
+
+    @Override
+    public <T> T readJson(Type returnType) throws IOException, SRMetaBlockEOFException {
         byte[] bytes = readJsonBytes();
-        try (JsonReader jsonReader = new JsonReader(new InputStreamReader(new ByteArrayInputStream(bytes),
-                StandardCharsets.UTF_8))) {
+        try (JsonReader jsonReader = genJsonReader(bytes)) {
             return GsonUtils.GSON.fromJson(jsonReader, returnType);
+        }
+    }
+
+    public <T> T readJson(Class<T> classOfT) throws IOException, SRMetaBlockEOFException {
+        Object object = readJson((Type) classOfT);
+        return Primitives.wrap(classOfT).cast(object);
+    }
+
+    @Override
+    public <T> void readCollection(Class<T> classType, CollectionConsumer<? super T> action)
+            throws IOException, SRMetaBlockEOFException {
+        int size = readInt();
+        while (size-- > 0) {
+            byte[] bytes = readJsonBytes();
+            try (JsonReader jsonReader = genJsonReader(bytes)) {
+                T t = GsonUtils.GSON.fromJson(jsonReader, classType);
+                action.accept(t);
+            } catch (SubtypeNotFoundException e) {
+                if (Config.metadata_ignore_unknown_subtype) {
+                    LOG.warn("ignore unknown sub type {}", e.getSubtype(), e);
+                } else {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private JsonReader genJsonReader(byte[] bytes) {
+        return new JsonReader(new InputStreamReader(new ByteArrayInputStream(bytes),
+                StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public <K, V> void readMap(Type keyType, Type valueType,
+                               MapEntryConsumer<? super K, ? super V> action)
+            throws IOException, SRMetaBlockEOFException {
+        int size = readInt();
+        while (size-- > 0) {
+            K k = null;
+            byte[] bytes = readJsonBytes();
+            boolean ignoreUnknownType = false;
+            try (JsonReader jsonReader = genJsonReader(bytes)) {
+                k = GsonUtils.GSON.fromJson(jsonReader, keyType);
+            } catch (SubtypeNotFoundException e) {
+                if (Config.metadata_ignore_unknown_subtype) {
+                    LOG.warn("ignore unknown sub type {}", e.getSubtype(), e);
+                    ignoreUnknownType = true;
+                } else {
+                    throw e;
+                }
+            }
+            V v = null;
+            bytes = readJsonBytes();
+            try (JsonReader jsonReader = genJsonReader(bytes)) {
+                v = GsonUtils.GSON.fromJson(jsonReader, valueType);
+            } catch (SubtypeNotFoundException e) {
+                if (Config.metadata_ignore_unknown_subtype) {
+                    LOG.warn("ignore unknown sub type {}", e.getSubtype(), e);
+                    ignoreUnknownType = true;
+                } else {
+                    throw e;
+                }
+            }
+            if (!ignoreUnknownType) {
+                action.accept(k, v);
+            }
         }
     }
 

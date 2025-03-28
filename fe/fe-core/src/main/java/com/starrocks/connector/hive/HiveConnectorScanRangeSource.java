@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorScanRangeSource;
@@ -59,7 +58,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
+import static com.starrocks.connector.hive.HiveMetadata.useMetadataCache;
+
+public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(HiveConnectorScanRangeSource.class);
 
     protected DescriptorTable descriptorTable;
@@ -127,16 +128,17 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
 
         GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys)
-                        .setPartitionAttachments(partitionAttachments).build();
+                        .setPartitionAttachments(partitionAttachments)
+                        .setUseCache(useMetadataCache())
+                        .build();
         remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(table, params);
     }
 
     private Optional<List<DataCacheOptions>> generateDataCacheOptions(Table table,
                                                                       final List<PartitionKey> partitionKeys) {
-        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-        QualifiedName qualifiedName = QualifiedName.of(ImmutableList.of(hmsTable.getCatalogName(),
-                hmsTable.getDbName(), hmsTable.getTableName()));
-        List<String> partitionColumnNames = hmsTable.getPartitionColumnNames();
+        QualifiedName qualifiedName = QualifiedName.of(ImmutableList.of(table.getCatalogName(),
+                table.getCatalogDBName(), table.getCatalogTableName()));
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
 
         if (!ConnectContext.get().getSessionVariable().isEnableScanDataCache()) {
             return Optional.empty();
@@ -382,7 +384,7 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
     }
 
     @Override
-    public List<TScanRangeLocations> getOutputs(int maxSize) {
+    public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         List<TScanRangeLocations> res = new ArrayList<>();
         updateIterator();
         while (hasMoreOutput) {
@@ -403,7 +405,7 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
     }
 
     @Override
-    public boolean hasMoreOutput() {
+    public boolean sourceHasMoreOutput() {
         updateIterator();
         return hasMoreOutput;
     }

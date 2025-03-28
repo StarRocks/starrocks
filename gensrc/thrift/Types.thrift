@@ -127,6 +127,10 @@ struct TStructField {
     1: optional string name
     2: optional string comment
     3: optional i32 id
+    // physical_name is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    4: optional string physical_name
 }
 
 struct TTypeNode {
@@ -209,6 +213,7 @@ enum TTaskType {
     REMOTE_SNAPSHOT,
     REPLICATE_SNAPSHOT,
     UPDATE_SCHEMA,
+    COMPACTION_CONTROL,
     NUM_TASK_TYPE
 }
 
@@ -525,6 +530,7 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
     BROTLI = 12;
+    AUTO = 13;
 }
 
 enum TWriteQuorumType {
@@ -602,4 +608,9 @@ struct TSnapshotInfo {
 enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1
+}
+
+enum TNodeType {
+    Backend = 0,
+    Compute = 1
 }

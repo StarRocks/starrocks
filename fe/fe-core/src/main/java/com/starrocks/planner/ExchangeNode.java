@@ -43,13 +43,14 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TLateMaterializeMode;
 import com.starrocks.thrift.TNormalExchangeNode;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSortInfo;
@@ -82,9 +83,13 @@ public class ExchangeNode extends PlanNode {
     // Offset after which the exchange begins returning rows. Currently valid
     // only if mergeInfo_ is non-null, i.e. this is a merging exchange node.
     private long offset;
-
+    // partitionType is used for BE's exchange source node to specify the input partition type
+    // exchange source then decide whether local shuffle is needed
+    // to be set in ExecutionDAG::connectXXXFragmentToDestFragments
     private TPartitionType partitionType;
+    // this is the same as input fragment's output dataPartition, right now only used for explain
     private DataPartition dataPartition;
+    // distributionType is used for plan fragment builder to decide join's DistributionMode(broadcast,colocate,etc)
     private DistributionSpec.DistributionType distributionType;
     // Specify the columns which need to send, work on CTE, and keep empty in other sense
     private List<Integer> receiveColumns;
@@ -143,6 +148,13 @@ public class ExchangeNode extends PlanNode {
         return mergeInfo != null;
     }
 
+    public long getOffset() {
+        return offset;
+    }
+    public void setOffset(long offset) {
+        this.offset = offset;
+    }
+
     public void setReceiveColumns(List<Integer> receiveColumns) {
         this.receiveColumns = receiveColumns;
     }
@@ -159,7 +171,7 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         super.init(analyzer);
         Preconditions.checkState(conjuncts.isEmpty());
     }
@@ -191,8 +203,10 @@ public class ExchangeNode extends PlanNode {
         if (partitionType != null) {
             msg.exchange_node.setPartition_type(partitionType);
         }
-        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        msg.exchange_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        msg.exchange_node.setEnable_parallel_merge(sv.isEnableParallelMerge());
+        TLateMaterializeMode mode = TLateMaterializeMode.valueOf(sv.getParallelMergeLateMaterializationMode().toUpperCase());
+        msg.exchange_node.setParallel_merge_late_materialize_mode(mode);
     }
 
     @Override

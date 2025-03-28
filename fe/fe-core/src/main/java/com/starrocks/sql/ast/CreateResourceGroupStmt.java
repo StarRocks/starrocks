@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG;
+import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG;
 
 // ReesourceGroup create statement format
 // create resource group [if not exists] [or replace] <name>
@@ -36,27 +36,27 @@ import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_DEDICATED_C
 // with ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type' = 'normal');
 //
 public class CreateResourceGroupStmt extends DdlStmt {
-    private String name;
+    private final String name;
     private boolean ifNotExists;
     private boolean replaceIfExists;
-    private List<List<Predicate>> classifiers;
-    private Map<String, String> properties;
+    private final List<List<Predicate>> classifiers;
+    private final Map<String, String> properties;
     private ResourceGroup resourceGroup;
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
-                                   List<List<Predicate>> classifiers, Map<String, String> proeprties) {
-        this(name, ifNotExists, replaceIfExists, classifiers, proeprties, NodePosition.ZERO);
+                                   List<List<Predicate>> classifiers, Map<String, String> properties) {
+        this(name, ifNotExists, replaceIfExists, classifiers, properties, NodePosition.ZERO);
     }
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
-                                   List<List<Predicate>> classifiers, Map<String, String> proeprties,
+                                   List<List<Predicate>> classifiers, Map<String, String> properties,
                                    NodePosition pos) {
         super(pos);
         this.name = name;
         this.ifNotExists = ifNotExists;
         this.replaceIfExists = replaceIfExists;
         this.classifiers = classifiers;
-        this.properties = proeprties;
+        this.properties = properties;
     }
 
     public boolean isIfNotExists() {
@@ -91,11 +91,11 @@ public class CreateResourceGroupStmt extends DdlStmt {
         }
 
         if (resourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
-                (resourceGroup.getDedicatedCpuCores() != null && resourceGroup.getDedicatedCpuCores() > 0)) {
-            throw new SemanticException(SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG);
+                (resourceGroup.getExclusiveCpuCores() != null && resourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
         }
 
-        ResourceGroup.validateCpuParameters(resourceGroup.getCpuWeight(), resourceGroup.getDedicatedCpuCores());
+        ResourceGroup.validateCpuParameters(resourceGroup.getRawCpuWeight(), resourceGroup.getExclusiveCpuCores());
 
         if (resourceGroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");

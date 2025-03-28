@@ -6,11 +6,12 @@ displayed_sidebar: docs
 
 ## Description
 
-Creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/Materialized_view.md).
+Creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md).
 
 > **CAUTION**
 >
-> Only users with the CREATE MATERIALIZED VIEW privilege in the database where the base table resides can create a materialized view.
+> - Only users with the CREATE MATERIALIZED VIEW privilege in the database where the base table resides can create a materialized view.
+> - From v3.4.0 onwards, StarRocks supports creating synchronous materialized views in shared-data clusters.
 
 Creating a materialized view is an asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of a synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](SHOW_ALTER_MATERIALIZED_VIEW.md) command, and view that of an asynchronous materialized view by querying the metadata views [`tasks`](../../information_schema/tasks.md) and [`task_runs`](../../information_schema/task_runs.md) in [Information Schema](../../information_schema/information_schema.md).
 
@@ -143,7 +144,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 ]
 -- partition_expression
 [PARTITION BY 
-    {<date_column> | date_trunc(fmt, <date_column>)}
+  [ <partition_column> [,...] ] | [ <date_function_expr> ]
 ]
 -- order_by_expression
 [ORDER BY (<sort_key>)]
@@ -188,11 +189,11 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
   DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
   ```
 
-  For more information, see [Data distribution](../../../table_design/Data_distribution.md#data-distribution).
+  For more information, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#data-distribution).
 
   > **NOTE**
   >
-  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
+  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 - **Random bucketing**:
 
@@ -206,7 +207,7 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
   >
   > Asynchronous materialized views with a random bucketing strategy cannot be assigned to a colocation group.
 
-  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31)
+  For more information, see [Random bucketing](../../../table_design/data_distribution/Data_distribution.md#random-bucketing-since-v31)
 
 **refresh_moment** (optional)
 
@@ -231,20 +232,44 @@ If this parameter is not specified, the default value `MANUAL` is used.
 
 **partition_expression** (optional)
 
-The partitioning strategy of the asynchronous materialized view. As for the current version of StarRocks, only one partition expression is supported when creating an asynchronous materialized view.
-
-> **CAUTION**
->
-> Currently, asynchronous materialized views do not support the list partitioning strategy.
+The partitioning strategy of the asynchronous materialized view. If this parameter is not specified, no partitioning strategy is adopted by default.
 
 Valid values:
 
-- `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
-- `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
-- `str2date` function: The function used to partition string type parititions of base table into materialized view's partition. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a string date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
-- `time_slice` or `date_slice` functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
+- `partition_column`: The column(s) used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
+- `date_function_expr`: The complex expression with date functions used for partitioning.
+  - `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
+  - `str2date` function: The function used to transform string type partitions of the base table into date types. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a STRING date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
+  - `time_slice` function: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
 
-If this parameter is not specified, no partitioning strategy is adopted by default.
+From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables.
+
+**Notes for multi-column partition expressions**:
+
+- Currently, multi-column partitions in materialized views can only be mapped one-to-one or in an N:1 relationship with the base table's partitions, not an M:N relationship. For example, if the base table has partition columns `(col1, col2, ..., coln)`, the materialized view partition expression can only be a single column partition, such as `col1`, `col2`, or `coln`, or a one-to-one mapping to the base table’s partition columns, that is, `(col1, col2, ..., coln)`. This limitation is designed to simplify the partition mapping logic between the base table and the materialized view, avoiding the complexity introduced by M:N relationships.
+- Because Iceberg partition expressions support the `transform` function, additional handling is required when mapping Iceberg partition expressions to StarRocks materialized view partition expressions. The mapping relationship is as follows:
+
+  | Iceberg Transform | Iceberg partition expression   | Materialized view partition expression   |
+  | ----------------- | ------------------------------ | ---------------------------------------- |
+  | Identity          | `<col>`                        | `<col>`                                  |
+  | hour              | `hour(<col>)`                  | `date_trunc('hour', <col>)`              |
+  | day               | `day(<col>)`                   | `date_trunc('day', <col>)`               |
+  | month             | `month(<col>)`                 | `date_trunc('month', <col>)`             |
+  | year              | `year(<col>)`                  | `date_trunc('year', <col>)`              |
+  | bucket            | `bucket(<col>, <n>)`           | Not supported                            |
+  | truncate          | `truncate(<col>)`              | Not supported                            |
+
+- For non-Iceberg partition columns, where partition expression computation is not involved, additional partition expression handling is not required. You can map them directly.
+
+See [Example -5](#examples) for detailed instructions on multi-column partition expressions.
+
+> **CAUTION**
+>
+> From v3.3.3 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
+>
+> - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
+> - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
+> - The refresh behavior and query rewrite logic of materialized views with the List Partitioning strategy are consistent with those with the Range Partitioning strategy.
 
 **order_by_expression** (optional)
 
@@ -259,13 +284,15 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `storage_medium`: Storage medium type. Valid values: `HDD` and `SSD`.
 - `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.
 - `partition_ttl`: The time-to-live (TTL) for partitions. Partitions whose data is within the specified time range are retained. Expired partitions are deleted automatically. Unit: `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. For example, you can specify this property as `2 MONTH`. This property is recommended over `partition_ttl_number`. It is supported from v3.1.5 onwards.
-- `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+- `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes the current partition and N-1 most recent partitions. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes all pre-created partitions.
 - `mv_rewrite_staleness_second`: If the materialized view's last refresh is within the time interval specified in this property, this materialized view can be used directly for query rewrite, regardless of whether the data in the base tables changes. If the last refresh is before this time interval, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Unit: Second. This property is supported from v3.0.
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
-- `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
+- `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
+- `excluded_refresh_tables`：The base tables listed in this property will not trigger data refresh to the materialized view when their data changes. This property is usually used together with the `excluded_trigger_tables` property. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any data change in all base tables will trigger the corresponding materialized view refresh.
+
 
   > **CAUTION**
   >
@@ -278,6 +305,18 @@ Properties of the asynchronous materialized view. You can modify the properties 
     - If `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables.
     - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last refresh is within the staleness time interval.
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
+  - `force_mv`: From v3.5.0 onwards, StarRocks materialized views support Common Partition Expression TTL. The `force_mv` semantic is specifically designed for this scenario. When this semantic is enabled:
+    - If the materialized view does not have the `partition_retention_condition` property, it will always force the use of the materialized view for query rewrite, regardless of whether the base table has been updated.
+    - If the materialized view has the `partition_retention_condition` property:
+      - For partitions within the TTL range, query rewrite based on the materialized view is always available, regardless of whether the base table has been updated.
+      - For partitions outside the TTL range, a Union compensation between the materialized view and the base table is required, regardless of whether the base table has been updated.
+
+    For example, if the materialized view has the `partition_retention_condition` property defined and the partition for `20241131` has expired, but the base table data for `20241203` has been updated while the materialized view data for `20241203` has not been refreshed, the following applies when the `query_rewrite_consistency` property is set to `force_mv`:
+    - The materialized view guarantees that queries against the partitions within the TTL range (for example, from `20241201` to `20241203`) defined in `partition_retention_condition` can always be transparently rewritten.
+    - For queries against partitions outside the `partition_retention_condition` range, compensation will occur automatically based on the Union of the materialized view and the base table.
+
+    See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
+
 - `storage_volume`: The name of the storage volume used to store the asynchronous materialized view you want to create if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
   - `true`(Default value since v3.3): Enable query rewrite for external catalog-based materialized views.
@@ -293,14 +332,17 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `true`: Queries directly against the materialized view will be rewritten and returned with the most updated data, which is consistent with the result of the materialized view definition query. Please note that when the materialized view is inactive or does not support transparent query rewrite, these queries will be executed as the materialized view definition query.
   - `transparent_or_error`: Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with an error.
   - `transparent_or_default` Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with the existing data in the materialized view.
+- `partition_retention_condition`: From v3.5.0 onwards, StarRocks materialized views support Common Partition Expression TTL. This property is the expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly. Example: `'partition_retention_condition' = 'dt >= CURRENT_DATE() - INTERVAL 3 MONTH'`.
+  - The expression can only contain partition columns and constants. Non-partition columns are not supported.
+  - Common Partition Expression applies to List partitions and Range partitions differently:
+    - For materialized views with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
+    - For materialized views with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
+
+  See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
-
-> **CAUTION**
->
-> Currently, StarRocks does not support creating asynchronous materialized views with base tables created with the list partitioning strategy.
 
 ### Query an asynchronous materialized view
 
@@ -310,7 +352,7 @@ An asynchronous materialized view is a physical table. You can operate it as any
 
 StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
 
-See [Asynchronous materialized view -  Rewrite queries with the asynchronous materialized view](../../../using_starrocks/query_rewrite_with_materialized_views.md) for further information.
+See [Asynchronous materialized view -  Rewrite queries with the asynchronous materialized view](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information.
 
 ### Supported data types
 
@@ -865,4 +907,54 @@ SELECT
    `d_datekey`
 FROM
  `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
+```
+
+Example 5: Create a partitioned materialized view with multi-column partition expression upon the base table from Iceberg Catalog (Spark).
+
+The definition of the base table in Spark:
+
+```SQL
+-- The partition expression of the base table contains multiple columns and a `days` transform.
+CREATE TABLE lineitem_days (
+      l_orderkey    BIGINT,
+      l_partkey     INT,
+      l_suppkey     INT,
+      l_linenumber  INT,
+      l_quantity    DECIMAL(15, 2),
+      l_extendedprice  DECIMAL(15, 2),
+      l_discount    DECIMAL(15, 2),
+      l_tax         DECIMAL(15, 2),
+      l_returnflag  VARCHAR(1),
+      l_linestatus  VARCHAR(1),
+      l_shipdate    TIMESTAMP,
+      l_commitdate  TIMESTAMP,
+      l_receiptdate TIMESTAMP,
+      l_shipinstruct VARCHAR(25),
+      l_shipmode     VARCHAR(10),
+      l_comment      VARCHAR(44)
+) USING ICEBERG
+PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
+```
+
+Create a materialized view with its partition columns mapped one-to-one with those of the base table:
+
+```SQL
+CREATE MATERIALIZED VIEW test_days
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+AS 
+SELECT * FROM iceberg_catalog.test_db.lineitem_days;
+```
+
+Example 6: Create a partitioned materialized view, define Common Partition Expression TTL for it, and enable the `force_mv` semantic for query rewrite.
+
+```SQL
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt, province)
+REFRESH MANUAL 
+PROPERTIES (
+    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH",
+    "query_rewrite_consistency" = "force_mv"
+)
+AS SELECT * from t1;
 ```

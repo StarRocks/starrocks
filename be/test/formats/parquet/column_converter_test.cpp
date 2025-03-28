@@ -83,8 +83,9 @@ protected:
 
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
@@ -243,6 +244,10 @@ TEST_F(ColumnConverterTest, Int32Test) {
         }
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+            check(file_path, col_type, col_name, "[-99998]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
             check(file_path, col_type, col_name, "[-99998]", expected_rows);
         }
     }

@@ -80,7 +80,7 @@ select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- Return {"a":1
 
 You can load STRUCT data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
-Note that StarRocks automatically casts the data type into the corresponding STRUCT type.
+Note that StarRocks automatically casts the data type into the corresponding STRUCT type. When loading data to a named struct column, please ensure that the field names within the struct are in the same order as specified when creating the table.
 
 ### INSERT INTO
 

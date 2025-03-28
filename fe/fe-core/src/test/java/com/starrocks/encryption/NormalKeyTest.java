@@ -46,6 +46,7 @@ public class NormalKeyTest {
         pb.encryptedKey = new byte[16];
         pb.type = EncryptionKeyTypePB.NORMAL_KEY;
         pb.createTime = 3L;
+        pb.keyDesc = "desc";
         String js = GsonUtils.GSON.toJson(pb);
         EncryptionKeyPB pb2 = GsonUtils.GSON.fromJson(js, EncryptionKeyPB.class);
         assertEquals(pb.id, pb2.id);
@@ -53,6 +54,7 @@ public class NormalKeyTest {
         assertEquals(pb.algorithm, pb2.algorithm);
         assertEquals(pb.createTime, pb2.createTime);
         assertEquals(pb.type, pb2.type);
+        assertEquals(pb.keyDesc, pb2.keyDesc);
         assertArrayEquals(pb.encryptedKey, pb2.encryptedKey);
     }
 

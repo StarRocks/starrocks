@@ -97,7 +97,7 @@ Status MemStateTable::_append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr
     return Status::OK();
 }
 
-Status MemStateTable::seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const {
+Status MemStateTable::seek(const Columns& keys, const Filter& selection, StateTableResult& values) const {
     DCHECK_LT(0, keys.size());
     auto num_rows = keys[0]->size();
     DCHECK_EQ(selection.size(), num_rows);

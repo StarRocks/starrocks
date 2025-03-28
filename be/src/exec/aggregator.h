@@ -34,6 +34,7 @@
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
@@ -312,7 +313,7 @@ public:
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
-    const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
+    const Filter& streaming_selection() { return _streaming_selection; }
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
     RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
     RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
@@ -348,6 +349,7 @@ public:
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
     Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection);
 
     // convert input chunk to spill format
     Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
@@ -401,6 +403,15 @@ public:
     bool is_streaming_all_states() const { return _streaming_all_states; }
 
     HashTableKeyAllocator _state_allocator;
+
+    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_sink_observer(state, observer);
+    }
+    void attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_source_observer(state, observer);
+    }
+    auto defer_notify_source() { return _pip_observable.defer_notify_source(); }
+    auto defer_notify_sink() { return _pip_observable.defer_notify_sink(); }
 
 protected:
     AggregatorParamsPtr _params;
@@ -461,7 +472,7 @@ protected:
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    std::vector<Columns> _agg_input_columns;
     //raw pointers in order to get multi-column values
     std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     // The expr used to evaluate agg intermediate columns.
@@ -495,7 +506,7 @@ protected:
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
     bool _is_pending_reset_state = false;
-    std::vector<uint8_t> _streaming_selection;
+    Filter _streaming_selection;
 
     bool _has_udaf = false;
 
@@ -506,6 +517,11 @@ protected:
     bool _is_opened = false;
     bool _is_prepared = false;
     int64_t _agg_state_mem_usage = 0;
+
+    // aggregate combinator functions since they are not persisted in agg hash map
+    std::vector<AggregateFunctionPtr> _combinator_function;
+
+    pipeline::PipeObservable _pip_observable;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
@@ -549,8 +565,8 @@ protected:
     Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
     Columns _create_group_by_columns(size_t num_rows);
 
-    void _serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
-    void _finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
+    void _serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
+    void _finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
     void _destroy_state(AggDataPtr __restrict state);
 
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
@@ -571,6 +587,11 @@ protected:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     void _release_agg_memory();
+
+    bool _is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type);
+
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
 
     template <class HashMapWithKey>
     friend struct AllocateState;

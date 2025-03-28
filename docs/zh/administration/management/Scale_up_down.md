@@ -118,3 +118,29 @@ ALTER SYSTEM DROP backend "be_host:be_heartbeat_service_port";
 ```sql
 SHOW PROC '/backends';
 ```
+
+## 扩缩容 CN 集群
+
+### 扩容 CN 集群
+
+运行以下命令添加 CN 节点。
+
+```sql
+ALTER SYSTEM ADD COMPUTE NODE "cn_host:cn_heartbeat_service_port";
+```
+
+运行以下命令查看 CN 节点状态。
+
+```sql
+SHOW PROC '/compute_nodes';
+```
+
+### 缩容 CN 集群
+
+运行以下命令删除 CN 节点。
+
+```sql
+ALTER SYSTEM DROP COMPUTE NODE "cn_host:cn_heartbeat_service_port";
+```
+
+您可以通过运行 `SHOW PROC '/compute_nodes';` 查看 CN 节点状态。

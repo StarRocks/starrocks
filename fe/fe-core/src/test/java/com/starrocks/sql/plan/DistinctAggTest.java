@@ -41,6 +41,30 @@ public class DistinctAggTest extends PlanTestBase {
     }
 
     @Test
+    void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
+        String sql = "select count(distinct v3) from (select *, 'b' as b from tarray) t group by b";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 5:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(3: v3)\n" +
+                "  |  group by: 5: b\n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 3: v3, 5: b\n" +
+                "  |  \n" +
+                "  3:EXCHANGE");
+    }
+
+    @Test
+    void testDistinctConstant() throws Exception {
+        String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
+                "t1 group by b1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(CAST(split('a,b,c', ',') IS NOT NULL AS BIGINT))");
+    }
+
+    @Test
     void testDistinctConstants() throws Exception {
         String sql = "select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), " +
                 "group_concat(distinct 1, 2 order by 1), array_agg(distinct 1 order by 1) from t0 group by v2;";
@@ -169,5 +193,24 @@ public class DistinctAggTest extends PlanTestBase {
                         "  |  output: group_concat(4: group_concat, '1', ','), array_agg_distinct(5: array_agg), sum(6: sum)"));
 
         return argumentsList.stream();
+    }
+
+    @Test
+    public void testDistinctWithAgg() throws Exception {
+        String sql = "select distinct v1, count(v2) from t0 group by v1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2)\n" +
+                "  |  group by: 1: v1");
+
+        sql = "select distinct v1 from t0 having abs(v1) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: abs(1: v1) = 1");
     }
 }

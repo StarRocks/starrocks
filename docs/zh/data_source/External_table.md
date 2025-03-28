@@ -8,7 +8,7 @@ StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源�
 
 > **NOTICE**
 >
-> * 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
+> * 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
 > * 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md)。
 
 从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见 [Data Cache](data_cache.md)。
@@ -693,65 +693,6 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
   1. Hive 中新增或者删除分区时，需要刷新 **表** 的元数据信息：`REFRESH EXTERNAL TABLE hive_t`，其中 `hive_t` 是 StarRocks 中的外表名称。
   2. Hive 中向某些 partition 新增数据时，需要 **指定 partition** 进行刷新：`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')`，其中 `hive_t` 是 StarRocks 中的外表名称，'k1 = 01/k2 = 02'、 'k1 = 03/k2 = 04'是 hive 中的 partition 名称。
   3. 在执行 `REFRESH EXTERNAL TABLE hive_t` 命令时，StarRocks 会先检查 Hive 外部表中的列信息和 Hive Metastore 返回的 Hive 表中的列信息是否一致。若发现 Hive 表的 schema 有修改，如增加列或减少列，那么 StarRocks 会将修改的信息同步到 Hive 外部表。同步后，Hive 外部表的列顺序和 Hive 表的列顺序保持一致，且分区列为最后一列。
-  
-#### 自动增量更新元数据缓存
-
-自动增量更新元数据缓存主要是通过定期消费 Hive Metastore 的 event 来实现，新增分区以及分区新增数据无需通过手动执行 refresh 来更新。用户需要在 Hive Metastore 端开启元数据 Event 机制。相比 Loading Cache 的自动刷新机制，自动增量更新性能更好，建议用户开启该功能。开启该功能后，Loading Cache 的自动刷新机制将不再生效。
-
-* Hive Metastore 开启 event 机制
-
-   用户需要在 $HiveMetastore/conf/hive-site.xml 中添加如下配置，并重启 Hive Metastore. 以下配置为 Hive Metastore 3.1.2 版本的配置，用户可以将以下配置先拷贝到 hive-site.xml 中进行验证，因为在 Hive Metastore 中配置不存在的参数只会提示 WARN 信息，不会抛出任何异常。
-
-~~~xml
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-  </property>
-  <property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-  </property>
-  <property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-  </property>
-  <property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-  </property>
-  <property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-  </property>
-  <property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-  </property>
-  <property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-  </property>
-~~~
-
-* StarRocks 开启自动增量元数据同步
-
-    用户需要在 $FE_HOME/conf/fe.conf 中添加如下配置并重启 FE。
-     `enable_hms_events_incremental_sync=true`
-    自动增量元数据同步相关配置如下，如无特殊需求，无需修改。
-
-   | 参数值                             | 说明                                      | 默认值 |
-   | --- | --- | ---|
-   | enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能            | false |
-   | hms_events_polling_interval_ms     | StarRocks 拉取 Hive Metastore Event 事件间隔 | 5000 毫秒 |
-   | hms_events_batch_size_per_rpc      | StarRocks 每次拉取 Event 事件的最大数量      | 500 |
-   | enable_hms_parallel_process_evens  | 对接收的 Events 是否并行处理                | true |
-   | hms_process_events_parallel_num    | 处理 Events 事件的并发数                    | 4 |
-
-* 注意事项
-  * 不同版本 Hive Metastore 的 Events 事件可能不同，且上述开启 HiveMetastore Event 机制的配置在不同版本也存在不同。使用时相关配置可根据实际版进行适当调整。当前已经验证可以开启 Hive Metastore Event 机制的版本有 2.X 和 3.X。用户可以在 FE 日志中搜索 "event id" 来验证 event 是否开启成功，如果没有开启成功，event id 始终保持为 0。如果无法判断是否成功开启 Event 机制，请在 StarRocks 用户交流群中联系值班同学进行排查。
-  * 当前 Hive 元数据缓存模式为懒加载，即：如果 Hive 新增了分区，StarRocks 只会将新增分区的 partition key 进行缓存，不会立即缓存该分区的文件信息。只有当查询该分区时或者用户手动执行 refresh 分区操作时，该分区的文件信息才会被加载。StarRocks 首次缓存该分区统计信息后，该分区后续的元数据变更就会自动同步到 StarRocks 中。
-  * 手动执行缓存方式执行效率较低，相比之下自动增量更新性能开销较小，建议用户开启该功能进行更新缓存。
-  * 当 Hive 数据存储为 Parquet、ORC、CSV 格式时，StarRocks 2.3及以上版本支持 Hive 外部表同步 ADD COLUMN、REPLACE COLUMN 等表结构变更（Schema Change）。
 
 ### 访问对象存储
 

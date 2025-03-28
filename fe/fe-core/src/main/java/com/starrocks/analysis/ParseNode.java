@@ -35,7 +35,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -47,7 +47,7 @@ public interface ParseNode {
      * @param analyzer
      * @throws AnalysisException, InternalException
      */
-    default void analyze(Analyzer analyzer) throws UserException {
+    default void analyze(Analyzer analyzer) throws StarRocksException {
         throw new RuntimeException("New AST not support analyze function");
     }
 

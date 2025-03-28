@@ -95,6 +95,12 @@ TEST_F(StatusTest, Error) {
     }
 }
 
+TEST_F(StatusTest, GlobalDictNotMatch) {
+    Status st = Status::GlobalDictNotMatch("SlotId: 1, Not dict encoded and not low rows on global dict column.");
+    ASSERT_FALSE(st.ok());
+    ASSERT_EQ("Global dictionary not match", st.code_as_string());
+}
+
 TEST_F(StatusTest, ErrorWithContext) {
     // default
     Status st = Status::InternalError("123");

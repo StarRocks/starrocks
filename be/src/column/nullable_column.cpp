@@ -29,19 +29,8 @@ NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&
             << "nullable column's data must be single column";
     DCHECK(!null_column->is_constant() && !null_column->is_nullable())
             << "nullable column's data must be single column";
-    ColumnPtr ptr = std::move(null_column);
-    _null_column = std::static_pointer_cast<NullColumn>(ptr);
+    _null_column = NullColumn::static_pointer_cast(std::move(null_column));
     _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
-}
-
-NullableColumn::NullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
-        : _data_column(std::move(data_column)),
-          _null_column(std::move(null_column)),
-          _has_null(SIMD::contain_nonzero(_null_column->get_data(), 0)) {
-    DCHECK(!_data_column->is_constant() && !_data_column->is_nullable())
-            << "nullable column's data must be single column";
-    DCHECK(!_null_column->is_constant() && !_null_column->is_nullable())
-            << "nullable column's data must be single column";
 }
 
 size_t NullableColumn::null_count() const {
@@ -79,13 +68,17 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
     if (src.only_null()) {
         append_nulls(count);
     } else if (src.is_nullable()) {
-        const auto& c = down_cast<const NullableColumn&>(src);
+        const auto& src_column = down_cast<const NullableColumn&>(src);
+        DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
 
-        DCHECK_EQ(c._null_column->size(), c._data_column->size());
-
-        _null_column->append(*c._null_column, offset, count);
-        _data_column->append(*c._data_column, offset, count);
-        _has_null = _has_null || SIMD::contain_nonzero(c._null_column->get_data(), offset, count);
+        if (!src_column.has_null()) {
+            _null_column->resize(_null_column->size() + count);
+            _data_column->append(*src_column._data_column, offset, count);
+        } else {
+            _null_column->append(*src_column._null_column, offset, count);
+            _data_column->append(*src_column._data_column, offset, count);
+            _has_null = _has_null || SIMD::contain_nonzero(src_column._null_column->get_data(), offset, count);
+        }
     } else {
         _null_column->resize(_null_column->size() + count);
         _data_column->append(src, offset, count);
@@ -101,12 +94,16 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
         append_nulls(size);
     } else if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
-
         DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
 
-        _null_column->append_selective(*src_column._null_column, indexes, from, size);
-        _data_column->append_selective(*src_column._data_column, indexes, from, size);
-        _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
+        if (!src_column.has_null()) {
+            _null_column->resize(orig_size + size);
+            _data_column->append_selective(*src_column._data_column, indexes, from, size);
+        } else {
+            _null_column->append_selective(*src_column._null_column, indexes, from, size);
+            _data_column->append_selective(*src_column._data_column, indexes, from, size);
+            _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
+        }
     } else {
         _null_column->resize(orig_size + size);
         _data_column->append_selective(src, indexes, from, size);
@@ -136,9 +133,12 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
-ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
-    return NullableColumn::create(this->_data_column->replicate(offsets),
-                                  std::dynamic_pointer_cast<NullColumn>(this->_null_column->replicate(offsets)));
+StatusOr<ColumnPtr> NullableColumn::replicate(const Buffer<uint32_t>& offsets) {
+    ASSIGN_OR_RETURN(auto data_col, this->_data_column->replicate(offsets));
+
+    ASSIGN_OR_RETURN(auto null_col, this->_null_column->replicate(offsets));
+
+    return NullableColumn::create(data_col, NullColumn::dynamic_pointer_cast(null_col));
 }
 
 bool NullableColumn::append_nulls(size_t count) {
@@ -152,27 +152,27 @@ bool NullableColumn::append_nulls(size_t count) {
     return true;
 }
 
-bool NullableColumn::append_strings(const Buffer<Slice>& strs) {
-    if (_data_column->append_strings(strs)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+bool NullableColumn::append_strings(const Slice* data, size_t size) {
+    if (_data_column->append_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
-bool NullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
-    if (_data_column->append_strings_overflow(strs, max_length)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+bool NullableColumn::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+    if (_data_column->append_strings_overflow(data, size, max_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
-bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
-    if (_data_column->append_continuous_strings(strs)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+bool NullableColumn::append_continuous_strings(const Slice* data, size_t size) {
+    if (_data_column->append_continuous_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -276,7 +276,7 @@ int NullableColumn::equals(size_t left, const Column& rhs, size_t right, bool sa
     }
 }
 
-uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) {
+uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) const {
     // For nullable column don't have null column data and has_null is false.
     if (!_has_null) {
         strings::memcpy_inlined(pos, &_has_null, sizeof(bool));
@@ -293,14 +293,14 @@ uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) {
     return sizeof(bool) + _data_column->serialize(idx, pos + sizeof(bool));
 }
 
-uint32_t NullableColumn::serialize_default(uint8_t* pos) {
+uint32_t NullableColumn::serialize_default(uint8_t* pos) const {
     bool null = true;
     strings::memcpy_inlined(pos, &null, sizeof(bool));
     return sizeof(bool);
 }
 
 size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                                   size_t count) {
+                                                   size_t count) const {
     _null_column->serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
     for (size_t i = start; i < start + count; i++) {
         if (_null_column->get_data()[i] == 0) {
@@ -313,7 +313,7 @@ size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_off
 }
 
 void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                     uint32_t max_one_row_size) {
+                                     uint32_t max_one_row_size) const {
     _data_column->serialize_batch_with_null_masks(dst, slice_sizes, chunk_size, max_one_row_size,
                                                   _null_column->get_data().data(), _has_null);
 }
@@ -334,9 +334,7 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
 }
 
 void NullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    for (size_t i = 0; i < chunk_size; ++i) {
-        srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
-    }
+    _data_column->deserialize_and_append_batch_nullable(srcs, chunk_size, null_column_data(), _has_null);
 }
 
 // Note: the hash function should be same with RawValue::get_hash_value_fvn
@@ -347,7 +345,7 @@ void NullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const 
         return;
     }
 
-    auto null_data = _null_column->get_data();
+    const auto& null_data = _null_column->get_data();
     uint32_t value = 0x9e3779b9;
     while (from < to) {
         uint32_t new_from = from + 1;
@@ -365,6 +363,47 @@ void NullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const 
     }
 }
 
+void NullableColumn::fnv_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const {
+    if (!_has_null) {
+        _data_column->fnv_hash_with_selection(hash, selection, from, to);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    uint32_t value = 0x9e3779b9;
+    while (from < to) {
+        uint16_t new_from = from + 1;
+        while (new_from < to && null_data[from] == null_data[new_from]) {
+            ++new_from;
+        }
+        if (null_data[from]) {
+            for (uint16_t i = from; i < new_from; ++i) {
+                if (!selection[i]) continue;
+                hash[i] = hash[i] ^ (value + (hash[i] << 6) + (hash[i] >> 2));
+            }
+        } else {
+            _data_column->fnv_hash_with_selection(hash, selection, from, new_from);
+        }
+        from = new_from;
+    }
+}
+
+void NullableColumn::fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    if (!_has_null) {
+        _data_column->fnv_hash_selective(hash, sel, sel_size);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    uint32_t value = 0x9e3779b9;
+    // @TODO can we optimize this?
+    for (uint16_t i = 0; i < sel_size; i++) {
+        if (null_data[sel[i]]) {
+            hash[sel[i]] = hash[sel[i]] ^ (value + (hash[sel[i]] << 6) + (hash[sel[i]] >> 2));
+        } else {
+            _data_column->fnv_hash(hash, sel[i], sel[i] + 1);
+        }
+    }
+}
+
 void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     // fast path when _has_null is false
     if (!_has_null) {
@@ -372,7 +411,7 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
         return;
     }
 
-    auto null_data = _null_column->get_data();
+    const auto& null_data = _null_column->get_data();
     // NULL is treat as 0 when crc32 hash for data loading
     static const int INT_VALUE = 0;
     while (from < to) {
@@ -390,6 +429,45 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
         from = new_from;
     }
 }
+void NullableColumn::crc32_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const {
+    if (!_has_null) {
+        _data_column->crc32_hash_with_selection(hash, selection, from, to);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    static const int INT_VALUE = 0;
+    while (from < to) {
+        uint16_t new_from = from + 1;
+        while (new_from < to && null_data[from] == null_data[new_from]) {
+            ++new_from;
+        }
+        if (null_data[from]) {
+            for (uint16_t i = from; i < new_from; ++i) {
+                if (!selection[i]) continue;
+                hash[i] = HashUtil::zlib_crc_hash(&INT_VALUE, 4, hash[i]);
+            }
+        } else {
+            _data_column->crc32_hash_with_selection(hash, selection, from, new_from);
+        }
+        from = new_from;
+    }
+}
+void NullableColumn::crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    if (!_has_null) {
+        _data_column->crc32_hash_selective(hash, sel, sel_size);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    static const int INT_VALUE = 0;
+    // @TODO can we optimize this?
+    for (uint16_t i = 0; i < sel_size; i++) {
+        if (null_data[sel[i]]) {
+            hash[sel[i]] = HashUtil::zlib_crc_hash(&INT_VALUE, 4, hash[sel[i]]);
+        } else {
+            _data_column->crc32_hash(hash, sel[i], sel[i] + 1);
+        }
+    }
+}
 
 int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     if (!_has_null) {
@@ -397,7 +475,7 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     }
 
     int64_t xor_checksum = 0;
-    uint8_t* src = _null_column->get_data().data();
+    const uint8_t* src = _null_column->get_data().data();
 
     // The XOR of NullableColumn
     // XOR all the 8-bit integers one by one
@@ -431,7 +509,6 @@ void NullableColumn::check_or_die() const {
 
 StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
     RETURN_IF_ERROR(_null_column->capacity_limit_reached());
-
     return upgrade_helper_func(&_data_column);
 }
 

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
@@ -21,6 +22,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.TagOptions;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
@@ -41,23 +43,41 @@ import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.ExpireSnapshots;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
+import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.ManifestFiles;
+import org.apache.iceberg.ManifestReader;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotRef;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
@@ -66,17 +86,31 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+import static com.starrocks.connector.iceberg.IcebergUtil.fileName;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static org.apache.iceberg.ReachableFileUtil.metadataFileLocations;
+import static org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations;
 
 public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
-    private org.apache.iceberg.Table table;
+    private static final Logger LOGGER = LoggerFactory.getLogger(IcebergAlterTableExecutor.class);
+    private Table table;
     private IcebergCatalog icebergCatalog;
     private Transaction transaction;
+    private HdfsEnvironment hdfsEnvironment;
 
-    public IcebergAlterTableExecutor(AlterTableStmt stmt, org.apache.iceberg.Table table, IcebergCatalog icebergCatalog) {
+    private static final int DELETE_BATCH_SIZE = 1000;
+
+    // TODO:Support using session to set default retention_threshold.
+    private static final Duration DEFAULT_RETENTION_THRESHOLD = Duration.ofDays(7);
+
+    public IcebergAlterTableExecutor(AlterTableStmt stmt,
+            Table table,
+            IcebergCatalog icebergCatalog,
+            HdfsEnvironment hdfsEnvironment) {
         super(stmt);
         this.table = table;
         this.icebergCatalog = icebergCatalog;
+        this.hdfsEnvironment = hdfsEnvironment;
     }
 
     @Override
@@ -430,6 +464,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             case EXPIRE_SNAPSHOTS:
                 expireSnapshots(args);
                 break;
+            case REMOVE_ORPHAN_FILES:
+                removeOrphanFiles(args);
+                break;
             default:
                 throw new StarRocksConnectorException("Unsupported table operation %s", op);
         }
@@ -493,6 +530,112 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 expireSnapshots = expireSnapshots.expireOlderThan(olderThanMillis);
             }
             expireSnapshots.commit();
+        });
+    }
+
+    private void removeOrphanFiles(List<ConstantOperator> args) {
+        if (args.size() > 1) {
+            throw new StarRocksConnectorException("invalid args. only support " +
+                    "`older_than` in the remove orphan files operation");
+        }
+
+        long olderThanMillis;
+        if (args.isEmpty()) {
+            LocalDateTime time = LocalDateTime.now(TimeUtils.getTimeZone().toZoneId());
+            olderThanMillis = time.minus(DEFAULT_RETENTION_THRESHOLD).toInstant(ZoneOffset.UTC).toEpochMilli();
+        } else {
+            LocalDateTime time = Optional.ofNullable(args.get(0))
+                    .flatMap(arg -> arg.castTo(Type.DATETIME)
+                    .map(ConstantOperator::getDatetime))
+                    .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+            olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+        }
+
+        if (table.currentSnapshot() == null) {
+            return;
+        }
+
+        Set<String> processedManifestFilePaths = new HashSet<>();
+        Set<String> validFileNames = new HashSet<>();
+
+        for (Snapshot snapshot : table.snapshots()) {
+            if (snapshot.manifestListLocation() != null) {
+                validFileNames.add(fileName(snapshot.manifestListLocation()));
+            }
+
+            for (ManifestFile manifest : snapshot.allManifests(table.io())) {
+                if (!processedManifestFilePaths.add(manifest.path())) {
+                    continue;
+                }
+
+                validFileNames.add(fileName(manifest.path()));
+                try (ManifestReader<? extends ContentFile<?>> manifestReader = readerForManifest(table, manifest)) {
+                    for (ContentFile<?> contentFile : manifestReader) {
+                        validFileNames.add(fileName(contentFile.location()));
+                    }
+                } catch (IOException e) {
+                    throw new StarRocksConnectorException("Unable to list manifest file content from " + manifest.path(), e);
+                }
+            }
+        }
+
+        metadataFileLocations(table, false).stream()
+                .map(IcebergUtil::fileName)
+                .forEach(validFileNames::add);
+
+        statisticsFilesLocations(table).stream()
+                .map(IcebergUtil::fileName)
+                .forEach(validFileNames::add);
+
+        validFileNames.add("version-hint.text");
+
+        actions.add(() -> scanAndDeleteInvalidFiles(table.location(), olderThanMillis, validFileNames));
+    }
+
+    private static ManifestReader<? extends ContentFile<?>> readerForManifest(Table table, ManifestFile manifest) {
+        return switch (manifest.content()) {
+            case DATA -> ManifestFiles.read(manifest, table.io());
+            case DELETES -> ManifestFiles.readDeleteManifest(manifest, table.io(), table.specs());
+        };
+    }
+
+    private void scanAndDeleteInvalidFiles(String tableLocation, long expiration, Set<String> validFiles) {
+        try {
+            URI uri = new Path(tableLocation).toUri();
+            FileSystem fileSystem = FileSystem.get(uri, hdfsEnvironment.getConfiguration());
+            RemoteIterator<LocatedFileStatus> allFiles = fileSystem.listFiles(new Path(tableLocation), true);
+            List<Path> filesToDelete = new ArrayList<>();
+            while (allFiles.hasNext()) {
+                LocatedFileStatus entry = allFiles.next();
+                FileStatus status = fileSystem.getFileStatus(entry.getPath());
+                if (status.getModificationTime() < expiration && !validFiles.contains(entry.getPath().getName())) {
+                    filesToDelete.add(entry.getPath());
+                    if (filesToDelete.size() >= DELETE_BATCH_SIZE) {
+                        deleteFiles(fileSystem, filesToDelete);
+                        filesToDelete.clear();
+                    }
+                }
+            }
+            if (!filesToDelete.isEmpty()) {
+                deleteFiles(fileSystem, filesToDelete);
+                filesToDelete.clear();
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException("Failed accessing data: ", e);
+        }
+    }
+
+    // TODO:implement deleteFiles in FsUtils
+    @VisibleForTesting
+    public static void deleteFiles(FileSystem fs, List<Path> files) {
+        files.forEach(file -> {
+            try {
+                fs.delete(file, false);
+                LOGGER.debug("Deleted file {}", file);
+            } catch (IOException e) {
+                LOGGER.error("Failed to delete file {}", file, e);
+                throw new StarRocksConnectorException("Failed to delete file " + file, e);
+            }
         });
     }
 }

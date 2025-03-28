@@ -15,7 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,7 +39,7 @@ public class HiveResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         String name = "hive0";
         String type = "hive";
         String metastoreURIs = "thrift://127.0.0.1:9380";

@@ -23,11 +23,13 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class ViewsSystemTable {
+    public static final String NAME = "views";
+
     public static SystemTable create(String catalogName) {
         return new SystemTable(
                 catalogName,
                 SystemId.VIEWS_ID,
-                "views",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("TABLE_CATALOG", ScalarType.createVarchar(512))

@@ -51,9 +51,7 @@ constexpr bool IsTemporal() {
 }
 
 template <typename T>
-class FixedLengthColumnBase : public ColumnFactory<Column, FixedLengthColumnBase<T>> {
-    friend class ColumnFactory<Column, FixedLengthColumnBase>;
-
+class FixedLengthColumnBase : public Column {
 public:
     using ValueType = T;
     using Container = Buffer<ValueType>;
@@ -124,8 +122,6 @@ public:
 
     [[nodiscard]] bool append_nulls(size_t count __attribute__((unused))) override { return false; }
 
-    [[nodiscard]] bool append_strings(const Buffer<Slice>& slices __attribute__((unused))) override { return false; }
-
     [[nodiscard]] bool contain_value(size_t start, size_t end, T value) const {
         DCHECK_LE(start, end);
         DCHECK_LE(start, _data.size());
@@ -158,11 +154,11 @@ public:
         _data.resize(_data.size() + count, DefaultValueGenerator<ValueType>::next_value());
     }
 
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
-    Status fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter);
+    Status fill_range(const std::vector<T>& ids, const Filter& filter);
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
@@ -174,20 +170,21 @@ public:
 
     bool has_large_column() const override { return false; }
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     uint32_t max_one_element_serialize_size() const override { return sizeof(ValueType); }
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                         uint32_t max_one_row_size, uint8_t* null_masks, bool has_null) override;
+                                         uint32_t max_one_row_size, const uint8_t* null_masks,
+                                         bool has_null) const override;
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) override;
+                                       size_t count) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -195,15 +192,17 @@ public:
 
     uint32_t serialize_size(size_t idx) const override { return sizeof(ValueType); }
 
-    MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
-
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+    void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+    void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 

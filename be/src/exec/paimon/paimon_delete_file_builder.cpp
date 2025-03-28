@@ -15,9 +15,11 @@
 #include "paimon_delete_file_builder.h"
 
 #include <roaring/roaring.h>
+#include <roaring/roaring64.h>
 
 #include <bitset>
 
+#include "connector/deletion_vector/deletion_bitmap.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -56,14 +58,10 @@ Status PaimonDeleteFileBuilder::build(const TPaimonDeletionFile* paimon_deletion
     // Construct the roaring bitmap of corresponding deletion vector
     roaring_bitmap_t* bitmap =
             roaring_bitmap_portable_deserialize_safe(deletion_vector.get(), serialized_bitmap_length);
-    // Construct _need_skip_rowids from bitmap
-    uint32_t bitmap_cardinality = roaring_bitmap_get_cardinality(bitmap);
-    std::unique_ptr<uint32_t[]> bitmap_array(new uint32_t[bitmap_cardinality]);
-    roaring_bitmap_to_uint32_array(bitmap, bitmap_array.get());
-    _need_skip_rowids->insert(bitmap_array.get(), bitmap_array.get() + bitmap_cardinality);
+    roaring64_bitmap_t* bitmap64 = roaring64_bitmap_move_from_roaring32(bitmap);
+    _skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap64);
 
     roaring_bitmap_free(bitmap);
-
     return Status::OK();
 }
 

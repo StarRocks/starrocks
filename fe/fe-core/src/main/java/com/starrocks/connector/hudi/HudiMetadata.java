@@ -19,11 +19,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
@@ -35,7 +36,9 @@ import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -64,19 +67,22 @@ public class HudiMetadata implements ConnectorMetadata {
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
+    private final ConnectorProperties properties;
 
     public HudiMetadata(String catalogName,
                         HdfsEnvironment hdfsEnvironment,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
-                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor) {
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
+                        ConnectorProperties properties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;
         this.fileOps = fileOperations;
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
+        this.properties = properties;
     }
 
     @Override
@@ -85,17 +91,17 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return hmsOps.getAllDatabaseNames();
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return hmsOps.getAllTableNames(dbName);
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, TableVersionRange version) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 
@@ -106,7 +112,7 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         Database database;
         try {
             database = hmsOps.getDb(dbName);
@@ -119,7 +125,7 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         Table table;
         try {
             table = hmsOps.getTable(dbName, tblName);
@@ -132,16 +138,14 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         return hmsOps.tableExists(dbName, tblName);
     }
 
     private List<Partition> buildGetRemoteFilesPartitions(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-
-        if (((HiveMetaStoreTable) table).isUnPartitioned()) {
-            partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
+        if ((table).isUnPartitioned()) {
+            partitions.add(hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList()));
         } else {
             // convert partition keys to partition names.
             // and handle partition names in following code.
@@ -150,7 +154,7 @@ public class HudiMetadata implements ConnectorMetadata {
             List<String> partitionNames = params.getPartitionNames();
             if (params.getPartitionKeys() != null) {
                 partitionNames =
-                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(hmsTbl.getPartitionColumnNames(), x))
+                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(table.getPartitionColumnNames(), x))
                                 .collect(
                                         Collectors.toList());
             }
@@ -177,8 +181,7 @@ public class HudiMetadata implements ConnectorMetadata {
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
-        List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
-        return fileOps.getRemoteFilesAsync(table, partitions, params);
+        return fileOps.getRemoteFilesAsync(table, params, (p) -> this.buildGetRemoteFilesPartitions(table, p));
     }
 
     @Override
@@ -187,6 +190,10 @@ public class HudiMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate, long limit, TableVersionRange version) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
@@ -233,11 +240,10 @@ public class HudiMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
             Table table = GlobalStateMgr.getCurrentState()
-                    .getMetadata().getTable(dbName, tableName);
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            if (hmsTable != null) {
+                    .getLocalMetastore().getTable(dbName, tableName);
+            if (table != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), table));
+                        table.getCatalogDBName(), table.getCatalogTableName(), table));
             }
         }
     }

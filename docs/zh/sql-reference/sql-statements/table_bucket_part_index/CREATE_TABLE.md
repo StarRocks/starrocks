@@ -24,7 +24,7 @@ CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [partition_desc]
 [distribution_desc]
 [rollup_index]
-[ORDER BY (column_definition1,...)]
+[ORDER BY (column_name1,...)]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
@@ -157,9 +157,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 可选值：`mysql`、`elasticsearch`、`hive`、`jdbc` (2.3 及以后)、`iceberg`、`hudi`（2.2 及以后）。如果指定了可选值，则创建的是对应类型的外部表 (external table)，在建表时需要使用 CREATE EXTERNAL TABLE。更多信息，参见[外部表](../../../data_source/External_table.md)。
 
-**从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
+**从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
 
-**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
+**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg/iceberg_catalog.md#创建-iceberg-表)。**
 
 **从 3.2 版本起，支持直接在 Hive Catalog 内创建 Parquet 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Parquet 格式的 Hive 表中。从 3.3 版本起，支持直接在 Hive Catalog 中创建 ORC 及 Textfile 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 ORC 及 Textfile 格式的 Hive 表中。参见[创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)和[向 Hive 表中插入数据](../../../data_source/catalog/hive_catalog.md#向-hive-表中插入数据)。**
 
@@ -272,13 +272,13 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 ### partition_desc
 
-支持三种分区方式，[表达式分区](../../../table_design/expression_partitioning.md)（推荐）、[Range 分区](../../../table_design/Data_distribution.md#range-分区) 和 [List 分区](../../../table_design/list_partitioning.md)。
+支持三种分区方式，[表达式分区](../../../table_design/data_distribution/expression_partitioning.md)（推荐）、[Range 分区](../../../table_design/data_distribution/Data_distribution.md#range-分区) 和 [List 分区](../../../table_design/data_distribution/list_partitioning.md)。
 
 使用 Range 分区时，提供三种创建方式，其语法、说明和示例如下：
 
 - **动态创建分区**
 
-    [动态分区](../../../table_design/dynamic_partitioning.md)提供了分区生命周期管理（TTL）。StarRocks 会自动提前创建新的分区，并删除过期的分区，以确保数据时效性。要启用这个功能，您可以在创建表时配置与动态分区相关的属性。
+    [动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)提供了分区生命周期管理（TTL）。StarRocks 会自动提前创建新的分区，并删除过期的分区，以确保数据时效性。要启用这个功能，您可以在创建表时配置与动态分区相关的属性。
 
 - **手动创建分区**
 
@@ -300,7 +300,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     使用指定的 key 列和指定的数值范围进行分区。
 
     - 分区名称的命名要求，参见[系统限制](../../System_limit.md)。
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
+    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
     - 分区为左闭右开区间，首个分区的左边界为最小值。
     - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
@@ -424,12 +424,12 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     说明：
     用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
 
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
+    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
     - 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
     - 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     - 仅支持指定一列作为分区列。
 
-    更多信息，请参见[批量创建分区](../../../table_design/Data_distribution.md#range-分区)。
+    更多信息，请参见[批量创建分区](../../../table_design/data_distribution/Data_distribution.md#range-分区)。
 
     示例：
 
@@ -468,9 +468,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   - 不支持主键表、更新表和聚合表。
   - 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
   - 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
-  更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
+  更多随机分桶的信息，请参见[随机分桶](../../../table_design/data_distribution/Data_distribution.md#随机分桶自-v31)。
 
 - 哈希分桶
 
@@ -487,14 +487,14 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   - 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
   - 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
   并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
-  更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/Data_distribution.md#哈希分桶).
+  更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/data_distribution/Data_distribution.md#哈希分桶).
 
   **注意事项**
 
   - **建表时，必须指定分桶键**。
   - 作为分桶键的列，该列的值不支持更新。
   - 分桶键指定后不支持修改。
-  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 ### ORDER BY
 
@@ -714,7 +714,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### 为 View Delta Join 查询改写定义 Unique Key 和外键约束
 
-要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
+要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
 
 ```SQL
 PROPERTIES (
@@ -750,8 +750,7 @@ PROPERTIES (
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>",
-    "enable_async_write_back" = "{ true | false }"
+    "datacache.partition_duration" = "<string_value>"
 )
 ```
 
@@ -772,19 +771,77 @@ PROPERTIES (
   >
   > 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
 
-- `enable_async_write_back`：是否允许数据异步写入对象存储。默认值：`false`。
-
-  - 当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
-  - 当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
-
 #### 设置 fast schema evolution
 
 `fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。
 
 > **NOTE**
 >
-> - StarRocks 存算一体集群自 v3.2.0 版本起支持该参数，存算分离集群自 v3.3.0 起支持该参数。
-> - 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution)。
+> - 存算一体集群自 v3.2.0 起支持 fast schema evolution。
+> - 存算分离集群自 v3.3.0 起支持 fast schema evolution，默认启用。在存算分离集群中创建云原生表时无需指定此属性，由 FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
+
+#### 禁止 Base Compaction
+
+`base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置该属性后，系统将仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。该属性 v3.2.13 起支持。
+
+> **说明**
+>
+> 请确保在禁止 Base Compaction 期间，对于该表的导入次数不超过 500 次。
+
+`base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，且只支持以下字段： `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>` ，其中 `<minute>` 必须为 `*`。
+
+```Plain
+crontab_param_value ::= [ "" | crontab ]
+
+crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
+```
+
+- 如果未设置此属性或设置为 `""`（空字符串），则在任何时候都不禁止 Base Compaction。
+- 当此属性设置为 `* * * * *` 时，Base Compaction 始终被禁止。
+- 其他值遵循 Quartz cron 语法。
+  - 独立数值表示字段的单位时间。例如，`<hour>` 字段中的 `8` 表示 8:00-8:59。
+  - 数值范围表示字段的时间范围。例如，`<hour>` 字段中的 `8-9` 表示 8:00-9:59。
+  - 用逗号分隔的多个数值范围表示字段的多个时间范围。
+  - `<day-of-the-week>` 的起始值为 `1` 表示周日，`7` 表示周六。
+
+示例：
+
+```SQL
+-- 每天 8AM～9PM 禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
+
+-- 每天 0-5，21-23 点禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
+
+-- 每周一到周五禁止执行 Base Compaction（也即是在每周六/周日的全天允许执行）。
+'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
+
+-- 每个工作日（周一到周五）的 8AM～9PM 禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
+```
+
+#### 指定通用分区表达式 TTL
+
+从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+
+`partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
+- 表达式只能包含分区列和常量。不支持非分区列。
+- 通用分区表达式处理 List 分区和 Range 分区的方式不同：
+  - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+  - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+示例：
+
+```SQL
+-- 保留最近三个月的数据。dt 列为分区列。
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+如需禁用此功能，可以使用 ALTER TABLE 语句将此属性设置为空字符串：
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
+```
 
 ## 示例
 

@@ -35,16 +35,24 @@
 #include "util/system_metrics.h"
 
 #include <runtime/exec_env.h>
+#ifdef WITH_TENANN
 #include <tenann/index/index_cache.h>
+#endif
 
 #include <cstdio>
 #include <memory>
 
-#include "column/column_pool.h"
+#include "cache/block_cache/block_cache.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
+#include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
+#include "storage/page_cache.h"
 #include "util/metrics.h"
 
 namespace starrocks {
@@ -166,6 +174,9 @@ SystemMetrics::~SystemMetrics() {
     for (auto& it : _runtime_filter_metrics) {
         delete it.second;
     }
+    for (auto& it : _io_metrics) {
+        delete it;
+    }
 }
 
 void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string>& disk_devices,
@@ -183,6 +194,7 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
     _install_query_cache_metrics(registry);
     _install_runtime_filter_metrics(registry);
     _install_vector_index_cache_metrics(registry);
+    _install_io_metrics(registry);
     _registry = registry;
 }
 
@@ -276,7 +288,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
-    registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
     registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
     registry->register_metric("jit_cache_mem_bytes", &_memory_metrics->jit_cache_mem_bytes);
     registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
@@ -284,29 +295,40 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
     registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
+}
 
-    registry->register_metric("total_column_pool_bytes", &_memory_metrics->column_pool_total_bytes);
-    registry->register_metric("local_column_pool_bytes", &_memory_metrics->column_pool_local_bytes);
-    registry->register_metric("central_column_pool_bytes", &_memory_metrics->column_pool_central_bytes);
-    registry->register_metric("binary_column_pool_bytes", &_memory_metrics->column_pool_binary_bytes);
-    registry->register_metric("uint8_column_pool_bytes", &_memory_metrics->column_pool_uint8_bytes);
-    registry->register_metric("int8_column_pool_bytes", &_memory_metrics->column_pool_int8_bytes);
-    registry->register_metric("int16_column_pool_bytes", &_memory_metrics->column_pool_int16_bytes);
-    registry->register_metric("int32_column_pool_bytes", &_memory_metrics->column_pool_int32_bytes);
-    registry->register_metric("int64_column_pool_bytes", &_memory_metrics->column_pool_int64_bytes);
-    registry->register_metric("int128_column_pool_bytes", &_memory_metrics->column_pool_int128_bytes);
-    registry->register_metric("float_column_pool_bytes", &_memory_metrics->column_pool_float_bytes);
-    registry->register_metric("double_column_pool_bytes", &_memory_metrics->column_pool_double_bytes);
-    registry->register_metric("decimal_column_pool_bytes", &_memory_metrics->column_pool_decimal_bytes);
-    registry->register_metric("date_column_pool_bytes", &_memory_metrics->column_pool_date_bytes);
-    registry->register_metric("datetime_column_pool_bytes", &_memory_metrics->column_pool_datetime_bytes);
+void SystemMetrics::_update_datacache_mem_tracker() {
+    // update datacache mem_tracker
+    int64_t datacache_mem_bytes = 0;
+    auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
+    if (datacache_mem_tracker) {
+        BlockCache* block_cache = BlockCache::instance();
+        if (block_cache != nullptr && block_cache->is_initialized()) {
+            auto datacache_metrics = block_cache->cache_metrics();
+            datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
+        }
+#ifdef USE_STAROS
+        if (!config::datacache_unified_instance_enable) {
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+        }
+#endif
+        datacache_mem_tracker->set(datacache_mem_bytes);
+    }
+}
+
+void SystemMetrics::_update_pagecache_mem_tracker() {
+    auto* pagecache_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
+    auto* page_cache = StoragePageCache::instance();
+    if (pagecache_mem_tracker && page_cache) {
+        pagecache_mem_tracker->set(page_cache->memory_usage());
+    }
 }
 
 void SystemMetrics::_update_memory_metrics() {
-    size_t value = 0;
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
+    size_t value = 0;
     // Update the statistics cached by mallctl.
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
@@ -335,6 +357,9 @@ void SystemMetrics::_update_memory_metrics() {
     }
 #endif
 
+    _update_datacache_mem_tracker();
+    _update_pagecache_mem_tracker();
+
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                  \
     if (GlobalEnv::GetInstance()->tracker() != nullptr) {                                   \
         _memory_metrics->key.set_value(GlobalEnv::GetInstance()->tracker()->consumption()); \
@@ -361,30 +386,11 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(jit_cache_mem_tracker, jit_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
+    SET_MEM_METRIC_VALUE(passthrough_mem_tracker, passthrough_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
-    SET_MEM_METRIC_VALUE(column_pool_mem_tracker, column_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
     SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
-
-#define UPDATE_COLUMN_POOL_METRIC(var, type)                 \
-    value = describe_column_pool<type>().central_free_bytes; \
-    var.set_value(value);
-
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_binary_bytes, BinaryColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_uint8_bytes, UInt8Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int8_bytes, Int8Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int16_bytes, Int16Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int32_bytes, Int32Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int64_bytes, Int64Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int128_bytes, Int128Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_float_bytes, FloatColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_double_bytes, DoubleColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_decimal_bytes, DecimalColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_date_bytes, DateColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_datetime_bytes, TimestampColumn)
-
-#undef UPDATE_COLUMN_POOL_METRIC
 }
 
 void SystemMetrics::_install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices) {
@@ -858,5 +864,20 @@ void SystemMetrics::get_max_net_traffic(const std::map<std::string, int64_t>& ls
 
     *send_rate = max_send / interval_sec;
     *rcv_rate = max_rcv / interval_sec;
+}
+
+void SystemMetrics::_install_io_metrics(MetricRegistry* registry) {
+    for (uint32_t i = 0; i < IOProfiler::TAG::TAG_END; i++) {
+        std::string tag_name = IOProfiler::tag_to_string(i);
+        auto* metrics = new IOMetrics();
+#define REGISTER_IO_METRIC(name) \
+    registry->register_metric("io_" #name, MetricLabels().add("tag", tag_name), &metrics->name);
+        REGISTER_IO_METRIC(read_ops);
+        REGISTER_IO_METRIC(read_bytes);
+        REGISTER_IO_METRIC(write_ops);
+        REGISTER_IO_METRIC(write_bytes);
+
+        _io_metrics.emplace_back(metrics);
+    }
 }
 } // namespace starrocks

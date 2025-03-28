@@ -26,6 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
@@ -53,7 +54,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -70,6 +70,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
@@ -284,7 +285,8 @@ public class TaskManager implements MemoryTrackable {
         } finally {
             taskRunManager.taskRunUnlock();
         }
-        return taskRunManager.killTaskRun(task.getId(), force);
+        taskRunManager.killTaskRun(task.getId(), force);
+        return true;
     }
 
     public SubmitResult executeTask(String taskName) {
@@ -292,7 +294,7 @@ public class TaskManager implements MemoryTrackable {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        ExecuteOption option = new ExecuteOption(task.getSource().isMergeable());
+        ExecuteOption option = new ExecuteOption(task);
         option.setManual(true);
         return executeTask(taskName, option);
     }
@@ -310,7 +312,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public SubmitResult executeTaskSync(Task task) {
-        return executeTaskSync(task, new ExecuteOption(task.getSource().isMergeable()));
+        return executeTaskSync(task, new ExecuteOption(task));
     }
 
     public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
@@ -376,7 +378,7 @@ public class TaskManager implements MemoryTrackable {
                     periodFutureMap.remove(task.getId());
                 }
                 if (!killTask(task.getName(), false)) {
-                    LOG.error("kill task failed: " + task.getName());
+                    LOG.warn("kill task failed: {}", task.getName());
                 }
                 idToTaskMap.remove(task.getId());
                 nameToTaskMap.remove(task.getName());
@@ -573,17 +575,9 @@ public class TaskManager implements MemoryTrackable {
 
     public void loadTasksV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
-        while (size-- > 0) {
-            Task task = reader.readJson(Task.class);
-            replayCreateTask(task);
-        }
+        reader.readCollection(Task.class, this::replayCreateTask);
 
-        size = reader.readInt();
-        while (size-- > 0) {
-            TaskRunStatus status = reader.readJson(TaskRunStatus.class);
-            replayCreateTaskRun(status);
-        }
+        reader.readCollection(TaskRunStatus.class, this::replayCreateTaskRun);
     }
 
     public void saveTasksV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -663,7 +657,7 @@ public class TaskManager implements MemoryTrackable {
                 .forEach(addResult);
 
         // history
-        taskRunManager.getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames)
+        taskRunManager.getTaskRunHistory().lookupLastJobOfTasks(dbName, taskNames)
                 .stream()
                 .filter(taskRunFilter)
                 .forEach(addResult);
@@ -703,17 +697,16 @@ public class TaskManager implements MemoryTrackable {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-                ExecuteOption executeOption = new ExecuteOption(task.getSource().isMergeable());
+                ExecuteOption executeOption = new ExecuteOption(task);
                 executeOption.setReplay(true);
                 TaskRun taskRun = TaskRunBuilder
                         .newBuilder(task)
                         .setExecuteOption(executeOption)
                         .build();
-
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                if (!taskRunManager.arrangeTaskRun(taskRun, true)) {
-                    LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
+                if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
+                    LOG.warn("Submit task run to pending queue failed in follower, reject the submit:{}", taskRun);
                 }
                 break;
             // this will happen in build image
@@ -724,6 +717,7 @@ public class TaskManager implements MemoryTrackable {
             case FAILED:
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
+            case MERGED:
             case SUCCESS:
                 status.setProgress(100);
                 taskRunManager.getTaskRunHistory().addHistory(status);
@@ -874,8 +868,12 @@ public class TaskManager implements MemoryTrackable {
     }
 
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(idToTaskMap.values());
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> taskSamples = idToTaskMap.values()
+                .stream()
+                .limit(1)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(taskSamples, (long) idToTaskMap.size()));
     }
 
     public boolean containTask(String taskName) {

@@ -71,7 +71,8 @@ class Executor;
 
 namespace starrocks::lake {
 class LocalPkIndexManager;
-}
+class LoadSpillBlockMergeExecutor;
+} // namespace starrocks::lake
 
 namespace starrocks {
 
@@ -234,6 +235,10 @@ public:
     DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
+
+    lake::LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() {
+        return _load_spill_block_merge_executor.get();
+    }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
@@ -418,7 +423,7 @@ private:
 private:
     EngineOptions _options;
     std::mutex _store_lock;
-    std::map<std::string, DataDir*> _store_map;
+    std::map<std::string, std::unique_ptr<DataDir>> _store_map;
     uint32_t _available_storage_medium_type_count;
     bool _is_all_cluster_id_exist;
 
@@ -491,6 +496,8 @@ private:
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
+
+    std::unique_ptr<lake::LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 

@@ -504,7 +504,7 @@ public class MaterializedViewRule extends Rule {
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
             for (Partition partition : olapTable.getPartitions()) {
-                rowCount += partition.getIndex(indexId).getRowCount();
+                rowCount += partition.getDefaultPhysicalPartition().getIndex(indexId).getRowCount();
             }
             if (rowCount < minRowCount) {
                 minRowCount = rowCount;

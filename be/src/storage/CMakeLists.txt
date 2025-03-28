@@ -19,7 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 
-add_library(Storage STATIC
+set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
@@ -99,17 +99,16 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
-    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
     rowset/storage_page_decoder.cpp
-    rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp
     rowset/bloom_filter_index_writer.cpp
-    rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
@@ -123,6 +122,7 @@ add_library(Storage STATIC
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_manual_compaction_task.cpp
+    task/engine_compaction_control_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
@@ -134,8 +134,10 @@ add_library(Storage STATIC
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+    column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
+    runtime_filter_predicate.cpp
     predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
@@ -209,8 +211,11 @@ add_library(Storage STATIC
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
+    lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+    lake/load_spill_block_manager.cpp
+    lake/spill_mem_table_sink.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp
@@ -224,6 +229,7 @@ add_library(Storage STATIC
     sstable/iterator.cpp
     sstable/options.cpp
     sstable/merger.cpp
+    lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -234,6 +240,7 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
@@ -254,8 +261,20 @@ add_library(Storage STATIC
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
+    index/vector/empty_index_reader.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
+    index/vector/vector_index_reader_factory.cpp
+    index/vector/tenann_index_reader.cpp
+    index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
     index/vector/tenann/tenann_index_utils.cpp)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
+endif()
+
+add_library(Storage STATIC
+    ${STORAGE_FILES}
+)

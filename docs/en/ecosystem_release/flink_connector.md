@@ -40,6 +40,29 @@ displayed_sidebar: docs
 
 ### 1.2
 
+#### 1.2.10
+
+**Features**
+
+- Supports reading JSON columns. [#334](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/334)
+- Supports reading ARRAY, STRUCT, and MAP columns. [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+- Supports LZ4 compression when sinking data with the JSON format. [#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
+- Supports Flink 1.19. [#379](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/379)
+
+**Improvements**
+
+- Supports configuring socket timeout. [#319](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/319)
+- The Stream Load transaction interface supports asynchronous `prepare` and `commit` operations. [#328](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/328)
+- Supports mapping a subset of columns in a StarRocks table to a Flink source table. [#352](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/352)
+- Supports setting a specific warehouse when using the Stream Load transaction interface. [#361](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/361)
+
+**Bug Fixes**
+
+Fixed the following issues:
+
+- `StarRocksSourceBeReader` in `StarRocksDynamicLookupFunction` is not closed after data reading completes. [#351](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/351)
+- An exception was thrown when loading an empty JSON string into a JSON column. [#380](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/380)
+
 #### 1.2.9
 
 This release includes some features and bug fixes. The notable change is that the Flink connector is integrated with Flink CDC 3.0 to easily build a streaming ELT pipeline from CDC sources (such as MySQL and Kafka) to StarRocks. You can see [Synchronize data with Flink CDC 3.0 (with schema change supported)](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#synchronize-data-with-flink-cdc-30-with-schema-change-supported) for details.

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # Synchronous materialized view
@@ -10,11 +11,11 @@ For a synchronous materialized view, all changes in the base table are simultane
 
 Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration rather than a physical table like asynchronous materialized views.
 
-From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
+From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](async_mv/Materialized_view.md).
 
 :::note
 - Synchronous materialized views support WHERE clauses from v3.1.8 onwards.
-- Currently, synchronous materialized view is not yet supported in the shared-data clusters.
+- Synchronous materialized views are supported in the shared-data clusters from v3.4.0 onwards.
 :::
 
 The following table compares the asynchronous materialized views (ASYNC MVs) in StarRocks v2.5, v2.4, and the synchronous materialized view (SYNC MV) in the perspective of features that they support:
@@ -161,6 +162,7 @@ GROUP BY store_id;
 > - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all synchronous materialized views of the base table do not contain the dropped column, otherwise the drop operation cannot be performed. To drop a column that used in synchronous materialized views, you need to first drop all synchronous materialized views that contain the column, and then drop the column.
 > - Creating too many synchronous materialized views for a table will affect the data loading efficiency. When data is being loaded to the base table, the data in synchronous materialized views and base table are updated synchronously. If the base table contains `n` synchronous materialized views, the efficiency of loading data into the base table is about the same as that of loading data into `n` tables.
 > - Currently, StarRocks does not support creating multiple synchronous materialized views at the same time. A new synchronous materialized view can only be created when the previous one is completed.
+> - Materialized view can only be created in default_catalog. You could either create it with default_catalog.database.mv, or switch to default_catalog through `set catalog <default_catalog>` statement.
 
 ## Check the building status of a synchronous materialized view
 

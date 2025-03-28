@@ -1,5 +1,5 @@
 ---
-keywords: ['xiugai'] 
+keywords: ['xiugai', 'ziyuanzu'] 
 displayed_sidebar: docs
 ---
 
@@ -60,6 +60,6 @@ ALTER RESOURCE GROUP rg1 DROP ALL;
 
 ```SQL
 ALTER RESOURCE GROUP rg1 WITH (
-    'cpu_core_limit' = '20'
+    'cpu_weight' = '10'
 );
 ```

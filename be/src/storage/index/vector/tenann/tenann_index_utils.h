@@ -41,10 +41,8 @@ static const std::string RANGE_SEARCH_CONFIDENCE = "range_search_confidence";
 }; // namespace starrocks::index::vector
 
 namespace starrocks {
-
 StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& tablet_index,
                                             const std::map<std::string, std::string>& query_params);
-
 } // namespace starrocks
 
 #endif

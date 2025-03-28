@@ -20,10 +20,8 @@ import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,8 +53,6 @@ public class AnalyzeState {
     private List<OrderByElement> orderBy;
     private Scope orderScope;
     private List<Expr> orderSourceExpressions;
-
-    private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
     /**
      * outputExprInOrderByScope is used to record which expressions in outputExpression are to be
@@ -103,19 +99,6 @@ public class AnalyzeState {
 
     public Map<Expr, FieldId> getColumnReferences() {
         return columnReferences;
-    }
-
-    public SelectRelation build() {
-        SelectRelation selectRelation = new SelectRelation(
-                outputExpressions, isDistinct,
-                orderScope, orderSourceExpressions,
-                relation, predicate, limit,
-                groupBy, aggregate, groupingSetsList, groupingFunctionCallExprs,
-                orderBy, having,
-                outputAnalytic, orderByAnalytic,
-                columnReferences);
-        selectRelation.setScope(new Scope(RelationId.of(selectRelation), outputScope.getRelationFields()));
-        return selectRelation;
     }
 
     public Scope getOrderScope() {
@@ -256,13 +239,5 @@ public class AnalyzeState {
 
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
-    }
-
-    public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
-        this.generatedExprToColumnRef = generatedExprToColumnRef;
-    }
-
-    public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
-        return generatedExprToColumnRef;
     }
 }

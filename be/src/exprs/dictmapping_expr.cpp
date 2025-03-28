@@ -34,7 +34,6 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
     if (ptr == nullptr || ptr->is_empty()) {
         return get_child(1)->evaluate_checked(context, ptr);
     }
-
     // children == 2: DictExpr(string column, string expression) or DictExpr(array column, array column)
     // children == 3: DictExpr(array column, string expression, array expression)
     // do array-expresion first, then string expression

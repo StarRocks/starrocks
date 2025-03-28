@@ -174,6 +174,24 @@ public class ScalarFunction extends Function {
                 symbol, prepareFnSymbol, closeFnSymbol, true);
     }
 
+    /**
+     * Returns a new instance of this aggregate function with new argument types and return type which is used for
+     * original function's argument types are psedo types.
+     */
+    public ScalarFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        ScalarFunction newFn = new ScalarFunction(this.getFunctionName(), newArgTypes, newRetType,
+                this.getLocation(), this.getSymbolName(), this.getPrepareFnSymbol(),
+                this.getCloseFnSymbol());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        return newFn;
+    }
+
     public void setSymbolName(String s) {
         symbolName = s;
     }

@@ -283,7 +283,7 @@ public class TabletChecker extends FrontendDaemon {
             int partitionBatchNum = Config.tablet_checker_partition_batch_num;
             int partitionChecked = 0;
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             lockStart = System.nanoTime();
             try {
                 List<Long> aliveBeIdsInCluster =
@@ -303,11 +303,11 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-                    for (Partition partition : GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                    for (PhysicalPartition physicalPartition : GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getAllPhysicalPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
 
-                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), partition.getId());
+                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), physicalPartition.getId());
                         totStat.isUrgentPartitionHealthy = true;
                         if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
                             continue;
@@ -317,8 +317,8 @@ public class TabletChecker extends FrontendDaemon {
                             LOG.debug("partition checked reached batch value, release lock");
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
-                            locker.unLockDatabase(db, LockType.READ);
-                            locker.lockDatabase(db, LockType.READ);
+                            locker.unLockDatabase(db.getId(), LockType.READ);
+                            locker.lockDatabase(db.getId(), LockType.READ);
                             LOG.debug("checker get lock again");
                             lockStart = System.nanoTime();
                             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
@@ -328,13 +328,18 @@ public class TabletChecker extends FrontendDaemon {
                                     .getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
                                 continue TABLE;
                             }
-                            if (GlobalStateMgr.getCurrentState()
-                                    .getLocalMetastore().getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
+                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getPhysicalPartitionIncludeRecycleBin(olapTbl, physicalPartition.getId()) == null) {
                                 continue;
                             }
                         }
 
-                        if (partition.getState() != PartitionState.NORMAL) {
+                        Partition logicalPartition = olapTbl.getPartition(physicalPartition.getParentId());
+                        if (logicalPartition == null) {
+                            continue;
+                        }
+
+                        if (logicalPartition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.
                             continue;
@@ -342,12 +347,13 @@ public class TabletChecker extends FrontendDaemon {
 
                         short replicaNum = GlobalStateMgr.getCurrentState()
                                 .getLocalMetastore()
-                                .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
+                                .getReplicationNumIncludeRecycleBin(
+                                        olapTbl.getPartitionInfo(), physicalPartition.getParentId());
                         if (replicaNum == (short) -1) {
                             continue;
                         }
 
-                        TabletCheckerStat partitionTabletCheckerStat = doCheckOnePartition(db, olapTbl, partition,
+                        TabletCheckerStat partitionTabletCheckerStat = doCheckOnePartition(db, olapTbl, physicalPartition,
                                 replicaNum, aliveBeIdsInCluster, isPartitionUrgent);
                         totStat.accumulateStat(partitionTabletCheckerStat);
 
@@ -355,15 +361,15 @@ public class TabletChecker extends FrontendDaemon {
                             // if all replicas in this partition are healthy, remove this partition from
                             // priorities.
                             LOG.debug("partition is healthy, remove from urgent table: {}-{}-{}",
-                                    db.getId(), olapTbl.getId(), partition.getId());
+                                    db.getId(), olapTbl.getId(), physicalPartition.getId());
                             removeFromUrgentTable(new RepairTabletInfo(db.getId(),
-                                    olapTbl.getId(), Lists.newArrayList(partition.getId())));
+                                    olapTbl.getId(), Lists.newArrayList(physicalPartition.getId())));
                         }
                     } // partitions
                 } // tables
             } finally {
                 lockTotalTime += System.nanoTime() - lockStart;
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } // end for dbs
 
@@ -402,12 +408,12 @@ public class TabletChecker extends FrontendDaemon {
         }
     }
 
-    private TabletCheckerStat doCheckOnePartition(Database db, OlapTable olapTbl, Partition partition,
+    private TabletCheckerStat doCheckOnePartition(Database db, OlapTable olapTbl, PhysicalPartition physicalPartition,
                                                   int replicaNum, List<Long> aliveBeIdsInCluster,
                                                   boolean isPartitionUrgent) {
         TabletCheckerStat partitionTabletCheckerStat = new TabletCheckerStat();
         // Tablet in SHADOW index can not be repaired or balanced
-        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+        if (physicalPartition != null) {
             for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
                     IndexExtState.VISIBLE)) {
                 for (Tablet tablet : idx.getTablets()) {
@@ -452,7 +458,7 @@ public class TabletChecker extends FrontendDaemon {
 
                     TabletSchedCtx tabletSchedCtx = new TabletSchedCtx(
                             TabletSchedCtx.Type.REPAIR,
-                            db.getId(), olapTbl.getId(), partition.getId(),
+                            db.getId(), olapTbl.getId(),
                             physicalPartition.getId(), idx.getId(), tablet.getId(),
                             System.currentTimeMillis());
                     // the tablet status will be set again when being scheduled
@@ -514,7 +520,7 @@ public class TabletChecker extends FrontendDaemon {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
                     long tblId = tblEntry.getKey();
@@ -525,7 +531,7 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     Set<PrioPart> parts = tblEntry.getValue();
-                    parts = parts.stream().filter(p -> (tbl.getPartition(p.partId) != null && !p.isTimeout())).collect(
+                    parts = parts.stream().filter(p -> (tbl.getPhysicalPartition(p.partId) != null && !p.isTimeout())).collect(
                             Collectors.toSet());
                     if (parts.isEmpty()) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
@@ -536,7 +542,7 @@ public class TabletChecker extends FrontendDaemon {
                     iter.remove();
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         for (Pair<Long, Long> prio : deletedUrgentTable) {
@@ -618,7 +624,7 @@ public class TabletChecker extends FrontendDaemon {
         long tblId;
         List<Long> partIds = Lists.newArrayList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
@@ -629,18 +635,19 @@ public class TabletChecker extends FrontendDaemon {
             OlapTable olapTable = (OlapTable) tbl;
 
             if (partitions == null || partitions.isEmpty()) {
-                partIds = olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+                partIds = olapTable.getPhysicalPartitions().stream().map(PhysicalPartition::getId).collect(Collectors.toList());
             } else {
                 for (String partName : partitions) {
                     Partition partition = olapTable.getPartition(partName);
                     if (partition == null) {
                         throw new DdlException("Partition does not exist: " + partName);
                     }
-                    partIds.add(partition.getId());
+                    partIds.addAll(partition.getSubPartitions().stream()
+                            .map(PhysicalPartition::getId).collect(Collectors.toList()));
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         Preconditions.checkState(tblId != -1);
@@ -941,12 +948,11 @@ public class TabletChecker extends FrontendDaemon {
             return createRedundantSchedCtx(TabletHealthStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     stats.getNeedFurtherRepairReplica());
         } else {
-            List<Long> availableBEs = systemInfoService.getAvailableBackendIds();
             // We create `REPLICA_MISSING` type task only when there exists enough available BEs which
             // we can choose to clone data to, if not we should check if we can create `VERSION_INCOMPLETE` task,
             // so that repair of replica with incomplete version won't be blocked and hence version publish process
             // of load task won't be blocked either.
-            if (availableBEs.size() > stats.getAliveCnt()) {
+            if (aliveBackendsNum > stats.getAliveCnt()) {
                 if (stats.getAliveCnt() < (replicationNum / 2) + 1) {
                     return Pair.create(TabletHealthStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
                 } else if (stats.getAliveCnt() < replicationNum) {

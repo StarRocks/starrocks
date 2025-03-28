@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load.streamload;
 
 import com.google.common.collect.Lists;
@@ -20,7 +19,7 @@ import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
@@ -63,7 +62,7 @@ public class StreamLoadManagerTest {
     public void setUp() {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         FeConstants.runningUnitTest = true;
-    
+
         try {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
@@ -145,18 +144,19 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testBeginStreamLoadTask() throws UserException {
+    public void testBeginStreamLoadTask() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
-        
+
         String dbName = "test_db";
         String tableName = "test_tbl";
         String labelName = "label1";
         long timeoutMillis = 100000;
         int channelNum = 1;
         int channelId = 0;
-        
+
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
@@ -170,22 +170,23 @@ public class StreamLoadManagerTest {
         Map<String, StreamLoadTask> dbToLabelToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "dbToLabelToStreamLoadTask");
         Assert.assertEquals(1, idToStreamLoadTask.size());
-        
+
     }
 
     @Test
-    public void testChannelIdEqualChannelNum() throws UserException {
+    public void testChannelIdEqualChannelNum() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
-        
+
         String dbName = "test_db";
         String tableName = "test_tbl";
         String labelName = "label1";
         long timeoutMillis = 100000;
         int channelNum = 1;
         int channelId = 1;
-        
+
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
         Assert.assertEquals(1, idToStreamLoadTask.size());
@@ -194,7 +195,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByName() throws UserException {
+    public void testGetTaskByName() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -203,9 +204,10 @@ public class StreamLoadManagerTest {
         long timeoutMillis = 100000;
         int channelNum = 5;
         int channelId = 0;
-        
+
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
         Assert.assertEquals(1, tasks.size());
@@ -216,7 +218,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByNameWithNullLabelName() throws UserException {
+    public void testGetTaskByNameWithNullLabelName() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -228,8 +230,10 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName1, "", "", timeoutMillis, channelNum, channelId, resp);
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName1, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
 
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
         Assert.assertEquals(2, tasks.size());
@@ -238,7 +242,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByIdWhenMatched() throws UserException {
+    public void testGetTaskByIdWhenMatched() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -249,7 +253,8 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         StreamLoadTask task = streamLoadManager.getTaskById(1001L);
         Assert.assertNotNull(task);
@@ -261,7 +266,7 @@ public class StreamLoadManagerTest {
     }
 
     @Test
-    public void testGetTaskByIdWhenNotMatched() throws UserException {
+    public void testGetTaskByIdWhenNotMatched() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -272,14 +277,15 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTaskFromFrontend(
+                dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         StreamLoadTask task = streamLoadManager.getTaskById(1002L);
         Assert.assertNull(task);
     }
 
     @Test
-    public void testStreamLoadTaskAfterCommit() throws UserException {
+    public void testStreamLoadTaskAfterCommit() throws StarRocksException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -289,7 +295,8 @@ public class StreamLoadManagerTest {
         long warehouseId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, false, warehouseId);
+        streamLoadManager.beginLoadTaskFromBackend(
+                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, warehouseId);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
@@ -300,14 +307,13 @@ public class StreamLoadManagerTest {
 
         TransactionState state = new TransactionState();
         task.afterCommitted(state, true);
-        Assert.assertNotEquals(-1, task.endTimeMs());
+        Assert.assertNotEquals(-1, task.commitTimeMs());
 
-        state.setCommitTime(task.endTimeMs());
-        task.replayOnCommitted(state);
-        Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
+        Assert.assertTrue(task.isUnreversibleState());
+        Assert.assertFalse(task.isFinalState());
 
         streamLoadManager.cleanSyncStreamLoadTasks();
-        Assert.assertEquals(0, streamLoadManager.getStreamLoadTaskCount());
+        Assert.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
     }
 
 }

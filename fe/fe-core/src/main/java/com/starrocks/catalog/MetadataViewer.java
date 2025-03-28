@@ -79,7 +79,7 @@ public class MetadataViewer {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
@@ -173,7 +173,7 @@ public class MetadataViewer {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
@@ -208,7 +208,7 @@ public class MetadataViewer {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
@@ -271,7 +271,7 @@ public class MetadataViewer {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return result;

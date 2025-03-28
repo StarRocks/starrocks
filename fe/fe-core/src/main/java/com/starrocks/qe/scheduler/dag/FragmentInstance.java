@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TScanRange;
@@ -37,8 +38,10 @@ import com.starrocks.thrift.TUniqueId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -78,6 +81,8 @@ public class FragmentInstance {
     private final Map<Integer, Map<Integer, List<TScanRangeParams>>> node2DriverSeqToScanRanges = Maps.newHashMap();
 
     private FragmentInstanceExecState execution = null;
+
+    private final Map<Integer, Set<Long>> node2SentPartitionIds = Maps.newHashMap();
 
     public FragmentInstance(ComputeNode worker, ExecutionFragment execFragment) {
         this.worker = worker;
@@ -232,7 +237,6 @@ public class FragmentInstance {
         this.groupExecutionScanDop = groupExecutionScanDop;
     }
 
-
     public FragmentInstanceExecState getExecution() {
         return execution;
     }
@@ -297,11 +301,39 @@ public class FragmentInstance {
         return bucketSeqToDriverSeq;
     }
 
+    private void removeDuplicatedPartitionValues(Integer scanId, List<TScanRangeParams> scanRangeParamsList) {
+        Set<Long> sentPartitionIds = node2SentPartitionIds.computeIfAbsent(scanId, k -> new HashSet<>());
+        for (TScanRangeParams scanRangeParams : scanRangeParamsList) {
+            TScanRange scanRange = scanRangeParams.scan_range;
+            if (!scanRange.isSetHdfs_scan_range()) {
+                continue;
+            }
+            THdfsScanRange hdfsScanRange = scanRange.getHdfs_scan_range();
+            if (!(hdfsScanRange.isSetPartition_id() && hdfsScanRange.isSetPartition_value())) {
+                continue;
+            }
+            if (sentPartitionIds.contains(hdfsScanRange.getPartition_id())) {
+                // this partition value has been sent down to BE before.
+                // no need to send it anymore.
+                hdfsScanRange.unsetPartition_value();
+            } else {
+                sentPartitionIds.add(hdfsScanRange.getPartition_id());
+            }
+        }
+    }
+
+    public void resetAllScanRanges() {
+        node2ScanRanges.clear();
+        node2DriverSeqToScanRanges.clear();
+    }
+
     public void addScanRanges(Integer scanId, List<TScanRangeParams> scanRanges) {
+        removeDuplicatedPartitionValues(scanId, scanRanges);
         node2ScanRanges.computeIfAbsent(scanId, k -> new ArrayList<>()).addAll(scanRanges);
     }
 
     public void addScanRanges(Integer scanId, Integer driverSeq, List<TScanRangeParams> scanRanges) {
+        removeDuplicatedPartitionValues(scanId, scanRanges);
         node2DriverSeqToScanRanges.computeIfAbsent(scanId, k -> new HashMap<>())
                 .computeIfAbsent(driverSeq, k -> new ArrayList<>()).addAll(scanRanges);
     }

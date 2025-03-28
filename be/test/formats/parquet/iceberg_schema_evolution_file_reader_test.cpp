@@ -153,7 +153,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -173,8 +173,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -235,7 +236,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructEvolutionPadNull) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -244,8 +245,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructEvolutionPadNull) {
 
     Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -297,7 +299,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -311,8 +313,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -365,7 +368,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -379,8 +382,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -441,7 +445,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -461,8 +465,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -586,7 +591,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -608,8 +613,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
         _create_null_conjunct_ctxs(2, &ctx->min_max_conjunct_ctxs, _pool, _runtime_state);
     }
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -650,14 +656,15 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -694,14 +701,15 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor rename_id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
     Utils::SlotDesc slot_descs[] = {{"rename_id", rename_id}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -749,7 +757,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_col, field_id};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -760,8 +768,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 
     Utils::SlotDesc slot_descs[] = {{"col", col}, {"id", id}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -806,7 +815,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 
     std::vector<TIcebergSchemaField> fields{field_col};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -815,8 +824,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 
     Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -865,7 +875,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
 
     std::vector<TIcebergSchemaField> fields{field_c1, field_c2, field_c3};
     schema.__set_fields(fields);
-    ctx->iceberg_schema = &schema;
+    ctx->lake_schema = &schema;
 
     TypeDescriptor rename_c1 = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
     TypeDescriptor c2 = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
@@ -873,8 +883,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
 
     Utils::SlotDesc slot_descs[] = {{"rename_c1", rename_c1}, {"c2", c2}, {"rename_c3", rename_c3}, {""}};
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
@@ -926,7 +937,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_id, field_col};
         schema.__set_fields(fields);
-        ctx->iceberg_schema = &schema;
+        ctx->lake_schema = &schema;
 
         TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -937,8 +948,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
@@ -984,7 +996,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_col};
         schema.__set_fields(fields);
-        ctx->iceberg_schema = &schema;
+        ctx->lake_schema = &schema;
 
         TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -993,8 +1005,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
@@ -1036,8 +1049,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestHiveWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
@@ -1075,8 +1089,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestHiveWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
@@ -1139,7 +1154,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_id, field_col};
         schema.__set_fields(fields);
-        ctx->iceberg_schema = &schema;
+        ctx->lake_schema = &schema;
 
         TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -1156,8 +1171,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col_struct", col_struct}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
@@ -1216,7 +1232,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_id, field_col_map};
         schema.__set_fields(fields);
-        ctx->iceberg_schema = &schema;
+        ctx->lake_schema = &schema;
 
         TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -1231,8 +1247,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col_map", col_map}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
@@ -1278,8 +1295,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col_Struct", col_struct}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
@@ -1320,8 +1338,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col_ARRAY", col_array}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 

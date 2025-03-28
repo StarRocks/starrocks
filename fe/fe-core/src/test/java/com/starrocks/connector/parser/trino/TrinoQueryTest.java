@@ -23,6 +23,7 @@ public class TrinoQueryTest extends TrinoTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
     @Test
@@ -104,6 +105,12 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select timestamp '2023-07-01'";
         assertPlanContains(sql, "'2023-07-01 00:00:00'");
+    }
+
+    @Test
+    public void testAtTimezone() {
+        String sql = "select now() AT TIME ZONE 'Asia/Hong_Kong';";
+        analyzeSuccess(sql);
     }
 
     @Test
@@ -446,7 +453,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select avg(c1[1]) from test_map where c1[1] is not null";
         assertPlanContains(sql, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: avg(2: c1[1])");
+                "  |  output: avg(5: expr)");
 
         sql = "select c2[2][1] from test_map";
         assertPlanContains(sql, "<slot 5> : 3: c2[2][1]");
@@ -898,7 +905,8 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
         Assert.assertTrue(getExplain(sql), StringUtils.containsIgnoreCase(getExplain(sql),
                 "SCAN [t1] => [8:auto_fill_col]\n" +
-                        "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4.50}\n" +
+                        "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4" +
+                        ".50}\n" +
                         "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
                         "                    8:auto_fill_col := 1"));
 
@@ -1031,7 +1039,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : trim('  abcd')");
 
         sql = "select trim(trailing 'ER' from upper('worker'));";
-        assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+        assertPlanContains(sql, "<slot 2> : rtrim('WORKER', 'ER')");
 
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
@@ -1227,5 +1235,26 @@ public class TrinoQueryTest extends TrinoTestBase {
     public void testCastArrayDataType() throws Exception {
         String sql = "select cast(ARRAY[1] as array(int))";
         assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+    }
+
+    @Test
+    public void testDistinctFrom() throws Exception {
+        String sql = "select 1 is distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is not distinct from null";
+        analyzeSuccess(sql);
     }
 }

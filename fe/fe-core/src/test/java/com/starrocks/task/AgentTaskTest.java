@@ -147,6 +147,7 @@ public class AgentTaskTest {
                 .setCompressionType(TCompressionType.LZ4_FRAME)
                 .setTabletSchema(tabletSchema)
                 .setEnableTabletCreationOptimization(false)
+                .setTimeoutMs(3600)
                 .build();
 
         // drop
@@ -220,6 +221,8 @@ public class AgentTaskTest {
         Assert.assertEquals(TTaskType.CREATE, request.getTask_type());
         Assert.assertEquals(createReplicaTask.getSignature(), request.getSignature());
         Assert.assertNotNull(request.getCreate_tablet_req());
+        Assert.assertTrue(request.getCreate_tablet_req().isSetTimeout_ms());
+        Assert.assertEquals(3600, request.getCreate_tablet_req().getTimeout_ms());
 
         // drop
         TAgentTaskRequest request2 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, dropTask);
@@ -319,8 +322,9 @@ public class AgentTaskTest {
         tasks.add((CreateReplicaTask) createReplicaTask);
 
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
+
         Assert.assertThrows(RuntimeException.class,
-                () -> Deencapsulation.invoke(localMetastore, "sendCreateReplicaTasks", tasks, countDownLatch));
+                () -> Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch));
         Assert.assertEquals(0, countDownLatch.getCount());
     }
 
@@ -343,7 +347,7 @@ public class AgentTaskTest {
 
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
         try {
-            Deencapsulation.invoke(localMetastore, "sendCreateReplicaTasks", tasks, countDownLatch);
+            Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Connection refused"));
             Assert.assertEquals(0, countDownLatch.getCount());

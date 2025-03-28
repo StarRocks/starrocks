@@ -35,6 +35,8 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -47,8 +49,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpAuthManager;
 import com.starrocks.http.HttpAuthManager.SessionValue;
 import com.starrocks.http.rest.RestBaseResult;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -178,7 +178,11 @@ public class WebBaseAction extends BaseAction {
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
                 try {
-                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.NODE);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(currentUser);
+                    context.setCurrentRoleIds(currentUser);
+
+                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
                     checkUserOwnsAdminRole(currentUser);
                 }
@@ -219,7 +223,10 @@ public class WebBaseAction extends BaseAction {
 
             try {
                 try {
-                    Authorizer.checkSystemAction(sessionValue.currentUser, null, PrivilegeType.NODE);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(sessionValue.currentUser);
+                    context.setCurrentRoleIds(sessionValue.currentUser);
+                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
                     checkUserOwnsAdminRole(sessionValue.currentUser);
                 }
@@ -272,6 +279,8 @@ public class WebBaseAction extends BaseAction {
         String key = UUID.randomUUID().toString();
         DefaultCookie cookie = new DefaultCookie(STARROCKS_SESSION_ID, key);
         cookie.setMaxAge(STARROCKS_SESSION_EXPIRED_TIME);
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
         response.addCookie(cookie);
         HttpAuthManager.getInstance().addSessionValue(key, value);
     }

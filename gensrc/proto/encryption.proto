@@ -25,6 +25,7 @@ enum EncryptionAlgorithmPB {
     AES_128 = 1;
 }
 
+// NOTE: if add field to EncryptionKeyPB, EncryptionKeyPBAdapter must be modified accordingly
 message EncryptionKeyPB {
     optional int64 id = 1; // not required, e.g. DEK may not have an id
     optional int64 parent_id = 2; // not required, e.g. root key may not have parent

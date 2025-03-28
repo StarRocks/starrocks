@@ -16,7 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
@@ -39,7 +39,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class IcebergMetadataScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanNode.class);
@@ -83,7 +82,7 @@ public class IcebergMetadataScanNode extends ScanNode {
         return result;
     }
 
-    public void setupScanRangeLocations() throws UserException {
+    public void setupScanRangeLocations() throws StarRocksException {
         String catalogName = table.getCatalogName();
         String originDbName = table.getOriginDb();
         String originTableName = table.getOriginTable();

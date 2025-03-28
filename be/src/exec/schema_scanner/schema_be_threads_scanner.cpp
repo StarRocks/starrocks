@@ -31,6 +31,7 @@ SchemaScanner::ColumnDesc SchemaBeThreadsScanner::_s_columns[] = {
         {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"IDLE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
         {"FINISHED_TASKS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"BOUND_CPUS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaBeThreadsScanner::SchemaBeThreadsScanner()
@@ -53,7 +54,7 @@ Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 7) {
+            if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -93,6 +94,11 @@ Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
             case 7: {
                 // finished_tasks
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.finished_tasks);
+                break;
+            }
+            case 8: {
+                // num_bound_cpu_cores
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_bound_cpu_cores);
                 break;
             }
             default:

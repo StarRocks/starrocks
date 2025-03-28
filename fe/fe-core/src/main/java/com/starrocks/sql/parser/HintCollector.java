@@ -73,6 +73,12 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
     }
 
     @Override
+    public Void visitDataCacheSelectStatement(StarRocksParser.DataCacheSelectStatementContext context) {
+        extractHintToRight(context, context.SELECT().getSymbol().getTokenIndex());
+        return null;
+    }
+
+    @Override
     public Void visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         extractHintToRight(context);
         if (context.createTableAsSelectStatement() != null) {
@@ -101,7 +107,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     @Override
     public Void visitUpdateStatement(StarRocksParser.UpdateStatementContext context) {
-        extractHintToRight(context);
+        extractHintToRight(context, context.UPDATE().getSymbol().getTokenIndex());
         if (!(context.fromClause() instanceof StarRocksParser.DualContext)) {
             StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
             if (fromContext.relations() != null) {
@@ -113,7 +119,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
 
     @Override
     public Void visitDeleteStatement(StarRocksParser.DeleteStatementContext context) {
-        extractHintToRight(context);
+        extractHintToRight(context, context.DELETE().getSymbol().getTokenIndex());
         if (context.using != null) {
             context.using.relation().stream().forEach(this::visit);
         }
@@ -179,6 +185,17 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
+    public Void visitCreateBaselinePlanStatement(StarRocksParser.CreateBaselinePlanStatementContext ctx) {
+        // only collect plan hints
+        if (ctx.queryRelation().size() == 1) {
+            visit(ctx.queryRelation(0));
+        } else {
+            visit(ctx.queryRelation(1));
+        }
+        return null;
+    }
+
     private void extractHintToLeft(ParserRuleContext ctx) {
         Token semi = ctx.start;
         int i = semi.getTokenIndex();
@@ -192,6 +209,13 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         Token semi = ctx.start;
         int i = semi.getTokenIndex();
         List<Token> hintTokens = tokenStream.getHiddenTokensToRight(i, HINT_CHANNEL);
+        if (hintTokens != null) {
+            contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
+        }
+    }
+
+    private void extractHintToRight(ParserRuleContext ctx, int fromIndex) {
+        List<Token> hintTokens = tokenStream.getHiddenTokensToRight(fromIndex, HINT_CHANNEL);
         if (hintTokens != null) {
             contextWithTokenMap.computeIfAbsent(ctx, e -> new ArrayList<>()).addAll(hintTokens);
         }

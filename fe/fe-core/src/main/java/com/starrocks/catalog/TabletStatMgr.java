@@ -36,8 +36,10 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -107,14 +109,16 @@ public class TabletStatMgr extends FrontendDaemon {
                 continue;
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
-            try {
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                    long totalRowCount = 0L;
-                    if (!table.isNativeTableOrMaterializedView()) {
-                        continue;
-                    }
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                long totalRowCount = 0L;
+                if (!table.isNativeTableOrMaterializedView()) {
+                    continue;
+                }
 
+                // NOTE: calculate the row first with read lock, then update the stats with write lock
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
+                try {
                     OlapTable olapTable = (OlapTable) table;
                     for (Partition partition : olapTable.getAllPartitions()) {
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -122,10 +126,12 @@ public class TabletStatMgr extends FrontendDaemon {
                             for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                                     IndexExtState.VISIBLE)) {
                                 long indexRowCount = 0L;
+                                // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : index.getTablets()) {
                                     indexRowCount += tablet.getRowCount(version);
                                 } // end for tablets
-                                index.setRowCount(indexRowCount);
+                                indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
+                                        indexRowCount);
                                 if (!olapTable.isTempPartition(partition.getId())) {
                                     totalRowCount += indexRowCount;
                                 }
@@ -134,10 +140,30 @@ public class TabletStatMgr extends FrontendDaemon {
                     } // end for partitions
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
-                    adjustStatUpdateRows(table.getId(), totalRowCount);
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 }
-            } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+
+                // update
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+                try {
+                    OlapTable olapTable = (OlapTable) table;
+                    for (Partition partition : olapTable.getAllPartitions()) {
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex index :
+                                    physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                Long indexRowCount =
+                                        indexRowCountMap.get(Pair.create(physicalPartition.getId(), index.getId()));
+                                if (indexRowCount != null) {
+                                    index.setRowCount(indexRowCount);
+                                }
+                            }
+                        }
+                    }
+                    adjustStatUpdateRows(table.getId(), totalRowCount);
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+                }
             }
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
@@ -149,7 +175,8 @@ public class TabletStatMgr extends FrontendDaemon {
         if (!RunMode.isSharedNothingMode()) {
             return;
         }
-        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backends =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
         for (Backend backend : backends.values()) {
@@ -214,20 +241,21 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void adjustStatUpdateRows(long tableId, long totalRowCount) {
-        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
         if (meta != null) {
-            meta.setUpdateRows(totalRowCount);
+            meta.setTotalRows(totalRowCount);
+            meta.resetDeltaRows();
         }
     }
 
     @NotNull
     private Collection<PhysicalPartition> getPartitions(@NotNull Database db, @NotNull OlapTable table) {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             return table.getPhysicalPartitions();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -239,14 +267,14 @@ public class TabletStatMgr extends FrontendDaemon {
         String tableName = table.getName();
         long partitionId = partition.getId();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
             List<Tablet> tablets = new ArrayList<>(partition.getBaseIndex().getTablets());
             return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -354,10 +382,13 @@ public class TabletStatMgr extends FrontendDaemon {
                     LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                     Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                     responseList.add(responseFuture);
-                    LOG.debug("Sent tablet stat collection task to node {} for partition {} of version {}. tablet count={}",
+                    LOG.debug(
+                            "Sent tablet stat collection task to node {} for partition {} of version {}. tablet " +
+                                    "count={}",
                             node.getHost(), debugName(), version, entry.getValue().size());
                 } catch (Throwable e) {
-                    LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(), debugName(),
+                    LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(),
+                            debugName(),
                             e.getMessage());
                 }
             }

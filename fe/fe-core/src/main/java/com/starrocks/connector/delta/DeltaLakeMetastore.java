@@ -22,16 +22,22 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
+import io.delta.kernel.Table;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
+import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.InternalScanFileUtils;
+import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
@@ -46,17 +52,19 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
+    private static final int MEMORY_META_SAMPLES = 10;
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
     protected final DeltaLakeCatalogProperties properties;
 
-    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache;
-    private final LoadingCache<String, List<JsonNode>> jsonCache;
+    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     public DeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration,
                               DeltaLakeCatalogProperties properties) {
@@ -76,8 +84,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
-                    public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first, pair.second, hdfsConfiguration);
+                    public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
                     }
                 });
 
@@ -89,10 +97,15 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
-                    public List<JsonNode> load(@NotNull String filePath) throws IOException {
-                        return DeltaLakeJsonHandler.readJsonFile(filePath, hdfsConfiguration);
+                    public List<JsonNode> load(@NotNull DeltaLakeFileStatus fileStatus) throws IOException {
+                        return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), hdfsConfiguration);
                     }
                 });
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
     }
 
     @Override
@@ -111,7 +124,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     }
 
     @Override
-    public DeltaLakeTable getTable(String dbName, String tableName) {
+    public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
         MetastoreTable metastoreTable = getMetastoreTable(dbName, tableName);
         if (metastoreTable == null) {
             LOG.error("get metastore table failed. dbName: {}, tableName: {}", dbName, tableName);
@@ -120,9 +133,26 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         String path = metastoreTable.getTableLocation();
         long createTime = metastoreTable.getCreateTime();
+        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
+        SnapshotImpl snapshot;
 
-        Engine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
-        return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tableName, path, deltaLakeEngine, createTime);
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
+            Table deltaTable = Table.forPath(deltaLakeEngine, path);
+            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaLakeEngine);
+        } catch (TableNotFoundException e) {
+            LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalogName, dbName, tableName, e.getMessage());
+            throw new SemanticException("Failed to find Delta table for " + catalogName + "." + dbName + "." + tableName);
+        } catch (Exception e) {
+            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}", catalogName, dbName, tableName, e.getMessage());
+            throw new SemanticException("Failed to get latest snapshot for " + catalogName + "." + dbName + "." + tableName);
+        }
+        return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, createTime, path);
+    }
+
+    @Override
+    public DeltaLakeTable getTable(String dbName, String tableName) {
+        DeltaLakeSnapshot snapshot = getLatestSnapshot(dbName, tableName);
+        return DeltaUtils.convertDeltaSnapshotToSRTable(catalogName, snapshot);
     }
 
     @Override
@@ -172,5 +202,26 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     public void invalidateAll() {
         checkpointCache.invalidateAll();
         jsonCache.invalidateAll();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return Map.of("checkpointCache", checkpointCache.size(), "jsonCache", jsonCache.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> jsonSamples = jsonCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+
+        List<Object> checkpointSamples = checkpointCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+
+        return Lists.newArrayList(Pair.create(jsonSamples, jsonCache.size()),
+                Pair.create(checkpointSamples, checkpointCache.size()));
     }
 }

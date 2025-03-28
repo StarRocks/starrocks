@@ -24,7 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -70,14 +70,12 @@ public class WarehouseManagerTest {
                 () -> mgr.getAllComputeNodeIds("a"));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getAllComputeNodeIds(1L));
-        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse name: a not exist.",
-                () -> mgr.getComputeNodeId("a", null));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getComputeNodeId(1L, null));
     }
 
     @Test
-    public void testGetAliveComputeNodes() throws UserException {
+    public void testGetAliveComputeNodes() throws StarRocksException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public NodeMgr getNodeMgr() {
@@ -125,7 +123,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws UserException {
+    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws StarRocksException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(true);
@@ -159,7 +157,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -202,7 +200,7 @@ public class WarehouseManagerTest {
     }
 
     @Test
-    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws UserException {
+    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws StarRocksException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -236,7 +234,7 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -276,11 +274,89 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, "aaa", null, null);
+        Partition partition = new Partition(123, 456, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
-                () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1));
+                () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
+                        index, Collections.emptyList(), 1));
         Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
+    }
+
+    @Test
+    public void testSelectWorkerGroupByWarehouseId_checkAliveNodesOnce(@Mocked WarehouseManager mockWarehouseMgr)
+            throws StarRocksException {
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        b1.setBePort(9060);
+        b1.setAlive(false);
+        b1.setWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                return systemInfo;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return b1;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+                if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
+                    return Lists.newArrayList(b1.getId());
+                }
+                return Lists.newArrayList();
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockWarehouseMgr;
+            }
+
+        };
+
+        ComputeNode livingCn = new ComputeNode();
+        livingCn.setAlive(true);
+        new Expectations() {
+            {
+                // This is the point of the test -- we only want to call this once even though we're calling
+                // addScanRangeLocations multiple times.
+                mockWarehouseMgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                times = 1;
+                result = Lists.newArrayList(livingCn);
+            }
+        };
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        OlapScanNode scanNode = newOlapScanNode();
+        Partition partition = new Partition(123, 456, "aaa", null, null);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
+        // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
+        // getAliveComputeNodes.
+        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
     }
 
     private OlapScanNode newOlapScanNode() {

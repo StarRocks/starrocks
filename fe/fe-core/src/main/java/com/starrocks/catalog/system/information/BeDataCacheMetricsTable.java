@@ -31,6 +31,7 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 
 public class BeDataCacheMetricsTable {
+    private static final String NAME = "be_datacache_metrics";
 
     public static SystemTable create() {
         ArrayList<StructField> dirSpacesFields = new ArrayList<>();
@@ -42,7 +43,7 @@ public class BeDataCacheMetricsTable {
         MapType usedBytesDetailType =
                 new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.BIGINT));
 
-        return new SystemTable(SystemId.BE_DATACACHE_METRICS, "be_datacache_metrics", Table.TableType.SCHEMA,
+        return new SystemTable(SystemId.BE_DATACACHE_METRICS, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("STATUS", ScalarType.createVarchar(NAME_CHAR_LEN))

@@ -74,7 +74,7 @@ Status MysqlScanner::open() {
         return Status::InternalError("mysql init failed.");
     }
 
-    VLOG(1) << "MysqlScanner::Connect";
+    VLOG(2) << "MysqlScanner::Connect";
 
     if (nullptr == mysql_real_connect(_my_conn, _my_param.host.c_str(), _my_param.user.c_str(),
                                       _my_param.passwd.c_str(), _my_param.db.c_str(), atoi(_my_param.port.c_str()),
@@ -164,35 +164,39 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
 
     // In Filter part.
     if (filters_in.size() > 0) {
-        if (!is_filter_initial) {
-            is_filter_initial = true;
-            _sql_str += " WHERE (";
-        } else {
-            _sql_str += " AND (";
-        }
-
-        bool is_first_conjunct = true;
+        std::vector<std::string> conjuncts;
         for (auto& iter : filters_in) {
-            if (!is_first_conjunct) {
-                _sql_str += " AND (";
-            }
-            is_first_conjunct = false;
-            if (iter.second.size() > 0) {
-                auto curr = iter.second.begin();
-                auto end = iter.second.end();
-                _sql_str += iter.first + " in (";
-                _sql_str += *curr;
-                ++curr;
-
-                // collect optional values.
-                while (curr != end) {
-                    _sql_str += ", " + *curr;
-                    ++curr;
+            if (iter.second.size() > 0 || filters_null_in_set[iter.first]) {
+                std::string tmp;
+                tmp += "(" + iter.first + " in (";
+                for (auto& curr : iter.second) {
+                    tmp += curr + ",";
                 }
                 if (filters_null_in_set[iter.first]) {
-                    _sql_str += ", null";
+                    tmp += "null";
                 }
-                _sql_str += ")) ";
+                if (tmp.back() == ',') {
+                    tmp.pop_back();
+                }
+                tmp += "))";
+                conjuncts.emplace_back(tmp);
+            } else {
+                // there is in predicate, but no value in it
+                // so there is no row from mysql node.
+                conjuncts.emplace_back("(0 = 1)");
+            }
+        }
+
+        if (conjuncts.size() > 0) {
+            if (!is_filter_initial) {
+                is_filter_initial = true;
+                _sql_str += " WHERE ";
+            } else {
+                _sql_str += " AND ";
+            }
+            _sql_str += conjuncts.at(0);
+            for (size_t i = 1; i < conjuncts.size(); i++) {
+                _sql_str += " AND " + conjuncts.at(i);
             }
         }
     }

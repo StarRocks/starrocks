@@ -67,6 +67,7 @@ public:
 
     VectorizedInConstPredicate(const TExprNode& node) : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
+    // _string_values is ColumnPtr, not deep copied, so once opened, should not be modified.
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other),
               _is_not_in(other._is_not_in),
@@ -74,7 +75,10 @@ public:
               _null_in_set(other._null_in_set),
               _is_join_runtime_filter(other._is_join_runtime_filter),
               _eq_null(other._eq_null),
-              _array_size(other._array_size) {}
+              _array_size(other._array_size),
+              _array_buffer(other._array_buffer),
+              _hash_set(other._hash_set),
+              _string_values(other._string_values) {}
 
     ~VectorizedInConstPredicate() override = default;
 
@@ -218,7 +222,7 @@ public:
         }
 
         if (lhs->is_constant()) {
-            return ConstColumn::create(result, size);
+            return ConstColumn::create(std::move(result), size);
         }
         return result;
     }
@@ -234,7 +238,7 @@ public:
 
         uint8_t* null_data = builder.null_column()->get_data().data();
         memset(null_data, 0x0, size);
-        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
+        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column().get())->get_data().data();
 
         auto update_row = [&](int row) {
             if (viewer.is_null(row)) {
@@ -381,6 +385,8 @@ public:
 
     bool null_in_set() const { return _null_in_set; }
 
+    bool is_eq_null() const { return _eq_null; }
+
     void set_null_in_set(bool v) { _null_in_set = v; }
 
     bool is_join_runtime_filter() const { return _is_join_runtime_filter; }
@@ -420,7 +426,7 @@ private:
 
     in_const_pred_detail::LHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
-    std::vector<ColumnPtr> _string_values;
+    Columns _string_values;
 };
 
 class VectorizedInConstPredicateGeneric final : public Predicate {
@@ -491,7 +497,7 @@ public:
         if (all_const) {
             dest_size = 1;
         }
-        BooleanColumn::Ptr res = BooleanColumn::create(dest_size, _is_not_in);
+        BooleanColumn::MutablePtr res = BooleanColumn::create(dest_size, _is_not_in);
         NullColumnPtr res_null = NullColumn::create(dest_size, DATUM_NULL);
         auto& res_data = res->get_data();
         auto& res_null_data = res_null->get_data();
@@ -525,7 +531,7 @@ public:
             if (res_null_data[0]) { // return only_null column
                 return ColumnHelper::create_const_null_column(size);
             } else {
-                return ConstColumn::create(res, size);
+                return ConstColumn::create(std::move(res), size);
             }
         } else {
             if (SIMD::count_nonzero(res_null_data) > 0) {
@@ -547,6 +553,8 @@ public:
             : _state(state), _pool(pool), _expr(expr) {}
 
     Status create();
+    // For string type, this interface will only copy the slice array, not add ColumnPtr,
+    // so be careful to manage the life cycle of source ColumnPtr.
     void add_values(const ColumnPtr& column, size_t column_offset);
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }

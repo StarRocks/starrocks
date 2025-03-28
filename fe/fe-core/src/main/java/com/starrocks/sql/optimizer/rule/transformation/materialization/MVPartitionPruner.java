@@ -38,6 +38,8 @@ import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 
 import java.util.List;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
 public class MVPartitionPruner {
     private final OptimizerContext optimizerContext;
     private final MvRewriteContext mvRewriteContext;
@@ -49,19 +51,6 @@ public class MVPartitionPruner {
 
     public OptExpression prunePartition(OptExpression queryExpression) {
         return queryExpression.getOp().accept(new MVPartitionPrunerVisitor(), queryExpression, null);
-    }
-
-    /**
-     * For input query expression, reset/clear pruned partitions and return new query expression to be pruned again.
-     */
-    public static LogicalOlapScanOperator resetSelectedPartitions(LogicalOlapScanOperator olapScanOperator) {
-        final LogicalOlapScanOperator.Builder mvScanBuilder = OperatorBuilderFactory.build(olapScanOperator);
-        // reset original partition predicates to prune partitions/tablets again
-        mvScanBuilder.withOperator(olapScanOperator)
-                .setSelectedPartitionId(null)
-                .setPrunedPartitionPredicates(Lists.newArrayList())
-                .setSelectedTabletId(Lists.newArrayList());
-        return mvScanBuilder.build();
     }
 
     private class MVPartitionPrunerVisitor extends OptExpressionVisitor<OptExpression, Void> {
@@ -84,8 +73,8 @@ public class MVPartitionPruner {
 
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
+            LogicalScanOperator result = null;
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
-
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) (scanOperator);
@@ -97,12 +86,13 @@ public class MVPartitionPruner {
                 if (isAddMvPrunePredicate) {
                     builder.setPredicate(getMVPrunePredicate(olapScanOperator));
                 }
-                LogicalOlapScanOperator newOlapScanOperator = builder.build();
+                LogicalOlapScanOperator cloned = builder.build();
 
                 // prune partition
                 List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
-                if (selectedPartitionIds == null || selectedPartitionIds.isEmpty()) {
-                    newOlapScanOperator =  OptOlapPartitionPruner.prunePartitions(newOlapScanOperator);
+                LogicalOlapScanOperator newOlapScanOperator = cloned;
+                if (selectedPartitionIds == null) {
+                    newOlapScanOperator =  OptOlapPartitionPruner.prunePartitions(cloned);
                 }
 
                 // prune distribution key
@@ -121,7 +111,7 @@ public class MVPartitionPruner {
                 }
 
                 LogicalOlapScanOperator.Builder rewrittenBuilder = new LogicalOlapScanOperator.Builder();
-                scanOperator = rewrittenBuilder.withOperator(newOlapScanOperator)
+                result = rewrittenBuilder.withOperator(newOlapScanOperator)
                         .setPredicate(MvUtils.canonizePredicate(scanPredicate))
                         .setSelectedTabletId(selectedTabletIds)
                         .build();
@@ -135,10 +125,13 @@ public class MVPartitionPruner {
                 Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
                 LogicalScanOperator copiedScanOperator =
                         (LogicalScanOperator) builder.withOperator(scanOperator).build();
-                scanOperator = OptExternalPartitionPruner.prunePartitions(optimizerContext,
+                result = OptExternalPartitionPruner.prunePartitions(optimizerContext,
                         copiedScanOperator);
             }
-            return OptExpression.create(scanOperator);
+            if (result != null) {
+                result.setOpRuleBit(OP_PARTITION_PRUNED);
+            }
+            return OptExpression.create(result);
         }
 
         public OptExpression visit(OptExpression optExpression, Void context) {

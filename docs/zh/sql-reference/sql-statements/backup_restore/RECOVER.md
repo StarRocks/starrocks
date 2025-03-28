@@ -5,8 +5,6 @@ keywords: ['beifen']
 
 # RECOVER
 
-## 功能
-
 恢复之前通过 DROP 操作删除的 database、table 或者 partition。DROP 操作后只有在指定的时间内才能通过 RECOVER 恢复数据，超过这个时间无法恢复。该时间由 FE 动态参数 `catalog_trash_expire_second` 控制，默认 1 天。
 
 通过 [TRUNCATE TABLE](../table_bucket_part_index/TRUNCATE_TABLE.md) 命令删除的数据无法恢复。

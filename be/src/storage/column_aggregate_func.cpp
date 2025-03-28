@@ -18,8 +18,13 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/agg/agg_state_union.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "runtime/exec_env.h"
+#include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "storage/column_aggregator.h"
 #include "util/percentile_value.h"
 
@@ -48,7 +53,7 @@ template <typename ColumnType, typename StateType>
 class ReplaceAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
+        const auto* data = down_cast<const ColumnType*>(src.get())->get_data().data();
         this->data() = data[row];
     }
 
@@ -63,7 +68,7 @@ template <>
 class ReplaceAggregator<BitmapColumn, BitmapValue> final : public ValueColumnAggregator<BitmapColumn, BitmapValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<BitmapColumn*>(src.get());
+        const auto* data = down_cast<const BitmapColumn*>(src.get());
         this->data() = *(data->get_object(row));
     }
 
@@ -83,7 +88,7 @@ class ReplaceAggregator<HyperLogLogColumn, HyperLogLog> final
         : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<HyperLogLogColumn*>(src.get());
+        auto* data = down_cast<const HyperLogLogColumn*>(src.get());
         this->data() = *(data->get_object(row));
     }
 
@@ -103,7 +108,7 @@ class ReplaceAggregator<PercentileColumn, PercentileValue> final
         : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<PercentileColumn*>(src.get());
+        const auto* data = down_cast<const PercentileColumn*>(src.get());
         this->data() = *(data->get_object(row));
     }
 
@@ -124,13 +129,13 @@ public:
     void reset() override { this->data().reset(); }
 
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
+        const auto* col = down_cast<const BinaryColumn*>(src.get());
         Slice data = col->get_slice(row);
         this->data().update(data);
     }
 
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
+        auto* col = down_cast<const BinaryColumn*>(src.get());
         Slice data = col->get_slice(end - 1);
         this->data().update(data);
     }
@@ -188,7 +193,7 @@ public:
     void update_source(const ColumnPtr& src) override {
         _source_column = src;
 
-        auto* nullable = down_cast<NullableColumn*>(src.get());
+        const auto* nullable = down_cast<const NullableColumn*>(src.get());
         _child->update_source(nullable->data_column());
         _null_child->update_source(nullable->null_column());
     }
@@ -251,13 +256,16 @@ public:
     AggFuncBasedValueAggregator(AggStateDesc* agg_state_desc, std::unique_ptr<AggregateFunction> agg_state_unoin)
             : _agg_func(agg_state_unoin.get()) {
         _agg_state_unoin = std::move(agg_state_unoin);
-        _func_ctx = FunctionContext::create_context(nullptr, nullptr, agg_state_desc->get_return_type(),
-                                                    agg_state_desc->get_arg_types());
+        _runtime_state = std::make_unique<RuntimeState>(ExecEnv::GetInstance());
+        _mem_pool = std::make_unique<MemPool>();
+        _func_ctx = FunctionContext::create_context(_runtime_state.get(), _mem_pool.get(),
+                                                    agg_state_desc->get_return_type(), agg_state_desc->get_arg_types());
         _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
         _agg_func->create(_func_ctx, _state);
     }
 
     ~AggFuncBasedValueAggregator() override {
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
         if (_state != nullptr) {
             _agg_func->destroy(_func_ctx, _state);
             std::free(_state);
@@ -322,7 +330,11 @@ private:
     const AggregateFunction* _agg_func;
     FunctionContext* _func_ctx = nullptr;
     AggDataPtr _state{nullptr};
+
+    // used for common aggregate functions
     std::unique_ptr<AggregateFunction> _agg_state_unoin = nullptr;
+    std::unique_ptr<RuntimeState> _runtime_state = nullptr;
+    std::unique_ptr<MemPool> _mem_pool = nullptr;
 };
 
 #define CASE_DEFAULT_WARNING(TYPE)                                             \
@@ -445,8 +457,8 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(cons
         CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
                                    << ", is_nullable=" << field->is_nullable()
                                    << ", agg_state_desc=" << agg_state_desc->debug_string();
-        // TODO(fixme): use agg_state_union instead of agg_func
-        return std::make_unique<AggFuncBasedValueAggregator>(std::move(agg_func));
+        auto agg_state_union = std::make_unique<AggStateUnion>(*agg_state_desc, agg_func);
+        return std::make_unique<AggFuncBasedValueAggregator>(agg_state_desc, std::move(agg_state_union));
     } else {
         auto func_name = get_string_by_aggregation_type(method);
         // TODO(alvin): To keep compatible with old code, when type must not be the legacy type,

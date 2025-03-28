@@ -15,6 +15,7 @@
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -47,7 +48,8 @@ bool MemoryScratchSinkOperator::is_finished() const {
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
     }
     return Status::OK();
 }

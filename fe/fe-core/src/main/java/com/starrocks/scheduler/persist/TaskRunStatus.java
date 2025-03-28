@@ -37,17 +37,21 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class TaskRunStatus implements Writable {
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
+
+    // Sort task run status by create time in descending order
+    public static final Comparator<TaskRunStatus> COMPARATOR_BY_CREATE_TIME_DESC =
+            Comparator.comparingLong(TaskRunStatus::getCreateTime).reversed();
 
     // A refresh may contain a batch of task runs, startTaskRunId is to mark the unique id of the batch task run status.
     // You can use the startTaskRunId to find the batch of task runs.
@@ -372,11 +376,9 @@ public class TaskRunStatus implements Writable {
         if (!state.isFinishState()) {
             return false;
         }
-        if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
-                !Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart())) {
-            return false;
-        }
-        return true;
+        return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
     }
 
     public long calculateRefreshProcessDuration() {
@@ -427,17 +429,20 @@ public class TaskRunStatus implements Writable {
         return true;
     }
 
+    public String getDefinition() {
+        return definition;
+    }
+
+    public void setDefinition(String definition) {
+        this.definition = definition;
+    }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public String toString() {

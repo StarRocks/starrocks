@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['suoyin']
+sidebar_position: 20
 ---
 
 # Bitmap 索引
@@ -101,7 +102,7 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
 - 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md)。
 
     ```SQL
-    CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
+    CREATE INDEX lo_quantity_index ON lineorder_partial (lo_quantity) USING BITMAP;
     ```
 
 ### 创建进度
@@ -408,7 +409,7 @@ select count(1) from lineorder_without_index where lo_partkey=10000;
 
 **查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_partkey` 列数据的 page 全部读出来，再进行谓词过滤。
 
-总共耗时约 0.43 ms，**其中加载数据花了 0.39 ms**，谓词过滤花了 0.02 ms。
+总共耗时约 0.43 s，**其中加载数据花了 0.39 s**，谓词过滤花了 0.02 s。
 
 ```Bash
 PullRowNum: 255 // 返回结果集的行数。

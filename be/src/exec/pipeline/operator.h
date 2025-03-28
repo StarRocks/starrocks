@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
@@ -148,7 +149,7 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    MemTracker* mem_tracker() const { return _mem_tracker; }
+    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
@@ -181,7 +182,7 @@ public:
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter = nullptr);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
-    void eval_runtime_bloom_filters(Chunk* chunk);
+    virtual void eval_runtime_bloom_filters(Chunk* chunk);
 
     // Pseudo plan_node_id for final sink, such as result_sink, table_sink
     static const int32_t s_pseudo_plan_node_id_for_final_sink;
@@ -249,6 +250,9 @@ public:
         }
     }
     int32_t get_driver_sequence() const { return _driver_sequence; }
+    void set_runtime_filter_probe_sequence(int32_t probe_sequence) {
+        this->_runtime_filter_probe_sequence = probe_sequence;
+    }
     OperatorFactory* get_factory() const { return _factory; }
 
     // memory to be reserved before executing push_chunk
@@ -267,6 +271,13 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
+    virtual void update_exec_stats(RuntimeState* state);
+
+    void set_observer(PipelineObserver* observer) { _observer = observer; }
+    PipelineObserver* observer() const { return _observer; }
+
+    void _init_rf_counters(bool init_bloom);
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -275,6 +286,7 @@ protected:
     const int32_t _plan_node_id;
     const bool _is_subordinate;
     const int32_t _driver_sequence;
+    int32_t _runtime_filter_probe_sequence;
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
     // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.
@@ -287,7 +299,7 @@ protected:
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
-    RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+    RuntimeMembershipFilterEvalContext _bloom_filter_eval_context;
 
     spill::OperatorMemoryResourceManager _mem_resource_manager;
 
@@ -321,15 +333,12 @@ protected:
     // such as OlapScanOperator( use separated IO thread to execute the IO task)
     std::atomic_int64_t _last_growth_cpu_time_ns = 0;
 
+    PipelineObserver* _observer = nullptr;
+
 private:
-    void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
 
-    // All the memory usage will be automatically added to this MemTracker by memory allocate hook.
-    // DO NOT use this MemTracker manually.
-    // The MemTracker is owned by QueryContext, so that all the operators with the same plan_node_id can share
-    // the same MemTracker.
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
     std::vector<ExprContext*> _runtime_in_filters;
 };
 
@@ -406,6 +415,11 @@ public:
 
     // Whether it has any runtime filter built by TopN node.
     bool has_topn_filter() const;
+
+    // try to get runtime filter from cache
+    void acquire_runtime_filter(RuntimeState* state);
+
+    virtual bool support_event_scheduler() const { return false; }
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);

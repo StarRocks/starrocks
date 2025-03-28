@@ -25,6 +25,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
@@ -38,7 +39,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
  * This class extends the primary identifier of a compute node with computing capabilities
  * and no storage capacity。
  */
-public class ComputeNode implements IComputable, Writable {
+public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(ComputeNode.class);
 
     @SerializedName("id")
@@ -73,6 +73,8 @@ public class ComputeNode implements IComputable, Writable {
     private volatile int beRpcPort; // be rpc port
     @SerializedName("brpcPort")
     private volatile int brpcPort = -1;
+    @SerializedName("arrowFlightPort")
+    private volatile int arrowFlightPort = -1; // be arrow port
 
     @SerializedName("cpuCores")
     private volatile int cpuCores = 0; // Cpu cores of node
@@ -139,7 +141,7 @@ public class ComputeNode implements IComputable, Writable {
      * - HeartbeatResponse.AliveStatus: {ALIVE, NOT_ALIVE}
      * - Backend.BackendState: {using, offline, free}
      * NOTE: The status will be serialized along with the ComputeNode object,
-     *   so be cautious changing the enum name.
+     * so be cautious changing the enum name.
      */
     public enum Status {
         CONNECTING,         // New added node, no heartbeat probing yet
@@ -159,6 +161,7 @@ public class ComputeNode implements IComputable, Writable {
         this.bePort = 0;
         this.httpPort = 0;
         this.beRpcPort = 0;
+        this.arrowFlightPort = -1;
 
         this.backendState = Backend.BackendState.free.ordinal();
 
@@ -174,6 +177,7 @@ public class ComputeNode implements IComputable, Writable {
         this.bePort = -1;
         this.httpPort = -1;
         this.beRpcPort = -1;
+        this.arrowFlightPort = -1;
         this.lastUpdateMs = -1L;
         this.lastStartTime = -1L;
 
@@ -246,6 +250,14 @@ public class ComputeNode implements IComputable, Writable {
 
     public int getBrpcPort() {
         return brpcPort;
+    }
+
+    public int getArrowFlightPort() {
+        return arrowFlightPort;
+    }
+
+    public void setArrowFlightPort(int arrowFlightPort) {
+        this.arrowFlightPort = arrowFlightPort;
     }
 
     public TNetworkAddress getAddress() {
@@ -333,9 +345,27 @@ public class ComputeNode implements IComputable, Writable {
         this.heartbeatPort = heartbeatPort;
     }
 
-    public void setAlive(boolean isAlive) {
-        this.isAlive.set(isAlive);
-        this.status = isAlive ? Status.OK : Status.DISCONNECTED;
+    /** Set liveness and adjust the Internal status accordingly
+     * |    Status    |  IsAlive |
+     * |  CONNECTING  |   false  |
+     * |     OK       |   true   |
+     * |  SHUTDOWN    |   false  |
+     * | DISCONNECTED |   false  |
+     */
+    public boolean setAlive(boolean isAlive) {
+        boolean success = this.isAlive.compareAndSet(!isAlive, isAlive);
+        if (success) {
+            if (isAlive) {
+                // force reset the status to OK under no condition
+                this.status = Status.OK;
+            } else {
+                if (this.status == Status.OK) {
+                    // force set to disconnected if target status is not alive but current status is OK
+                    this.status = Status.DISCONNECTED;
+                }
+            }
+        }
+        return success;
     }
 
     public void setBePort(int agentPort) {
@@ -429,11 +459,7 @@ public class ComputeNode implements IComputable, Writable {
         groupIdToUsage.set(newGroupIdToUsage);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
 
     public static ComputeNode read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -555,23 +581,18 @@ public class ComputeNode implements IComputable, Writable {
                 this.starletPort = hbResponse.getStarletPort();
             }
 
+            if (this.arrowFlightPort != hbResponse.getArrowFlightPort()) {
+                isChanged = true;
+                this.arrowFlightPort = hbResponse.getArrowFlightPort();
+            }
+
             if (RunMode.isSharedDataMode() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
                 isChanged = true;
                 this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();
-            if (!isAlive.get()) {
-                isChanged = true;
-                // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
-                // This line to set 'lastStartTime' will be removed in due time
-                this.lastStartTime = hbResponse.getHbTime();
-                LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
-                setAlive(true);
-            } else if (this.lastStartTime <= 0) {
-                this.lastStartTime = hbResponse.getHbTime();
-            }
-
+            // RebootTime will be `-1` if not set from backend.
             if (hbResponse.getRebootTime() > this.lastStartTime) {
                 this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
@@ -579,6 +600,18 @@ public class ComputeNode implements IComputable, Writable {
                 // but alive state may be not changed since the BE may be restarted in a short time
                 // we need notify coordinator to cancel query
                 becomeDead = true;
+            }
+
+            if (!isAlive.get()) {
+                isChanged = true;
+                if (hbResponse.getRebootTime() == -1) {
+                    // Only update lastStartTime by hbResponse.hbTime if the RebootTime is not set from an OK-response.
+                    // Just for backwards compatibility purpose in case the response is from an ancient version
+                    this.lastStartTime = hbResponse.getHbTime();
+                }
+                LOG.info("{} is alive, last start time: {}, hbTime: {}", this.toString(), this.lastStartTime,
+                        hbResponse.getHbTime());
+                setAlive(true);
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
@@ -614,7 +647,7 @@ public class ComputeNode implements IComputable, Writable {
                 needSetAlive = true;
             } else {
                 this.heartbeatRetryTimes++;
-                if (this.heartbeatRetryTimes >= Config.heartbeat_retry_times) {
+                if (this.heartbeatRetryTimes > Config.heartbeat_retry_times) {
                     deadMessage = "exceed heartbeatRetryTimes";
                     needSetAlive = true;
                     lastMissingHeartbeatTime = System.currentTimeMillis();
@@ -651,10 +684,12 @@ public class ComputeNode implements IComputable, Writable {
                     HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
-                // The metadata before the upgrade does not contain hbResponse.aliveStatus,
-                // in which case the alive status needs to be handled according to the original logic
+                // Override the aliveStatus detected by the counter `heartbeatRetryTimes`, in two cases
+                // 1. the follower has a different `heartbeatRetryTimes` value compared to the Leader, the follower
+                //    must follow the leader's aliveStatus decision.
+                // 2. editLog replay in leader FE's startup, where the value of `heartbeatRetryTimes` is changed.
                 boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
-                if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
+                if (setAlive(newIsAlive)) {
                     LOG.info("{} alive status is changed to {}", this, newIsAlive);
                 }
             }
@@ -725,6 +760,15 @@ public class ComputeNode implements IComputable, Writable {
 
     public Status getStatus() {
         return status;
+    }
+
+    @Override
+    public void gsonPostProcess() {
+        if (isAlive.get()) {
+            // Upgraded from an old version where the status is not properly set.
+            // reset the status according to the aliveness
+            status = Status.OK;
+        }
     }
 
     public static class ResourceGroupUsage {

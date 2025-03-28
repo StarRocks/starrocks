@@ -83,6 +83,11 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
             driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
                                                       fragment_ctx->next_driver_id());
         }
+
+        if (state->enable_event_scheduler()) {
+            driver->assign_observer();
+        }
+
         setup_drivers_profile(driver);
         driver->set_workgroup(workgroup);
         _drivers.emplace_back(std::move(driver));
@@ -104,9 +109,9 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
             if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
-                scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor());
+                scan_operator->set_scan_executor(workgroup->executors()->connector_scan_executor());
             } else {
-                scan_operator->set_scan_executor(state->exec_env()->scan_executor());
+                scan_operator->set_scan_executor(workgroup->executors()->scan_executor());
             }
         }
     }
@@ -117,7 +122,7 @@ void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
 }
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
-    runtime_profile()->add_info_string("isGroupExecution",
+    runtime_profile()->add_info_string("IsGroupExecution",
                                        _execution_group->is_colocate_exec_group() ? "true" : "false");
     runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     auto* dop_counter =

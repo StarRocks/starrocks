@@ -45,7 +45,7 @@ public:
         return Status::OK();
     }
 
-    void process_row(const std::vector<BitmapValue*>& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
+    void process_row(const Buffer<BitmapValue*>& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
                      Column* dst_bitmap_col, UInt32Column* dst_offset_col, uint32_t* compact_offset) const {
         auto* bitmap = src_bitmap_col[row];
 
@@ -118,7 +118,7 @@ public:
             return {};
         }
         dst_columns.emplace_back(std::move(dst_bitmap_col));
-        return std::make_pair(dst_columns, dst_offset_col);
+        return std::make_pair(std::move(dst_columns), std::move(dst_offset_col));
     }
 };
 } // namespace starrocks

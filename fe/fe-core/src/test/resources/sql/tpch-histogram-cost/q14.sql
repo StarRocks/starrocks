@@ -9,15 +9,15 @@ RESULT SINK
 |  32 <-> 100.0 * [30: sum, DOUBLE, true] / [31: sum, DOUBLE, true]
 |  cardinality: 1
 |  column statistics:
-|  * expr-->[-Infinity, Infinity, 0.0, 8.0, 1.0] ESTIMATE
+|  * expr-->[0.0, 12942.348008385745, 0.0, 8.0, 1.0] ESTIMATE
 |
 8:AGGREGATE (merge finalize)
 |  aggregate: sum[([30: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([31: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 8.0, 1.0] ESTIMATE
+|  * expr-->[0.0, 12942.348008385745, 0.0, 8.0, 1.0] ESTIMATE
 |
 7:EXCHANGE
 distribution type: GATHER
@@ -30,17 +30,17 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 07
 
 6:AGGREGATE (update serialize)
-|  aggregate: sum[(if[(22: P_TYPE LIKE 'PROMO%', [34: multiply, DOUBLE, true], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+|  aggregate: sum[(if[(22: P_TYPE LIKE 'PROMO%', [34: multiply, DOUBLE, false], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 5:Project
 |  output columns:
 |  22 <-> [22: P_TYPE, VARCHAR, false]
-|  29 <-> [34: multiply, DOUBLE, false]
-|  34 <-> clone([34: multiply, DOUBLE, false])
+|  29 <-> clone([34: multiply, DOUBLE, false])
+|  34 <-> [34: multiply, DOUBLE, false]
 |  common expressions:
 |  33 <-> 1.0 - [7: L_DISCOUNT, DOUBLE, false]
 |  34 <-> [6: L_EXTENDEDPRICE, DOUBLE, false] * [33: subtract, DOUBLE, false]
@@ -62,7 +62,7 @@ OutPut Exchange Id: 07
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 7013946.675798152] ESTIMATE
 |  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 8.0, 932378.0] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 8.0, 932378.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----3:EXCHANGE

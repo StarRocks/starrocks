@@ -22,8 +22,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.DmlType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
@@ -69,7 +71,8 @@ public class LoadJobMVListener implements LoadJobListener {
     }
 
     @Override
-    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                              DmlType dmlType) {
         if (table != null && table.isMaterializedView()) {
             return;
         }
@@ -80,7 +83,7 @@ public class LoadJobMVListener implements LoadJobListener {
     }
 
     @Override
-    public void onInsertOverwriteJobCommitFinish(Database db, Table table) {
+    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
         triggerToRefreshRelatedMVs(db, table);
     }
 
@@ -92,6 +95,9 @@ public class LoadJobMVListener implements LoadJobListener {
      * @throws MetaNotFoundException
      */
     private void triggerToRefreshRelatedMVs(TransactionState transactionState, boolean isTriggerIfBaseTableIsMV) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -130,6 +136,9 @@ public class LoadJobMVListener implements LoadJobListener {
      * @throws MetaNotFoundException
      */
     private void doTriggerToRefreshRelatedMVs(Database db, Table table) throws DdlException, MetaNotFoundException {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
         if (table == null) {
             return;
         }

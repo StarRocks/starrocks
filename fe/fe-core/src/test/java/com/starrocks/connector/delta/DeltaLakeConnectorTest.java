@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
@@ -42,7 +43,7 @@ public class DeltaLakeConnectorTest {
     @Test
     public void testCreateDeltaLakeConnectorWithException1() {
         Map<String, String> properties = ImmutableMap.of("type", "deltalake",
-                "hive.metastore.TYPE", "glue",  "aws.glue.access_key", "xxxxx",
+                "hive.metastore.TYPE", "glue", "aws.glue.access_key", "xxxxx",
                 "aws.glue.secret_key", "xxxx",
                 "aws.glue.region", "us-west-2");
         try {
@@ -59,7 +60,7 @@ public class DeltaLakeConnectorTest {
     @Test
     public void testCreateDeltaLakeConnectorWithException2() {
         Map<String, String> properties = ImmutableMap.of("type", "deltalake",
-                "hive.metastore.type", "error_metastore",  "aws.glue.access_key", "xxxxx",
+                "hive.metastore.type", "error_metastore", "aws.glue.access_key", "xxxxx",
                 "aws.glue.secret_key", "xxxx",
                 "aws.glue.region", "us-west-2");
         try {
@@ -69,7 +70,25 @@ public class DeltaLakeConnectorTest {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
             Assert.assertEquals("Failed to init connector [type: deltalake, name: delta0]. " +
                     "msg: Getting analyzing error. Detail message: hive metastore type [error_metastore] " +
-                            "is not supported.", e.getMessage());
+                    "is not supported.", e.getMessage());
         }
+    }
+
+    @Test
+    public void testDeltaLakeConnectorMemUsage() {
+        Map<String, String> properties = ImmutableMap.of("type", "deltalake",
+                "hive.metastore.type", "hive", "hive.metastore.uris", "thrift://localhost:9083");
+        CatalogConnector catalogConnector = ConnectorFactory.createConnector(
+                new ConnectorContext("delta0", "deltalake", properties), false);
+        Assert.assertTrue(catalogConnector.supportMemoryTrack());
+        Assert.assertEquals(0, catalogConnector.estimateSize());
+        Assert.assertEquals(4, catalogConnector.estimateCount().size());
+    }
+
+    @Test
+    public void testDeltaLakeRemoteFileInfo() {
+        FileScanTask fileScanTask = null;
+        DeltaRemoteFileInfo deltaRemoteFileInfo = new DeltaRemoteFileInfo(fileScanTask);
+        Assert.assertNull(deltaRemoteFileInfo.getFileScanTask());
     }
 }

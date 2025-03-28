@@ -24,7 +24,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.SetMultimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.OlapScanNode;
@@ -82,7 +82,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
     }
 
     @Override
-    public void exec() throws UserException {
+    public void exec() throws StarRocksException {
         if (result != null) {
             return;
         }
@@ -113,8 +113,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 if (null == future) {
                     return;
                 }
-                PExecShortCircuitResult shortCircuitResult = future.get(
-                        context.getSessionVariable().getQueryTimeoutS(), TimeUnit.SECONDS);
+                PExecShortCircuitResult shortCircuitResult = future.get(context.getExecTimeout(), TimeUnit.SECONDS);
                 watch.stop();
                 long t = watch.elapsed().toMillis();
                 MetricRepo.HISTO_SHORTCIRCUIT_RPC_LATENCY.update(t);
@@ -228,7 +227,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         return backend2Tablets;
     }
 
-    private SetMultimap<TNetworkAddress, TExecShortCircuitParams> createRequests() throws UserException {
+    private SetMultimap<TNetworkAddress, TExecShortCircuitParams> createRequests() throws StarRocksException {
         SetMultimap<TNetworkAddress, TExecShortCircuitParams> toSendRequests = HashMultimap.create();
         Optional<PlanNode> planNode = getOlapScanNode();
         if (planNode.isEmpty()) {

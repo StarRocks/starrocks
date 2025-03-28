@@ -93,13 +93,13 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
-        ColumnPtr col;
+        MutableColumnPtr col;
         if constexpr (lt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {
             col = RunTimeColumnType<Type>::create();
         }
-        auto* concrete_col = ColumnHelper::cast_to_raw<Type>(col);
+        auto* concrete_col = ColumnHelper::cast_to_raw<Type>(col.get());
         concrete_col->reserve(size);
         for (int j = 0; j < size; ++j) {
             concrete_col->append(value);
@@ -156,13 +156,13 @@ public:
         if (only_null) {
             return ColumnHelper::create_const_null_column(size);
         }
-        ColumnPtr col = nullptr;
+        MutableColumnPtr col = nullptr;
         if constexpr (lt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {
             col = RunTimeColumnType<Type>::create();
         }
-        auto* concrete_col = ColumnHelper::cast_to_raw<Type>(col);
+        auto* concrete_col = ColumnHelper::cast_to_raw<Type>(col.get());
         for (int j = 0; j < size; ++j) {
             concrete_col->append(value);
         }
@@ -176,7 +176,7 @@ public:
                 nul->append((flag + i) % 2);
             }
         }
-        auto re = NullableColumn::create(col, nul);
+        auto re = NullableColumn::create(std::move(col), std::move(nul));
         re->update_has_null();
         stop();
         return re;

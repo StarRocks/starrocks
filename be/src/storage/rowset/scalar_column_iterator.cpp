@@ -34,6 +34,7 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include "common/status.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -52,7 +53,7 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
 
     IndexReadOptions index_opts;
-    index_opts.use_page_cache = !opts.temporary_data &&
+    index_opts.use_page_cache = !opts.temporary_data && opts.use_page_cache &&
                                 (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
     index_opts.kept_in_memory = !opts.temporary_data && config::enable_ordinal_index_memory_page_cache;
     index_opts.lake_io_opts = opts.lake_io_opts;
@@ -231,6 +232,31 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
+Status ScalarColumnIterator::null_count(size_t* count) {
+    if (!_reader->is_nullable()) {
+        *count = 0;
+        return Status::OK();
+    }
+    bool eos = false;
+    while (!eos) {
+        *count += _page->read_null_count();
+        _current_ordinal += _page->num_rows();
+        RETURN_IF_ERROR(_load_next_page(&eos));
+        if (eos) {
+            // release shareBufferStream
+            if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                if (shared_buffer_stream != nullptr) {
+                    shared_buffer_stream->release();
+                }
+            }
+            break;
+        }
+    }
+    _opts.stats->bytes_read += static_cast<int64_t>(*count);
+    return Status::OK();
+}
+
 Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     size_t prev_bytes = dst->byte_size();
     SparseRangeIterator<> iter = range.new_iterator();
@@ -382,7 +408,7 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         }
 
         IndexReadOptions opts;
-        opts.use_page_cache = !_opts.temporary_data &&
+        opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
                               (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
         opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
@@ -424,7 +450,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     }
 
     IndexReadOptions opts;
-    opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache;
+    opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache && _opts.use_page_cache;
     opts.kept_in_memory = false;
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;

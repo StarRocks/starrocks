@@ -19,19 +19,36 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.iceberg.IcebergDeleteSchema;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-
     private boolean hasUnknownColumn = true;
+
+    // record if this scan is derived from IcebergEqualityDeleteRewriteRule.
+    private boolean fromEqDeleteRewriteRule;
+
+    private Set<IcebergDeleteSchema> deleteSchemas = new HashSet<>();
+
+    // Mainly used for table with iceberg equality delete files. Record full iceberg mor params in the table,
+    // used for the first build to associate multiple scan nodes RemoteFileInfoSource.
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
+
+    // Mainly used for table with iceberg equality delete files.
+    // Marking this split scan node type after IcebergEqualityDeleteRewriteRule rewriting.
+    private IcebergMORParams morParam = IcebergMORParams.EMPTY;
 
     public LogicalIcebergScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -73,11 +90,36 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
-    @Override
-    public boolean isEmptyOutputRows() {
-        return !table.isUnPartitioned() &&
-                !(((IcebergTable) table).hasPartitionTransformedEvolution()) &&
-                predicates.getSelectedPartitionIds().isEmpty();
+    public boolean isFromEqDeleteRewriteRule() {
+        return fromEqDeleteRewriteRule;
+    }
+
+    public void setFromEqDeleteRewriteRule(boolean fromEqDeleteRewriteRule) {
+        this.fromEqDeleteRewriteRule = fromEqDeleteRewriteRule;
+    }
+
+    public Set<IcebergDeleteSchema> getDeleteSchemas() {
+        return deleteSchemas;
+    }
+
+    public void setDeleteSchemas(Set<IcebergDeleteSchema> deleteSchemas) {
+        this.deleteSchemas = deleteSchemas;
+    }
+
+    public IcebergTableMORParams getTableFullMORParams() {
+        return tableFullMORParams;
+    }
+
+    public void setTableFullMORParams(IcebergTableMORParams tableFullMORParams) {
+        this.tableFullMORParams = tableFullMORParams;
+    }
+
+    public IcebergMORParams getMORParam() {
+        return morParam;
+    }
+
+    public void setMORParam(IcebergMORParams morParam) {
+        this.morParam = morParam;
     }
 
     public boolean hasUnknownColumn() {
@@ -104,8 +146,9 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         @Override
         public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
             super.withOperator(scanOperator);
-
             builder.predicates = scanOperator.predicates.clone();
+            builder.morParam = scanOperator.morParam;
+            builder.tableFullMORParams = scanOperator.tableFullMORParams;
             return this;
         }
     }

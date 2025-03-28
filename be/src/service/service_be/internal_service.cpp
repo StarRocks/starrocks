@@ -98,21 +98,49 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunks(google::protobuf::R
 
 template <typename T>
 static bool parse_from_iobuf(butil::IOBuf& iobuf, T* proto_obj) {
-    // deserialize
-    size_t request_size = 0;
-    if (!iobuf.cutn(&request_size, sizeof(request_size))) {
-        LOG(ERROR) << "Failed to read request size";
+    // 1. deserialize protobuf
+    size_t protobuf_size = 0;
+    if (!iobuf.cutn(&protobuf_size, sizeof(protobuf_size))) {
+        LOG(ERROR) << "Failed to read protobuf_size";
         return false;
     }
-    butil::IOBuf request_from;
-    if (!iobuf.cutn(&request_from, request_size)) {
-        LOG(ERROR) << "Failed to cut the required size from the io buffer";
+    butil::IOBuf protobuf_buf;
+    if (!iobuf.cutn(&protobuf_buf, protobuf_size)) {
+        LOG(ERROR) << "Failed to cut the protobuf_size from the io buffer";
         return false;
     }
-    butil::IOBufAsZeroCopyInputStream wrapper(request_from);
+    butil::IOBufAsZeroCopyInputStream wrapper(protobuf_buf);
     if (!proto_obj->ParseFromZeroCopyStream(&wrapper)) {
-        LOG(ERROR) << "Failed to parse the request";
+        LOG(ERROR) << "Failed to parse the protobuf";
         return false;
+    }
+    // 2. deserialize chunks
+    if constexpr (std::is_same<T, PTabletWriterAddChunkRequest>::value) {
+        auto chunk = proto_obj->mutable_chunk();
+        if (iobuf.size() < chunk->data_size()) {
+            LOG(ERROR) << fmt::format("Not enough data in iobuf. Expected: {}, available: {}.", chunk->data_size(),
+                                      iobuf.size());
+            return false;
+        }
+        auto size = iobuf.cutn(chunk->mutable_data(), chunk->data_size());
+        if (size != chunk->data_size()) {
+            LOG(ERROR) << fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
+            return false;
+        }
+    } else if constexpr (std::is_same<T, PTabletWriterAddChunksRequest>::value) {
+        for (int i = 0; i < proto_obj->requests_size(); i++) {
+            auto chunk = proto_obj->mutable_requests(i)->mutable_chunk();
+            if (iobuf.size() < chunk->data_size()) {
+                LOG(ERROR) << fmt::format("Not enough data in iobuf. Expected: {}, available: {}.", chunk->data_size(),
+                                          iobuf.size());
+                return false;
+            }
+            auto size = iobuf.cutn(chunk->mutable_data(), chunk->data_size());
+            if (size != chunk->data_size()) {
+                LOG(ERROR) << fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
+                return false;
+            }
+        }
     }
     return true;
 }
@@ -174,6 +202,16 @@ void BackendInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcCo
 }
 
 template <typename T>
+void BackendInternalServiceImpl<T>::load_diagnose(google::protobuf::RpcController* controller,
+                                                  const starrocks::PLoadDiagnoseRequest* request,
+                                                  starrocks::PLoadDiagnoseResult* response,
+                                                  google::protobuf::Closure* done) {
+    VLOG_RPC << "load diagnose, id=" << print_id(request->id()) << ", txn_id=" << request->txn_id();
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->load_diagnose(
+            static_cast<brpc::Controller*>(controller), request, response, done);
+}
+
+template <typename T>
 void BackendInternalServiceImpl<T>::local_tablet_reader_open(google::protobuf::RpcController* controller,
                                                              const PTabletReaderOpenRequest* request,
                                                              PTabletReaderOpenResult* response,
@@ -226,5 +264,4 @@ void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::pr
 }
 
 template class BackendInternalServiceImpl<PInternalService>;
-template class BackendInternalServiceImpl<doris::PBackendService>;
 } // namespace starrocks

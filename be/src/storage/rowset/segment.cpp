@@ -365,7 +365,7 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
 
     PageReadOptions opts;
-    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.use_page_cache = lake_io_opts.use_page_cache;
     opts.read_file = read_file.get();
     opts.page_pointer = _short_key_index_page;
     opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
@@ -484,7 +484,8 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     } else {
         tablet_schema = TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]);
     }
-    FileInfo info{.path = dcg.column_files(parent_name(_segment_file_info.path))[idx]};
+    ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
+    FileInfo info{.path = filepath};
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }

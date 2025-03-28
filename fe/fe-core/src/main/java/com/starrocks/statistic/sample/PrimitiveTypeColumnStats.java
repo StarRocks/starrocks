@@ -14,12 +14,10 @@
 
 package com.starrocks.statistic.sample;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 
-import java.text.MessageFormat;
-
 public class PrimitiveTypeColumnStats extends ColumnStats {
-
 
     public PrimitiveTypeColumnStats(String columnName, Type columnType) {
         super(columnName, columnType);
@@ -75,18 +73,10 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
         return fn;
     }
 
-    // From PostgreSQL: n*d / (n - f1 + f1*n/N)
-    // (https://github.com/postgres/postgres/blob/master/src/backend/commands/analyze.c)
-    // and paper: ESTIMATING THE NUMBER OF CLASSES IN A FINITE POPULATION
-    // (http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.93.8637&rep=rep1&type=pdf)
-    // sample_row * count_distinct / ( sample_row - once_count + once_count * sample_row / total_row)
     @Override
     public String getDistinctCount(double rowSampleRatio) {
-        String sampleRows = "SUM(t1.count)";
-        String onceCount = "SUM(IF(t1.count = 1, 1, 0))";
-        String countDistinct = "COUNT(1)";
-        String fn = MessageFormat.format("{0} * {1} / ({0} - {2} + {2} * {3})", sampleRows,
-                countDistinct, onceCount, String.valueOf(rowSampleRatio));
-        return "IFNULL(" + fn + ", COUNT(1))";
+        Preconditions.checkArgument(rowSampleRatio <= 1.0, "invalid sample ratio: " + rowSampleRatio);
+        return NDVEstimator.build().generateQuery(rowSampleRatio);
     }
+
 }

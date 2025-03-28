@@ -98,10 +98,10 @@ public interface MVRepairHandler {
             List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(partitionCommitInfos.size());
 
             Locker locker = new Locker();
-            locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             try {
                 for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
-                    long partitionId = partitionCommitInfo.getPartitionId();
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                     Partition partition = olapTable.getPartition(partitionId);
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;
@@ -115,7 +115,7 @@ public interface MVRepairHandler {
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
             } finally {
-                locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
 
             if (partitionRepairInfos.isEmpty()) {

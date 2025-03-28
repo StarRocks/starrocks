@@ -60,7 +60,7 @@ public:
         DCHECK_EQ(TYPE_INT, type_desc.type);
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
 
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
@@ -79,7 +79,7 @@ public:
         }
         down_cast<NullableColumn*>(column.get())->update_has_null();
 
-        return {column, std::move(expr)};
+        return {std::move(column), std::move(expr)};
     }
 
     static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(const TypeDescriptor& type_desc,
@@ -87,7 +87,7 @@ public:
                                                                           bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
@@ -132,7 +132,7 @@ public:
             }
         }
 
-        return {column, std::move(expr)};
+        return {std::move(column), std::move(expr)};
     }
 
     std::shared_ptr<RuntimeState> _create_runtime_state() {
@@ -257,7 +257,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         }
         case MergeSort: {
             sorter = std::make_unique<ChunksSorterTopn>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
-                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER,
+                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER, max_buffered_rows,
                                                         params.max_buffered_chunks);
             expected_rows = limit_rows;
             break;

@@ -63,10 +63,10 @@ public class CreateTableLikeTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         String createDbStmtStr2 = "create database test2;";
         CreateDbStmt createDbStmt2 = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr2, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt2.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt2.getFullDbName());
     }
 
     private static void createTable(String sql) throws Exception {
@@ -262,7 +262,7 @@ public class CreateTableLikeTest {
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"in_memory\" = \"false\",\n" +
-                    "\"enable_persistent_index\" = \"false\",\n" +
+                    "\"enable_persistent_index\" = \"true\",\n" +
                     "\"replicated_storage\" = \"true\",\n" +
                     "\"compression\" = \"LZ4\"\n" +
                     ");";

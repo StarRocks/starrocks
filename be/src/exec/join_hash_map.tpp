@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
+#include "simd/gather.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
@@ -25,6 +28,7 @@ namespace starrocks {
 template <LogicalType LT>
 void JoinBuildFunc<LT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
 }
@@ -55,23 +59,34 @@ template <LogicalType LT>
 void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                              HashTableProbeState* probe_state) {
     auto& data = get_key_data(*table_items);
-    if (table_items->key_columns[0]->is_nullable()) {
+    if (table_items->key_columns[0]->is_nullable() && table_items->key_columns[0]->has_null()) {
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]);
-        auto& null_array = nullable_column->null_column()->get_data();
+        const auto& null_array = nullable_column->null_column()->get_data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             if (null_array[i] == 0) {
-                uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size);
+                const uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(
+                        data[i], table_items->bucket_size, table_items->log_bucket_size);
                 table_items->next[i] = table_items->first[bucket_num];
                 table_items->first[bucket_num] = i;
             }
         }
     } else {
+        auto* __restrict next = table_items->next.data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
-            uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size);
-            table_items->next[i] = table_items->first[bucket_num];
-            table_items->first[bucket_num] = i;
+            const uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size,
+                                                                                    table_items->log_bucket_size);
+            // Use `next` stores `bucket_num` temporarily.
+            next[i] = bucket_num;
+        }
+
+        auto* __restrict first = table_items->first.data();
+        for (size_t i = 1; i < table_items->row_count + 1; i++) {
+            const uint32_t bucket_num = next[i];
+            next[i] = first[bucket_num];
+            first[bucket_num] = i;
         }
     }
+
     table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }
 
@@ -80,6 +95,7 @@ void DirectMappingJoinBuildFunc<LT>::prepare(RuntimeState* runtime, JoinHashTabl
     static constexpr size_t BUCKET_SIZE =
             (int64_t)(RunTimeTypeLimits<LT>::max_value()) - (int64_t)(RunTimeTypeLimits<LT>::min_value()) + 1L;
     table_items->bucket_size = BUCKET_SIZE;
+    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
 }
@@ -124,6 +140,7 @@ void DirectMappingJoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, J
 template <LogicalType LT>
 void FixedSizeJoinBuildFunc<LT>::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
     table_items->next.resize(table_items->row_count + 1, 0);
     table_items->build_key_column = ColumnType::create(table_items->row_count + 1);
@@ -178,7 +195,8 @@ void FixedSizeJoinBuildFunc<LT>::_build_columns(JoinHashTableItems* table_items,
                                                            count);
 
     const auto& data = get_key_data(*table_items);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, &probe_state->buckets, start, count);
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, table_items->log_bucket_size,
+                                                 &probe_state->buckets, start, count);
 
     for (uint32_t i = 0; i < count; i++) {
         table_items->next[start + i] = table_items->first[probe_state->buckets[i]];
@@ -203,7 +221,8 @@ void FixedSizeJoinBuildFunc<LT>::_build_nullable_columns(JoinHashTableItems* tab
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, table_items->build_key_column.get(), start,
                                                            count);
     const auto& data = get_key_data(*table_items);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, &probe_state->buckets, start, count);
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items->bucket_size, table_items->log_bucket_size,
+                                                 &probe_state->buckets, start, count);
 
     for (size_t i = 0; i < count; i++) {
         if (probe_state->is_nulls[i] == 0) {
@@ -262,38 +281,31 @@ const Buffer<typename DirectMappingJoinProbeFunc<LT>::CppType>& DirectMappingJoi
 
 template <LogicalType LT>
 void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
-    size_t probe_row_count = probe_state->probe_row_count;
+    const size_t probe_row_count = probe_state->probe_row_count;
     auto& data = get_key_data(*probe_state);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, data.size());
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, table_items.log_bucket_size,
+                                                 &probe_state->buckets, 0, data.size());
+
+    const auto* firsts = table_items.first.data();
+    const auto* buckets = probe_state->buckets.data();
+    auto* nexts = probe_state->next.data();
 
     if ((*probe_state->key_columns)[0]->is_nullable()) {
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[0]);
-
+        const auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[0]);
         if (nullable_column->has_null()) {
-            auto& null_array = nullable_column->null_column()->get_data();
-            for (size_t i = 0; i < probe_row_count; i++) {
-                if (null_array[i] == 0) {
-                    probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-                } else {
-                    probe_state->next[i] = 0;
-                }
-            }
+            const auto* is_nulls = nullable_column->null_column()->get_data().data();
+            SIMDGather::gather(nexts, firsts, buckets, is_nulls, probe_row_count);
+
             probe_state->null_array = &nullable_column->null_column()->get_data();
-        } else {
-            for (size_t i = 0; i < probe_row_count; i++) {
-                probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-            }
-            probe_state->null_array = nullptr;
+            probe_state->consider_probe_time_locality();
+            return;
         }
-        probe_state->consider_probe_time_locality();
-        return;
     }
 
-    for (size_t i = 0; i < probe_row_count; i++) {
-        probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-    }
-    probe_state->consider_probe_time_locality();
+    SIMDGather::gather(nexts, firsts, buckets, probe_row_count);
+
     probe_state->null_array = nullptr;
+    probe_state->consider_probe_time_locality();
 }
 
 template <LogicalType LT>
@@ -350,8 +362,9 @@ void FixedSizeJoinProbeFunc<LT>::_probe_column(const JoinHashTableItems& table_i
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
                                                            row_count);
     const auto& data = get_key_data(*probe_state);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, row_count);
-
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, table_items.log_bucket_size,
+                                                 &probe_state->buckets, 0, row_count);
+    probe_state->null_array = nullptr;
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];
     }
@@ -376,7 +389,8 @@ void FixedSizeJoinProbeFunc<LT>::_probe_nullable_column(const JoinHashTableItems
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
                                                            row_count);
     const auto& data = get_key_data(*probe_state);
-    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, row_count);
+    JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, table_items.log_bucket_size,
+                                                 &probe_state->buckets, 0, row_count);
 
     for (uint32_t i = 0; i < row_count; i++) {
         if (probe_state->is_nulls[i] == 0) {
@@ -647,7 +661,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_co
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         if (to_nullable) {
-            ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create((*src_column)->size()));
+            ColumnPtr dest_column =
+                    NullableColumn::create((*src_column)->as_mutable_ptr(), NullColumn::create((*src_column)->size()));
             (*chunk)->append_column(std::move(dest_column), slot->id());
         } else {
             (*chunk)->append_column(*src_column, slot->id());
@@ -655,7 +670,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_co
     } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
         if (to_nullable) {
             (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
-            ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create((*src_column)->size()));
+            ColumnPtr dest_column =
+                    NullableColumn::create((*src_column)->as_mutable_ptr(), NullColumn::create((*src_column)->size()));
             (*chunk)->append_column(std::move(dest_column), slot->id());
         } else {
             (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
@@ -701,7 +717,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
                 null_column->get_data()[i] = 1;
             }
         }
-        auto dest_column = NullableColumn::create(std::move(data_column), null_column);
+        auto dest_column = NullableColumn::create(std::move(data_column), std::move(null_column));
         (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
         auto dest_column = src_column->clone_empty();
@@ -713,19 +729,26 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk,
                                                                         const SlotDescriptor* slot) {
+    const uint32_t num_rows = _probe_state->count;
+    const auto* build_index = _probe_state->build_index.data();
+
+    const auto num_new_nulls = SIMD::count_zero(build_index, num_rows);
     ColumnPtr dest_column = src_column->clone_empty();
-
-    dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
-
-    // When left outer join is executed,
-    // build_index[i] Equal to 0 means it is not found in the hash table,
-    // but append_selective() has set item of NullColumn to not null
-    // so NullColumn needs to be set back to null
-    auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
-    size_t end = _probe_state->count;
-    for (size_t i = 0; i < end; i++) {
-        if (_probe_state->build_index[i] == 0) {
-            null_column->set_null(i);
+    if (num_new_nulls == num_rows) {
+        dest_column->append_nulls(num_rows);
+    } else {
+        dest_column->append_selective(*src_column, build_index, 0, num_rows);
+        // When left outer join is executed,
+        // build_index[i] Equal to 0 means it is not found in the hash table,
+        // but append_selective() has set item of NullColumn to not null
+        // so NullColumn needs to be set back to null
+        if (num_new_nulls > 0) {
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
+            auto* is_nulls = nullable_column->null_column_data().data();
+            for (uint32_t i = 0; i < num_rows; i++) {
+                is_nulls[i] |= build_index[i] == 0;
+            }
+            nullable_column->set_has_null(true);
         }
     }
 
@@ -909,6 +932,17 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         return;                                                  \
     }
 
+#define RETURN_IF_CHUNK_FULL2()                                  \
+    if (UNLIKELY(match_count > state->chunk_size())) {           \
+        _probe_state->next[i] = _table_items->next[build_index]; \
+        _probe_state->cur_probe_index = i;                       \
+        _probe_state->cur_build_index = build_index;             \
+        _probe_state->has_remain = true;                         \
+        _probe_state->count = state->chunk_size();               \
+        _probe_state->cur_row_match_count = cur_row_match_count; \
+        return;                                                  \
+    }
+
 #define COWAIT_IF_CHUNK_FULL()                              \
     if (_probe_state->match_count == state->chunk_size()) { \
         _probe_state->has_remain = true;                    \
@@ -1014,6 +1048,17 @@ template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                            const Buffer<CppType>& probe_data) {
+    if (_table_items->is_collision_free_and_unique) {
+        _do_probe_from_ht<first_probe, true>(state, build_data, probe_data);
+    } else {
+        _do_probe_from_ht<first_probe, false>(state, build_data, probe_data);
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                              const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     bool one_to_many = false;
@@ -1031,43 +1076,59 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
 
     [[maybe_unused]] size_t probe_cont = 0;
 
-    size_t probe_row_count = _probe_state->probe_row_count;
+    if constexpr (first_probe) {
+        memset(_probe_state->probe_match_filter.data(), 0, _probe_state->probe_row_count * sizeof(uint8_t));
+    }
+
+    const size_t probe_row_count = _probe_state->probe_row_count;
+    const auto* probe_buckets = _probe_state->next.data();
+    // Only `!is_collision_free_and_unique` needs to record and check `cur_row_match_count`.
+    uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
+
     for (; i < probe_row_count; i++) {
-        if constexpr (first_probe) {
-            _probe_state->probe_match_filter[i] = 0;
+        uint32_t build_index = probe_buckets[i];
+
+        if (build_index == 0) {
+            continue;
         }
-        size_t build_index = _probe_state->next[i];
-        if (build_index != 0) {
-            do {
-                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                    _probe_state->probe_index[match_count] = i;
-                    _probe_state->build_index[match_count] = build_index;
-                    match_count++;
 
-                    if constexpr (first_probe) {
-                        _probe_state->cur_row_match_count++;
-                        _probe_state->probe_match_filter[i] = 1;
+        do {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = build_index;
+                match_count++;
+
+                if constexpr (first_probe) {
+                    if constexpr (!is_collision_free_and_unique) {
+                        cur_row_match_count++;
                     }
-                    RETURN_IF_CHUNK_FULL()
+                    _probe_state->probe_match_filter[i] = 1;
                 }
-                probe_cont++;
-                auto next_index = _table_items->next[build_index];
-                build_index = next_index;
-            } while (build_index != 0);
 
-            if constexpr (first_probe) {
-                if (_probe_state->cur_row_match_count > 1) {
-                    one_to_many = true;
+                if constexpr (!is_collision_free_and_unique) {
+                    RETURN_IF_CHUNK_FULL2()
                 }
             }
-        }
 
-        if constexpr (first_probe) {
-            _probe_state->cur_row_match_count = 0;
+            if constexpr (is_collision_free_and_unique) {
+                break;
+            }
+
+            probe_cont++;
+            build_index = _table_items->next[build_index];
+        } while (build_index != 0);
+
+        if constexpr (first_probe && !is_collision_free_and_unique) {
+            if (cur_row_match_count > 1) {
+                one_to_many = true;
+            }
+            cur_row_match_count = 0;
         }
     }
 
     // COUNTER_UPDATE(_probe_state->probe_counter, probe_cont);
+
+    _probe_state->cur_row_match_count = cur_row_match_count;
 
     if constexpr (first_probe) {
         CHECK_MATCH()
@@ -1290,7 +1351,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
             size_t index = _probe_state->next[i];
-            if ((*_probe_state->null_array)[i] == 1) {
+            if ((*_probe_state->null_array).at(i) == 1) {
                 continue;
             }
 
@@ -1348,7 +1409,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_prob
         for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
              i = _probe_state->cur_probe_index++) {
             size_t build_index = _probe_state->next[i];
-            if ((*_probe_state->null_array)[i] == 1) {
+            if ((*_probe_state->null_array).at(i) == 1) {
                 continue;
             }
 
@@ -1779,47 +1840,22 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 
     size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
-        _probe_state->cur_row_match_count = 0;
         size_t build_index = _probe_state->next[i];
-        if (build_index == 0) {
-            bool change_flag = false;
-            if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
-                // when left table col value is null needs match all rows in right table
-                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
-                    change_flag = true;
-                    MATCH_RIGHT_TABLE_ROWS()
-                    RETURN_IF_CHUNK_FULL()
-                }
-            } else if (_table_items->key_columns[0]->is_nullable()) {
-                // when left table col value not hits in hash table needs match all null value rows in right table
-                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
-                auto& null_array = nullable_column->null_column()->get_data();
-                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
-                    if (null_array[j] == 1) {
-                        change_flag = true;
-                        MATCH_RIGHT_TABLE_ROWS()
-                        RETURN_IF_CHUNK_FULL()
-                    }
-                }
-            }
-
-            if (!change_flag) {
-                _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = 0;
-                match_count++;
+        if (_probe_state->null_array != nullptr && (*_probe_state->null_array).at(i) == 1) {
+            // when left table col value is null needs match all rows in right table
+            for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                MATCH_RIGHT_TABLE_ROWS()
                 RETURN_IF_CHUNK_FULL()
             }
-            continue;
-        } else {
-            // left table col value hits in hash table, we also need match null values firstly then match hit rows.
-            if (_table_items->key_columns[0]->is_nullable()) {
-                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
-                auto& null_array = nullable_column->null_column()->get_data();
-                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
-                    if (null_array[j] == 1) {
-                        MATCH_RIGHT_TABLE_ROWS()
-                        RETURN_IF_CHUNK_FULL()
-                    }
+        } else if (_table_items->key_columns[0]->is_nullable()) {
+            // when left table col value not hits in hash table needs match all null value rows in right table
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
+            auto& null_array = nullable_column->null_column()->get_data();
+            // TODO: optimize me
+            for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                if (null_array[j] == 1) {
+                    MATCH_RIGHT_TABLE_ROWS()
+                    RETURN_IF_CHUNK_FULL()
                 }
             }
         }
@@ -1844,6 +1880,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 
             RETURN_IF_CHUNK_FULL()
         }
+        _probe_state->cur_row_match_count = 0;
     }
     PROBE_OVER()
 }

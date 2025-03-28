@@ -19,7 +19,6 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 /*
@@ -28,16 +27,30 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class RemoteFileScanContext {
     public RemoteFileScanContext(Table table) {
-        this.table = table;
+        this.tableLocation = table.getTableLocation();
     }
 
-    public Table table = null;
+    public RemoteFileScanContext(String tableLocation) {
+        this.tableLocation = tableLocation;
+    }
+
+    public String tableLocation = null;
+
     // ---- concurrent initialization -----
-    public AtomicBoolean init = new AtomicBoolean(false);
     public ReentrantLock lock = new ReentrantLock();
+    public int usedCount = 0;
 
     // ---- hudi related fields -----
     public HoodieTableFileSystemView hudiFsView = null;
     public HoodieTimeline hudiTimeline = null;
     public HoodieInstant hudiLastInstant = null;
+
+    public void close() {
+        if (hudiFsView != null) {
+            hudiFsView.close();
+            hudiFsView = null;
+            hudiTimeline = null;
+            hudiLastInstant = null;
+        }
+    }
 }

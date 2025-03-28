@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -50,13 +51,17 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
+import com.starrocks.catalog.constraint.TableWithFKConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -107,6 +112,7 @@ import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.collections4.CollectionUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -123,6 +129,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class AlterTest {
 
@@ -332,7 +339,7 @@ public class AlterTest {
         }
     }
 
-    private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
+    public static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
@@ -964,24 +971,300 @@ public class AlterTest {
         OlapTable replace2 =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assert.assertEquals(3,
-                    replace1.getPartition("replace1").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace1.getPartition("replace1").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assert.assertEquals(1,
-                    replace2.getPartition("replace2").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace2.getPartition("replace2").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
 
         alterTableWithNewParser(replaceStmt, false);
 
         replace1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace1");
         replace2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assert.assertEquals(1,
-                    replace1.getPartition("replace1").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace1.getPartition("replace1").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assert.assertEquals(3,
-                    replace2.getPartition("replace2").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace2.getPartition("replace2").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assert.assertEquals("replace1", replace1.getIndexNameById(replace1.getBaseIndexId()));
         Assert.assertEquals("replace2", replace2.getIndexNameById(replace2.getBaseIndexId()));
+    }
+
+    @Test
+    public void testSwapTableWithUniqueConstraints() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s2.k1');";
+
+        createTable(s1);
+        createTable(s2);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        String replaceStmt = "ALTER TABLE s1 SWAP WITH s2";
+        alterTableWithNewParser(replaceStmt, false);
+
+        OlapTable tbl1 = (OlapTable) db.getTable("s1");
+        List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
+        Assert.assertEquals(1, uk1.size());
+        UniqueConstraint uk10 = uk1.get(0);
+        Assert.assertEquals("s1", uk10.getTableName());
+
+        OlapTable tbl2 = (OlapTable) db.getTable("s2");
+        List<UniqueConstraint> uk2 = tbl2.getUniqueConstraints();
+        Assert.assertEquals(1, uk2.size());
+        UniqueConstraint uk20 = uk2.get(0);
+        Assert.assertEquals("s2", uk20.getTableName());
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+    }
+
+    @Test
+    public void testSwapTableWithForeignConstraints1() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s2(k1) REFERENCES s1(k1)');";
+        String s3 = "CREATE TABLE test.s3 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
+        createTable(s1);
+        createTable(s2);
+        createTable(s3);
+
+        String mvSql = "create materialized view test_mv12\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "     'foreign_key_constraints'='s2(k1) REFERENCES s1(k1)',\n" +
+                "     'unique_constraints'='s1.k1'\n" +
+                ") \n" +
+                "as select s1.k1 as s11, s1.k2 as s12, s1.k3 as s13, s2.k1 s21, s2.k2 s22, s2.k3 s23 from s1 join s2 " +
+                "on s1.k1 = s2.k1;";
+        starRocksAssert.withMaterializedView(mvSql);
+
+        MaterializedView mv = starRocksAssert.getMv("test", "test_mv12");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        // swap child tables
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s3";
+        alterTableWithNewParser(replaceStmt, false);
+
+        OlapTable tbl1 = (OlapTable) db.getTable("s1");
+        List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
+        Assert.assertEquals(1, uk1.size());
+        UniqueConstraint uk10 = uk1.get(0);
+        Assert.assertEquals("s1", uk10.getTableName());
+
+        OlapTable tbl2 = (OlapTable) db.getTable("s2");
+        List<ForeignKeyConstraint> fk2 = tbl2.getForeignKeyConstraints();
+        Assert.assertEquals(1, fk2.size());
+        ForeignKeyConstraint fk20 = fk2.get(0);
+        BaseTableInfo baseTableInfo20 = fk20.getChildTableInfo();
+        Assert.assertTrue(baseTableInfo20 == null);
+        BaseTableInfo parentTableInfo = fk20.getParentTableInfo();
+        Assert.assertTrue(parentTableInfo != null);
+        Assert.assertEquals("s1", parentTableInfo.getTableName());
+        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+
+        OlapTable tbl3 = (OlapTable) db.getTable("s3");
+        List<ForeignKeyConstraint> fk3 = tbl3.getForeignKeyConstraints();
+        Assert.assertEquals(1, fk3.size());
+        ForeignKeyConstraint fk30 = fk3.get(0);
+        BaseTableInfo baseTableInfo30 = fk30.getChildTableInfo();
+        Assert.assertTrue(baseTableInfo30 == null);
+        parentTableInfo = fk30.getParentTableInfo();
+        Assert.assertTrue(parentTableInfo != null);
+        Assert.assertEquals("s1", parentTableInfo.getTableName());
+        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+
+        starRocksAssert.alterMvProperties("ALTER materialized view test_mv12 active;");
+
+        Assert.assertTrue(mv.isActive());
+        List<ForeignKeyConstraint> mvFKs = mv.getForeignKeyConstraints();
+        List<UniqueConstraint> mvUKs = mv.getUniqueConstraints();
+        Assert.assertTrue(CollectionUtils.isEmpty(mvFKs));
+        Assert.assertTrue(CollectionUtils.isEmpty(mvUKs));
+
+        // test global constraint manager
+        GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        Assert.assertTrue(cm != null);
+
+        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
+        Assert.assertTrue(tableWithFKConstraintSet != null);
+        Assert.assertTrue(tableWithFKConstraintSet.size() == 3);
+        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
+        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
+
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropTable("s3");
+    }
+
+    @Test
+    public void testSwapTableWithForeignConstraints2() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s2.k1');";
+        String s3 = "CREATE TABLE test.s3 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
+        createTable(s1);
+        createTable(s2);
+        createTable(s3);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        // swap parent tables
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s1";
+        alterTableWithNewParser(replaceStmt, false);
+
+        OlapTable tbl1 = (OlapTable) db.getTable("s1");
+        List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
+        Assert.assertEquals(1, uk1.size());
+        UniqueConstraint uk10 = uk1.get(0);
+        Assert.assertEquals("s1", uk10.getTableName());
+
+        OlapTable tbl2 = (OlapTable) db.getTable("s2");
+        List<UniqueConstraint> uk2 = tbl2.getUniqueConstraints();
+        Assert.assertEquals(1, uk2.size());
+        UniqueConstraint uk20 = uk2.get(0);
+        Assert.assertEquals("s2", uk20.getTableName());
+
+        OlapTable tbl3 = (OlapTable) db.getTable("s3");
+        List<ForeignKeyConstraint> fk3 = tbl3.getForeignKeyConstraints();
+        Assert.assertEquals(1, fk3.size());
+        ForeignKeyConstraint fk30 = fk3.get(0);
+        BaseTableInfo baseTableInfo30 = fk30.getChildTableInfo();
+        Assert.assertTrue(baseTableInfo30 == null);
+        BaseTableInfo parentTableInfo = fk30.getParentTableInfo();
+        Assert.assertTrue(parentTableInfo != null);
+        Assert.assertEquals("s1", parentTableInfo.getTableName());
+        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+
+        // test global constraint manager
+        GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        Assert.assertTrue(cm != null);
+
+        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
+        Assert.assertTrue(tableWithFKConstraintSet != null);
+        Assert.assertTrue(tableWithFKConstraintSet.size() == 1);
+        TableWithFKConstraint expect = tableWithFKConstraintSet.iterator().next();
+        Assert.assertTrue(expect.getChildTable().equals(tbl3));
+        Assert.assertTrue(expect.getRefConstraint().equals(fk30));
+
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropTable("s3");
+    }
+
+    @Test
+    public void testSwapTableWithForeignConstraints3() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\");";
+        String s3 = "CREATE TABLE test.s3 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
+        createTable(s1);
+        createTable(s2);
+        createTable(s3);
+        // swap parent tables
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s1";
+        alterTableWithNewParser(replaceStmt, true);
+
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropTable("s3");
+    }
+
+    @Test
+    public void testSwapTableWithForeignConstraints4() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s2(k1) REFERENCES s1(k1)');";
+        String s3 = "CREATE TABLE test.s3 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\");";
+        createTable(s1);
+        createTable(s2);
+        createTable(s3);
+        // swap child tables
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s3";
+        alterTableWithNewParser(replaceStmt, true);
+
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropTable("s3");
     }
 
     @Test
@@ -1015,7 +1298,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition");
@@ -1075,7 +1358,7 @@ public class AlterTest {
             Assert.assertEquals(physicalPartition.getParentId(), partition.get().getId());
             Assert.assertNotNull(physicalPartition.getBaseIndex());
             Assert.assertFalse(physicalPartition.isImmutable());
-            Assert.assertEquals(physicalPartition.getShardGroupId(), 0);
+            Assert.assertEquals(physicalPartition.getShardGroupId(), PhysicalPartition.INVALID_SHARD_GROUP_ID);
             Assert.assertTrue(physicalPartition.hasStorageData());
             Assert.assertFalse(physicalPartition.isFirstLoad());
         }
@@ -1217,7 +1500,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition");
@@ -1259,7 +1542,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_exception", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_exception", addPartitionClause);
     }
 
     @Test
@@ -1290,7 +1573,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_week", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_week", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition_week");
@@ -1332,7 +1615,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_week", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_week", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition_week");
@@ -1376,7 +1659,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition");
@@ -1421,7 +1704,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition");
@@ -1466,7 +1749,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition");
@@ -1513,7 +1796,7 @@ public class AlterTest {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
             AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                        .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
             Assert.fail();
         } catch (AnalysisException ex) {
 
@@ -1561,7 +1844,7 @@ public class AlterTest {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
             AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_0day", addPartitionClause);
+                        .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_0day", addPartitionClause);
             Assert.fail();
         } catch (AnalysisException ex) {
 
@@ -1612,7 +1895,7 @@ public class AlterTest {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
             AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                        .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
             Assert.fail();
         } catch (AnalysisException ex) {
 
@@ -1658,14 +1941,14 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_exists", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_exists", addPartitionClause);
 
         String alterSQL2 =
                     "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-02')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_exists", addPartitionClause2);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_exists", addPartitionClause2);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition_exists");
@@ -1705,14 +1988,14 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_exists2", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_exists2", addPartitionClause);
 
         String alterSQL2 =
                     "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_exists2", addPartitionClause2);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_exists2", addPartitionClause2);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition_exists2");
@@ -1751,13 +2034,13 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_exists3", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_exists3", addPartitionClause);
 
         String alterSQL2 = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_exists3", addPartitionClause2);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_exists3", addPartitionClause2);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_partition_exists3");
@@ -1831,9 +2114,9 @@ public class AlterTest {
                     .getTable("test_partition");
 
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
+        analyzer.analyze(Util.getOrCreateInnerContext(), addPartitionClause);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
 
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<List<String>>> idToValues = partitionInfo.getIdToMultiValues();
@@ -1898,9 +2181,9 @@ public class AlterTest {
         OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_partition");
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
+        analyzer.analyze(Util.getOrCreateInnerContext(), addPartitionClause);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition", addPartitionClause);
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<String>> idToValues = partitionInfo.getIdToValues();
 
@@ -2104,10 +2387,10 @@ public class AlterTest {
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_partition_1");
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
+        analyzer.analyze(Util.getOrCreateInnerContext(), addPartitionClause);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_1", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_1", addPartitionClause);
     }
 
     @Test(expected = SemanticException.class)
@@ -2144,9 +2427,9 @@ public class AlterTest {
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_partition_2");
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
+        analyzer.analyze(Util.getOrCreateInnerContext(), addPartitionClause);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_2", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_partition_2", addPartitionClause);
     }
 
     @Test(expected = SemanticException.class)
@@ -2178,7 +2461,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_partition_3");
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
+        analyzer.analyze(Util.getOrCreateInnerContext(), addPartitionClause);
     }
 
     @Test(expected = SemanticException.class)
@@ -2213,7 +2496,7 @@ public class AlterTest {
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_partition_4");
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
+        analyzer.analyze(Util.getOrCreateInnerContext(), addPartitionClause);
     }
 
     @Test
@@ -2294,7 +2577,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "site_access", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test2")
                     .getTable("site_access");
@@ -2354,7 +2637,7 @@ public class AlterTest {
     @Test
     public void testCatalogRenameColumnReserved() throws Exception {
         String stmt = "alter table test.tbl1 rename column __op TO __op";
-        Assert.assertThrows(UserException.class, () -> {
+        Assert.assertThrows(StarRocksException.class, () -> {
             UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         });
     }
@@ -2560,8 +2843,8 @@ public class AlterTest {
                                         replayNextJournal(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES);
                 Assert.assertNotNull(modifyMvLog);
                 if (modifyMvLog.getProperties().containsKey("foreign_key_constraints")) {
-                    Assert.assertEquals("default_catalog.10001.10133(site_id) " +
-                                            "REFERENCES default_catalog.10001.10118(site_id)",
+                    Assert.assertEquals("default_catalog.10001.10145(site_id) " +
+                                            "REFERENCES default_catalog.10001.10129(site_id)",
                                 modifyMvLog.getProperties().get("foreign_key_constraints"));
                     break;
                 }

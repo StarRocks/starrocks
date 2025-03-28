@@ -61,7 +61,7 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, < function_name>(input_data_type),...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
@@ -103,11 +103,16 @@ GRANT
 #### Table 相关
 
 ```SQL
-GRANT  
-    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
-    ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
-           { { DATABASE <database_name> } | ALL DATABASES }}
+-- 赋予**特定表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON TABLE <table_name> [, < table_name >,...]
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+
+-- 赋予特定或所有 Database 中的**所有表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -162,7 +167,7 @@ GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USE
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
+    ON { FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
     TO { ROLE | USER } {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
@@ -171,7 +176,7 @@ GRANT
 *注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `<db_name>.<function_name>` 的方式来进行表示。
 
 ```SQL
-GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO {ROLE <role_name> | USER <user_name>}
 ```
 
 #### User 相关

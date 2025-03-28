@@ -55,6 +55,24 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         return childOutputColumns;
     }
 
+    /**
+     * Return the children refs correspond to the output ref
+     *
+     * @param ref output ref
+     * @return children
+     */
+    public List<ColumnRefOperator> resolveColumnRef(ColumnRefOperator ref) {
+        int index = outputColumnRefOp.indexOf(ref);
+        if (index == -1) {
+            return null;
+        }
+        List<ColumnRefOperator> result = Lists.newArrayList();
+        for (var child : childOutputColumns) {
+            result.add(child.get(index));
+        }
+        return result;
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {

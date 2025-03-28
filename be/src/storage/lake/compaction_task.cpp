@@ -27,7 +27,7 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
         : _txn_id(context->txn_id),
           _tablet(std::move(tablet)),
           _input_rowsets(std::move(input_rowsets)),
-          _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
+          _mem_tracker(std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
                                                     GlobalEnv::GetInstance()->compaction_mem_tracker())),
           _context(context),
@@ -35,6 +35,7 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
 
 Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
     if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
+        SCOPED_RAW_TIMER(&_context->stats->pk_sst_merge_ns);
         auto metadata = _tablet.metadata();
         if (metadata->enable_persistent_index() &&
             metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {

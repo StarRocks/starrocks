@@ -57,7 +57,8 @@ enum TDataSinkType {
     TABLE_FUNCTION_TABLE_SINK,
     BLACKHOLE_TABLE_SINK,
     DICTIONARY_CACHE_SINK,
-    MULTI_OLAP_TABLE_SINK
+    MULTI_OLAP_TABLE_SINK,
+    SPLIT_DATA_STREAM_SINK
 }
 
 enum TResultSinkType {
@@ -67,7 +68,8 @@ enum TResultSinkType {
     VARIABLE,
     HTTP_PROTOCAL,
     METADATA_ICEBERG,
-    CUSTOMIZED
+    CUSTOMIZED,
+    ARROW_FLIGHT_PROTOCAL
 }
 
 enum TResultSinkFormatType {
@@ -233,6 +235,7 @@ struct TOlapTableSink {
     29: optional bool write_txn_log
     30: optional bool ignore_out_of_partition
     31: optional binary encryption_meta;
+    32: optional bool dynamic_overwrite
 }
 
 struct TSchemaTableSink {
@@ -267,6 +270,12 @@ struct TTableFunctionTableSink {
     2: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+struct TSplitDataStreamSink {
+    1: optional list<TDataStreamSink> sinks;
+    2: optional list< list<TPlanFragmentDestination> > destinations;
+    3: optional list<Exprs.TExpr> splitExprs;
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -283,4 +292,5 @@ struct TDataSink {
   14: optional TDictionaryCacheSink dictionary_cache_sink
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
+  17: optional TSplitDataStreamSink split_stream_sink
 }

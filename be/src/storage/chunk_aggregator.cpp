@@ -18,12 +18,9 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "gutil/casts.h"
-#include "runtime/memory/mem_hook_allocator.h"
 #include "storage/column_aggregate_func.h"
 
 namespace starrocks {
-
-static MemHookAllocator kDefaultChunkAggregatorAllocator = MemHookAllocator{};
 
 ChunkAggregator::ChunkAggregator(const starrocks::Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
                                  double factor, bool is_vertical_merge, bool is_key)
@@ -173,7 +170,7 @@ void ChunkAggregator::aggregate() {
             _aggregate_loops[_aggregate_loops.size() - 1] += 1;
         }
     }
-    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultChunkAggregatorAllocator);
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
     // 3. Copy the selected key rows
     // 4. Aggregate the value rows
     for (int i = 0; i < _key_fields; ++i) {
@@ -196,7 +193,7 @@ bool ChunkAggregator::is_finish() {
 void ChunkAggregator::aggregate_reset() {
     _aggregate_chunk = ChunkHelper::new_chunk(*_schema, _reserve_rows);
     _aggregate_rows = 0;
-    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultChunkAggregatorAllocator);
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
     for (int i = 0; i < _num_fields; ++i) {
         auto p = _aggregate_chunk->get_column_by_index(i).get();
         _column_aggregator[i]->update_aggregate(p);
@@ -210,7 +207,7 @@ void ChunkAggregator::aggregate_reset() {
 }
 
 ChunkPtr ChunkAggregator::aggregate_result() {
-    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultChunkAggregatorAllocator);
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
     for (int i = 0; i < _num_fields; ++i) {
         _column_aggregator[i]->finalize();
     }

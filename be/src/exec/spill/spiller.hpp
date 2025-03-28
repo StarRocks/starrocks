@@ -152,6 +152,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
                  trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+        auto yield_defer = yield_ctx.defer_finished();
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
         SCOPED_TIMER(_spiller->metrics().flush_timer);
@@ -167,7 +168,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
                 _mem_table_pool.emplace(std::move(mem_table));
             }
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-            yield_ctx.set_finished();
         });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
@@ -181,13 +181,14 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
             COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
             defer.cancel();
+            yield_defer.cancel();
         }
 
         return Status::OK();
     };
 
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
-    auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
+    auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
@@ -220,13 +221,11 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+            auto yield_defer = yield_ctx.defer_finished();
             RETURN_IF(!guard.scoped_begin(), (void)0);
             DEFER_GUARD_END(guard);
             {
-                auto defer = CancelableDefer([&]() {
-                    _running_restore_tasks--;
-                    yield_ctx.set_finished();
-                });
+                auto defer = CancelableDefer([&]() { _running_restore_tasks--; });
                 Status res;
                 SerdeContext serd_ctx;
                 if (!yield_ctx.task_context_data.has_value()) {
@@ -243,6 +242,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
                     defer.cancel();
+                    yield_defer.cancel();
                 }
 
                 if (!res.is_ok_or_eof()) {
@@ -255,8 +255,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
             TaskExecutor::force_submit(std::move(task));
         };
-        auto io_task =
-                workgroup::ScanTask(_spiller->options().wg.get(), std::move(restore_task), std::move(yield_func));
+        auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(restore_task), std::move(yield_func));
         RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
         COUNTER_SET(_spiller->metrics().peak_restore_io_task_count, _running_restore_tasks);
@@ -320,14 +319,12 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
                  spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+        auto yield_defer = yield_ctx.defer_finished();
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
         // concurrency test
         RACE_DETECT(detect_flush);
-        auto defer = CancelableDefer([&]() {
-            _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-            yield_ctx.set_finished();
-        });
+        auto defer = CancelableDefer([&]() { _spiller->update_spilled_task_status(_decrease_running_flush_tasks()); });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
@@ -343,11 +340,12 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
             COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
             defer.cancel();
+            yield_defer.cancel();
         }
         return Status::OK();
     };
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
-    auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
+    auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);

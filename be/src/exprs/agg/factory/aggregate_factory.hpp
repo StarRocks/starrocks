@@ -31,15 +31,17 @@
 #include "exprs/agg/count.h"
 #include "exprs/agg/covariance.h"
 #include "exprs/agg/distinct.h"
+#include "exprs/agg/ds_hll_count_distinct.h"
+#include "exprs/agg/ds_theta_count_distinct.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
-#include "exprs/agg/hll_sketch.h"
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
 #include "exprs/agg/intersect_count.h"
 #include "exprs/agg/mann_whitney.h"
+#include "exprs/agg/map_agg.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/nullable_aggregate.h"
@@ -96,9 +98,9 @@ public:
     static AggregateFunctionPtr MakeCountAggregateFunction();
 
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
+    static auto MakeCountDistinctAggregateFunction();
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
+    static auto MakeCountDistinctAggregateFunctionV2();
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -126,10 +128,10 @@ public:
     template <LogicalType LT>
     static auto MakeMaxAggregateFunction();
 
-    template <LogicalType LT>
+    template <LogicalType LT, bool not_filter_nulls>
     static auto MakeMaxByAggregateFunction();
 
-    template <LogicalType LT>
+    template <LogicalType LT, bool not_filter_nulls>
     static auto MakeMinByAggregateFunction();
 
     template <LogicalType LT>
@@ -192,9 +194,14 @@ public:
     static AggregateFunctionPtr MakeHllSketchAggregateFunction();
 
     template <LogicalType T>
+    static AggregateFunctionPtr MakeThetaSketchAggregateFunction();
+
+    template <LogicalType T>
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
+
+    static AggregateFunctionPtr MakePercentileApproxWeightedAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
@@ -279,12 +286,12 @@ AggregateFunctionPtr AggregateFactory::MakeWindowfunnelAggregateFunction() {
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunction() {
+auto AggregateFactory::MakeCountDistinctAggregateFunction() {
     return std::make_shared<DistinctAggregateFunction<LT, AggDistinctType::COUNT>>();
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
+auto AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<LT, AggDistinctType::COUNT>>();
 }
 
@@ -303,16 +310,16 @@ auto AggregateFactory::MakeMaxAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<LT, MaxAggregateData<LT>, MaxElement<LT, MaxAggregateData<LT>>>>();
 }
 
-template <LogicalType LT>
+template <LogicalType LT, bool not_filter_nulls>
 auto AggregateFactory::MakeMaxByAggregateFunction() {
-    return std::make_shared<
-            MaxMinByAggregateFunction<LT, MaxByAggregateData<LT>, MaxByElement<LT, MaxByAggregateData<LT>>>>();
+    using AggData = MaxByAggregateData<LT, not_filter_nulls>;
+    return std::make_shared<MaxMinByAggregateFunction<LT, AggData, MaxByElement<LT, AggData>>>();
 }
 
-template <LogicalType LT>
+template <LogicalType LT, bool not_filter_nulls>
 auto AggregateFactory::MakeMinByAggregateFunction() {
-    return std::make_shared<
-            MaxMinByAggregateFunction<LT, MinByAggregateData<LT>, MinByElement<LT, MinByAggregateData<LT>>>>();
+    using AggData = MinByAggregateData<LT, not_filter_nulls>;
+    return std::make_shared<MaxMinByAggregateFunction<LT, AggData, MinByElement<LT, AggData>>>();
 }
 
 template <LogicalType LT>
@@ -397,6 +404,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
     return std::make_shared<HllSketchAggregateFunction<LT>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeThetaSketchAggregateFunction() {
+    return std::make_shared<ThetaSketchAggregateFunction<LT>>();
 }
 
 template <LogicalType LT>

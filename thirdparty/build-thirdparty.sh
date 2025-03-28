@@ -370,8 +370,8 @@ build_glog() {
 
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib
 
-    make -j$PARALLEL
-    make install
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
 }
 
 # gtest
@@ -404,7 +404,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -516,7 +516,6 @@ build_lzo2() {
 build_bzip() {
     check_if_source_exist $BZIP_SOURCE
     cd $TP_SOURCE_DIR/$BZIP_SOURCE
-
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
 }
 
@@ -588,7 +587,7 @@ build_rocksdb() {
 
     CFLAGS= \
     EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR} ${FILE_PREFIX_MAP_OPTION}" \
-    EXTRA_CXXFLAGS="-fPIC -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" \
+    EXTRA_CXXFLAGS="-fPIC -Wno-redundant-move -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
     PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
 
@@ -652,6 +651,7 @@ build_flatbuffers() {
   mkdir -p $BUILD_DIR
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
+
   LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
   ${BUILD_SYSTEM} -j$PARALLEL
@@ -706,6 +706,8 @@ build_arrow() {
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
+    -DARROW_SIMD_LEVEL=AVX2 \
+    -DARROW_RUNTIME_SIMD_LEVEL=AVX2 \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_GFLAGS_USE_SHARED=OFF \
@@ -727,6 +729,7 @@ build_arrow() {
     -DARROW_BOOST_USE_SHARED=OFF \
     -DBoost_NO_BOOST_CMAKE=ON \
     -DARROW_FLIGHT=ON \
+    -DARROW_FLIGHT_SQL=ON \
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ ..
@@ -1097,10 +1100,14 @@ build_benchmark() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
+    # https://github.com/google/benchmark/issues/773
     cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
           -DBENCHMARK_ENABLE_GTEST_TESTS=off \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
+          -DRUN_HAVE_STD_REGEX=0 \
+          -DRUN_HAVE_POSIX_REGEX=0 \
+          -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
           -DCMAKE_BUILD_TYPE=Release ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1204,8 +1211,8 @@ build_datasketches() {
 build_async_profiler() {
     check_if_source_exist $ASYNC_PROFILER_SOURCE
     mkdir -p $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/bin $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/lib $TP_INSTALL_DIR/async-profiler
 }
 
 # fiu
@@ -1341,6 +1348,25 @@ build_tenann() {
     cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
 }
 
+build_icu() {
+    check_if_source_exist $ICU_SOURCE
+    cd $TP_SOURCE_DIR/$ICU_SOURCE/source
+
+    sed -i 's/\r$//' ./runConfigureICU
+    sed -i 's/\r$//' ./config.*
+    sed -i 's/\r$//' ./configure
+    sed -i 's/\r$//' ./mkinstalldirs
+
+    unset CPPFLAGS
+    unset CXXFLAGS
+    unset CFLAGS
+
+    ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
+    make -j$PARALLEL
+    make install
+    restore_compile_flags
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1435,6 +1461,7 @@ build_llvm
 build_clucene
 build_simdutf
 build_poco
+build_icu
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

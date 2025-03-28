@@ -57,7 +57,7 @@ public class ShowStreamLoadTest {
         // create database
         String createDbStmtStr = "create database test_db;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         // create table
         String createTableStmtStr = "CREATE TABLE test_db.test_tbl (c0 int, c1 string, c2 int, c3 bigint) " +
                 "DUPLICATE KEY (c0) DISTRIBUTED BY HASH (c0) BUCKETS 3 properties(\"replication_num\"=\"1\") ;;";
@@ -76,10 +76,10 @@ public class ShowStreamLoadTest {
 
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, false,
+        streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
         labelName = "label_routine_load";
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, true,
+        streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, true,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         String sql = "show all stream load";

@@ -20,10 +20,6 @@ package com.starrocks.journal.bdbje;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 // Write this class to bdb periodically
 public class Timestamp implements Writable {
     @SerializedName("ts")
@@ -37,14 +33,7 @@ public class Timestamp implements Writable {
         return this.timestamp;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(timestamp);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        timestamp = in.readLong();
-    }
 
     public String toString() {
         return "" + timestamp;

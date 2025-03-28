@@ -62,30 +62,18 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
 
     auto* merged_time1 = merged_profile->get_counter("time1");
     ASSERT_EQ(2000000000L, merged_time1->value());
-    auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
-    auto* merged_max_of_time1 = merged_profile->get_counter("__MAX_OF_time1");
-    ASSERT_TRUE(merged_min_of_time1);
-    ASSERT_TRUE(merged_max_of_time1);
-    ASSERT_EQ(2000000000L, merged_min_of_time1->value());
-    ASSERT_EQ(2000000000L, merged_max_of_time1->value());
+    ASSERT_EQ(2000000000L, merged_time1->min_value().value());
+    ASSERT_EQ(2000000000L, merged_time1->max_value().value());
 
     auto* merged_time2 = merged_profile->get_counter("time2");
     ASSERT_EQ(1000000000L, merged_time2->value());
-    auto* merged_min_of_time2 = merged_profile->get_counter("__MIN_OF_time2");
-    auto* merged_max_of_time2 = merged_profile->get_counter("__MAX_OF_time2");
-    ASSERT_TRUE(merged_min_of_time2);
-    ASSERT_TRUE(merged_max_of_time2);
-    ASSERT_EQ(0, merged_min_of_time2->value());
-    ASSERT_EQ(2000000000L, merged_max_of_time2->value());
+    ASSERT_EQ(0, merged_time2->min_value().value());
+    ASSERT_EQ(2000000000L, merged_time2->max_value().value());
 
     auto* merged_count1 = merged_profile->get_counter("count1");
     ASSERT_EQ(2, merged_count1->value());
-    auto* merged_min_of_count1 = merged_profile->get_counter("__MIN_OF_count1");
-    auto* merged_max_of_count1 = merged_profile->get_counter("__MAX_OF_count1");
-    ASSERT_TRUE(merged_min_of_count1);
-    ASSERT_TRUE(merged_max_of_count1);
-    ASSERT_EQ(1, merged_min_of_count1->value());
-    ASSERT_EQ(1, merged_max_of_count1->value());
+    ASSERT_EQ(1, merged_count1->min_value().value());
+    ASSERT_EQ(1, merged_count1->min_value().value());
 }
 
 TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
@@ -96,21 +84,13 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
     {
         auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
         time1->set(2000000000L);
-        auto* min_of_time1 =
-                profile1->add_child_counter("__MIN_OF_time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS), "time1");
-        min_of_time1->set(1500000000L);
-        auto* max_of_time1 =
-                profile1->add_child_counter("__MAX_OF_time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS), "time1");
-        max_of_time1->set(5000000000L);
+        time1->set_min(1500000000L);
+        time1->set_max(5000000000L);
 
         auto* count1 = profile1->add_counter("count1", TUnit::UNIT, create_strategy(TUnit::UNIT));
         count1->set(6L);
-        auto* min_of_count1 =
-                profile1->add_child_counter("__MIN_OF_count1", TUnit::UNIT, create_strategy(TUnit::UNIT), "count1");
-        min_of_count1->set(1L);
-        auto* max_of_count1 =
-                profile1->add_child_counter("__MAX_OF_count1", TUnit::UNIT, create_strategy(TUnit::UNIT), "count1");
-        max_of_count1->set(3L);
+        count1->set_min(1L);
+        count1->set_max(3L);
 
         profiles.push_back(profile1.get());
     }
@@ -119,21 +99,13 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
     {
         auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
         time1->set(3000000000L);
-        auto* min_of_time1 =
-                profile2->add_child_counter("__MIN_OF_time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS), "time1");
-        min_of_time1->set(100000000L);
-        auto* max_of_time1 =
-                profile2->add_child_counter("__MAX_OF_time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS), "time1");
-        max_of_time1->set(4000000000L);
+        time1->set_min(100000000L);
+        time1->set_max(4000000000L);
 
         auto* count1 = profile2->add_counter("count1", TUnit::UNIT, create_strategy(TUnit::UNIT));
         count1->set(15L);
-        auto* min_of_count1 =
-                profile2->add_child_counter("__MIN_OF_count1", TUnit::UNIT, create_strategy(TUnit::UNIT), "count1");
-        min_of_count1->set(4L);
-        auto* max_of_count1 =
-                profile2->add_child_counter("__MAX_OF_count1", TUnit::UNIT, create_strategy(TUnit::UNIT), "count1");
-        max_of_count1->set(6L);
+        count1->set_min(4L);
+        count1->set_max(6L);
 
         profiles.push_back(profile2.get());
     }
@@ -141,21 +113,13 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
     auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
     auto* merged_time1 = merged_profile->get_counter("time1");
     ASSERT_EQ(2500000000L, merged_time1->value());
-    auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
-    auto* merged_max_of_time1 = merged_profile->get_counter("__MAX_OF_time1");
-    ASSERT_TRUE(merged_min_of_time1);
-    ASSERT_TRUE(merged_max_of_time1);
-    ASSERT_EQ(100000000L, merged_min_of_time1->value());
-    ASSERT_EQ(5000000000L, merged_max_of_time1->value());
+    ASSERT_EQ(100000000L, merged_time1->min_value().value());
+    ASSERT_EQ(5000000000L, merged_time1->max_value().value());
 
     auto* merged_count1 = merged_profile->get_counter("count1");
     ASSERT_EQ(21, merged_count1->value());
-    auto* merged_min_of_count1 = merged_profile->get_counter("__MIN_OF_count1");
-    auto* merged_max_of_count1 = merged_profile->get_counter("__MAX_OF_count1");
-    ASSERT_TRUE(merged_min_of_count1);
-    ASSERT_TRUE(merged_max_of_count1);
-    ASSERT_EQ(1, merged_min_of_count1->value());
-    ASSERT_EQ(6, merged_max_of_count1->value());
+    ASSERT_EQ(1, merged_count1->min_value().value());
+    ASSERT_EQ(6, merged_count1->max_value().value());
 }
 
 TEST(TestRuntimeProfile, testProfileMergeStrategy) {
@@ -216,35 +180,23 @@ TEST(TestRuntimeProfile, testProfileMergeStrategy) {
 
         auto* merged_time1 = merged_profile->get_counter("time1");
         ASSERT_EQ(2000000000L, merged_time1->value());
-        auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
-        auto* merged_max_of_time1 = merged_profile->get_counter("__MAX_OF_time1");
-        ASSERT_TRUE(merged_min_of_time1);
-        ASSERT_TRUE(merged_max_of_time1);
-        ASSERT_EQ(1000000000L, merged_min_of_time1->value());
-        ASSERT_EQ(1000000000L, merged_max_of_time1->value());
+        ASSERT_EQ(1000000000L, merged_time1->min_value().value());
+        ASSERT_EQ(1000000000L, merged_time1->max_value().value());
 
         auto* merged_time2 = merged_profile->get_counter("time2");
         ASSERT_EQ(2000000000L, merged_time2->value());
-        auto* merged_min_of_time2 = merged_profile->get_counter("__MIN_OF_time2");
-        auto* merged_max_of_time2 = merged_profile->get_counter("__MAX_OF_time2");
-        ASSERT_FALSE(merged_min_of_time2);
-        ASSERT_FALSE(merged_max_of_time2);
+        ASSERT_FALSE(merged_time2->min_value().has_value());
+        ASSERT_FALSE(merged_time2->max_value().has_value());
 
         auto* merged_count1 = merged_profile->get_counter("count1");
         ASSERT_EQ(6, merged_count1->value());
-        auto* merged_min_of_count1 = merged_profile->get_counter("__MIN_OF_count1");
-        auto* merged_max_of_count1 = merged_profile->get_counter("__MAX_OF_count1");
-        ASSERT_FALSE(merged_min_of_count1);
-        ASSERT_FALSE(merged_max_of_count1);
+        ASSERT_FALSE(merged_count1->min_value().has_value());
+        ASSERT_FALSE(merged_count1->max_value().has_value());
 
         auto* merged_count2 = merged_profile->get_counter("count2");
         ASSERT_EQ(8, merged_count2->value());
-        auto* merged_min_of_count2 = merged_profile->get_counter("__MIN_OF_count2");
-        auto* merged_max_of_count2 = merged_profile->get_counter("__MAX_OF_count2");
-        ASSERT_TRUE(merged_min_of_count2);
-        ASSERT_TRUE(merged_max_of_count2);
-        ASSERT_EQ(8, merged_min_of_count2->value());
-        ASSERT_EQ(8, merged_max_of_count2->value());
+        ASSERT_EQ(8, merged_count2->min_value().value());
+        ASSERT_EQ(8, merged_count2->max_value().value());
     };
 
     do_test(TCounterAggregateType::SUM, TCounterAggregateType::AVG);

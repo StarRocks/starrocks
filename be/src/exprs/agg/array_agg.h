@@ -40,7 +40,11 @@ struct ArrayAggAggregateState {
                 for (int i = 0; i < count; i++) {
                     auto raw_key = column.get_slice(offset + i);
                     KeyType key(raw_key);
+#if defined(__clang__) && (__clang_major__ >= 16)
+                    set.lazy_emplace(key, [&](const auto& ctor) {
+#else
                     set.template lazy_emplace(key, [&](const auto& ctor) {
+#endif
                         uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                         assert(pos != nullptr);
                         memcpy(pos, key.data, key.size);
@@ -111,7 +115,7 @@ struct ArrayAggAggregateState {
 };
 
 template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
-class ArrayAggAggregateFunction
+class ArrayAggAggregateFunction final
         : public AggregateFunctionBatchHelper<ArrayAggAggregateState<LT, is_distinct, MyHashSet>,
                                               ArrayAggAggregateFunction<LT, is_distinct, MyHashSet>> {
 public:
@@ -222,7 +226,7 @@ struct ArrayAggAggregateStateV2 {
     Columns data_columns;
 };
 
-class ArrayAggAggregateFunctionV2
+class ArrayAggAggregateFunctionV2 final
         : public AggregateFunctionBatchHelper<ArrayAggAggregateStateV2, ArrayAggAggregateFunctionV2> {
 public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
@@ -404,7 +408,6 @@ public:
             index.resize(res_num);
             elem_size = res_num;
         }
-        array_col->elements_column()->reserve(array_col->elements_column()->size() + elem_size);
         if (index.empty()) {
             array_col->elements_column()->append(*res, 0, elem_size);
         } else {

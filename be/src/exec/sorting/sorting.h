@@ -53,7 +53,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
 ///     key_column0 = ([1,1], [2,2], [3, 3], [4,4]),
 ///     key_column1 = ([1,2], [3,4], null, [5,6])
 ///     so, src_offsets = (0, 0, 2, 4, 6), offsets_per_key = ((0, 0, 2, 4, 6, 8), (0, 2, 4, 4, 6))
-Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<Column*>& columns,
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
                             const std::vector<std::span<const uint32_t>>& offsets_per_key);
@@ -63,9 +63,9 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
                                    SmallPermutation* permutation);
 
 // Sort multiple columns in vertical
-Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
-                             const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                             const bool build_tie, const size_t limit = 0, size_t* limited = nullptr);
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDesc& sort_desc,
+                             Permutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                             const size_t limit = 0, size_t* limited = nullptr);
 
 // Sort multiple chunks in column-wise style
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
@@ -75,8 +75,8 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
 // Compare the column with the `rhs_value`, which must have the some type with column.
 // @param cmp_result compare result is written into this array, value must within -1,0,1
 // @param rhs_value the compare value
-int compare_column(const ColumnPtr& column, std::vector<int8_t>& cmp_result, Datum rhs_value, const SortDesc& desc);
-void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_result, const std::vector<Datum>& rhs_values,
+int compare_column(const ColumnPtr& column, Buffer<int8_t>& cmp_result, Datum rhs_value, const SortDesc& desc);
+void compare_columns(const Columns& columns, Buffer<int8_t>& cmp_result, const Buffer<Datum>& rhs_values,
                      const SortDescs& sort_desc);
 
 // Build tie by comparison of adjacent rows in column.

@@ -71,12 +71,18 @@ public class FeConstants {
             "Backend node not found. Check if any backend node is down.";
     public static final String COMPUTE_NODE_NOT_FOUND_ERROR =
             "Compute node not found. Check if any compute node is down.";
+    public static final String QUERY_FINISHED_ERROR = "QueryFinished";
+    public static final String LIMIT_REACH_ERROR = "LimitReach";
+
 
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set this flag true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+    // set this flat true to enable unit statistics mock
+    public static boolean enableUnitStatistics = false;
+    public static boolean temporaryTableCleanerTest = false;
     // set this flag false to skip test view in plan test
     public static boolean unitTestView = true;
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
@@ -84,6 +90,9 @@ public class FeConstants {
 
     // Set this flag false to suppress showing fragment cost, when running FE unit tests.
     public static boolean showFragmentCost = true;
+
+    // set length for varchar, only set false for ut
+    public static boolean setLengthForVarchar = true;
 
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
@@ -95,10 +104,14 @@ public class FeConstants {
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
 
+    public static final String GENERATED_PARTITION_COLUMN_PREFIX = "__generated_partition_column_";
+
     // Max counter num of TOP K function
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
     public static final int DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM = 16;
+
+    public static final int MAX_LIST_PARTITION_NAME_LENGTH = 50;
 
     public static final String DOCUMENT_SHOW_ALTER =
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER";

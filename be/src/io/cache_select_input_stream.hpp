@@ -28,6 +28,8 @@ public:
         set_enable_async_populate_mode(false);
         set_enable_cache_io_adaptor(false);
         set_enable_block_buffer(false);
+        // Set a high frequecy for cache item that will be populated by cache select.
+        set_frequency(1);
     }
 
     ~CacheSelectInputStream() override = default;
@@ -80,7 +82,7 @@ protected:
             RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
             char* src = _buffer.data();
 
-            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, src, nullptr));
+            _populate_to_cache(src, read_offset_cursor, read_size, nullptr);
             read_offset_cursor += read_size;
         }
         return Status::OK();

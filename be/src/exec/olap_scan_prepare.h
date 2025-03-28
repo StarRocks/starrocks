@@ -18,9 +18,11 @@
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "storage/olap_runtime_range_pruner.h"
+#include "runtime/descriptors.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/predicate_tree_params.h"
+#include "storage/runtime_filter_predicate.h"
+#include "storage/runtime_range_pruner.h"
 
 namespace starrocks {
 
@@ -29,10 +31,11 @@ class RuntimeState;
 class RuntimeFilterProbeCollector;
 class PredicateParser;
 class ColumnPredicate;
+class VectorizedLiteral;
 using ColumnPredicatePtr = std::unique_ptr<ColumnPredicate>;
 using ColumnPredicatePtrs = std::vector<ColumnPredicatePtr>;
 
-struct OlapScanConjunctsManagerOptions {
+struct ScanConjunctsManagerOptions {
     // fields from olap scan node
     const std::vector<ExprContext*>* conjunct_ctxs_ptr = nullptr;
     const TupleDescriptor* tuple_desc = nullptr;
@@ -46,6 +49,7 @@ struct OlapScanConjunctsManagerOptions {
     bool scan_keys_unlimited = true;
     int32_t max_scan_key_num = 1024;
     bool enable_column_expr_predicate = false;
+    bool is_olap_scan = true;
 
     PredicateTreeParams pred_tree_params;
 };
@@ -75,7 +79,7 @@ concept BoxedExprType = std::is_same_v<E, BoxedExpr> || std::is_same_v<E, BoxedE
 template <BoxedExprType E, CompoundNodeType Type>
 class ChunkPredicateBuilder {
 public:
-    ChunkPredicateBuilder(const OlapScanConjunctsManagerOptions& opts, std::vector<E> exprs, bool is_root_builder);
+    ChunkPredicateBuilder(const ScanConjunctsManagerOptions& opts, std::vector<E> exprs, bool is_root_builder);
 
     StatusOr<bool> parse_conjuncts();
 
@@ -88,8 +92,11 @@ public:
 
     const UnarrivedRuntimeFilterList& unarrived_runtime_filters() { return rt_ranger_params; }
 
+    template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
+    void normalized_rf_with_null(const RuntimeFilter* rf, const SlotDescriptor* slot_desc, Args&&... args);
+
 private:
-    const OlapScanConjunctsManagerOptions& _opts;
+    const ScanConjunctsManagerOptions& _opts;
     const std::vector<E> _exprs;
     const bool _is_root_builder;
 
@@ -115,6 +122,9 @@ private:
     StatusOr<bool> _normalize_compound_predicate(const Expr* root_expr);
 
     Status _get_column_predicates(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
+
+    Status _build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root, PredicateParser* parser,
+                                       ColumnPredicatePtrs& col_preds_owner);
 
     friend struct ColumnRangeBuilder;
     friend class ConjunctiveTestFixture;
@@ -154,17 +164,23 @@ private:
     // `ColumnExprPredicate` would be used in late materialization, zone map filtering,
     // dict encoded column filtering and bitmap value column filtering etc.
     Status build_column_expr_predicates();
+
+    Expr* _gen_min_binary_pred(Expr* col_ref, VectorizedLiteral* min_literal, bool is_close_interval);
+    Expr* _gen_max_binary_pred(Expr* col_ref, VectorizedLiteral* max_literal, bool is_close_interval);
+    Expr* _gen_is_null_pred(Expr* col_ref);
+    Expr* _gen_and_pred(Expr* left, Expr* right);
 };
 
-class OlapScanConjunctsManager {
+class ScanConjunctsManager {
 public:
-    explicit OlapScanConjunctsManager(OlapScanConjunctsManagerOptions&& opts);
+    explicit ScanConjunctsManager(ScanConjunctsManagerOptions&& opts);
 
     Status parse_conjuncts();
 
     static Status eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
 
     StatusOr<PredicateTree> get_predicate_tree(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
+    StatusOr<RuntimeFilterPredicates> get_runtime_filter_predicates(ObjectPool* obj_pool, PredicateParser* parser);
 
     Status get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges);
 
@@ -173,7 +189,7 @@ public:
     const UnarrivedRuntimeFilterList& unarrived_runtime_filters();
 
 private:
-    OlapScanConjunctsManagerOptions _opts;
+    ScanConjunctsManagerOptions _opts;
     ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> _root_builder;
 };
 

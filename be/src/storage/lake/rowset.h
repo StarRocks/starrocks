@@ -108,17 +108,23 @@ public:
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-    StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache);
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
 
     // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
-                         std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
+                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
 
     int64_t tablet_id() const { return _tablet_id; }
 
     [[nodiscard]] int64_t version() const { return metadata().version(); }
+
+    bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
+
+    // no practical significance, just compatible interface
+    int64_t start_version() const override { return 0; }
+    int64_t end_version() const override { return 0; }
 
 private:
     TabletManager* _tablet_mgr;

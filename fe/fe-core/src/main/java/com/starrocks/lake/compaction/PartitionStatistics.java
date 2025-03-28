@@ -143,6 +143,10 @@ public class PartitionStatistics {
         this.setPriority(CompactionPriority.DEFAULT);
     }
 
+    public PartitionStatisticsSnapshot getSnapshot() {
+        return new PartitionStatisticsSnapshot(this);
+    }
+
     @Override
     public String toString() {
         return new Gson().toJson(this);

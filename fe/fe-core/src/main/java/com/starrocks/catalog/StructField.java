@@ -22,6 +22,8 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.StringJoiner;
+
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
  * comments of struct fields. We set comment to null to avoid compatibility issues.
@@ -40,13 +42,24 @@ public class StructField {
     @SerializedName(value = "fieldId")
     private int fieldId = -1;
 
+    // fieldPhysicalName is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    @SerializedName(value = "fieldPhysicalName")
+    private String fieldPhysicalName = "";
+
     public StructField() {}
 
     public StructField(String name, int fieldId, Type type, String comment) {
+        this(name, fieldId, "", type, comment);
+    }
+
+    public StructField(String name, int fieldId, String fieldPhysicalName, Type type, String comment) {
         this.name = name;
         this.type = type;
         this.comment = comment;
         this.fieldId = fieldId;
+        this.fieldPhysicalName = fieldPhysicalName;
     }
 
     public StructField(String name, Type type, String comment) {
@@ -130,13 +143,14 @@ public class StructField {
         field.setName(name);
         field.setComment(comment);
         field.setId(fieldId);
+        field.setPhysical_name(fieldPhysicalName);
         node.struct_fields.add(field);
         type.toThrift(container);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(name.toLowerCase(), type);
+        return Objects.hashCode(name.toLowerCase(), type, fieldId, fieldPhysicalName);
     }
 
     @Override
@@ -147,12 +161,23 @@ public class StructField {
         StructField otherStructField = (StructField) other;
         // Both are named struct field
         return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type) &&
-                    (fieldId == otherStructField.fieldId);
+                    (fieldId == otherStructField.fieldId) && Objects.equal(fieldPhysicalName, otherStructField.fieldPhysicalName);
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", StructField.class.getSimpleName() + "[", "]")
+                .add("name='" + (Strings.isNullOrEmpty(name) ? "" : name) + "'")
+                .add("type=" + type)
+                .add("position=" + position)
+                .add("fieldId=" + fieldId)
+                .add("fieldPhysicalName='" + (Strings.isNullOrEmpty(fieldPhysicalName) ? "" : fieldPhysicalName) + "'")
+                .toString();
     }
 
     @Override
     public StructField clone() {
-        return new StructField(name, fieldId, type.clone(), comment);
+        return new StructField(name, fieldId, fieldPhysicalName, type.clone(), comment);
     }
 
     public int getMaxUniqueId() {

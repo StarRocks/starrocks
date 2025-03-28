@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.starrocks.sql.ast.UserAuthOption;
@@ -36,4 +35,22 @@ public interface AuthenticationProvider {
             byte[] password,
             byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+
+    /**
+     * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
+     * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
+     */
+    default byte[] authMoreDataPacket(String user, String host) throws AuthenticationException {
+        return null;
+    }
+
+    /**
+     * Authentication method Switch Request Packet
+     * If both server and the client support CLIENT_PLUGIN_AUTH capability,
+     * server can send this packet tp ask client to use another authentication method.
+     * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_switch_request.html">...</a>
+     */
+    default byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
+        return null;
+    }
 }

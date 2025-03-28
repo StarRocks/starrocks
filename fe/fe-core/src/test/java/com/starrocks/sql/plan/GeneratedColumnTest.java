@@ -34,7 +34,7 @@ public class GeneratedColumnTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
@@ -49,7 +49,7 @@ public class GeneratedColumnTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ")");
@@ -137,13 +137,13 @@ public class GeneratedColumnTest extends PlanTestBase {
         assertContains(plan, "OUTPUT EXPRS:5: expr");
         assertContains(plan, " group by: 1: v1, 2: v2");
 
-        sql = " select tmc.v1 + 1 from tmc as v,tmc2 as tmc";
+        sql = " select v.v1 + 1 from tmc as v,tmc2 as tmc";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "<slot 8> : 5: v1 + 1");
+        assertContains(plan, "<slot 3> : 3: v3");
 
-        sql = " select tmc.v1 + 1 from tmc as v,tmc2 as tmc";
+        sql = " select v.v1 + 1 from tmc as v,tmc2 as tmc";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "<slot 8> : 5: v1 + 1");
+        assertContains(plan, "<slot 3> : 3: v3");
 
         sql = " select * from view_1";
         plan = getFragmentPlan(sql);

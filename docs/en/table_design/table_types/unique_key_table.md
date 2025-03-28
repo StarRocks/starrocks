@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 50
 ---
 
 # Unique Key table
@@ -54,8 +55,8 @@ DISTRIBUTED BY HASH(order_id);
 
 > **NOTICE**
 >
-> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#bucketing).
-> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../Data_distribution.md#set-the-number-of-buckets).
+> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../data_distribution/Data_distribution.md#bucketing).
+> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 ## Usage notes
 
@@ -74,7 +75,7 @@ DISTRIBUTED BY HASH(order_id);
 
 ## What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/loading_introduction/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/Loading_intro.md).
 
 :::note
 

@@ -21,7 +21,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 public class CreateInsertOverwriteJobLog implements Writable {
@@ -37,11 +36,19 @@ public class CreateInsertOverwriteJobLog implements Writable {
     @SerializedName(value = "targetPartitionIds")
     private List<Long> targetPartitionIds;
 
-    public CreateInsertOverwriteJobLog(long jobId, long dbId, long tableId, List<Long> targetPartitionIds) {
+    @SerializedName(value = "dynamicOverwrite")
+    private boolean dynamicOverwrite = false;
+
+    public CreateInsertOverwriteJobLog() {
+    }
+
+    public CreateInsertOverwriteJobLog(long jobId, long dbId, long tableId,
+                                       List<Long> targetPartitionIds, boolean dynamicOverwrite) {
         this.jobId = jobId;
         this.dbId = dbId;
         this.tableId = tableId;
         this.targetPartitionIds = targetPartitionIds;
+        this.dynamicOverwrite = dynamicOverwrite;
     }
 
     public long getJobId() {
@@ -60,6 +67,10 @@ public class CreateInsertOverwriteJobLog implements Writable {
         return targetPartitionIds;
     }
 
+    public boolean isDynamicOverwrite() {
+        return dynamicOverwrite;
+    }
+
     @Override
     public String toString() {
         return "CreateInsertOverwriteJobInfo{" +
@@ -67,13 +78,11 @@ public class CreateInsertOverwriteJobLog implements Writable {
                 ", dbId=" + dbId +
                 ", tableId=" + tableId +
                 ", targetPartitionIds=" + targetPartitionIds +
+                ", dynamicOverwrite=" + dynamicOverwrite +
                 '}';
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static CreateInsertOverwriteJobLog read(DataInput in) throws IOException {
         String json = Text.readString(in);

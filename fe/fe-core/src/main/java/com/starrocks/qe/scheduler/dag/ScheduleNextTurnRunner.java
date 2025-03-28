@@ -14,11 +14,11 @@
 
 package com.starrocks.qe.scheduler.dag;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.rpc.RpcException;
 
 import java.util.Collection;
 
 public interface ScheduleNextTurnRunner {
-    Collection<FragmentInstanceExecState> doSchedule() throws RpcException, UserException;
+    Collection<FragmentInstanceExecState> doSchedule() throws RpcException, StarRocksException;
 }

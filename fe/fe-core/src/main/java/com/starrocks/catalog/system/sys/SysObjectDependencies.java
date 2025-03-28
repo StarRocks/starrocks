@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -24,7 +25,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -42,11 +43,9 @@ import java.util.Collection;
 import java.util.Optional;
 
 public class SysObjectDependencies {
-
-    public static final String NAME = "object_dependencies";
-
     private static final Logger LOG = LogManager.getLogger(SysObjectDependencies.class);
 
+    public static final String NAME = "object_dependencies";
 
     public static SystemTable create() {
         return new SystemTable(SystemId.OBJECT_DEPENDENCIES, NAME, Table.TableType.SCHEMA,
@@ -83,7 +82,7 @@ public class SysObjectDependencies {
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             String catalog = Optional.ofNullable(db.getCatalogName())
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     // If it is not a materialized view, we do not need to verify permissions
@@ -92,7 +91,10 @@ public class SysObjectDependencies {
                     }
                     // Only show tables with privilege
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
+                        ConnectContext context = new ConnectContext();
+                        context.setCurrentUserIdentity(currentUser);
+                        context.setCurrentRoleIds(currentUser);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }
@@ -123,7 +125,7 @@ public class SysObjectDependencies {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 

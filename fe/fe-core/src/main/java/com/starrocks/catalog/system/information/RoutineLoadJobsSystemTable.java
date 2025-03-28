@@ -25,9 +25,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class RoutineLoadJobsSystemTable {
+    public static final String NAME = "routine_load_jobs";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.ROUTINE_LOAD_JOBS_ID,
-                "routine_load_jobs",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
@@ -49,6 +51,8 @@ public class RoutineLoadJobsSystemTable {
                         .column("ERROR_LOG_URLS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OTHER_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("LATEST_SOURCE_POSITION", ScalarType.createJsonType())
+                        .column("OFFSET_LAG", ScalarType.createJsonType())
                         .build(), TSchemaTableType.SCH_ROUTINE_LOAD_JOBS);
     }
 }

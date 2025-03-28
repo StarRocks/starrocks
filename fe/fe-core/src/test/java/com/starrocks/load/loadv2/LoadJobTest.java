@@ -44,17 +44,24 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -64,10 +71,22 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.ArrayBlockingQueue;
 
 public class LoadJobTest {
+
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+    @Mocked
+    private Warehouse warehouse;
 
     @BeforeClass
     public static void start() {
@@ -107,6 +126,26 @@ public class LoadJobTest {
 
     @Test
     public void testSetJobProperties() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getId();
+                minTimes = 0;
+                result = 1001L;
+            }
+        };
+
         Map<String, String> jobProperties = Maps.newHashMap();
         jobProperties.put(LoadStmt.TIMEOUT_PROPERTY, "1000");
         jobProperties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY, "0.1");
@@ -120,6 +159,69 @@ public class LoadJobTest {
             Assert.assertEquals(0.1, Deencapsulation.getField(loadJob, "maxFilterRatio"), 0);
             Assert.assertEquals(1024, (long) Deencapsulation.getField(loadJob, "loadMemLimit"));
             Assert.assertTrue(Deencapsulation.getField(loadJob, "strictMode"));
+        } catch (DdlException e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSetJobPropertiesForWarehouse() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getId();
+                minTimes = 0;
+                result = 1001L;
+            }
+        };
+
+        ConnectContext context = new ConnectContext(null);
+        new Expectations(context) {
+            {
+                ConnectContext.get();
+                result = context;
+
+                context.getCurrentWarehouseId();
+                result = 1000L;
+            }
+        };
+
+        try {
+            // normal, jobProperties set
+            LoadJob loadJob1 = new BrokerLoadJob();
+            Map<String, String> jobProperties1 = Maps.newHashMap();
+            jobProperties1.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "test_warehouse");
+            loadJob1.setJobProperties(jobProperties1);
+            Assert.assertEquals(1001L, (long) Deencapsulation.getField(loadJob1, "warehouseId"));
+
+            // with jobProperties set, but no warehouse property,
+            LoadJob loadJob2 = new BrokerLoadJob();
+            Map<String, String> jobProperties2 = Maps.newHashMap();
+            loadJob2.setJobProperties(jobProperties2);
+            Assert.assertEquals(1000L, (long) Deencapsulation.getField(loadJob2, "warehouseId"));
+
+            // no jobProperties provided
+            LoadJob loadJob3 = new BrokerLoadJob();
+            loadJob3.setJobProperties(null);
+            Assert.assertEquals(1000L, (long) Deencapsulation.getField(loadJob3, "warehouseId"));
         } catch (DdlException e) {
             Assert.fail(e.getMessage());
         }
@@ -232,5 +334,106 @@ public class LoadJobTest {
         Assert.assertNotEquals(-1, (long) Deencapsulation.getField(loadJob, "finishTimestamp"));
         Assert.assertEquals(100, (int) Deencapsulation.getField(loadJob, "progress"));
         Assert.assertEquals(0, loadJob.idToTasks.size());
+    }
+
+    @Test
+    public void testGetShowInfo() throws DdlException {
+        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return tz;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getName();
+                minTimes = 0;
+                result = "test_wh";
+            }
+        };
+
+        LoadJob loadJob = new BrokerLoadJob();
+        List<Comparable> showInfo = loadJob.getShowInfo();
+        Assert.assertNotNull(showInfo);
+        Comparable result = showInfo.get(showInfo.size() - 1);
+        Assert.assertEquals("test_wh", result);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        showInfo = loadJob.getShowInfo();
+        Assert.assertNotNull(showInfo);
+        result = showInfo.get(showInfo.size() - 1);
+        Assert.assertEquals("", result);
+    }
+
+    @Test
+    public void testToThrift() {
+        LoadJob loadJob = new BrokerLoadJob();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getName();
+                minTimes = 0;
+                result = "test_wh";
+            }
+        };
+
+        TLoadInfo loadInfo = loadJob.toThrift();
+        Assert.assertEquals("test_wh", loadInfo.getWarehouse());
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        loadInfo = loadJob.toThrift();
+        Assert.assertEquals("", loadInfo.getWarehouse());
     }
 }

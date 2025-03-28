@@ -19,7 +19,7 @@ This topic describes the rules and limits that apply when you use StarRocks.
   - Column name (column alias), partition name, and index name are **not** case-sensitive. Other names are **case-sensitive**.
 
 - Naming conventions for labels:
-  You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (\_), and cannot exceed 128 characters in length. The label name has no requirement for the starting character.
+  You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (\_), and cannot exceed 128 characters in length. Label names can start with a letter or an underscore (\_).
 
 - When you create a table, the key column cannot be of the FLOAT or DOUBLE type. You can use the DECIMAL type to represent decimals.
 
@@ -30,8 +30,6 @@ This topic describes the rules and limits that apply when you use StarRocks.
   - The default length is 1 byte.
 
 - StarRocks supports only UTF-8 encoding, not GBK.
-
-- StarRocks does not support modifying column names in tables.
 
 - StarRocks does not support modifying the table types of an existing table. For example, you cannot change a Duplicate Key table to a Primary Key table. You must create a new table.
 

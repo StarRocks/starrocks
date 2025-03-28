@@ -20,6 +20,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
@@ -28,11 +29,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.mv.MVTimelinessMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,8 +44,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
 
 /**
  * Store materialized view context during the query lifecycle which is seperated from per materialized view's context.
@@ -69,7 +71,16 @@ public class QueryMaterializationContext {
     // It can be be used for more situations later.
     private Cache<Object, Object> mvQueryContextCache = null;
 
+    // mvQueryContextCache is enabled when related mv is more than 1 since the cache is used to
+    // cache query predicates rewrite for different mvs.
+    private boolean isEnableQueryContextCache = false;
+    // used to cache partition traits result for the connector
     private final QueryCacheStats queryCacheStats = new QueryCacheStats();
+
+    // mv contexts that query has been rewritten successfully by materialized view
+    private Set<MaterializationContext> rewrittenSuccessMVContexts = Sets.newHashSet();
+
+    private MvRewriteStrategy.MVRewriteStage currentRewriteStage = MvRewriteStrategy.MVRewriteStage.PHASE0;
 
     /**
      * It's used to record the cache stats of `mvQueryContextCache`.
@@ -94,13 +105,21 @@ public class QueryMaterializationContext {
         }
     }
 
-    private boolean hasRewrittenSuccess = false;
 
     public QueryMaterializationContext() {
     }
 
+    public void setEnableQueryContextCache(boolean enableQueryContextCache) {
+        isEnableQueryContextCache = enableQueryContextCache;
+    }
+
+    @VisibleForTesting
+    public boolean isEnableQueryContextCache() {
+        return isEnableQueryContextCache;
+    }
+
     public Cache<Object, Object> getMvQueryContextCache() {
-        if (mvQueryContextCache == null) {
+        if (isEnableQueryContextCache() && mvQueryContextCache == null) {
             mvQueryContextCache = Caffeine.newBuilder()
                     .maximumSize(Config.mv_query_context_cache_max_size)
                     .recordStats()
@@ -112,16 +131,21 @@ public class QueryMaterializationContext {
     public PredicateSplit getPredicateSplit(Set<ScalarOperator> predicates,
                                             ReplaceColumnRefRewriter columnRefRewriter) {
         // Cache predicate split for predicates because it's time costing if there are too many materialized views.
-        Object cached = getMvQueryContextCache().getIfPresent(predicates);
-        if (cached != null) {
-            return (PredicateSplit) cached;
+        var cache = getMvQueryContextCache();
+        if (cache == null) {
+            return PredicateSplit.splitPredicate(rewriteOptExprCompoundPredicate(predicates, columnRefRewriter));
+        } else {
+            Object cached = cache.getIfPresent(predicates);
+            if (cached != null) {
+                return (PredicateSplit) cached;
+            }
+            ScalarOperator queryPredicate = rewriteOptExprCompoundPredicate(predicates, columnRefRewriter);
+            PredicateSplit predicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+            if (predicateSplit != null) {
+                cache.put(predicates, predicateSplit);
+            }
+            return predicateSplit;
         }
-        ScalarOperator queryPredicate = rewriteOptExprCompoundPredicate(predicates, columnRefRewriter);
-        PredicateSplit predicateSplit = PredicateSplit.splitPredicate(queryPredicate);
-        if (predicateSplit != null) {
-            getMvQueryContextCache().put(predicates, predicateSplit);
-        }
-        return predicateSplit;
     }
 
     private ScalarOperator rewriteOptExprCompoundPredicate(Set<ScalarOperator> conjuncts,
@@ -139,15 +163,20 @@ public class QueryMaterializationContext {
             return null;
         }
 
-        return (ScalarOperator) getMvQueryContextCache().get(predicate, x -> {
-            ScalarOperator rewritten = new ScalarOperatorRewriter()
-                    .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
-            return rewritten;
-        });
+        var cache = getMvQueryContextCache();
+        if (cache == null) {
+            return new ScalarOperatorRewriter().rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+        } else {
+            return (ScalarOperator) getMvQueryContextCache().get(predicate, x -> {
+                ScalarOperator rewritten = new ScalarOperatorRewriter()
+                        .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+                return rewritten;
+            });
+        }
     }
 
     public QueryCacheStats getQueryCacheStats() {
-        return queryCacheStats;
+        return mvQueryContextCache == null ? null : queryCacheStats;
     }
 
     public OptExpression getQueryOptPlanWithView() {
@@ -192,7 +221,8 @@ public class QueryMaterializationContext {
             return null;
         }
         if (!mvTimelinessInfos.containsKey(mv)) {
-            MvUpdateInfo result = getMVTimelinessUpdateInfo(mv, true);
+            MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
+            MvUpdateInfo result = mvTimelinessMgr.getMVTimelinessInfo(mv);
             mvTimelinessInfos.put(mv, result);
             return result;
         } else {
@@ -235,11 +265,31 @@ public class QueryMaterializationContext {
         this.mvQueryContextCache.invalidateAll();
     }
 
-    public void markRewriteSuccess(boolean val) {
-        this.hasRewrittenSuccess = val;
+    public void addRewrittenSuccessMVContext(MaterializationContext mvContext) {
+        rewrittenSuccessMVContexts.add(mvContext);
     }
 
     public boolean hasRewrittenSuccess() {
-        return this.hasRewrittenSuccess;
+        return !rewrittenSuccessMVContexts.isEmpty();
+    }
+
+    public boolean isNeedsFurtherMVRewrite() {
+        if (rewrittenSuccessMVContexts.isEmpty()) {
+            return true;
+        }
+        return rewrittenSuccessMVContexts
+                .stream()
+                .anyMatch(mvContext -> {
+                    final int level = mvContext.getLevel();
+                    return validCandidateMVs.stream().anyMatch(mv -> mv.getLevel() > level);
+                });
+    }
+
+    public MvRewriteStrategy.MVRewriteStage getCurrentRewriteStage() {
+        return currentRewriteStage;
+    }
+
+    public void setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage currentRewriteStage) {
+        this.currentRewriteStage = currentRewriteStage;
     }
 }

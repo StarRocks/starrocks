@@ -80,7 +80,7 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     PredicateTree _non_pushdown_pred_tree;
-    std::vector<uint8_t> _selection;
+    Filter _selection;
 
     ObjectPool _obj_pool;
 
@@ -88,7 +88,7 @@ private:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
-    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager = nullptr;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
 
     lake::VersionedTablet _tablet;
     TabletSchemaCSPtr _tablet_schema;

@@ -937,7 +937,7 @@ select * from small_table where tiny_column in (1,2);
 
 #### Like Operator
 
-This operator is used to compare to a string. ''matches a single character,'%' matches multiple characters. The parameter must match the complete string. Typically, placing'%'at the end of a string is more practical.
+This operator is used to compare to a string. '_' (underscore) matches a single character, '%' matches multiple characters. The parameter must match the complete string. Typically, placing'%'at the end of a string is more practical.
 
 Examples:
 
@@ -1082,6 +1082,8 @@ select one.tiny_column, two.int_column from small_table one, <br/> big_table two
 ```
 
 ### PIVOT
+
+This feature is supported from v3.3 onwards.
 
 The PIVOT operation is an advanced feature in SQL that allows you to transform rows into columns in a table, which is particularly useful for creating pivot tables. This comes in handy when dealing with database reports or analytics, especially when you need to summarize or categorize data for presentation.
 

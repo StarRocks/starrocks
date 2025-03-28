@@ -51,13 +51,47 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value, u
             _max_rss_rowid = max_rss_rowid;
             _index_value_vers.emplace_front(version, index_value);
         } else if ((version > _index_value_vers.front().first) ||
-                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid)) {
+                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid) ||
+                   (version == _index_value_vers.front().first && max_rss_rowid == _max_rss_rowid &&
+                    index_value.get_value() == NullIndexValue)) {
             // NOTICE: we need both version and max_rss_rowid here to decide the order of keys.
-            // Consider the following two scenarios:
+            // Consider the following 3 scenarios:
             // 1. Same keys are from two different Rowsets, and we can decide their order by version recorded
             //    in Rowset.
+            //   | ------- ver1 --------- | + | -------- ver2 ----------|
+            //   | k1 k2 k3(1)            |   | k3(2) k4                |
+            //
+            //   =
+            //   | ------- ver2 --------- |
+            //   | k1 k2 k3(2) k4         |
+            //   k3 in ver2 will replace k3 in ver1, because it has a larger version.
+            //
             // 2. Same keys are from same Rowset, and they have same version. Now we use `max_rss_rowid` in sst to
             //    decide their order.
+            //   | ------- ver1 --------- | + | -------- ver1 ----------|
+            //   | k1 k2 k3(1)            |   | k3(2) k4                |
+            //   | max_rss_rowid = 2      |   | max_rss_rowid = 4       |
+            //   =
+            //   | ------- ver1 --------- |
+            //   | k1 k2 k3(2) k4         |
+            //   | max_rss_rowid = 4      |
+            //
+            //   k3 with larger max_rss_rowid will replace previous one, because max_rss_rowid is incremental,
+            //   larger max_rss_rowid means it was generated later.
+            //
+            // 3. Same keys are from same Rowset, and they have same version. And they also have same `max_rss_rowid`
+            //    because one of them is delete flag.
+            //   | ------- ver1 --------- | + | -------- ver1 ----------|
+            //   | k1 k2 k3 k4(del)       |   | k3(del)      k4(del)    |
+            //   | max_rss_rowid = MAX    |   | max_rss_rowid = MAX     |
+            //   =
+            //   | ------- ver1 --------- |
+            //   | k1 k2                  |
+            //   | max_rss_rowid = MAX    |
+            //
+            //   Because we use UINT32_TMAX as delete flag key's rowid, so two sst will have same
+            //   max_rss_rowid, when the second one is only contains delete flag keys.
+            //   k3 with delete flag will replace previous one.
             _max_rss_rowid = max_rss_rowid;
             std::list<std::pair<int64_t, IndexValue>> t;
             t.emplace_front(version, index_value);
@@ -138,13 +172,16 @@ void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyInde
 
 bool LakePersistentIndex::is_memtable_full() const {
     const auto memtable_mem_size = _memtable->memory_usage();
-    // We have two memtable in index, so memtable memory limit means half of `l0_max_mem_usage`.
-    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage / 2;
+    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage;
     // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
     const bool mem_tracker_exceed =
             _tablet_mgr->update_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
             memtable_mem_size >= config::l0_min_mem_usage;
     return mem_size_exceed || mem_tracker_exceed;
+}
+
+bool LakePersistentIndex::too_many_rebuild_files() const {
+    return _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
 }
 
 Status LakePersistentIndex::minor_compact() {
@@ -160,7 +197,7 @@ Status LakePersistentIndex::minor_compact() {
     }
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     uint64_t filesize = 0;
-    RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize));
+    RETURN_IF_ERROR(_memtable->flush(wf.get(), &filesize));
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
@@ -172,7 +209,7 @@ Status LakePersistentIndex::minor_compact() {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
-    sstable_pb.set_max_rss_rowid(_immutable_memtable->max_rss_rowid());
+    sstable_pb.set_max_rss_rowid(_memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
@@ -185,11 +222,12 @@ Status LakePersistentIndex::minor_compact() {
 }
 
 Status LakePersistentIndex::flush_memtable() {
-    if (_immutable_memtable != nullptr) {
-        RETURN_IF_ERROR(minor_compact());
-    }
-    _immutable_memtable = std::make_unique<PersistentIndexMemtable>(_memtable->max_rss_rowid());
-    _memtable.swap(_immutable_memtable);
+    RETURN_IF_ERROR(minor_compact());
+    auto max_rss_rowid = _memtable->max_rss_rowid();
+    _memtable.reset();
+    _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
+    // Reset rebuild file count, avoid useless flush.
+    _need_rebuild_file_cnt = 0;
     return Status::OK();
 }
 
@@ -209,24 +247,11 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     return Status::OK();
 }
 
-Status LakePersistentIndex::get_from_immutable_memtable(const Slice* keys, IndexValue* values,
-                                                        const KeyIndexSet& key_indexes, KeyIndexSet* found_key_indexes,
-                                                        int64_t version) const {
-    if (_immutable_memtable == nullptr || key_indexes.empty()) {
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(_immutable_memtable->get(keys, values, key_indexes, found_key_indexes, version));
-    return Status::OK();
-}
-
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     KeyIndexSet not_founds;
     // Assuming we always want the latest value now
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, -1));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, values, &key_indexes, -1));
     return Status::OK();
 }
@@ -237,9 +262,6 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
@@ -273,9 +295,6 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
@@ -469,7 +488,7 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
 }
 
 Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
-    if (op_compaction.input_sstables().empty()) {
+    if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
         return Status::OK();
     }
 
@@ -478,7 +497,13 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     sstable_pb.set_max_rss_rowid(
             op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+    RandomAccessFileOptions opts;
+    if (!sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf,
+                     fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
@@ -506,6 +531,11 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 }
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
+    if (too_many_rebuild_files() && !_memtable->empty()) {
+        // If we have too many files need to be rebuilt,
+        // we need to do flush to reduce index rebuild cost later.
+        RETURN_IF_ERROR(flush_memtable());
+    }
     PersistentIndexSstableMetaPB sstable_meta;
     int64_t last_max_rss_rowid = 0;
     for (auto& sstable : _sstables) {
@@ -520,18 +550,20 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
     builder->finalize_sstable_meta(sstable_meta);
+    _need_rebuild_file_cnt = need_rebuild_file_cnt(*builder->tablet_meta(), sstable_meta);
     return Status::OK();
 }
 
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
-    TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+    TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
+        TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
         if (!del.encryption_meta().empty()) {
@@ -619,6 +651,24 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
     return true;
 }
 
+// Return the files cnt that need to rebuild.
+size_t LakePersistentIndex::need_rebuild_file_cnt(const TabletMetadataPB& metadata,
+                                                  const PersistentIndexSstableMetaPB& sstable_meta) {
+    size_t cnt = 0;
+    const auto& sstables = sstable_meta.sstables();
+    const uint32_t rebuild_rss_id = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid() >> 32;
+    for (const auto& rowset : metadata.rowsets()) {
+        if (!needs_rowset_rebuild(rowset, rebuild_rss_id)) {
+            continue; // skip rowset
+        }
+        cnt += rowset.del_files_size();
+        // rowset id + segment id < rebuild_rss_id can be skip.
+        // so only some segments in this rowset need to rebuild
+        cnt += std::min(rowset.id() + rowset.segments_size() - rebuild_rss_id + 1, (uint32_t)rowset.segments_size());
+    }
+    return cnt;
+}
+
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
     // 1. create and set key column schema
@@ -629,6 +679,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
+    _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
+
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
@@ -637,7 +689,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         // more than one key column
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
@@ -664,6 +716,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         for (size_t i = 0; i < itrs.size(); i++) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
             auto itr = itrs[i].get();
             if (itr == nullptr) {
                 continue;
@@ -736,8 +789,10 @@ size_t LakePersistentIndex::memory_usage() const {
     if (_memtable != nullptr) {
         mem_usage += _memtable->memory_usage();
     }
-    if (_immutable_memtable != nullptr) {
-        mem_usage += _immutable_memtable->memory_usage();
+    for (const auto& sst_ptr : _sstables) {
+        if (sst_ptr != nullptr) {
+            mem_usage += sst_ptr->memory_usage();
+        }
     }
     return mem_usage;
 }

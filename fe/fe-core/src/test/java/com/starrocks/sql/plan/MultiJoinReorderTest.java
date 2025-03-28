@@ -478,11 +478,11 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String sql = "select v from (select v1, 2 as v, 3 from t0 inner join t1 on v2 = v4) t,t2;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment, planFragment.contains("9:Project\n" +
-                "  |  <slot 7> : 7: expr\n" +
+                "  |  <slot 12> : 2\n" +
                 "  |  \n" +
                 "  8:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n"));
+                "  |  colocate: false, reason: "));
 
         sql = "select * from (select v1, 2 as v, 3 from t0 inner join t1 on v2 = v4) t,t2;";
         planFragment = getFragmentPlan(sql);

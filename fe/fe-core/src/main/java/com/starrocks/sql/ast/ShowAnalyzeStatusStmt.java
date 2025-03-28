@@ -16,13 +16,14 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,22 +33,24 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeStatusStmt extends ShowStmt {
+    private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
 
-    public ShowAnalyzeStatusStmt(Predicate predicate) {
-        this(predicate, NodePosition.ZERO);
-    }
-
-    public ShowAnalyzeStatusStmt(Predicate predicate, NodePosition pos) {
+    public ShowAnalyzeStatusStmt(Predicate predicate, List<OrderByElement> orderByElements,
+                                 LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
+        this.limitElement = limitElement;
+        this.orderByElements = orderByElements;
     }
 
-    private static final ShowResultSetMetaData META_DATA =
+    public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Id", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Database", ScalarType.createVarchar(60)))
@@ -75,13 +78,13 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
             table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                    analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+                    context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
             }
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
-        } catch (AccessDeniedException | SemanticException e) {
+            Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
+        } catch (Exception e) {
+            LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
             return null;
         }
 

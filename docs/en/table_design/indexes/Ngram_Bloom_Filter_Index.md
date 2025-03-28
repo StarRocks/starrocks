@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-
+sidebar_position: 40
 ---
 
 # [Preview] N-gram bloom filter index

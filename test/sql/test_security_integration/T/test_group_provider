@@ -1,0 +1,9 @@
+-- name: test_group_provider
+
+create group provider foo properties("type" = "foo");
+
+create group provider unix_group_provider properties("type" = "unix");
+show create group provider unix_group_provider;
+show group providers;
+drop group provider unix_group_provider;
+show group providers;

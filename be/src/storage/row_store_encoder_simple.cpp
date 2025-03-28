@@ -106,7 +106,7 @@ Status RowStoreEncoderSimple::encode_chunk_to_full_row_column(const Schema& sche
 Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& schema,
                                                                   const BinaryColumn& full_row_column,
                                                                   const std::vector<uint32_t>& read_column_ids,
-                                                                  std::vector<std::unique_ptr<Column>>* pdest) {
+                                                                  MutableColumns* pdest) {
     auto& dest = *pdest;
     int num_rows = full_row_column.size();
     for (size_t i = 0; i < num_rows; i++) {

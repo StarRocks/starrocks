@@ -261,9 +261,4 @@ public class LargeIntLiteral extends LiteralExpr {
         // IntLiteral(0) equals to LargeIntLiteral(0), so their hash codes must equal.
         return Objects.hash(getLongValue());
     }
-
-    @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj);
-    }
 }

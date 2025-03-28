@@ -58,6 +58,7 @@ public class CreateFunctionStmt extends DdlStmt {
     private final Map<String, String> properties;
     private final String content;
     private final boolean shouldReplaceIfExists;
+    private final boolean createIfNotExists;
 
     // needed item set after analyzed
     private Function function;
@@ -81,7 +82,8 @@ public class CreateFunctionStmt extends DdlStmt {
                               TypeDef returnType,
                               Map<String, String> properties,
                               String content,
-                              boolean shouldReplaceIfExists) {
+                              boolean shouldReplaceIfExists,
+                              boolean createIfNotExists) {
         this(functionType,
                 functionName,
                 argsDef,
@@ -89,12 +91,14 @@ public class CreateFunctionStmt extends DdlStmt {
                 properties,
                 content,
                 shouldReplaceIfExists,
-                NodePosition.ZERO);
+                createIfNotExists,
+                NodePosition.ZERO
+        );
     }
 
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, Map<String, String> properties, String content,
-                              boolean shouldReplaceIfExists, NodePosition pos) {
+                              boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
         super(pos);
         this.functionName = functionName;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
@@ -103,6 +107,7 @@ public class CreateFunctionStmt extends DdlStmt {
         this.returnType = returnType;
         this.content = content;
         this.shouldReplaceIfExists = shouldReplaceIfExists;
+        this.createIfNotExists = createIfNotExists;
         if (properties == null) {
             this.properties = ImmutableSortedMap.of();
         } else {
@@ -166,6 +171,10 @@ public class CreateFunctionStmt extends DdlStmt {
 
     public boolean shouldReplaceIfExists() {
         return shouldReplaceIfExists;
+    }
+
+    public boolean createIfNotExists() {
+        return createIfNotExists;
     }
 
     @Override

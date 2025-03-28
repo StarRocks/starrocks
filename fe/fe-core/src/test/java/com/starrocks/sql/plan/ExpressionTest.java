@@ -480,8 +480,19 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select t2.tb from tall t1 join tall t2 " +
                 "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 20: tt = '123', " +
-                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1");
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: CAST(20: tt != 'ax' AS BIGINT) = 14: td\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 12> : 12: tb\n" +
+                "  |  <slot 14> : 14: td\n" +
+                "  |  <slot 20> : 20: tt\n" +
+                "  |  <slot 21> : CAST(12: tb AS INT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: tall\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 20: tt = '123', 14: td = 1");
     }
 
     @Test
@@ -689,22 +700,22 @@ public class ExpressionTest extends PlanTestBase {
                 "AS actions FROM action1 GROUP BY uid) AS t ) AS t1) AS t2;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 32> : minutes_add(31: expr, 90)\n" +
-                "  |  <slot 33> : 31: expr != '2020-01-01 00:00:00'\n" +
-                "  |  <slot 22> : array_sort(4: array_agg)\n" +
-                "  |  <slot 23> : array_sortby(5: array_agg, 4: array_agg)\n" +
-                "  |  <slot 24> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') " +
-                "AND ((<slot 8> >= '2020-01-02 00:00:00') " +
-                "AND (<slot 8> <= '2020-01-02 23:59:59')), 22: array_sort, 23: array_sortby)\n" +
-                "  |  <slot 25> : array_filter(22: array_sort, 24: array_map)\n" +
-                "  |  <slot 26> : 25: array_filter[1]\n" +
-                "  |  <slot 27> : minutes_add(26: expr, 90)\n" +
-                "  |  <slot 28> : 26: expr != '2020-01-01 00:00:00'\n" +
-                "  |  <slot 29> : array_map((<slot 11>, <slot 12>) -> ((<slot 12> = '下单') " +
-                "AND ((<slot 11> >= 26: expr) AND (<slot 11> <= 27: minutes_add))) " +
-                "AND (28: expr), 22: array_sort, 23: array_sortby)\n" +
-                "  |  <slot 30> : array_filter(22: array_sort, 29: array_map)\n" +
-                "  |  <slot 31> : 30: array_filter[1]");
+                "  |  <slot 20> : array_sort(4: array_agg)\n" +
+                "  |  <slot 21> : array_sortby(5: array_agg, 4: array_agg)\n" +
+                "  |  <slot 22> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') " +
+                "AND ((<slot 8> >= '2020-01-02 00:00:00') AND (<slot 8> <= '2020-01-02 23:59:59')), " +
+                "20: array_sort, 21: array_sortby)\n" +
+                "  |  <slot 23> : array_filter(20: array_sort, 22: array_map)\n" +
+                "  |  <slot 24> : 23: array_filter[1]\n" +
+                "  |  <slot 25> : minutes_add(24: expr, 90)\n" +
+                "  |  <slot 26> : 24: expr != '2020-01-01 00:00:00'\n" +
+                "  |  <slot 27> : array_map((<slot 11>, <slot 12>) -> ((<slot 12> = '下单') " +
+                "AND ((<slot 11> >= 24: expr) AND (<slot 11> <= 25: minutes_add))) " +
+                "AND (26: expr), 20: array_sort, 21: array_sortby)\n" +
+                "  |  <slot 28> : array_filter(20: array_sort, 27: array_map)\n" +
+                "  |  <slot 29> : 28: array_filter[1]\n" +
+                "  |  <slot 30> : minutes_add(29: expr, 90)\n" +
+                "  |  <slot 31> : 29: expr != '2020-01-01 00:00:00'");
     }
 
     @Test
@@ -717,9 +728,11 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select array_agg(array_length(array_map(x->x*2, c2))) from test_array12";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
-                "  |  output: array_agg(array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2)))"));
-        Assert.assertTrue(plan.contains("  1:Project\n" +
-                "  |  <slot 3> : 3: c2"));
+                "  |  output: array_agg(5: array_length)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 5> : array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2))"));
 
         sql = "select array_map(x->x > count(c1), c2) from test_array12 group by c2";
         plan = getFragmentPlan(sql);
@@ -1282,7 +1295,7 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select cast(cast(id_datetime as string) as date) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(CAST(8: id_datetime AS VARCHAR(65533)) AS DATE)");
+        assertContains(plan, "CAST(8: id_datetime AS DATE)");
 
         sql = "select cast(cast(t1d as int) as boolean) from test_all_type;";
         plan = getFragmentPlan(sql);
@@ -1583,7 +1596,7 @@ public class ExpressionTest extends PlanTestBase {
 
         String sql2 = "select ilike('AA', concat('a', 'A'))";
         String plan2 = getFragmentPlan(sql2);
-        assertContains(plan2, "<slot 2> : like(lower('AA'), lower('aA'))");
+        assertContains(plan2, "<slot 2> : like('aa', 'aa')");
     }
 
     @Test
@@ -1780,7 +1793,7 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select * from test_object where true = bitmap_contains(b1, v1) or bitmap_contains(b1, v2) = true";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
+        assertContains(plan, "predicates: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
                 "OR (bitmap_contains(5: b1, CAST(2: v2 AS BIGINT)))");
     }
 

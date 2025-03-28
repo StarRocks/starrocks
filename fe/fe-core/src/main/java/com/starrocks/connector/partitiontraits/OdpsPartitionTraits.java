@@ -14,16 +14,9 @@
 package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.OdpsPartitionKey;
-import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 
 public class OdpsPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return ((OdpsTable) table).getDbName();
-    }
-
     @Override
     public boolean isSupportPCTRefresh() {
         return false;

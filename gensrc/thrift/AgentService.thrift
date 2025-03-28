@@ -118,6 +118,10 @@ struct TCreateTabletReq {
     21: optional i32 compression_level = -1;
     // Whether or not use shared tablet initial metadata.
     22: optional bool enable_tablet_creation_optimization = false;
+    // The timeout FE will wait for the tablet to be created.
+    23: optional i64 timeout_ms = -1;
+    // Global transaction id
+    24: optional i64 gtid = 0;
 }
 
 struct TDropTabletReq {
@@ -248,6 +252,10 @@ struct TCheckConsistencyReq {
 struct TCompactionReq {
     1: optional list<Types.TTableId> tablet_ids
     2: optional bool is_base_compaction
+}
+
+struct TCompactionControlReq {
+    1: optional map<Types.TTableId, i64> table_to_disable_deadline
 }
 
 struct TUpdateSchemaReq {
@@ -384,6 +392,7 @@ struct TRemoteSnapshotRequest {
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TBackend> src_backends
      14: optional i32 timeout_sec
+     15: optional Types.TVersion data_version
  }
 
  struct TReplicateSnapshotRequest {
@@ -401,6 +410,7 @@ struct TRemoteSnapshotRequest {
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TSnapshotInfo> src_snapshot_infos
      14: optional binary encryption_meta
+     15: optional Types.TVersion data_version
  }
 
 enum TTabletMetaType {
@@ -414,7 +424,9 @@ enum TTabletMetaType {
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
     STORAGE_TYPE,
-    MUTABLE_BUCKET_NUM
+    MUTABLE_BUCKET_NUM,
+    ENABLE_LOAD_PROFILE,
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES
 }
 
 struct TTabletMetaInfo {
@@ -429,6 +441,7 @@ struct TTabletMetaInfo {
     9: optional TTabletSchema tablet_schema;
     // |create_schema_file| only used when |tablet_schema| exists
     10: optional bool create_schema_file;
+    11: optional TPersistentIndexType persistent_index_type;
 }
 
 struct TUpdateTabletMetaInfoReq {
@@ -478,6 +491,7 @@ struct TAgentTaskRequest {
     29: optional TRemoteSnapshotRequest remote_snapshot_req
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
+    32: optional TCompactionControlReq compaction_control_req
 }
 
 struct TAgentResult {

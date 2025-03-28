@@ -27,6 +27,7 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+#include "util/thrift_rpc_helper.h"
 
 using namespace fmt::literals;
 
@@ -90,39 +91,18 @@ static Status to_status(const TBrokerOperationStatus& st, const TNetworkAddress&
 template <typename Method, typename Request, typename Response>
 static Status call_method(const TNetworkAddress& broker, Method method, const Request& request, Response* response,
                           int retry_count = 1, int timeout_ms = DEFAULT_TIMEOUT_MS) {
-    TFileBrokerServiceClient* client;
-#ifndef BE_TEST
-    Status status;
-    BrokerServiceConnection conn(client_cache(), broker, timeout_ms, &status);
-    if (!status.ok()) {
-        LOG(WARNING) << "Fail to get broker client, error=" << status << ", broker=" << broker.hostname;
-        return status.clone_and_append(fmt::format("broker={}", broker.hostname));
-    }
-    client = conn.get();
+#ifdef BE_TEST
+    TFileBrokerServiceClient* client = g_broker_client;
+    (client->*method)(*response, request);
+    return Status::OK();
 #else
-    client = g_broker_client;
+    return ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+            broker,
+            [method, response, &request](BrokerServiceConnection& client) {
+                (client.get()->*method)(*response, request);
+            },
+            timeout_ms, retry_count);
 #endif
-
-    while (true) {
-        try {
-            (client->*method)(*response, request);
-            return Status::OK();
-        } catch (apache::thrift::transport::TTransportException& e) {
-#ifndef BE_TEST
-            RETURN_IF_ERROR(conn.reopen());
-            client = conn.get();
-#endif
-            if (retry_count-- > 0) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-            } else {
-                return Status::ThriftRpcError(
-                        fmt::format("Fail to call broker, error={}, broker={}", e.what(), broker.hostname));
-            }
-        } catch (apache::thrift::TException& e) {
-            return Status::ThriftRpcError(
-                    fmt::format("Fail to call broker, error={}, broker={}", e.what(), broker.hostname));
-        }
-    }
 }
 
 // This function will *NOT* return EOF status.

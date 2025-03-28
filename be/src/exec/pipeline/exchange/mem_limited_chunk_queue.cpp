@@ -117,10 +117,9 @@ Status MemLimitedChunkQueue::push(const ChunkPtr& chunk) {
     _tail->cells.emplace_back(cell);
     _tail->memory_usage += chunk->memory_usage();
 
+#ifndef BE_TEST
     size_t in_memory_rows = _total_accumulated_rows - _flushed_accumulated_rows + _current_load_rows;
     size_t in_memory_bytes = _total_accumulated_bytes - _flushed_accumulated_bytes + _current_load_bytes;
-
-#ifndef BE_TEST
     _peak_memory_rows_counter->set(in_memory_rows);
     _peak_memory_bytes_counter->set(in_memory_bytes);
 #endif
@@ -468,8 +467,8 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
         auto defer = DeferOp([&]() {
-            _has_flush_io_task.store(false);
             TEST_SYNC_POINT("MemLimitedChunkQueue::after_execute_flush_task");
+            _has_flush_io_task.store(false);
         });
 
         auto status = _flush();
@@ -479,7 +478,7 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         }
     };
 
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup().get(), std::move(flush_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(flush_task));
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
 }
@@ -551,7 +550,7 @@ Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
             _update_io_task_status(status);
         }
     };
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup().get(), std::move(load_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(load_task));
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
 }

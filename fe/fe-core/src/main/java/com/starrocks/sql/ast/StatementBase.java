@@ -39,9 +39,12 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -60,10 +63,26 @@ public abstract class StatementBase implements ParseNode {
         // True if the describe_stmt print verbose information, if `isVerbose` is true, `isExplain` must be set to true.
         VERBOSE,
         // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
-        COST,
+        COSTS,
         OPTIMIZER,
         REWRITE,
-        SCHEDULER
+        SCHEDULER,
+        PLAN_ADVISOR;
+
+        public static ExplainLevel defaultValue() {
+            return NORMAL;
+        }
+
+        public static ExplainLevel parse(String value) {
+            if (StringUtils.isEmpty(value)) {
+                return defaultValue();
+            }
+            ExplainLevel result = EnumUtils.getEnumIgnoreCase(ExplainLevel.class, value);
+            if (result == null) {
+                return defaultValue();
+            }
+            return result;
+        }
     }
 
     private ExplainLevel explainLevel;
@@ -109,7 +128,7 @@ public abstract class StatementBase implements ParseNode {
 
     public ExplainLevel getExplainLevel() {
         if (explainLevel == null) {
-            return ExplainLevel.NORMAL;
+            return ExplainLevel.defaultValue();
         } else {
             return explainLevel;
         }
@@ -150,5 +169,9 @@ public abstract class StatementBase implements ParseNode {
 
     public boolean isExistQueryScopeHint() {
         return CollectionUtils.isNotEmpty(allQueryScopeHints);
+    }
+
+    public int getTimeout() {
+        return ConnectContext.get().getSessionVariable().getQueryTimeoutS();
     }
 }

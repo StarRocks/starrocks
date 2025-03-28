@@ -18,10 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.RpcException;
@@ -59,8 +60,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
+    private Coordinator coordinator;
     private Deployer deployer;
     private ExecutionDAG dag;
+
+    private volatile boolean cancelled = false;
 
     public PhasedExecutionSchedule(ConnectContext context) {
         this.connectContext = context;
@@ -106,7 +110,8 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     // fragment id -> fragment child schedule order
     private Map<PlanFragmentId, FragmentSequence> sequenceMap = Maps.newHashMap();
 
-    public void prepareSchedule(Deployer deployer, ExecutionDAG dag) {
+    public void prepareSchedule(Coordinator coordinator, Deployer deployer, ExecutionDAG dag) {
+        this.coordinator = coordinator;
         this.deployer = deployer;
         this.dag = dag;
         ExecutionFragment rootFragment = dag.getRootFragment();
@@ -197,7 +202,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     // schedule next
-    public void schedule() throws RpcException, UserException {
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
         buildDeployStates();
         final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
         if (oldTaskCnt == 0) {
@@ -209,25 +214,42 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
-    private void doDeploy() throws RpcException, UserException {
+    public void cancel() {
+        cancelled = true;
+    }
+
+    private void doDeploy() throws RpcException, StarRocksException {
         if (deployStates.isEmpty()) {
             return;
         }
-        final List<DeployState> deployState = deployStates.poll();
+        List<DeployState> deployState = deployStates.poll();
         Preconditions.checkState(deployState != null);
         for (DeployState state : deployState) {
             deployer.deployFragments(state);
         }
+
+        while (true) {
+            deployState = coordinator.assignIncrementalScanRangesToDeployStates(deployer, deployState);
+            if (deployState.isEmpty()) {
+                break;
+            }
+            for (DeployState state : deployState) {
+                deployer.deployFragments(state);
+            }
+        }
     }
 
-    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException {
+    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
+        if (cancelled) {
+            return;
+        }
         final FragmentInstance instance = dag.getInstanceByInstanceId(fragmentInstanceId);
         final PlanFragmentId fragmentId = instance.getFragmentId();
         final AtomicInteger countDowns = schedulingFragmentInstances.get(fragmentId);
         if (countDowns.decrementAndGet() != 0) {
             return;
         }
-        try (var guard = ConnectContext.ScopeGuard.setIfNotExists(connectContext)) {
+        try (var guard = connectContext.bindScope()) {
             final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
             if (oldTaskCnt == 0) {
                 int dec = 0;
@@ -315,7 +337,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
             }
 
             if (groups.size() != fragment.childrenSize()) {
-                List<PackedExecutionFragment> fragments =  Lists.newArrayList();
+                List<PackedExecutionFragment> fragments = Lists.newArrayList();
                 for (int i = fragment.childrenSize() - 1; i >= 0; i--) {
                     final ExecutionFragment child = sequenceMap.get(fragment.getFragmentId()).getAt(i);
                     final PlanFragmentId childFragmentId = child.getFragmentId();

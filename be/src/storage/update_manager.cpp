@@ -27,6 +27,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
+#include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -476,7 +477,7 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
 }
 
 Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelVectorPtr& delvec) {
-    VLOG(1) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
+    VLOG(2) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
             << " version:" << delvec->version() << " #del:" << delvec->cardinality();
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     auto itr = _del_vec_cache.find(tsid);
@@ -498,8 +499,9 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(on_rowset_finished_failed_due_to_mem);
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), config::enable_pk_strict_memcheck);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? mem_tracker() : nullptr);
     if (!rowset->has_data_files() || tablet->tablet_state() == TABLET_NOTREADY) {
         // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index
@@ -507,7 +509,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     }
 
     string rowset_unique_id = rowset->rowset_id().to_string();
-    VLOG(1) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
+    VLOG(2) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     // Prepare apply required resources, load updatestate, primary index into cache,
     // so apply can run faster. Since those resources are in cache, they can get evicted
@@ -564,14 +566,22 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         }
     }
 
-    VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
+    VLOG(2) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
+
+    FAIL_POINT_TRIGGER_EXECUTE(on_rowset_finished_failed_due_to_mem,
+                               { st = Status::MemoryLimitExceeded("on_rowset_finished failed"); });
+    // if failed due to memory limit which is not a critical issue. we don't need to abort the ingestion
+    // and we can still commit the txn.
+    if (st.is_mem_limit_exceeded()) {
+        return Status::OK();
+    }
     return st;
 }
 
 void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
     string rowset_unique_id = rowset->rowset_id().to_string();
-    VLOG(1) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
+    VLOG(2) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     if (rowset->is_column_mode_partial_update()) {
         auto column_state_entry =

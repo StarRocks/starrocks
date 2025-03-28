@@ -28,7 +28,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Util;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -48,7 +48,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
-    public AlterJobV2 build() throws UserException {
+    public AlterJobV2 build() throws StarRocksException {
         if (newIndexSchema.isEmpty() && !hasIndexChanged) {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }

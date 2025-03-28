@@ -141,7 +141,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `low_card_t2` (\n" +
@@ -158,7 +158,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
@@ -395,6 +395,11 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" multi_distinct_count(11: S_ADDRESS), " +
                 "multi_distinct_count(12: S_COMMENT)"));
+
+        sql = "select max(a) from (select count(distinct S_ADDRESS) a from supplier)t";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "multi_distinct_count(9: count)");
+
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         sql = "select max(S_ADDRESS), count(distinct S_ADDRESS) from supplier group by S_ADDRESS;";
         plan = getFragmentPlan(sql);
@@ -886,15 +891,20 @@ public class LowCardinalityTest extends PlanTestBase {
         // Test multi input Expression with DictColumn
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                        "DictDecode(13: S_COMMENT, [CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
-
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: if(3: S_ADDRESS = 'kks', CAST(7: S_COMMENT AS BOOLEAN), FALSE)\n" +
+                "  |  \n" +
+                "  1:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  <dict id 13> : <string id 7>");
         // Test multi input Expression with No-String Column
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_NAME as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: if(3: S_ADDRESS = 'kks', CAST(2: S_NAME AS BOOLEAN), FALSE)\n" +
+                "  |  \n" +
+                "  1:Decode\n" +
+                "  |  <dict id 12> : <string id 3>");
 
         // Test Two input column. one could apply the other couldn't apply
         // The first expression that can accept a full rewrite. the second couldn't apply
@@ -908,9 +918,16 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false) " +
                 "and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictDecode(12: S_ADDRESS, [<place-holder> = 'kks']), " +
-                        "CAST(7: S_COMMENT AS BOOLEAN), FALSE), NOT (7: S_COMMENT LIKE '%kks%')"));
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: if(3: S_ADDRESS = 'kks', CAST(7: S_COMMENT AS BOOLEAN), FALSE)\n" +
+                "  |  \n" +
+                "  1:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: NOT (7: S_COMMENT LIKE '%kks%')");
 
     }
 
@@ -1456,8 +1473,8 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
-                "  |  <slot 14> : 8: S_ADDRESS\n" +
-                "  |  <slot 15> : clone(8: S_ADDRESS)\n" +
+                "  |  <slot 14> : clone(8: S_ADDRESS)\n" +
+                "  |  <slot 15> : 8: S_ADDRESS\n" +
                 "  |  \n" +
                 "  2:Decode\n" +
                 "  |  <dict id 16> : <string id 8>\n" +
@@ -1516,7 +1533,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testMetaScan2() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
 
         Assert.assertTrue(plan.contains("  0:MetaScan\n" +
@@ -1528,15 +1545,16 @@ public class LowCardinalityTest extends PlanTestBase {
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
                 "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
-                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), " +
+                "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:INT))])]"));
     }
 
     @Test
     public void testMetaScan3() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a)\n" +
+                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a, 255)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
@@ -1943,4 +1961,50 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertFalse("table doesn't contain global dict, we can change its distribution",
                 execPlan.getOptExpression(1).isExistRequiredDistribution());
     }
+
+    @Test
+    public void testRuntimeFilterOnProjectWithDictExpr() throws Exception {
+        String sql = "WITH \n" +
+                "   w1 AS (\n" +
+                "     SELECT CASE\n" +
+                "         WHEN P_NAME = 'a' THEN 'a1'\n" +
+                "         WHEN P_BRAND = 'b' THEN 'b1'\n" +
+                "         ELSE 'c1'\n" +
+                "      END as P_NAME2, P_NAME from part_v2\n" +
+                "      UNION ALL\n" +
+                "      SELECT P_NAME, P_NAME from part_v2\n" +
+                ")\n" +
+                "SELECT count(1) \n" +
+                "FROM  \n" +
+                "   w1 t1 \n" +
+                "   JOIN [broadcast] part_v2 t2 ON t1.P_NAME2 = t2.P_NAME AND t1.P_NAME = t2.P_NAME;";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 38> : <string id 2>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 1, probe_expr = (2: P_NAME)\n" +
+                "  |  column statistics: \n" +
+                "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  12 <-> CASE WHEN DictDecode(38: P_NAME, [<place-holder> = 'a']) THEN 'a1' " +
+                "WHEN DictDecode(39: P_BRAND, [<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  38 <-> [38: P_NAME, INT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (<slot 12>)\n" +
+                "  |  column statistics: \n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     table: part_v2, rollup: part_v2\n" +
+                "     preAggregation: on\n" +
+                "     dict_col=P_NAME,P_BRAND");
+        System.out.println(plan);
+    }
+
 }

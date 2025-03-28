@@ -18,12 +18,14 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
@@ -37,6 +39,7 @@
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
@@ -59,8 +62,10 @@ void PipelineDriver::check_operator_close_states(const std::string& func_name) {
             ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
                << " fragment_id="
                << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
-            auto msg = fmt::format("{} close operator {}-{} failed, may leak resources when {}, please reflect to SR",
-                                   ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
+            auto msg = fmt::format(
+                    "{} close operator {}-{} failed, may leak resources when {}, please report an issue at "
+                    "https://github.com/StarRocks/starrocks/issues/new/choose.",
+                    ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
             LOG(ERROR) << msg;
             DCHECK(false) << msg;
         }
@@ -76,15 +81,15 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _runtime_state = runtime_state;
 
-    auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
+    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
     SCOPED_TIMER(prepare_timer);
 
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
-    _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
+    _overhead_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "OverheadTime", 1_ms);
+    _schedule_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "ScheduleTime", 1_ms);
 
-    _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
     _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
@@ -93,13 +98,16 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
 
-    _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
-    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
-    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
-    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
-    _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
-    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
-    _pending_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PendingFinishTime", "PendingTime");
+    _pending_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "PendingTime", 1_ms);
+    _precondition_block_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "PreconditionBlockTime", "PendingTime", 1_ms);
+    _input_empty_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "InputEmptyTime", "PendingTime", 1_ms);
+    _first_input_empty_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime", 1_ms);
+    _followup_input_empty_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime", 1_ms);
+    _output_full_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "OutputFullTime", "PendingTime", 1_ms);
+    _pending_finish_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "PendingFinishTime", "PendingTime", 1_ms);
 
     _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
             "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
@@ -156,6 +164,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());
         }
     }
+    if (!_global_rf_descriptors.empty() && runtime_state->enable_event_scheduler()) {
+        _fragment_ctx->add_timer_observer(observer(), _global_rf_wait_timeout_ns);
+    }
 
     if (!all_local_rf_set.empty()) {
         _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
@@ -163,6 +174,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     size_t subscribe_filter_sequence = source_op->get_driver_sequence();
     _local_rf_holders =
             fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
+    for (auto rf_holder : _local_rf_holders) {
+        rf_holder->add_observer(_runtime_state, &_observer);
+    }
     if (use_cache) {
         ssize_t cache_op_idx = -1;
         query_cache::CacheOperatorPtr cache_op = nullptr;
@@ -283,6 +297,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    curr_op->update_exec_stats(runtime_state);
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -304,7 +319,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
-                    SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(curr_op);
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
@@ -337,7 +351,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                         total_rows_moved += row_num;
                         {
-                            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
@@ -374,6 +387,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    curr_op->update_exec_stats(runtime_state);
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -408,6 +422,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         _first_unfinished = new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
+            sink_operator()->update_exec_stats(runtime_state);
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
@@ -563,6 +578,7 @@ void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
                       fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
     }
+    _is_operator_cancelled = true;
 }
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
@@ -653,8 +669,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
     }
 }
 
-void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
-                              int64_t execution_time) {
+void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     stop_timers();
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
@@ -679,6 +694,10 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
     set_driver_state(state);
 
     _update_driver_level_timer();
+
+    if (_global_rf_timer != nullptr) {
+        _fragment_ctx->pipeline_timer()->unschedule(_global_rf_timer.get());
+    }
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
@@ -715,6 +734,17 @@ void PipelineDriver::_update_driver_level_timer() {
     }
 }
 
+void PipelineDriver::_update_global_rf_timer() {
+    if (!_runtime_state->enable_event_scheduler()) {
+        return;
+    }
+    auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx, true);
+    timer->add_observer(_runtime_state, &_observer);
+    _global_rf_timer = std::move(timer);
+    timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
+    WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
+}
+
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
     std::string block_reasons = "";
@@ -724,8 +754,8 @@ std::string PipelineDriver::to_readable_string() const {
     ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
        << " fragment_id="
        << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
-       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << block_reasons
-       << ", operator-chain: [";
+       << " driver=" << _driver_name << " addr=" << this << ", status=" << ds_to_string(this->driver_state())
+       << block_reasons << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();
@@ -779,7 +809,6 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
@@ -797,7 +826,6 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
@@ -821,7 +849,6 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         op_state = OperatorStage::CANCELLED;
         return op->set_cancelled(state);
     }
@@ -843,7 +870,6 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
 
     VLOG_ROW << msg;
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
         QUERY_TRACE_SCOPED(op->get_name(), "close");
@@ -898,6 +924,12 @@ void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
 
 void PipelineDriver::increment_schedule_times() {
     driver_acct().increment_schedule_times();
+}
+
+void PipelineDriver::assign_observer() {
+    for (const auto& op : _operators) {
+        op->set_observer(&_observer);
+    }
 }
 
 } // namespace starrocks::pipeline

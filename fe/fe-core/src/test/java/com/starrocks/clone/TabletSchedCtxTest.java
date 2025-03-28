@@ -39,6 +39,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
+import com.starrocks.clone.TabletScheduler.PathSlot;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -51,6 +52,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -62,12 +64,14 @@ public class TabletSchedCtxTest {
     private static int PART_ID = 3;
     private static int INDEX_ID = 4;
     private static int SCHEMA_HASH = 5;
+    private static int PH_PART_ID = 6;
 
     private static String TB_NAME = "test";
     private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1", ScalarType
             .createType(PrimitiveType.TINYINT), true, null, "", "key1"));
 
     private static int TABLET_ID_1 = 50000;
+    private static int TABLET_ID_2 = 51000;
 
     private Backend be1;
     private Backend be2;
@@ -115,7 +119,7 @@ public class TabletSchedCtxTest {
         // mock catalog
         MaterializedIndex baseIndex = new MaterializedIndex(TB_ID, MaterializedIndex.IndexState.NORMAL);
         DistributionInfo distributionInfo = new RandomDistributionInfo(32);
-        Partition partition = new Partition(PART_ID, TB_NAME, baseIndex, distributionInfo);
+        Partition partition = new Partition(PART_ID, PH_PART_ID, TB_NAME, baseIndex, distributionInfo);
         baseIndex.addTablet(tablet, tabletMeta);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PART_ID, (short) 3);
@@ -159,9 +163,8 @@ public class TabletSchedCtxTest {
 
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
-        TabletSchedCtx ctx =
-                new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
-                        TABLET_ID_1, System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PH_PART_ID, INDEX_ID,
+                TABLET_ID_1, System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         ctx.setTablet(missedTablet);
         ctx.setStorageMedium(TStorageMedium.HDD);
 
@@ -228,6 +231,58 @@ public class TabletSchedCtxTest {
         expectedCtx = pendingTablets.poll();
         Assert.assertNotNull(expectedCtx);
         Assert.assertEquals(ctx2.getTabletId(), expectedCtx.getTabletId());
+    }
+
+    @Test
+    public void testChooseDestReplicaForVersionIncomplete() {
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, SCHEMA_HASH, TStorageMedium.HDD);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID_2, tabletMeta);
+        Replica replica1 = new Replica(50011, be1.getId(), 0, Replica.ReplicaState.NORMAL);
+        Replica replica2 = new Replica(50012, be2.getId(), 0, Replica.ReplicaState.NORMAL);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID_2, replica1);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID_2, replica2);
+
+        replica1.updateVersionInfo(101, 108, 101);
+        replica2.updateVersionInfo(100, 120, 100);
+        replica1.setPathHash(Long.valueOf(100));
+        replica2.setPathHash(Long.valueOf(101));
+
+        List<Replica> replicas = new ArrayList<>();
+        replicas.add(replica1);
+        replicas.add(replica2);
+        LocalTablet repairTablet = new LocalTablet(TABLET_ID_2, replicas);
+
+        TabletSchedCtx ctx =
+                new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
+                        TABLET_ID_2, System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        ctx.setTablet(repairTablet);
+        ctx.setStorageMedium(TStorageMedium.HDD);
+        ctx.setVersionInfo(101, 108, 12332);
+
+        Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
+        List<Long> pathHashes = new ArrayList<>();
+        pathHashes.add(Long.valueOf(100));
+        PathSlot slot1 = new PathSlot(pathHashes, 1000);
+        backendsWorkingSlots.put(be1.getId(), slot1);
+        pathHashes.clear();
+        pathHashes.add(Long.valueOf(101));
+        PathSlot slot2 = new PathSlot(pathHashes, 1000);
+        backendsWorkingSlots.put(be2.getId(), slot2);
+        try {
+            ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+        Assert.assertEquals(be2.getId(), ctx.getDestBackendId());
+
+        replica2.updateVersionInfo(101, 120, 101);
+        try {
+            ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+        Assert.assertEquals(be1.getId(), ctx.getDestBackendId());
+
     }
 
 }

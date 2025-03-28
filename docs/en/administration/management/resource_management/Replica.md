@@ -1,352 +1,346 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 70
 ---
 
-# Replica management
+# Manage replica
 
-## Terminology
+This topic describes how to manage data replicas in your StarRocks cluster.
 
-* Tablet: Logical slice of a table, a table has multiple tablets.
-* Replica: Copy of a tablet, 3 replicas per tablet by default.
-* Healthy Replica: A replica whose backend is alive and version is complete.
-* TabletChecker (TC): A resident background thread that periodically scans all Tablets and decides whether to send tablets to TabletScheduler based on their status.
-* TabletScheduler (TS): A resident background thread that processes tablets sent by TabletChecker, and also performs cluster replica balancing.
-* TabletSchedCtx (TSC): A wrapper for a tablet. When a tablet is selected by TC, it is encapsulated as a TSC and sent to TS.
-* Storage Medium: StarRocks supports different storage media for partition granularity, including SSD and HDD. The scheduling of replicas varies for different storage media.
+## Overview
 
-## Status
+StarRocks adopts a multi-replica strategy to guarantee the high availability of data. When you create a table, you must specify the replica count of the table using the table property `replication_num` (Default value: `3`). When a loading transaction starts, data is simultaneously loaded into the specified number of replicas. The transaction is returned with success only after the data is stored in the majority of replicas. For detailed information, see [Write quorum](#write-quorum). Nonetheless, StarRocks allows you to specify a lower write quorum for a table to achieve better loading performance.
 
-### Replica Status
+StarRocks stores multiple replicas across different BE nodes. For example, if you want to store three replicas for a table, you must deploy at least three BE nodes in your StarRocks cluster. If any of the replicas fail, StarRocks clones a healthy replica, partially or wholly, from another BE node to repair the failed replica. By using the Multi-Version Concurrency Control (MVCC) technique, StarRocks accelerates the repairing of the replica by duplicating the physical copies of these multi-version data.
 
-The health states of a Replica are as follows.
+### Loading data into a multi-replica table
 
-* **BAD**
+![Replica-1](../../../_assets/replica-1.png)
 
-The replica is corrupted. This includes, but is not limited to, unrecoverable damage to the replica caused by disk failures, bugs, etc.
+The routine of a loading transaction is as follows:
 
-* **VERSION_MISSING**
+1. The client submits a loading request to FE.
 
-Each batch import corresponds to one version of data. You should see several consecutive versions in one replica. Due to import errors, some replicas may have incomplete versions of data.
+2. FE chooses a BE node as the Coordinator BE node of this loading transaction, and generates an execution plan for the transaction.
 
-* **HEALTHY**
+3. The Coordinator BE node reads the data to be loaded from the client.
 
-The replica has correct data and the BE node where it is located is in normal state (with a normal heartbeat and is not in the process of being taken offline).
+4. The Coordinator BE node dispatches the data to all the replicas of tablets.
 
-### Tablet Status
+   > **NOTE**
+   >
+   > A tablet is a logical slice of a table. A table has multiple tablets, and each tablet has replication_num replicas. The number of tablets in a table is determined by the `bucket_size` property of the table.
 
-The health state of a Tablet is determined by the status of all its replicas:
+5. After the data is loaded and stored in all the tablets, FE makes the loaded data visible.
 
-* **REPLICA_MISSING**
+6. FE returns loading success to the client.
 
-Replica missing. That is, the number of surviving replicas is less than the expected number of replicas.
+Such a routine guarantees service availability even under extreme scenarios.
 
-* **VERSION_INCOMPLETE**
+### Write quorum
 
-The number of surviving replicas is greater than or equal to the expected number, but the number of healthy replicas is less than the expected number.
+Loading data into a multi-replica table can be very time-consuming. If you want to improve the loading performance and you can tolerate relatively lower data availability, you can set a lower write quorum for tables. A write quorum refers to the minimum number of replicas that need to acknowledge a write operation before it is considered successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md). This property is supported from v2.5.
 
-* **REPLICA_RELOCATING**
+`write_quorum` supports the following values:
 
-The number of surviving replicas that have full version is equal to `replication num`. But the BE node where some of the replicas are located is unavailable (e.g., in decommission status).
+- `MAJORITY`: Default value. When the majority of data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ONE`: When one of the data replicas returns loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ALL`: When all of the data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
 
-* **REPLICA_MISSING_IN_CLUSTER**
+## Automatic replica repair
 
-When using multiple clusters, the number of healthy replicas is greater than or equal to the expected number, but the number of replicas within the corresponding cluster is less than the expected number.
+Replicas can fail because certain BE nodes crash or some loading tasks fail. StarRocks automatically repairs these failed replicas.
 
-* **REDUNDANT**
+Every `tablet_sched_checker_interval_seconds`, default 20 seconds, Tablet Checker in FE scans all tablet replicas of all tables in your StarRocks cluster, and judges if a replica is healthy by checking the version number of the currently visible data and the health status of the BE node. If the visible version of a replica lags behind those of the other replicas, StarRocks performs an incremental clone to repair the failed replica. If a BE node fails to receive heartbeats or is dropped from the cluster, or the replica is too lagged to be repaired by an incremental clone, StarRocks performs a full clone to repair the lost replica.
 
-Replica redundancy. All healthy replicas are in the corresponding cluster, but the total number of replicas is greater than the expected numbers due to redundant unavailable replicas.
+After detecting tablet replicas that need repair, FE generates a tablet scheduling task, and adds the task to the scheduling task queue. Tablet Scheduler in the FE receives the scheduling task from the queue, creates clone tasks for each failed replica in accordance with the clone type they need, and assigns the tasks to the executor BE nodes.
 
-* **FORCE_REDUNDANT**
+A clone task is essentially copying data from a source BE node (which has a healthy replica), and loading the data into the destination BE node (which has a failed replica). For a replica with a lagged data version, FE assigns an incremental clone task to the BE executor that stores the failed replica, and informs the executor BE node from which peer BE node it can find a healthy replica and clone the new data. If a replica is lost, FE chooses a surviving BE node as the executor BE node, creates an empty replica in the BE node, and assigns a full clone task to the BE node.
 
-This is a special status. It only occurs when the expected number of replicas is greater than or equal to the number of available nodes, and the Tablet is in the replica missing state. In this case, one replica needs to be deleted first to ensure that there are available nodes for creating new replicas.
+For each clone task, regardless of its type, the executor BE node duplicates the physical data files from a healthy replica, and then updates its metadata accordingly. After the clone task is completed, the executor BE node reports task success to Tablet Scheduler in FE. After removing the redundant tablet replicas, FE updates its metadata, marking the completion of the replica repair.
 
-* **COLOCATE_MISMATCH**
+![Replica-2](../../../_assets/replica-2.png)
 
-Tablet status for the Colocation attribute, indicating that the sharded replica does not match the distribution specified by the Colocation Group.
+During tablet repair, StarRocks can still execute queries. StarRocks can load data into the table as long as the number of healthy replicas satisfies `write_quorum`.
 
-* **COLOCATE_REDUNDANT**
+## Repair replica manually
 
-Tablet status for the Colocation attribute, indicating that the tablet replica of the Colocation table is redundant.
+The manual replica repair consists of two steps:
 
-* **HEALTHY**
+1. Check the replica status.
+2. Set the replica priority level.
 
-Healthy tablets.
+### Check replica status
 
-## Replica Repair
+Follow these steps to check the replica status of tablets to identify the unhealthy (failed) tablets.
 
-TabletChecker periodically checks the status of all tablets. Unhealthy tablets are handed over to TabletScheduler for scheduling and repairing. The repair is done on the BE as a clone task. The FE is responsible for generating the clone task.
+1. **Check the status of all tablets in the cluster.**
 
-> Note 1: The main idea of replica repair is to first create or patch new replicas to reach the desired value, and then delete any redundant replicas.
-> Note 2: A clone task is to copy target data from a remote BE to a destination BE.
+   ```SQL
+   SHOW PROC '/statistic';
+   ```
 
-For different states, we use different methods to repair.
+   Example:
 
-1. REPLICA_MISSING/REPLICA_RELOCATING
-   Select an available BE node as the destination BE. Select a healthy replica as the source. The clone task will copy a full replica from the source to the destination BE. For replica replenishment, an available BE node will be selected regardless of the storage medium.
-2. VERSION_INCOMPLETE
-   Select a relatively complete replica as the destination. Select a healthy replica as the source. The clone task will copy the missing version from the source to the destination.
-3. REPLICA_MISSING_IN_CLUSTER
-   This status is handled in the same way as REPLICA_MISSING.
-4. REDUNDANT
-  Usually after a replica repair, the tablet will have redundant replicas. Choose a redundant replica and delete it. The selection of redundant replicas follows this order:
+   ```Plain
+   mysql> SHOW PROC '/statistic';
+   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+   | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum |
+   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+   | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     |
+   | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     |
+   | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     |
+   | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     |
+   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+   ```
 
-   * The BE where the replica is located is already offline
-   * The replica is corrupted
-   * The BE where the replica is located is out of connection or in the process of being taken offline
-   * The replica is in CLONE state, which is an intermediate state during clone task execution
-   * The replica has a missing version
-   * The cluster where the replica is located is incorrect
-   * The BE node where the replica is located is heavily loaded
+   - `UnhealthyTabletNum`: indicates the number of unhealthy tablets in the corresponding database.
+   - `InconsistentTabletNum`: indicates the number of tablets whose replicas are inconsistent.
 
-5. FORCE_REDUNDANT
-   Although the Tablet has a missing replica, there are no available nodes to create a new one. In this case, a replica must be deleted first to free up a node for creating a new replica. The order of deleting replicas is the same as REDUNDANT.
-6. COLOCATE_MISMATCH
-   Select one of the BE nodes specified in the Colocation Group as the destination node for replica replenishment.
-7. COLOCATE_REDUNDANT
-   Delete a replica on a BE node that is not specified in the Colocation Group.
+   If the value of `UnhealthyTabletNum` or `InconsistentTabletNum` is not `0` in a specific database, you can check the unhealthy tablets in the database with its `DbId`.
 
-StarRocks does not deploy replicas of the same Tablet on different BEs of the same host, which ensures that even if all BEs of the same host fail, some replicas are still alive.
+   ```SQL
+   SHOW PROC '/statistic/<DbId>'
+   ```
 
-## Replica Scheduling
+   Example:
+
+   ```Plain
+   mysql> SHOW PROC '/statistic/5909381';
+   +------------------+---------------------+
+   | UnhealthyTablets | InconsistentTablets |
+   +------------------+---------------------+
+   | [40467980]       | []                  |
+   +------------------+---------------------+
+   ```
+
+   The ID of the unhealthy tablet is returned in the field `UnhealthyTablets`.
+
+2. **Check the tablet status in a specific table or partition.**
+
+   You can use the WHERE clause in [ADMIN SHOW REPLICA STATUS](../../../sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_SHOW_REPLICA_STATUS.md) to filter the tablets with a certain `STATUS`.
+
+   ```SQL
+   ADMIN SHOW REPLICA STATUS FROM <table_name> 
+   [PARTITION (<partition_name_1>[, <partition_name_2>, ...])]
+   [WHERE STATUS = {'OK'|'DEAD'|'VERSION_ERROR'|'SCHEMA_ERROR'|'MISSING'}]
+   ```
+
+   Example:
+
+   ```Plain
+   mysql> ADMIN SHOW REPLICA STATUS FROM tbl PARTITION (p1, p2) WHERE STATUS = "OK";
+   +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
+   | TabletId | ReplicaId | BackendId | Version | LastFailedVersion | LastSuccessVersion | CommittedVersion | SchemaHash | VersionNum | IsBad | State  | Status |
+   +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
+   | 29502429 | 29502432  | 10006     | 2       | -1                | 2                  | 1                | -1         | 2          | false | NORMAL | OK     |
+   | 29502429 | 36885996  | 10002     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
+   | 29502429 | 48100551  | 10007     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
+   | 29502433 | 29502434  | 10001     | 2       | -1                | 2                  | 1                | -1         | 2          | false | NORMAL | OK     |
+   | 29502433 | 44900737  | 10004     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
+   | 29502433 | 48369135  | 10006     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
+   +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
+   ```
+
+   If the field `IsBad` is `true`, this tablet is corrupted.
+
+   For detailed information provided in the field `Status`, see [ADMIN SHOW REPLICA STATUS](../../../sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_SHOW_REPLICA_STATUS.md).
+
+   You can further explore the details of tablets in the table using [SHOW TABLET](../../../sql-reference/sql-statements/table_bucket_part_index/SHOW_TABLET.md).
+
+   ```SQL
+   SHOW TABLET FROM <table_name>
+   ```
+
+   Example:
+
+   ```Plain
+   mysql> SHOW TABLET FROM tbl1;
+   +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
+   | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion |     CheckVersionHash | VersionCount | PathHash             | MetaUrl              | CompactionStatus     |
+   +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
+   | 29502429 | 29502432  | 10006     | 1421156361 | 2       | 0           | 2                 | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -5822326203532286804 | url                  | url                  |
+   | 29502429 | 36885996  | 10002     | 1421156361 | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -1441285706148429853 | url                  | url                  |
+   | 29502429 | 48100551  | 10007     | 1421156361 | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -4784691547051455525 | url                  | url                  |
+   +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
+   ```
 
-### Scheduling priority
+   The returned results show the size, row count, version, and URL of the tablets.
 
-Tablets waiting to be scheduled in TabletScheduler are given different priorities depending on their status. Tablets with higher priority will be scheduled first. Priority levels are as follows:
+   The field `State` returned by SHOW TABLET indicates the task state of the tablet, including `CLONE`, `SCHEMA_CHANGE`, and `ROLLUP`.
 
-* VERY_HIGH
+   You can also check the replica distribution of a specific table or partition to see if these replicas are distributed evenly using [ADMIN SHOW REPLICA DISTRIBUTION](../../../sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_SHOW_REPLICA_DISTRIBUTION.md).
 
-* In `REDUNDANT` state. Tablets with redundant replicas are given very high priority. Although the replica redundancy is the least urgent, it is the fastest to process and free up resources (such as disk space).
-* In `FORCE_REDUNDANT` state. Same as above.
+   ```SQL
+   ADMIN SHOW REPLICA DISTRIBUTION FROM <table_name>
+   ```
 
-* HIGH
+   Example:
 
-* In `REPLICA_MISSING` state and most replicas are missing (e.g., 2 of 3 replicas are missing)
-* In `VERSION_INCOMPLETE` state and most replicas have missing versions
-* In `COLOCATE_MISMATCH` state. Tablets associated with the Colocation table will be fixed as soon as possible.
-* In `COLOCATE_REDUNDANT` state.
+   ```Plain
+   mysql> ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;
+   +-----------+------------+-------+---------+
+   | BackendId | ReplicaNum | Graph | Percent |
+   +-----------+------------+-------+---------+
+   | 10000     | 7          |       | 7.29 %  |
+   | 10001     | 9          |       | 9.38 %  |
+   | 10002     | 7          |       | 7.29 %  |
+   | 10003     | 7          |       | 7.29 %  |
+   | 10004     | 9          |       | 9.38 %  |
+   | 10005     | 11         | >     | 11.46 % |
+   | 10006     | 18         | >     | 18.75 % |
+   | 10007     | 15         | >     | 15.62 % |
+   | 10008     | 13         | >     | 13.54 % |
+   +-----------+------------+-------+---------+
+   ```
 
-* NORMAL
+   The returned results show the number of tablet replicas on each BE node, and their corresponding percentages.
 
-* In `REPLICA_MISSING` state but most replicas survive (e.g. 1 of 3 replicas is missing)
-* In `VERSION_INCOMPLETE` state but most replicas have complete versions
-* In `REPLICA_RELOCATING` state and most replicas need to be relocated (e.g. 3 copies with 2)
+3. **Check the** **replica** **status of a specific tablet.**
 
-* LOW
+   With the `TabletId` of the unhealthy tablets you obtained in the preceding procedures, you can examine the replica statues of them.
 
-* In `REPLICA_MISSING_IN_CLUSTER` state
-* In `REPLICA_RELOCATING` state but most replicas are stable
+   ```SQL
+   SHOW TABLET <TabletId>
+   ```
 
-### Manually determined priority
+   Example:
 
-The system will automatically determine the scheduling priority. However, there are times when users want certain tablets to be repaired faster. Therefore, we provide a command where the user can specify tablets of a certain table or partition to be repaired first.
+   ```Plain
+   mysql> SHOW TABLET 29502553;
+   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
+   | DbName                 | TableName | PartitionName | IndexName | DbId     | TableId  | PartitionId | IndexId  | IsSync | DetailCmd                                                                 |
+   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
+   | default_cluster:test   | test      | test          | test      | 29502391 | 29502428 | 29502427    | 29502428 | true   | SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553'; |
+   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
+   ```
 
-ADMIN REPAIR TABLE tbl [PARTITION (p1, p2, ...)] ;
+   The returned results show detailed information about the database, table, partition, and index (Rollup) of the tablet.
 
-This command tells TC to give `VERY_HIGH` priority to the problematic Tablet  so it can be repaired first.
+   You can copy the SQL statement in the field `DetailCmd` to further examine the replica status of the tablet.
 
-> Note: This command does not guarantee a successful repair, and the priority will change with the scheduling of TS. This information will be lost when the leader FE is changed or restarted.
+   Example:
 
-Prioritization can be canceled with the following command.
+   ```Plain
+   mysql> SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553';
+   +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
+   | ReplicaId | BackendId | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | SchemaHash | DataSize | RowCount | State  | IsBad | VersionCount | PathHash             | MetaUrl  | CompactionStatus |
+   +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
+   | 43734060  | 10004     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | -8566523878520798656 | url      | url              |
+   | 29502555  | 10002     | 2       | 0           | 2                 | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1885826196444191611  | url      | url              |
+   | 39279319  | 10007     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1656508631294397870  | url      | url              |
+   +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
+   ```
 
-ADMIN CANCEL REPAIR TABLE tbl [PARTITION (p1, p2, ...)] ;
+   The returned results show all the replicas of the tablet.
 
-### Priority Scheduling
+### Set replica priority level
 
-Prioritization ensures that severely damaged tablets are repaired first. However, if a high-priority repair task keeps failing, it will result in low-priority tasks remaining unscheduled. Therefore, we dynamically adjust the priority based on the status of each task to ensure that all tasks have a chance to be scheduled.
+Tablet Scheduler automatically assigns a different priority level to each different type of clone task.
 
-* If the scheduling fails for 5 consecutive times (e.g., unable to acquire resources, unable to find a suitable source or destination, etc.), the task will be deprioritized.
-* A task will be prioritized if it has not been scheduled for 30 minutes.
-* The priority of a task can’t be adjusted twice within five minutes.
+If you want the tablets from a certain table or certain partitions to be repaired at the earliest opportunity, you can manually assign a `VERY_HIGH` priority level to them using [ADMIN REPAIR TABLE](../../../sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_REPAIR.md).
 
-To ensure that the initial priority level is weighted, `VERY_HIGH` tasks can only be deprioritized to `NORMAL` at most, and `LOW` tasks can only be prioritized to `HIGH` at most. The priority adjustment also applies to tasks whose priority is manually set by users.
+```SQL
+ADMIN REPAIR TABLE <table_name>
+[PARTITION (<partition_name_1>[, <partition_name_2>, ...])]
+```
 
-## Replica Balancing
+> **NOTE**
+>
+> - Executing this SQL statement only submits a hint to modify the priority level of the tablets to be repaired. It does not guarantee that these tablets can be successfully repaired.
+> - Tablet Scheduler might still assign different priority levels to these tablets after you execute this SQL statement.
+> - When the Leader FE node is changed or restarted, the hint this SQL statement submitted expires.
 
-StarRocks automatically performs replica balancing within a cluster. The main idea of balancing is to create  replicas on a low-load node and delete replicas on the high-load node. More than one storage medium may exist on different BE nodes within the same cluster.   To keep tablets in their original storage medium after balancing, BE nodes are divided based on storage media  , allowing the load balancing to be wisely scheduled .
+You can cancel this operation using [ADMIN CANCEL REPAIR TABLE](../../../sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_CANCEL_REPAIR.md).
 
-Similarly, replica balancing ensures that no replicas of the same Tablet are deployed on BEs of the same host.
+```SQL
+ADMIN CANCEL REPAIR TABLE <table_name>
+[PARTITION (<partition_name_1>[, <partition_name_2>, ...])]
+```
 
-### BE Node Load
+## Replica balancing
 
-ClusterLoadStatistics (CLS) shows the load balancing of each Backend in a cluster and triggersTabletScheduler to balance the cluster. Currently, we  `**Disk Utilization**` and `**Number of Replicas**` to calculate `loadScore` for each BE. The higher the score, the heavier the load on the BE.
+StarRocks automatically balances the tablets across BE nodes.
 
-`capacityCoefficient` and `replicaNumCoefficient` (sum to 1) are the weighting factors for `Disk Utilization` and `Number of Replicas` respectively. The `capacityCoefficient` is dynamically adjusted according to the actual disk usage. When the overall disk utilization of a BE is below 50%, the `capacityCoefficient` value is 0.5. When the disk utilization is above 75% (configurable via the FE configuration item `capacity_used_percent_high_water`), the value is 1. If the utilization is between 50% and 75%, the weight factor increases smoothly based on this formula:
+To move a tablet from a high-load node to a low-load node, StarRocks first creates a replica of the tablet in the low-load node, and then drops the corresponding replica on the high-load node. If different types of storage mediums are used in the cluster, StarRocks categorizes all the BE nodes in accordance with the storage medium types. StarRocks moves the tablet across the BE nodes of the same storage medium type whenever possible. Replicas of the same tablet are stored on different BE nodes.
 
-`capacityCoefficient= 2 * disk utilization - 0.5`
+### BE load
 
-This weighting factor ensures that when the disk usage is too high, the load score of this Backend will be higher, forcing to reduce the load on this BE as soon as possible.
+StarRocks shows the load statistics of each BE node in the cluster using `ClusterLoadStatistics` (CLS). Tablet Scheduler triggers the replica balancing based on `ClusterLoadStatistics`. StarRocks evaluates the **disk utilization** and the **replica count** of each BE node and calculates a `loadScore` accordingly. The higher the `loadScore` of a BE node, the higher the load the node has. Tablet Scheduler updates `ClusterLoadStatistics` every one minute.
 
-TabletScheduler will update the CLS every 1 minute.
+`capacityCoefficient` and `replicaNumCoefficient`are the weighting factors for the disk utilization and the replica count respectively. The sum of `capacityCoefficient` and `replicaNumCoefficient` is one. `capacityCoefficient` is dynamically adjusted according to the actual disk usage. When the overall disk utilization of a BE node is below 50%, the `capacityCoefficient` value is 0.5. When the disk utilization is above 75%, the value is 1. You can configure this limit via the FE configuration item `capacity_used_percent_high_water`. If the utilization is between 50% and 75%, `capacityCoefficient` increases smoothly based on this formula:
 
-### Balancing Policy
+```SQL
+capacityCoefficient= 2 * Disk utilization - 0.5
+```
 
-TabletScheduler selects a certain number of healthy tablets as candidates for balancing through LoadBalancer in each scheduling round and adjust future scheduling based on these candidate slices.
+`capacityCoefficient` ensures that when the disk usage is exceedingly high, the `loadScore` of this BE node gets higher, forcing the system to reduce the load on this BE node at the earliest opportunity.
 
-## Resource Control
+### Balancing policy
 
-Both replica repair and balancing are done by copying across BEs. Too many tasks simultaneously performed on the same BE lead to an increase in IO pressure. Therefore, StarRocks controls the number of tasks that can be executed on each node during scheduling. The smallest unit of resource control is the disk (i.e., a data path specified in `be.conf`). By default, two slots for each disk are allocated for replica repair. A clone task occupies one slot on the source and one slot on the destination. If the disk has zero slots, no more tasks will be assigned to it. This number of slots can be configured with the `schedule_slot_num_per_path` parameter of FE.
+Each time Tablet Scheduler schedules tablets, it selects a certain number of healthy tablets as the candidate tablets to be balanced through Load Balancer. Next time when scheduling tablets, Tablet Scheduler balances these healthy tablets.
 
-In addition, by default, two slots for each disk are allocated for replica balancing. The purpose is to prevent heavily loaded nodes from being occupied by repair tasks and not being able to free up space through balancing.
+### Check tablet scheduling tasks
 
-## View replica status
+You can check tablet scheduling tasks that are pending, running, and finished.
 
-The replica status is **only present in the leader FE node**. Therefore, the following commands need to be executed by connecting directly to the leader FE.
+- **Check pending tablet scheduling tasks**
 
-### View replica status
-
-1. Global Status Check  
-    The `SHOW PROC '/statistic';`command allows you to view the replica status of the entire cluster.
-
-    ```plaintext
-    +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-    | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum |
-    +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-    | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     |
-    | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     |
-    | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     |
-    | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     |
-    +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-    ```
-
-    The `UnhealthyTabletNum` column shows how many unhealthy Tablets are in the corresponding Database. The `InconsistentTabletNum` column shows how many Tablets in the corresponding Database are in a replica inconsistent state. The last `Total` row gives the statistics of the entire cluster. Normally `UnhealthyTabletNum` and `InconsistentTabletNum` should be zero. If they are not zero, you can further check the tablet’s information. As shown above, there is one tablet in the `UM_TEST` database with unhealthy status, then you can use the following command to see which tablet it is.
-
-    `SHOW PROC '/statistic/5909381';`  
-    where `5909381` is the corresponding DbId.
-
-    ```plaintext
-    +------------------+---------------------+
-    | UnhealthyTablets | InconsistentTablets |
-    +------------------+---------------------+
-    | [40467980]       | []                  |
-    +------------------+---------------------+
-    ```
-
-    The above result shows the specific unhealthy Tablet ID (40467980). Next, we will describe how to check the status of each replica of a specific Tablet.
-
-2. Table (Partition) Level Status Check  
-    Users can check the status of replicas of a specific table or partition with the following command and can filter the status by the WHERE statement. For example, to view the status of NORMAL replicas of `p1` and `p2` in `tbl1`.  
-    `ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2) WHERE STATUS = "OK";`
-
-    ```plaintext
-    +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
-    | TabletId | ReplicaId | BackendId | Version | LastFailedVersion | LastSuccessVersion | CommittedVersion | SchemaHash | VersionNum | IsBad | State  | Status |
-    +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
-    | 29502429 | 29502432  | 10006     | 2       | -1                | 2                  | 1                | -1         | 2          | false | NORMAL | OK     |
-    | 29502429 | 36885996  | 10002     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
-    | 29502429 | 48100551  | 10007     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
-    | 29502433 | 29502434  | 10001     | 2       | -1                | 2                  | 1                | -1         | 2          | false | NORMAL | OK     |
-    | 29502433 | 44900737  | 10004     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
-    | 29502433 | 48369135  | 10006     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
-    +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
-    ```
-
-    If `IsBad = true`, that means that the replica is corrupted. The `Status` column shows additional information.
-    The `ADMIN SHOW REPLICA STATUS` command is mainly used to view the health status of a replica. Users can also view additional information with the following command.  
-
-    `SHOW TABLET FROM tbl1;`
-
-    ```plaintext
-    +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
-    | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion |     CheckVersionHash | VersionCount | PathHash             | MetaUrl              | CompactionStatus     |
-    +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
-    | 29502429 | 29502432  | 10006     | 1421156361 | 2       | 0           | 2                 | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -5822326203532286804 | url                  | url                  |
-    | 29502429 | 36885996  | 10002     | 1421156361 | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -1441285706148429853 | url                  | url                  |
-    | 29502429 | 48100551  | 10007     | 1421156361 | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -4784691547051455525 | url                  | url                  |
-    +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
-    ```
-
-Additional information includes replica size, number of rows, number of versions, data path where it is located, etc.
-
-> Note: The `State` column does not represent the health status of the replica itself, but the status of the replica under certain tasks (e.g., `CLONE`, `SCHEMA_CHANGE`, `ROLLUP`, etc.).
-
-In addition, users can check whether the replicas are evenly distributed with the following command  
-`ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;`
-
-  ```plaintext
-  +-----------+------------+-------+---------+
-  | BackendId | ReplicaNum | Graph | Percent |
-  +-----------+------------+-------+---------+
-  | 10000     | 7          |       | 7.29 %  |
-  | 10001     | 9          |       | 9.38 %  |
-  | 10002     | 7          |       | 7.29 %  |
-  | 10003     | 7          |       | 7.29 %  |
-  | 10004     | 9          |       | 9.38 %  |
-  | 10005     | 11         | >     | 11.46 % |
-  | 10006     | 18         | >     | 18.75 % |
-  | 10007     | 15         | >     | 15.62 % |
-  | 10008     | 13         | >     | 13.54 % |
-  +-----------+------------+-------+---------+
+  ```SQL
+  SHOW PROC '/cluster_balance/pending_tablets';
   ```
 
-Information includes the number of replicas on each BE node, percentage, and simple graphical display is shown above.
+  Example:
 
-Tablet Level Status Check  
+   ```Plain
+   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+   | TabletId | Type   | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
+   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+   | 4203036  | REPAIR | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
+   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+   ```
 
-Users can use the following command to check the status of a specific Tablet. For example, to check the status of the tablet with ID 29502553.  
+  - `TabletId`: the ID of the tablet pending to be scheduled. A scheduled task is only for one tablet.
+  - `Type`: the task type. Valid values: REPAIR and BALANCE.
+  - `Status`: the current status of the tablet, such as REPLICA_MISSING.
+  - `State`: the state of the scheduling task. Valid values: PENDING, RUNNING, FINISHED, CANCELLED, TIMEOUT, and UNEXPECTED.
+  - `OrigPrio`: the original priority of the task.
+  - `DynmPrio`: the current priority of the task after the dynamic adjustment.
+  - `SrcBe`: the ID of the source BE node.
+  - `SrcPath`: the hash value of the path to the source BE node.
+  - `DestBe`: the ID of the destination BE node.
+  - `DestPath`: the hash value of the path to the destination BE node.
+  - `Timeout`: the timeout of the task when the task is scheduled successfully. Unit: second.
+  - `Create`: the time when the task was created.
+  - `LstSched`: the time when the task was scheduled most recently.
+  - `LstVisit`: the time when the task was visited most recently. To visit the task here means to schedule the task or to report its execution.
+  - `Finished`: the time when the task is finished.
+  - `Rate`: the rate at which the data is cloned.
+  - `FailedSched`: the number of task scheduling failures.
+  - `FailedRunning`: the number of task execution failures.
+  - `LstAdjPrio`: the time when the task priority was adjusted most recently.
+  - `CmtVer`, `CmtVerHash`, `VisibleVer`, and `VisibleVerHash`: the version information used to execute the clone task.
+  - `ErrMsg`: the error message that occurs when the task is scheduled and running.
 
-`SHOW TABLET 29502553;`
+- **Check running tablet scheduling tasks**
 
-  ```plaintext
-  +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
-  | DbName                 | TableName | PartitionName | IndexName | DbId     | TableId  | PartitionId | IndexId  | IsSync | DetailCmd                                                                 |
-  +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
-  | default_cluster:test   | test      | test          | test      | 29502391 | 29502428 | 29502427    | 29502428 | true   | SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553'; |
-  +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
+  ```SQL
+  SHOW PROC '/cluster_balance/running_tablets';
   ```
 
-Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details.
-    `SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553';`
+  The returned results are identical to those of the pending tasks.
 
-  ```plaintext
-  +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
-  | ReplicaId | BackendId | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | SchemaHash | DataSize | RowCount | State  | IsBad | VersionCount | PathHash             | MetaUrl  | CompactionStatus |
-  +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
-  | 43734060  | 10004     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | -8566523878520798656 | url      | url              |
-  | 29502555  | 10002     | 2       | 0           | 2                 | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1885826196444191611  | url      | url              |
-  | 39279319  | 10007     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1656508631294397870  | url      | url              |
-  +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
+- **Check finished tablet scheduling tasks**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/history_tablets';
   ```
 
-Above shows all replicas of the corresponding Tablet. The content shown here is the same as `SHOW TABLET FROM tbl1;`. But here you can clearly see the status of all replicas of a specific Tablet.
+  The returned results are identical to those of the pending tasks. If the `State` of the task is `FINISHED`, the task is completed successfully. If not, please check the `ErrMsg` field for the cause of the task failure.
 
-### Scheduling tasks for replicas
+## Resource control
 
-1. View the tasks that are waiting to be scheduled by using `SHOW PROC '/cluster_balance/pending_tablets';`
+Because StarRocks repairs and balances tablets by cloning tablets from one BE node to another, the I/O load of a BE node can increase dramatically if the node executes such tasks too frequently in a short time. To avoid this situation, StarRocks sets a concurrency limit on clone tasks for each BE node. The minimum unit of resource control is a disk, which is a data storage path (`storage_root_path`) you have specified in the BE configuration file. By default, StarRocks allocates two slots for each disk to process tablet repair tasks. A clone task occupies one slot on the source BE node and one on the destination BE node. If all the slots on a BE node are occupied, StarRocks stops scheduling tasks to the node. You can increase the number of slots on a BE node by increasing the value of the FE dynamic parameter `tablet_sched_slot_num_per_path`.
 
-     ```plaintext
-     +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-     | TabletId | Type   | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
-     +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-     | 4203036  | REPAIR | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
-     +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-     ```
+StarRocks allocates two slots specifically for tablet balancing tasks to avoid the situation that a high-load BE node fails to release the disk space by balancing tablets because tablet repair tasks constantly occupy the slots.
 
-      |   Field   | Description   |
-      |-----------|---------------|
-      | TabletId  | The ID of the tablet that is waiting for scheduling. |
-      | Type      | The type of task, either REPAIR or BALANCE. |
-      |  Status   | The current status of the Tablet, such as `REPLICA_MISSING`. |
-      |  State    |  The state of this scheduling task. Values: `PENDING`/`RUNNING`/`FINISHED`/`CANCELLED`/`TIMEOUT`/`UNEXPECTED`. |
-      | OrigPrio  | The initial priority. |
-      | DynmPrio  | The dynamic priority. |
-      | SrcBe     | The ID of the source BE node.|
-      | SrcPath   |  The path of the source BE node.|
-      |  DestBe   | The ID of the destination BE node.|
-      | DestPath  | The path of the destination BE node.|
-      | Timeout   | When the task is scheduled successfully, the timeout of the task is shown here in seconds.|
-      | Create    | The time when the task was created.|
-      | LstSched  | The time the task was last scheduled.|
-      | LstVisit   | The time the task was last accessed. "accessed" refers to scheduling, task execution reporting.|
-      | Finished  | The time when the task was finished.|
-      | Rate   |The data copy rate of the clone task|
-      | FailedSched |  The number of times the task scheduling failed|
-      | FailedRunning| The number of times the task failed to execute|
-      | LstAdjPrio | The time the task priority was last adjusted |
-      | CmtVer/CmtVerHash/VisibleVer/VisibleVerHash| Version information used to execute the clone task |
-      | ErrMsg |The error message when the task is scheduled and run|
-
-2. View the running tasks by using `SHOW PROC '/cluster_balance/running_tablets';`.
-   Same properties are used here. See `pending tablets` for details.
-
-3. View the finished tasks by using `SHOW PROC '/cluster_balance/history_tablets';`.
-   By default, we only keep the last 1000 completed tasks. Same properties are used here. See `pending tablets` for details. If the `State` is `FINISHED`, that means the task is completed properly. Otherwise, check `ErrMsg` for the reason of a failed task.

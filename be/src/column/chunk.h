@@ -32,7 +32,6 @@ class ChunkPB;
 class DatumTuple;
 class ChunkExtraData;
 using ChunkExtraDataPtr = std::shared_ptr<ChunkExtraData>;
-
 /**
  * ChunkExtraData is an extra data which can be used to extend Chunk and 
  * attach extra infos beside the schema. eg, In Stream MV scenes, 
@@ -102,6 +101,7 @@ public:
 
     const SchemaPtr& schema() const { return _schema; }
     SchemaPtr& schema() { return _schema; }
+    void reset_schema() { _schema.reset(); }
 
     const Columns& columns() const { return _columns; }
     Columns& columns() { return _columns; }
@@ -111,6 +111,8 @@ public:
 
     // schema must exist and will be updated.
     void append_column(ColumnPtr column, const FieldPtr& field);
+
+    void append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id);
 
     void append_column(ColumnPtr column, SlotId slot_id);
     void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
@@ -151,10 +153,9 @@ public:
 
     void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
+    bool is_cid_exist(ColumnId cid) const { return _cid_to_index.contains(cid); }
     void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
     size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
-
-    void set_columns(const Columns& columns) { _columns = columns; }
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     ChunkUniquePtr clone_empty() const;
@@ -217,6 +218,7 @@ public:
     DelCondSatisfied delete_state() const { return _delete_state; }
 
     const SlotHashMap& get_slot_id_to_index_map() const { return _slot_id_to_index; }
+    const ColumnIdHashMap& get_column_id_to_index_map() const { return _cid_to_index; }
 
     // Call `Column::reserve` on each column of |chunk|, with |cap| passed as argument.
     void reserve(size_t cap);
@@ -286,8 +288,18 @@ public:
 
     query_cache::owner_info& owner_info() { return _owner_info; }
     const ChunkExtraDataPtr& get_extra_data() const { return _extra_data; }
+    ChunkExtraDataPtr& get_extra_data() { return _extra_data; }
     void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
     bool has_extra_data() const { return this->_extra_data != nullptr; }
+
+    MutableColumns mutable_columns() const {
+        size_t num_columns = _columns.size();
+        MutableColumns mutable_columns(num_columns);
+        for (size_t i = 0; i < num_columns; ++i) {
+            mutable_columns[i] = _columns[i]->as_mutable_ptr();
+        }
+        return mutable_columns;
+    }
 
 private:
     void rebuild_cid_index();
@@ -303,7 +315,8 @@ private:
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {
-    return const_cast<Chunk*>(this)->get_column_by_name(column_name);
+    size_t idx = _schema->get_field_index_by_name(column_name);
+    return _columns.at(idx);
 }
 
 inline ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) {
@@ -312,12 +325,20 @@ inline ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) {
 }
 
 inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
-    return const_cast<Chunk*>(this)->get_column_by_slot_id(slot_id);
+    DCHECK(is_slot_exist(slot_id)) << slot_id;
+    if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+    }
+    size_t idx = _slot_id_to_index.at(slot_id);
+    return _columns.at(idx);
 }
 
 inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
     DCHECK(is_slot_exist(slot_id)) << slot_id;
-    size_t idx = _slot_id_to_index[slot_id];
+    if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+    }
+    size_t idx = _slot_id_to_index.at(slot_id);
     return _columns[idx];
 }
 
@@ -326,7 +347,8 @@ inline bool Chunk::is_column_nullable(SlotId slot_id) const {
 }
 
 inline const ColumnPtr& Chunk::get_column_by_index(size_t idx) const {
-    return const_cast<Chunk*>(this)->get_column_by_index(idx);
+    DCHECK_LT(idx, _columns.size());
+    return _columns.at(idx);
 }
 
 inline ColumnPtr& Chunk::get_column_by_index(size_t idx) {
@@ -335,7 +357,9 @@ inline ColumnPtr& Chunk::get_column_by_index(size_t idx) {
 }
 
 inline const ColumnPtr& Chunk::get_column_by_id(ColumnId cid) const {
-    return const_cast<Chunk*>(this)->get_column_by_id(cid);
+    DCHECK(!_cid_to_index.empty());
+    DCHECK(_cid_to_index.contains(cid));
+    return _columns.at(_cid_to_index.at(cid));
 }
 
 inline ColumnPtr& Chunk::get_column_by_id(ColumnId cid) {

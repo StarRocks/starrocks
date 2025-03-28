@@ -43,4 +43,6 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 struct ScanTask;
 struct ScanTaskGroup;
 
+class PipelineExecutorSet;
+
 } // namespace starrocks::workgroup

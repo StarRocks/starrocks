@@ -35,6 +35,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 
 #include "gen_cpp/PlanNodes_types.h"
 #include "http/http_handler.h"
@@ -69,6 +70,8 @@ private:
     Status _data_saved_path(HttpRequest* req, std::string* file_path);
     Status _execute_plan_fragment(StreamLoadContext* ctx);
     Status _process_put(HttpRequest* http_req, StreamLoadContext* ctx);
+
+    Status _handle_batch_write(HttpRequest* http_req, StreamLoadContext* ctx);
 
 private:
     ExecEnv* _exec_env;

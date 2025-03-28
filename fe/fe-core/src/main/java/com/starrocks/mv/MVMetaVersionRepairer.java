@@ -77,7 +77,7 @@ public class MVMetaVersionRepairer {
             try {
                 repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
             } finally {
-                locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
             }
         }
     }
@@ -104,6 +104,8 @@ public class MVMetaVersionRepairer {
         long maxChangedTableRefreshTime =
                 MvUtils.getMaxTablePartitionInfoRefreshTime(Lists.newArrayList(changedVersions));
         MVVersionManager.updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+        LOG.info("Update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
+                mv.getName(), maxChangedTableRefreshTime);
     }
 
     /**

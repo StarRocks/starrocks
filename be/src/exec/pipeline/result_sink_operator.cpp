@@ -14,7 +14,10 @@
 
 #include "exec/pipeline/result_sink_operator.h"
 
+#include <arrow/type.h>
+
 #include "exprs/expr.h"
+#include "runtime/arrow_result_writer.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/customized_result_writer.h"
 #include "runtime/http_result_writer.h"
@@ -31,33 +34,37 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     // Create profile
-    _profile = std::make_unique<RuntimeProfile>("result sink");
-    _unique_metrics->add_child(_profile.get(), true, nullptr);
+    _unique_metrics->add_info_string("SinkType", to_string(_sink_type));
+    auto profile = _unique_metrics.get();
+    _sender->attach_query_ctx(state->query_ctx()->get_shared_ptr());
+    _sender->attach_observer(state, observer());
 
     // Create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
-        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format,
-                                                      _profile.get());
+        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format, profile);
         break;
     case TResultSinkType::STATISTIC:
-        _writer = std::make_shared<StatisticResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<StatisticResultWriter>(_sender.get(), _output_expr_ctxs, profile);
         break;
     case TResultSinkType::VARIABLE:
-        _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, profile);
         break;
     case TResultSinkType::HTTP_PROTOCAL:
-        _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
+        _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, profile, _format_type);
         break;
     case TResultSinkType::METADATA_ICEBERG:
-        _writer = std::make_shared<MetadataResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _sink_type);
+        _writer = std::make_shared<MetadataResultWriter>(_sender.get(), _output_expr_ctxs, profile, _sink_type);
         break;
     case TResultSinkType::CUSTOMIZED:
         // CustomizedResultWriter is a general-purposed result writer that used by FE to executing internal
         // query, the result is serialized in packed binary format. FE can parse the result row into object
         // via ORM(Object-Relation Mapping) mechanism. In the future, all the internal queries should be
         // unified to adopt this result sink type.
-        _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
+        break;
+    case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, profile, _row_desc);
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -107,8 +114,7 @@ StatusOr<ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {
 
 Status ResultSinkOperator::set_cancelled(RuntimeState* state) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-
-    _fetch_data_result.clear();
+    _writer->cancel();
     return Status::OK();
 }
 
@@ -118,17 +124,8 @@ bool ResultSinkOperator::need_input() const {
     if (is_finished()) {
         return false;
     }
-    if (_fetch_data_result.empty()) {
-        return true;
-    }
 
-    auto status = _writer->try_add_batch(_fetch_data_result);
-    if (status.ok()) {
-        return status.value();
-    } else {
-        _last_error = status.status();
-        return true;
-    }
+    return !_writer->is_full();
 }
 
 Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -144,15 +141,8 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     if (!_last_error.ok()) {
         return _last_error;
     }
-    DCHECK(_fetch_data_result.empty());
 
-    auto status = _writer->process_chunk(chunk.get());
-    if (status.ok()) {
-        _fetch_data_result = std::move(status.value());
-        return _writer->try_add_batch(_fetch_data_result).status();
-    } else {
-        return status.status();
-    }
+    return _writer->add_to_write_buffer(chunk.get());
 }
 
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {

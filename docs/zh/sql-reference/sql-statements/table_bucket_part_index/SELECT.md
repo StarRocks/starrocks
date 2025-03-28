@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['lianjie'] 
 ---
 
 # SELECT
@@ -461,7 +462,7 @@ LIMIT 子句用于限制返回结果的最大行数。设置返回结果的最�
 
 3. 表中数据量大，或者 where 子句没有过滤太多的数据，需要限制查询结果集的大小。
 
-使用说明：LIMMIT 子句的值必须是数字型字面常量。
+使用说明：LIMIT 子句的值必须是数字型字面常量。
 
 示例：
 
@@ -1081,6 +1082,8 @@ select one.tiny_column, two.int_column from small_table one, big_table two where
 ```
 
 ### PIVOT
+
+该函数从 3.3 版本开始支持。
 
 PIVOT操作符是SQL中的一个高级特性，它允许你将表中的行转换为列，通常用于数据透视表的创建。这在处理数据库报表或分析时非常有用，特别是当你需要对数据进行汇总或分类展示时。
 

@@ -18,6 +18,7 @@ import com.starrocks.common.util.RuntimeProfile;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 public abstract class Tracer {
@@ -42,7 +43,7 @@ public abstract class Tracer {
     public void record(String name, String value) {
     }
 
-    public void count(String name, int count) {
+    public void count(String name, long count) {
     }
 
     public List<Var<?>> getAllVars() {
@@ -70,5 +71,9 @@ public abstract class Tracer {
     }
 
     public void toRuntimeProfile(RuntimeProfile parent) {
+    }
+
+    public Optional<Timer> getSpecifiedTimer(String name) {
+        return Optional.empty();
     }
 }

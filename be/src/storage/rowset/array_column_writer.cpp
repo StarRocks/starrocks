@@ -72,6 +72,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnW
     element_options.need_zone_map = false;
     element_options.need_bloom_filter = element_column.is_bf_column();
     element_options.need_bitmap_index = element_column.has_bitmap_index();
+    element_options.need_flat = opts.need_flat;
+    element_options.is_compaction = opts.is_compaction;
     if (element_column.type() == LogicalType::TYPE_ARRAY) {
         if (element_options.need_bloom_filter) {
             return Status::NotSupported("Do not support bloom filter for array type");
@@ -131,7 +133,8 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPt
         DCHECK(_opts.tablet_index.count(IndexType::VECTOR) > 0);
         auto tablet_index = std::make_shared<TabletIndex>(_opts.tablet_index.at(IndexType::VECTOR));
         std::string index_path = _opts.standalone_index_file_paths.at(IndexType::VECTOR);
-        VectorIndexWriter::create(tablet_index, index_path, is_nullable(), &_vector_index_writer);
+        // Element column of array column MUST BE nullable.
+        VectorIndexWriter::create(tablet_index, index_path, true, &_vector_index_writer);
     }
 }
 
@@ -150,11 +153,11 @@ Status ArrayColumnWriter::init() {
 
 Status ArrayColumnWriter::append(const Column& column) {
     const ArrayColumn* array_column = nullptr;
-    NullColumn* null_column = nullptr;
+    const NullColumn* null_column = nullptr;
     if (is_nullable()) {
         const auto& nullable_column = down_cast<const NullableColumn&>(column);
-        array_column = down_cast<ArrayColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
+        array_column = down_cast<const ArrayColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         array_column = down_cast<const ArrayColumn*>(&column);
     }
@@ -172,6 +175,8 @@ Status ArrayColumnWriter::append(const Column& column) {
 
     // 4. write vector index
     if (_vector_index_writer.get()) {
+        // Vector index only support non-nullable array column.
+        DCHECK(!is_nullable());
         RETURN_IF_ERROR(_vector_index_writer->append(*array_column));
     }
 

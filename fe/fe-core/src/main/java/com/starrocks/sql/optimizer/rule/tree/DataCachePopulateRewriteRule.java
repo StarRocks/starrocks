@@ -134,7 +134,7 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
                     }
 
                     // ignore full partition scan
-                    if (checkIsFullPartitionScan(predicates)) {
+                    if (checkIsFullPartitionScan(predicates, scanOperator.getOpType())) {
                         return rewritePhysicalScanOperator(scanOperator, false);
                     }
 
@@ -145,6 +145,7 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
 
         private boolean isValidScanOperatorType(OperatorType operatorType) {
             if (operatorType == OperatorType.PHYSICAL_HIVE_SCAN || operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN ||
+                    operatorType == OperatorType.PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN ||
                     operatorType == OperatorType.PHYSICAL_FILE_SCAN ||
                     operatorType == OperatorType.PHYSICAL_HUDI_SCAN ||
                     operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN ||
@@ -165,8 +166,18 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
             return usedColumns == totalColumns;
         }
 
-        private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates) {
-            if (scanOperatorPredicates.getIdToPartitionKey().size() == 1) {
+        private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates, OperatorType operatorType) {
+            if (operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN ||
+                    operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN ||
+                    operatorType == OperatorType.PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN ||
+                    operatorType == OperatorType.PHYSICAL_PAIMON_SCAN) {
+                // For iceberg/delta lake is very expensive to get all partitions,
+                // so we didn't set the correct idToPartitionKey/selectedPartitionIds here.
+                // Paimon partition prune is after Optimizer (in PaimonScanNode#setupScanRangeLocations()).
+                // For the above cases, there is no need to check here.
+                return false;
+            }
+            if (scanOperatorPredicates.getIdToPartitionKey().size() <= 1) {
                 // for none-partition table, it has one partition id
                 return false;
             }

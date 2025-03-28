@@ -113,7 +113,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 #### 增加分区 (ADD PARTITION(S))
 
-增加分区时支持使用 Range 分区和 List 分区。
+增加分区时支持使用 Range 分区和 List 分区。不支持增加表达式分区。
 
 语法：
 
@@ -220,7 +220,7 @@ DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ALTER TABLE [<db_name>.]<tbl_name>
 DROP [ TEMPORARY ] PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] 
 
-partion_name_list ::= ( <partition_name> [, ... ] )
+partition_name_list ::= ( <partition_name> [, ... ] )
 
 multi_range_partitions ::=
     { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
@@ -233,6 +233,27 @@ multi_range_partitions ::=
 - 其中涉及的参数与 [增加分区 ADD PARTITION(S)](#增加分区-add-partitions) 中的相同。
 - 仅支持基于单个分区键的分区。
 
+基于通用分区表达式删除分区（自 v3.4.1 起支持）：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS WHERE <expr>
+```
+
+从 v3.4.1 开始，StarRocks 支持基于通用分区表达式（Common Partition Expression）删除分区。您可以通过指定一个带有表达式的 WHERE 子句来过滤要删除的分区。
+- 表达式声明了要删除的分区。执行后，符合表达式条件的分区将被批量删除。请谨慎操作。
+- 表达式只能包含分区列和常量。不支持非分区列。
+- 常用分区表达式处理 List 分区和 Range 分区的方式不同：
+  - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+  - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+示例：
+
+```sql
+-- 删除最近三个月之前的数据。dt 列为分区列。
+ALTER TABLE t1 DROP PARTITIONS WHERE dt < CURRENT_DATE() - INTERVAL 3 MONTH;
+```
+
 :::note
 
 - 分区表需要至少要保留一个分区。
@@ -243,7 +264,7 @@ multi_range_partitions ::=
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
 
-详细使用信息，请查阅[临时分区](../../../table_design/Temporary_partition.md)。
+详细使用信息，请查阅[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。
 
 语法：
 
@@ -565,18 +586,49 @@ ALTER TABLE orders ORDER BY (dt,revenue,state);
 
 ```sql
 -- 增加字段
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name>  <field_type> [AFTER <prior_field_name> |FIRST]
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+ADD FIELD field_path field_desc
 
 -- 删除字段
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> DROP FIELD <field_name>
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+DROP FIELD field_path
+
+field_path ::= [ { <field_name>. | [*]. } [ ... ] ]<field_name>
+
+  -- 请注意，此处的 `[*]` 整体是一个预定义符号，不可拆分，
+  -- 用于在添加或删除嵌套在 ARRAY 类型中的 STRUCT 类型的字段时，代表 ARRAY 字段中的所有元素。
+  -- 有关详细信息，请参阅以下 `field_path` 的参数说明和示例。
+
+field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```
 
 参数：
 
-- `field_name`：需要增加或删除字段的名称。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.new_field_name`。
-- `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_name` 决定，无需手动指定。
+- `field_path`：需要增加或删除字段。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.[*].new_field_name`。
+- `[*]`：当 ARRAY 和 STRUCT 类型发生嵌套时，`[*]` 代表操作 ARRAY 字段中的所有元素，用于在 ARRAY 类型字段下嵌套的每个 STRUCT 类型字段中添加或删除子字段。
+- `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_path` 决定，无需手动指定（也即是 `new_field_name` 之前的部分 `level1_k1.level2_k2.[*]`）。
+
+`field_path` 示例：
+
+- 向嵌套 STRUCT 类型中添加或删除子字段。
+
+  假设向列 `fx stuct<c1 int, c2 struct <v1 int, v2 int>>` 中的 `c2` 字段下增加新字段 `v3`, 对应的语法为：
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.v3 INT
+  ```
+
+  操作后该列变为 `fx stuct<c1 int, c2 struct <v1 int, v2 int, v3 int>>`。
+
+- 向 ARRAY 类型下嵌套的 STRUCT 类型中添加或删除子字段。
+
+  假设有列 `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`, `fx` 列中 `c2` 字段是 ARRAY 类型，其下嵌套 STRUCT 类型元素 `v1` 和 `v2` 两个字段。当向 `c2` 中的 STRUCT 类型元素添加一个新字段 `v3` 时，对应的语法为：
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT
+  ```
+
+  操作后该列变为 `fx struct<c1 int, c2 array<struct <v1 int, v2 int, v3 int>>>`。
 
 有关示例，参考 [示例 - Column -14](#column)。
 
@@ -703,7 +755,7 @@ DROP INDEX index_name;
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+SET ("key" = "value")
 ```
 
 参数说明：
@@ -715,13 +767,20 @@ SET ("key" = "value",...)
   - `default.replication_num`
   - `storage_cooldown_ttl`
   - `storage_cooldown_time`
-  - [动态分区相关属性 properties](../../../table_design/dynamic_partitioning.md)，比如 `dynamic_partition.enable`
+  - [动态分区相关属性 properties](../../../table_design/data_distribution/dynamic_partitioning.md)，比如 `dynamic_partition.enable`
   - `enable_persistent_index`
   - `bloom_filter_columns`
   - `colocate_with`
   - `bucket_size`（自 3.2 版本支持）
+  - `base_compaction_forbidden_time_ranges`（自 v3.2.13 版本支持）
 
-注意：修改表的属性也可以合并到 schema change <!--这个 schema change 除了column相关的alter table还包括啥--> 操作中来修改，见[示例](#示例)部分。
+
+:::note
+
+- 大多数情况下，一次只能修改一个属性。只有当多个属性的前缀相同时，才能同时修改多个属性。目前仅支持 `dynamic_partition.` 和 `binlog.`。
+- 修改表的属性也可以合并到 schema change 操作中来修改，见[示例](#示例)部分。
+
+:::
 
 ### Swap 将两个表原子替换
 
@@ -731,6 +790,11 @@ SET ("key" = "value",...)
 ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
+
+:::note
+- StarRocks 会在 Swap 过程中验证 OLAP 表之间的唯一键和外键约束，以确保被交换的两个表的约束一致。如果检测到不一致，将返回错误信息。如果未检测到不一致，将自动 Swap 唯一键和外键约束。
+- 依赖于被 Swap 表的物化视图将自动设置为 Inactive，其唯一键和外键约束将被移除，变为不可用。
+:::
 
 ### 手动 Compaction（3.1 版本起）
 
@@ -744,6 +808,10 @@ StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，�
 3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
 
 存算分离集群自 v3.3.0 起支持该功能。
+
+> **说明**
+>
+> 自 v3.2.13 版本起支持通过 [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#禁止-base-compaction) 属性在特定时段禁止 Base Compaction。
 
 语法：
 

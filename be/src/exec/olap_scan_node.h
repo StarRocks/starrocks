@@ -150,7 +150,7 @@ private:
     void _update_status(const Status& status);
     Status _get_status();
 
-    void _fill_chunk_pool(int count, bool force_column_pool);
+    void _fill_chunk_pool(int count);
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
 
@@ -172,7 +172,7 @@ private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     TupleDescriptor* _tuple_desc = nullptr;
-    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager = nullptr;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
     const Schema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;
@@ -248,6 +248,10 @@ private:
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_search_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;

@@ -33,7 +33,7 @@ public:
                        TResultSinkType::type sink_type, bool is_binary_format, TResultSinkFormatType::type format_type,
                        std::vector<ExprContext*> output_expr_ctxs, const std::shared_ptr<BufferControlBlock>& sender,
                        std::atomic<int32_t>& num_sinks, std::atomic<int64_t>& num_written_rows,
-                       FragmentContext* const fragment_ctx)
+                       FragmentContext* const fragment_ctx, const RowDescriptor& row_desc)
             : Operator(factory, id, "result_sink", plan_node_id, false, driver_sequence),
               _sink_type(sink_type),
               _is_binary_format(is_binary_format),
@@ -42,7 +42,8 @@ public:
               _sender(sender),
               _num_sinkers(num_sinks),
               _num_written_rows(num_written_rows),
-              _fragment_ctx(fragment_ctx) {}
+              _fragment_ctx(fragment_ctx),
+              _row_desc(row_desc) {}
 
     ~ResultSinkOperator() override = default;
 
@@ -56,7 +57,7 @@ public:
 
     bool need_input() const override;
 
-    bool is_finished() const override { return _is_finished && _fetch_data_result.empty(); }
+    bool is_finished() const override { return _is_finished; }
 
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
@@ -82,29 +83,30 @@ private:
     std::atomic<int64_t>& _num_written_rows;
 
     std::shared_ptr<ResultWriter> _writer;
-    mutable TFetchDataResultPtrs _fetch_data_result;
-
-    std::unique_ptr<RuntimeProfile> _profile = nullptr;
 
     mutable Status _last_error;
     bool _is_finished = false;
 
     FragmentContext* const _fragment_ctx;
+    const RowDescriptor& _row_desc;
 };
 
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
     ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, bool is_binary_format,
                               TResultSinkFormatType::type format_type, std::vector<TExpr> t_output_expr,
-                              FragmentContext* const fragment_ctx)
+                              FragmentContext* const fragment_ctx, const RowDescriptor& row_desc)
             : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _sink_type(sink_type),
               _is_binary_format(is_binary_format),
               _format_type(format_type),
               _t_output_expr(std::move(t_output_expr)),
-              _fragment_ctx(fragment_ctx) {}
+              _fragment_ctx(fragment_ctx),
+              _row_desc(row_desc) {}
 
     ~ResultSinkOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         // _num_sinkers is incremented when creating a ResultSinkOperator instance here at the preparing
@@ -114,7 +116,7 @@ public:
         _increment_num_sinkers_no_barrier();
         return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type,
                                                     _is_binary_format, _format_type, _output_expr_ctxs, _sender,
-                                                    _num_sinkers, _num_written_rows, _fragment_ctx);
+                                                    _num_sinkers, _num_written_rows, _fragment_ctx, _row_desc);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -138,6 +140,7 @@ private:
     std::atomic<int64_t> _num_written_rows = 0;
 
     FragmentContext* const _fragment_ctx;
+    const RowDescriptor& _row_desc;
 };
 
 } // namespace pipeline

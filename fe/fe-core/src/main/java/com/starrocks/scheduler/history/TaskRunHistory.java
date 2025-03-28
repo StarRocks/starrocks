@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 
 public class TaskRunHistory {
     private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
+    private static final int MEMORY_TASK_RUN_SAMPLES = 10;
 
     // Thread-Safe history map:
     // QueryId -> TaskRunStatus
@@ -86,12 +87,33 @@ public class TaskRunHistory {
         return historyTaskRunMap.size();
     }
 
+    public synchronized List<Object> getSamplesForMemoryTracker() {
+        return historyTaskRunMap.values()
+                .stream()
+                .limit(MEMORY_TASK_RUN_SAMPLES)
+                .collect(Collectors.toList());
+    }
+
     public List<TaskRunStatus> lookupHistoryByTaskNames(String dbName, Set<String> taskNames) {
         List<TaskRunStatus> result = getInMemoryHistory().stream()
                 .filter(x -> x.matchByTaskName(dbName, taskNames))
                 .collect(Collectors.toList());
         if (isEnableArchiveHistory()) {
             result.addAll(historyTable.lookupByTaskNames(dbName, taskNames));
+        }
+        return result;
+    }
+
+    /**
+     * Return the list of task runs belong to the LAST JOB:
+     * Each task run has a `startTaskRunId` as JobId, a job may have multiple task runs.
+     */
+    public List<TaskRunStatus> lookupLastJobOfTasks(String dbName, Set<String> taskNames) {
+        List<TaskRunStatus> result = getInMemoryHistory().stream()
+                .filter(x -> x.matchByTaskName(dbName, taskNames))
+                .collect(Collectors.toList());
+        if (isEnableArchiveHistory()) {
+            result.addAll(historyTable.lookupLastJobOfTasks(dbName, taskNames));
         }
         return result;
     }

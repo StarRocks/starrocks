@@ -107,13 +107,16 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // this is for keeping tablet order
     private List<Tablet> tablets;
 
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
+
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
     // PublishVersionRequest requests to BE nodes.
     private long visibleTxnId;
 
     public MaterializedIndex() {
-        this(0, IndexState.NORMAL);
+        this(0, IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
     }
 
     public MaterializedIndex(long id) {
@@ -121,7 +124,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public MaterializedIndex(long id, @Nullable IndexState state) {
-        this(id, state, 0);
+        this(id, state, 0, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long shardGroupId) {
+        this(id, state, 0, shardGroupId);
     }
 
     /**
@@ -133,13 +140,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * @param state        the state of the index
      * @param visibleTxnId the minimum transaction id that can see this index.
      */
-    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
         this.id = id;
         this.state = state == null ? IndexState.NORMAL : state;
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
         this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
+        this.shardGroupId = shardGroupId;
     }
 
     /**
@@ -166,6 +174,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public void setVisibleTxnId(long visibleTxnId) {
         Preconditions.checkState(state == IndexState.SHADOW);
         this.visibleTxnId = visibleTxnId;
+    }
+
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
+    }
+
+    public long getShardGroupId() {
+        return shardGroupId;
     }
 
     public List<Tablet> getTablets() {
@@ -226,9 +242,13 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public long getDataSize() {
+        return getDataSize(false);
+    }
+
+    public long getDataSize(boolean singleReplica) {
         long dataSize = 0;
         for (Tablet tablet : getTablets()) {
-            dataSize += tablet.getDataSize(false);
+            dataSize += tablet.getDataSize(singleReplica);
         }
         return dataSize;
     }
@@ -313,7 +333,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         StringBuilder buffer = new StringBuilder();
         buffer.append("index id: ").append(id).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
-
+        buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
         buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");

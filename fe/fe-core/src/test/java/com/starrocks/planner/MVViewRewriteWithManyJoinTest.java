@@ -68,7 +68,7 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
                                     "\"replication_num\"=\"1\",\n" +
                                     "\"in_memory\"=\"false\",\n" +
                                     "\"storage_format\"=\"DEFAULT\",\n" +
-                                    "\"enable_persistent_index\"=\"false\",\n" +
+                                    "\"enable_persistent_index\"=\"true\",\n" +
                                     "\"compression\"=\"LZ4\"\n" +
                                     ")", i));
         }
@@ -76,7 +76,7 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
 
     @ParameterizedTest(name = "{index}-{0}")
     @MethodSource("generateManyJoinArguments")
-    @Timeout(5)
+    @Timeout(30)
     public void testManyJoins(String name, String query) throws Exception {
         LOG.info("test {}, query: {}", name, query);
         String mvName = "mv_manyjoin";

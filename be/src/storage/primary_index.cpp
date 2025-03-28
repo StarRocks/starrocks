@@ -20,7 +20,6 @@
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
-#include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
@@ -29,6 +28,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
+#include "types/large_int_value.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/xxh3.h"
@@ -173,10 +173,6 @@ public:
             auto p = _map.insert({keys[i], v});
             if (!p.second) {
                 uint64_t old = p.first->second.value;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
-                               << " rowid=" << rowid_start + i;
-                }
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             }
@@ -395,10 +391,6 @@ public:
                 auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
                 if (!p.second) {
                     uint64_t old = p.first->second.value;
-                    if ((old >> 32) == rssid) {
-                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                    }
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
@@ -415,10 +407,6 @@ public:
                 auto p = _map.emplace(FixSlice<S>(keys[i]), v);
                 if (!p.second) {
                     uint64_t old = p.first->second.value;
-                    if ((old >> 32) == rssid) {
-                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                    }
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
@@ -667,10 +655,6 @@ public:
             auto p = _map.insert({keys[i].to_string(), v});
             if (!p.second) {
                 uint64_t old = p.first->second;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                               << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                }
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             } else {
@@ -1224,7 +1208,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     }
 
     OlapReaderStatistics stats;
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }
@@ -1353,10 +1337,6 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
                                               reinterpret_cast<IndexValue*>(old_values.data()), stat));
     for (unsigned long old : old_values) {
-        if ((old != NullIndexValue) && (old >> 32) == rssid) {
-            LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
-            st = Status::InternalError("found duplicate in upsert data");
-        }
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }
@@ -1427,7 +1407,9 @@ Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, cons
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         return _insert_into_persistent_index(rssid, rowids, pks);
     } else {
-        return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
+        auto st = _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1445,7 +1427,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     if (_persistent_index != nullptr) {
         return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
     } else {
-        return _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1455,7 +1439,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     if (_persistent_index != nullptr) {
         return _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
     } else {
-        return _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        auto st = _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1481,7 +1467,9 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
     if (_persistent_index != nullptr) {
         return _replace_persistent_index_by_indexes(rssid, rowid_start, replace_indexes, pks);
     } else {
-        return _pkey_to_rssid_rowid->replace(rssid, rowid_start, replace_indexes, 0, replace_indexes.size(), pks);
+        auto st = _pkey_to_rssid_rowid->replace(rssid, rowid_start, replace_indexes, 0, replace_indexes.size(), pks);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1491,7 +1479,9 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
     if (_persistent_index != nullptr) {
         return _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
     } else {
-        return _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1501,7 +1491,9 @@ Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Col
     if (_persistent_index != nullptr) {
         return _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
     } else {
-        return _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1511,7 +1503,9 @@ Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         return _erase_persistent_index(key_col, deletes);
     } else {
-        return _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1606,7 +1600,7 @@ void PrimaryIndex::reset_cancel_major_compaction() {
 Status PrimaryIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
     if (_persistent_index != nullptr) {
         RETURN_IF_ERROR(_persistent_index->pk_dump(dump, dump_pb));
-    } else {
+    } else if (_pkey_to_rssid_rowid != nullptr) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
         level->set_filename("memory primary index");
         RETURN_IF_ERROR(_pkey_to_rssid_rowid->pk_dump(dump, level));

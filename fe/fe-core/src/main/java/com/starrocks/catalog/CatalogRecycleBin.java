@@ -48,12 +48,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
-import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -73,6 +73,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -97,6 +99,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private final com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private final Map<Long, RecyclePartitionInfo> idToPartition;
 
+    private Map<RecyclePartitionInfo, CompletableFuture<Boolean>> asyncDeleteForPartitions;
+    private Map<RecycleTableInfo, CompletableFuture<Boolean>> asyncDeleteForTables;
+
+    private static final ExecutorService ASYNC_REMOVE_PARTITION_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.lake_remove_partition_thread_num, Integer.MAX_VALUE, "lake-remove-partition-pool", true);
+
+    private static final ExecutorService ASYNC_REMOVE_TABLE_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.lake_remove_table_thread_num, Integer.MAX_VALUE, "lake-remove-table-pool", true);
+
     protected Map<Long, Long> idToRecycleTime;
 
     // The real recycle time will extend by LATE_RECYCLE_INTERVAL_SECONDS when enable `eraseLater`.
@@ -115,6 +126,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToPartition = Maps.newHashMap();
         idToRecycleTime = Maps.newHashMap();
         enableEraseLater = new HashSet<>();
+        asyncDeleteForPartitions = Maps.newHashMap();
+        asyncDeleteForTables = Maps.newHashMap();
     }
 
     private void removeRecycleMarkers(Long id) {
@@ -122,7 +135,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         enableEraseLater.remove(id);
     }
 
-    public synchronized void recycleDatabase(Database db, Set<String> tableNames) {
+    public synchronized void recycleDatabase(Database db, Set<String> tableNames, boolean recoverable) {
         Preconditions.checkState(!idToDatabase.containsKey(db.getId()));
 
         // db should be empty. all tables are recycled before
@@ -132,7 +145,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         eraseDatabaseWithSameName(db.getFullName());
 
         // recycle db
-        RecycleDatabaseInfo databaseInfo = new RecycleDatabaseInfo(db, tableNames);
+        RecycleDatabaseInfo databaseInfo = new RecycleDatabaseInfo(db, tableNames, recoverable);
         idToDatabase.put(db.getId(), databaseInfo);
         idToRecycleTime.put(db.getId(), System.currentTimeMillis());
         LOG.info("recycle db[{}-{}]", db.getId(), db.getOriginName());
@@ -168,12 +181,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             nameToTableInfo.remove(dbId, table.getName());
             nameToTableInfo.put(dbId, oldTable.getName(), oldTableInfo);
             // Speed up the deletion of this renamed table by modifying its recycle time to zero
-            idToRecycleTime.put(oldTable.getId(), 0L);
+            idToRecycleTime.put(oldTable.getId(), System.currentTimeMillis());
         }
 
         // If the table was force dropped, set recycle time to zero so that this table will be deleted immediately
         // in the next cleanup round.
-        idToRecycleTime.put(table.getId(), !recoverable ? 0 : System.currentTimeMillis());
+        idToRecycleTime.put(table.getId(), System.currentTimeMillis());
         idToTableInfo.put(dbId, table.getId(), newTableInfo);
         nameToTableInfo.put(dbId, table.getName(), newTableInfo);
 
@@ -215,8 +228,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
 
-        long recycleTime = recyclePartitionInfo.isRecoverable() ? System.currentTimeMillis() : 0;
-        idToRecycleTime.put(partitionId, recycleTime);
+        idToRecycleTime.put(partitionId, System.currentTimeMillis());
         idToPartition.put(partitionId, recyclePartitionInfo);
         LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
                 partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
@@ -279,12 +291,54 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
+    public synchronized List<PhysicalPartition> getPhysicalPartitions(long tableId) {
+        return idToPartition.values().stream()
+                .filter(v -> (v.getTableId() == tableId))
+                .map(RecyclePartitionInfo::getPartition)
+                .flatMap(p -> p.getSubPartitions().stream())
+                .collect(Collectors.toList());
+    }
+
+    private synchronized boolean checkValidDeletionByClusterSnapshot(long id) {
+        Long originalRecycleTime = idToRecycleTime.get(id);
+        if (originalRecycleTime == null) {
+            return true;
+        }
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isDeletionSafeToExecute(originalRecycleTime);
+    }
+
+    private synchronized long getAdjustedRecycleTimestamp(long id) {
+        Map<Long, RecycleTableInfo> idToRecycleTableInfo =  Maps.newHashMap();
+        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
+            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
+                idToRecycleTableInfo.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        RecycleTableInfo tableInfo = idToRecycleTableInfo.get(id);
+        if (tableInfo != null && !tableInfo.isRecoverable()) {
+            return 0;
+        }
+
+        RecyclePartitionInfo partitionInfo = idToPartition.get(id);
+        if (partitionInfo != null && !partitionInfo.isRecoverable()) {
+            return 0;
+        }
+
+        RecycleDatabaseInfo databaseInfo = idToDatabase.get(id);
+        if (databaseInfo != null && !databaseInfo.isRecoverable()) {
+            return 0;
+        }
+
+        return idToRecycleTime.get(id);
+    }
+
     /**
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.
      */
     private synchronized boolean timeExpired(long id, long currentTimeMs) {
-        long latencyMs = currentTimeMs - idToRecycleTime.get(id);
+        long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
         if (enableEraseLater.contains(id)) {
             // if enableEraseLater is set, extend the timeout by LATE_RECYCLE_INTERVAL_SECONDS
@@ -293,7 +347,23 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return latencyMs > expireMs;
     }
 
+    private synchronized boolean canEraseDatabase(RecycleDatabaseInfo databaseInfo, long currentTimeMs) {
+        if (!checkValidDeletionByClusterSnapshot(databaseInfo.getDb().getId())) {
+            return false;
+        }
+
+        if (timeExpired(databaseInfo.getDb().getId(), currentTimeMs)) {
+            return true;
+        }
+
+        return false;
+    }
+
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
+        if (!checkValidDeletionByClusterSnapshot(tableInfo.getTable().getId())) {
+            return false;
+        }
+
         if (timeExpired(tableInfo.getTable().getId(), currentTimeMs)) {
             return true;
         }
@@ -306,6 +376,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
+        if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartition().getId())) {
+            return false;
+        }
+
         if (timeExpired(partitionInfo.getPartition().getId(), currentTimeMs)) {
             return true;
         }
@@ -334,11 +408,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return false;
         }
         // 2. will expire after quite a long time, don't worry
-        long latency = currentTimeMs - idToRecycleTime.get(id);
+        long latency = currentTimeMs - getAdjustedRecycleTimestamp(id);
         if (latency < (Config.catalog_trash_expire_second - LATE_RECYCLE_INTERVAL_SECONDS) * 1000L) {
             return true;
         }
-        // 3. already expired, sorry.
+        // 3. check valid by cluster snapshot
+        if (!checkValidDeletionByClusterSnapshot(id)) {
+            return true;
+        } 
+        // 4. already expired, sorry.
         if (latency > Config.catalog_trash_expire_second * 1000L) {
             return false;
         }
@@ -353,7 +431,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Map.Entry<Long, RecycleDatabaseInfo> entry = dbIter.next();
             RecycleDatabaseInfo dbInfo = entry.getValue();
             Database db = dbInfo.getDb();
-            if (timeExpired(db.getId(), currentTimeMs)) {
+            // db erase should be control by cluster snapshot backup if it is avaliable
+            // to prevent the incorrect deletion by the StarMgrMetaSyncer
+            if (canEraseDatabase(dbInfo, currentTimeMs)) {
                 // erase db
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
@@ -495,15 +575,36 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         List<Long> finishedTables = Lists.newArrayList();
         for (RecycleTableInfo info : tableToErase) {
-            boolean succ = info.table.deleteFromRecycleBin(info.dbId, false);
+            boolean finished = false;
+            CompletableFuture<Boolean> future = asyncDeleteForTables.get(info);
+            if (future == null) {
+                asyncDeleteForTables.put(info, CompletableFuture.supplyAsync(() -> {
+                    return info.table.deleteFromRecycleBin(info.dbId, false);
+                }, ASYNC_REMOVE_TABLE_EXECUTOR));
+            } else if (future.isDone()) {
+                try {
+                    finished = future.get();
+                } catch (Exception e) {
+                    finished = false;
+                    LOG.warn("erase table failed in Recycle Bin, DB id: {}, table name: {}, error message: {}",
+                             info.getDbId(), info.getTable().getName(), e.getMessage());
+                }
+
+                if (!finished) {
+                    // finish with error, re-submit in next round
+                    asyncDeleteForTables.remove(info);
+                }
+            }
+
             if (!info.table.isDeleteRetryable()) {
                 // Nothing to do
                 continue;
             }
             Preconditions.checkState(!info.isRecoverable());
-            if (succ) {
+            if (finished) {
                 finishedTables.add(info.table.getId());
-            } else {
+            } else if (asyncDeleteForTables.get(info) == null) {
+                // treated as error if task is not running
                 setNextEraseMinTime(info.table.getId(), System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
             }
         }
@@ -542,7 +643,30 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             if (!canErasePartition(partitionInfo, currentTimeMs)) {
                 continue;
             }
-            if (partitionInfo.delete()) {
+
+            boolean finished = false;
+            CompletableFuture<Boolean> future = asyncDeleteForPartitions.get(partitionInfo);
+            if (future == null) {
+                asyncDeleteForPartitions.put(partitionInfo, CompletableFuture.supplyAsync(() -> {
+                    return partitionInfo.delete();
+                }, ASYNC_REMOVE_PARTITION_EXECUTOR));
+            } else if (future.isDone()) {
+                try {
+                    finished = future.get();
+                } catch (Exception e) {
+                    finished = false;
+                    LOG.warn("erase partition failed in Recycle Bin, DB id: {}, table id: {}, partition name: " +
+                             "{}, partition id: {}, error message: {}", partitionInfo.getDbId(), partitionInfo.getTableId(),
+                             partitionInfo.getPartition().getName(), partitionInfo.getPartition().getId(), e.getMessage());
+                }
+
+                if (!finished) {
+                    // finish with error, re-submit in next round
+                    asyncDeleteForPartitions.remove(partitionInfo);
+                }
+            }
+
+            if (finished) {
                 iterator.remove();
                 removeRecycleMarkers(partitionId);
 
@@ -554,7 +678,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
                 }
-            } else {
+            } else if (asyncDeleteForPartitions.get(partitionInfo) == null) {
+                // treated as error if task is not running
                 Preconditions.checkState(!partitionInfo.isRecoverable());
                 setNextEraseMinTime(partitionId, System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
             }
@@ -569,7 +694,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 continue;
             }
             partitionInfo.setRecoverable(false);
-            idToRecycleTime.replace(partitionInfo.getPartition().getId(), 0L);
+            idToRecycleTime.replace(partitionInfo.getPartition().getId(), System.currentTimeMillis());
             break;
         }
     }
@@ -908,6 +1033,38 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return idToRecycleTime.get(id) != null;
     }
 
+    @VisibleForTesting
+    synchronized boolean recyclePartitionInfoIsEmpty() {
+        return idToPartition.isEmpty();
+    }
+
+    @VisibleForTesting
+    synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
+        return idToPartition.get(id);
+    }
+
+    @VisibleForTesting
+    synchronized RecycleTableInfo getRecycleTableInfo(long id) {
+        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
+            if (tableEntry.get(id) != null) {
+                return tableEntry.get(id);
+            }
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    synchronized boolean isDeletingPartition(long id) {
+        RecyclePartitionInfo info = getRecyclePartitionInfo(id);
+        return info != null && asyncDeleteForPartitions.get(info) != null;
+    }
+
+    @VisibleForTesting
+    synchronized boolean isDeletingTable(long id) {
+        RecycleTableInfo info = getRecycleTableInfo(id);
+        return info != null && asyncDeleteForTables.get(info) != null;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         int count = idToDatabase.size();
@@ -947,14 +1104,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         private Database db;
         @SerializedName("t")
         private Set<String> tableNames;
+        @SerializedName(value = "r")
+        private boolean recoverable;
 
         public RecycleDatabaseInfo() {
             tableNames = Sets.newHashSet();
+            recoverable = true;
         }
 
-        public RecycleDatabaseInfo(Database db, Set<String> tableNames) {
+        public RecycleDatabaseInfo(Database db, Set<String> tableNames, boolean recoverable) {
             this.db = db;
             this.tableNames = tableNames;
+            this.recoverable = recoverable;
         }
 
         public Database getDb() {
@@ -963,6 +1124,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         public Set<String> getTableNames() {
             return tableNames;
+        }
+
+        public boolean isRecoverable() {
+            return recoverable;
         }
 
         @Override
@@ -1064,30 +1229,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int idToDatabaseSize = reader.readInt();
-        for (int i = 0; i < idToDatabaseSize; ++i) {
-            RecycleDatabaseInfo recycleDatabaseInfo = reader.readJson(RecycleDatabaseInfo.class);
+        reader.readCollection(RecycleDatabaseInfo.class, recycleDatabaseInfo -> {
             idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
-        }
+        });
 
-        int idToTableInfoSize = reader.readInt();
-        for (int i = 0; i < idToTableInfoSize; ++i) {
-            RecycleTableInfo recycleTableInfo = reader.readJson(RecycleTableInfo.class);
+        reader.readCollection(RecycleTableInfo.class, recycleTableInfo -> {
             idToTableInfo.put(recycleTableInfo.dbId, recycleTableInfo.table.getId(), recycleTableInfo);
             nameToTableInfo.put(recycleTableInfo.getDbId(), recycleTableInfo.getTable().getName(), recycleTableInfo);
-        }
+        });
 
-        int idToPartitionSize = reader.readInt();
-        for (int i = 0; i < idToPartitionSize; ++i) {
-            RecyclePartitionInfo recyclePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
-            if (recyclePartitionInfo instanceof IForwardCompatibleObject) {
-                // Ignore the future unknown subtype derived from RecyclePartitionInfoV2
-                LOG.warn("Ignore unknown partition type(partitionId: {}) from the future version!",
-                        recyclePartitionInfo.getPartition().getId());
-                continue;
-            }
+        reader.readCollection(RecyclePartitionInfoV2.class, recyclePartitionInfo -> {
             idToPartition.put(recyclePartitionInfo.partition.getId(), recyclePartitionInfo);
-        }
+        });
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
         }.getType());

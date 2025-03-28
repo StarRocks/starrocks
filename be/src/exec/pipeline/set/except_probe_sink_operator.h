@@ -51,6 +51,8 @@ public:
     }
 
     Status set_finishing(RuntimeState* state) override {
+        auto notify_src = _except_ctx->observable().defer_notify_source();
+        auto notify = _except_ctx->observable().defer_notify_sink();
         _is_finished = true;
         _except_ctx->finish_probe_ht(_dependency_index);
         return Status::OK();
@@ -79,6 +81,7 @@ public:
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ExceptContextPtr except_ctx = _except_partition_ctx_factory->get(driver_sequence);

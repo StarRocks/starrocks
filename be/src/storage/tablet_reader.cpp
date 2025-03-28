@@ -242,7 +242,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         return Status::NotSupported(strings::Substitute("should have eq predicates on all pk columns current: $0 < $1",
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
 
@@ -286,6 +286,9 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
     // single row fetch, no need to use delvec
     rs_opts.is_primary_keys = false;
+    rs_opts.use_vector_index = _reader_params->use_vector_index;
+    rs_opts.vector_search_option = _reader_params->vector_search_option;
+    rs_opts.enable_join_runtime_filter_pushdown = _reader_params->enable_join_runtime_filter_pushdown;
 
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     auto rowid_range = std::make_shared<SparseRange<>>();
@@ -342,6 +345,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
+    rs_opts.runtime_filter_preds = params.runtime_filter_preds;
     PredicateTree pred_tree_for_zone_map;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
                                                                       rs_opts.pred_tree_for_zone_map));
@@ -358,6 +362,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.use_vector_index = params.use_vector_index;
+    rs_opts.vector_search_option = params.vector_search_option;
+    rs_opts.sample_options = params.sample_options;
+    rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -560,7 +568,7 @@ Status TabletReader::_init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {

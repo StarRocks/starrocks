@@ -1,0 +1,118 @@
+-- name: test_insert_by_name
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int, k2 varchar(100));
+
+insert into t1 by name select "a" as k2, 1 as k1;
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+1	a
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+insert into t1 (k2, k1) select "d" as k1, 4 as k2;
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+4	d
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+insert into t1 by name select 2 as k1;
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+2	None
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+
+insert into t1 by name values(1, "a");
+-- result:
+[REGEX].*Insert match column by name does not support values\(\).
+-- !result
+
+insert into t1 by name select "a" as k2, 1 as k1, 2 as k3;
+-- result:
+[REGEX].*Unknown column 'k3' in 't1'.
+-- !result
+
+insert into t1 (k1) by name select 2 as k1;
+-- result:
+[REGEX].*Cannot use COLUMN LIST and BY NAME clause together in insert.
+-- !result
+
+
+create table t2 (k1 int, k2 varchar(100), k3 int default "10");
+
+insert into t1 values(3, "c");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+3	c
+-- !result
+
+insert into t2 by name select * from t1;
+-- result:
+-- !result
+
+select * from t2;
+-- result:
+3	c	10
+-- !result
+
+truncate table t2;
+-- result:
+-- !result
+
+insert into t2 by name select *, 11 as k3 from t1;
+-- result:
+-- !result
+
+select * from t2;
+-- result:
+3	c	11
+-- !result
+
+truncate table t2;
+-- result:
+-- !result
+
+insert into t2 by name select k1 + 1 as k1, k2, 12 as k3 from t1;
+-- result:
+-- !result
+
+select * from t2;
+-- result:
+4	c	12
+-- !result
+
+truncate table t2;
+-- result:
+-- !result
+
+
+insert into t2 by name select k1 + 1 as k1, k1, 12 as k3 from t1;
+-- result:
+[REGEX].*Duplicate column name 'k1'.
+-- !result

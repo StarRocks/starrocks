@@ -276,7 +276,7 @@
     "description": "The label for category Database in sidebar docs"
   },
   "sidebar.docs.category.Resource": {
-    "message": "资源组",
+    "message": "资源",
     "description": "The label for category Resource in sidebar docs"
   },
   "sidebar.docs.category.Table, bucket, partition, and index": {
@@ -540,7 +540,7 @@
     "description": "The label for category Utility in sidebar docs"
   },
   "sidebar.docs.category.Data types": {
-    "message": "Data types",
+    "message": "数据类型",
     "description": "The label for category Data types in sidebar docs"
   },
   "sidebar.docs.category.SQL statements": {

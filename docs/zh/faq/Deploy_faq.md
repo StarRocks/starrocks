@@ -88,19 +88,6 @@ CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 GRANT SELECT_PRIV ON . TO 'test'@'%';
 ```
 
-## 为 BE 节点增加磁盘空间后，数据存储无法均衡负载且报错 “Failed to get scan range, no queryable replica found in tablet: xxxxx”。我该如何解决？
-
-**问题描述**
-
-该错误可能发生在往主键表 (Primary Key) 导入数据时，BE 节点磁盘空间不足，导致 BE Crash。扩容磁盘后，由于 PK 表目前还不支持 BE 内部磁盘间的均衡，数据存储无法负载均衡。
-
-**解决方案:**
-
-该问题（PK 表不支持 BE 内磁盘间均衡）目前仍在修复当中，您可以通过以下两种方式解决：
-
-* 手动均衡数据存储负载，比如通过把使用率高的磁盘上的数据目录 copy 到一个磁盘空间更大的目录。
-* 如果当前磁盘中的数据非重要数据，建议您直接删除掉磁盘并修改相应磁盘路径。如果系统继续报错，您需要通过 `TRUNCATE TABLE` 命令清除当前表中的数据。
-
 ## 重启集群时，FE 启动失败并报错 “Fe type:unknown ,is ready :false”。我该如何解决？
 
 请确认 Leader FE 节点是否已启动。如果未启动，请尝试逐台重启集群中的 FE 节点。

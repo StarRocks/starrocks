@@ -144,6 +144,17 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+### Set variables as user properties
+
+You can set session variables as user properties using the [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
+
+Example:
+
+```SQL
+-- Set the session variable `query_timeout` to `600` for the user jack.
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
 ## Descriptions of variables
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
@@ -231,7 +242,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1.11, v3.2.5
 
-### query_excluding_mv_names(
+### query_excluding_mv_names
 
 * **Description**: Specifies the name of the asynchronous materialized views to exclude from query execution. You can use this variable to limit the number of candidate materialized views and reduce the time of query rewrite in the optimizer. `query_including_mv_names` takes effect prior to this item.
 * **Default**: empty
@@ -247,7 +258,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_materialized_view_agg_pushdown_rewrite
 
-* **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/query_rewrite_with_materialized_views.md#aggregation-pushdown).
+* **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown).
 * **Default**: false
 * **Introduced in**: v3.3.0
 
@@ -286,6 +297,18 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. Setting it to `true` indicates enabling it.
 * **Default**: true
 * **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
+
+### enable_plan_advisor
+
+* **Description**: Whether to enable Query Feedback feature for slow queries and manually marked queries.
+* **Default**: true
+* **Introduced in**: v3.4.0
+
+### enable_plan_analyzer
+
+* **Description**: Whether to enable Query Feedback feature for all queries. This variable takes effect only when `enable_plan_advisor` is set to `true`.
+* **Default**: false
+* **Introduced in**: v3.4.0
 
 ### follower_query_forward_mode
 
@@ -362,6 +385,14 @@ Used to enable the streaming pre-aggregations. The default value is `false`, mea
 
 Used for MySQL client compatibility. No practical usage.
 
+### dynamic_overwrite
+
+* **Description**: Whether to enable the [Dynamic Overwrite](./sql-statements/loading_unloading/INSERT.md#dynamic-overwrite) semantic for INSERT OVERWRITE with partitioned tables. Valid values:
+  * `true`: Enables Dynamic Overwrite.
+  * `false`: Disables Dynamic Overwrite and uses the default semantic.
+* **Default**: false
+* **Introduced in**: v3.4.0
+
 <!--
 ### enable_collect_table_level_scan_stats (Invisible to users)
 
@@ -408,9 +439,44 @@ Default value: `true`.
 * **Description**: Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 * **Introduced in**: v3.2.1
 
+### enable_metadata_profile
+
+* **Description**: 是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* **Default**: true
+* **Introduced in**: v3.3.3
+
+### plan_mode
+
+* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
+  * `auto`: The system will automatically select the retrieval plan.
+  * `local`: Use the local cache plan.
+  * `distributed`: Use the distributed plan.
+* **Default**: auto
+* **Introduced in**: v3.3.3
+
+### metadata_collect_query_timeout
+
+* **Description**: The timeout duration for Iceberg Catalog metadata collection queries.
+* **Unit**: Second
+* **Default**: 60
+* **Introduced in**: v3.3.3
+
 ### enable_insert_strict
 
-Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
+* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+* **Default**: true
+
+### insert_max_filter_ratio
+
+* **Description**: The maximum error tolerance of INSERT from files(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Range: [0, 1].
+* **Default**: 0
+* **Introduced in**: v3.4.0
+
+### insert_timeout
+
+* **Description**: The timeout duration of the INSERT job. Unit: Seconds. From v3.4.0 onwards, `insert_timeout` applies to operations involved INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE), replacing `query_timeout`.
+* **Default**: 14400
+* **Introduced in**: v3.4.0
 
 ### enable_materialized_view_for_insert
 
@@ -438,7 +504,7 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 ### enable_spill_to_remote_storage
 
-* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: false
 * **Introduced in**: v3.3.0
 
@@ -536,7 +602,7 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 ### enable_query_cache
 
-* **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/query_cache.md#application-scenarios).
+* **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios).
 * **Default**: false
 * **Introduced in**: v2.5
 
@@ -579,6 +645,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Description**: Whether to allow for sinking data to external tables of Hive.
 * **Default**: false
 * **Introduced in**: v3.2
+
+### enable_query_trigger_analyze
+
+* **Default**: true
+* **Type**: Boolean
+* **Description**: Whether to enable query-trigger ANALYZE tasks.
+* **Introduced in**: v3.4.0
 
 ### event_scheduler
 
@@ -643,6 +716,16 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 4
 * **Data type**: Int
 * **Introduced in**: v2.5
+
+### jit_level
+
+* **Description**: The level at which JIT compilation for expressions is enabled. Valid values:
+  * `1`: The system adaptively enables JIT compilation for compilable expressions.
+  * `-1`: JIT compilation is enabled for all compilable, non-constant expressions.
+  * `0`: JIT compilation is disabled. You can disable it manually if any error is returned for this feature.
+* **Default**: 1
+* **Data type**: Int
+* **Introduced in**: -
 
 ### language (global)
 
@@ -816,30 +899,30 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
-* **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable.
-* **Default**: 0, which means no limit.
+* **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable. Setting it to `0` indicates no limit is imposed.
+* **Default**: 0
 * **Unit**: Byte
 
 ### query_queue_concurrency_limit (global)
 
-* **Description**: The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Default**: 0
 * **Data type**: Int
 
 ### query_queue_cpu_used_permille_limit (global)
 
-* **Description**: The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Value range**: [0, 1000]
 * **Default**: `0`
 
 ### query_queue_max_queued_queries (global)
 
-* **Description**: The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Default**: `1024`.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`.
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
 * **Value range**: [0, 1]
 * **Default**: 0
 
@@ -851,7 +934,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_timeout
 
-* **Description**: Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds.
+* **Description**: Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection. The default value is 300 seconds. From v3.4.0 onwards, `query_timeout` does not apply to INSERT statements.
 * **Value range**: [1, 259200]
 * **Default**: 300
 * **Data type**: Int
@@ -889,6 +972,12 @@ Used to decide whether to rewrite count distinct queries to bitmap_union_count a
 * **Data type**: Int
 * **Introduced in**: v3.1.0
 
+### scan_olap_partition_num_limit
+
+* **Description**: The number of partitions allowed to be scanned for a single table in the execution plan.
+* **Default**: 0 (No limit)
+* **Introduced in**: v3.3.9
+
 ### spill_mode (3.0 and later)
 
 The execution mode of intermediate result spilling. Valid values:
@@ -900,7 +989,7 @@ This variable takes effect only when the variable `enable_spill` is set to `true
 
 ### spill_storage_volume
 
-* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: Empty string
 * **Introduced in**: v3.3.0
 
@@ -950,7 +1039,9 @@ Used for MySQL client compatibility. No practical usage.
 
 ### sql_select_limit
 
-Used for MySQL client compatibility. No practical usage.
+* **Description**: Used to limit the maximum number of rows returned by a query, which can prevent issues such as insufficient memory or network congestion caused by the query returning too much data.
+* **Default**: Unlimited
+* **Data type**: Long
 
 ### statistic_collect_parallel
 

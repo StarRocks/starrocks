@@ -57,6 +57,8 @@ public:
 
     StatusOr<std::string> read_all() override;
 
+    bool is_encrypted() const override { return true; };
+
 private:
     std::unique_ptr<io::SeekableInputStream> _stream;
     FileEncryptionInfo _encryption_info;

@@ -14,6 +14,7 @@
 
 #pragma once
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
 #include "common/status.h"
@@ -21,6 +22,7 @@
 #include "exprs/function_context.h"
 #include "jni.h"
 #include "types/logical_type.h"
+#include "udf/java/type_traits.h"
 #include "util/slice.h"
 
 // implements by libhdfs
@@ -37,15 +39,35 @@ extern "C" JNIEnv* getJNIEnv(void);
     jmethodID _value_of_##TYPE;     \
     jmethodID _val_##TYPE;
 
-#define DECLARE_NEW_BOX(TYPE, CLAZZ) \
-    jobject new##CLAZZ(TYPE value);  \
-    TYPE val##TYPE(jobject obj);
+#define DECLARE_NEW_BOX(PRIM_CLAZZ, TYPE, CLAZZ) \
+    jobject new##CLAZZ(TYPE value);              \
+    TYPE val##TYPE(jobject obj);                 \
+    jclass TYPE##_class() { return _class_##PRIM_CLAZZ; }
 
 namespace starrocks {
 class DirectByteBuffer;
 class AggBatchCallStub;
 class BatchEvaluateStub;
 class JVMClass;
+
+struct ListMeta {
+    // List class
+    JVMClass* list_class;
+    JVMClass* array_list_class;
+
+    // List method
+    jmethodID list_get;
+    jmethodID list_size;
+    jmethodID list_add;
+};
+
+struct MapMeta {
+    JVMClass* map_class;
+    JVMClass* immutable_map_class;
+    jmethodID immutable_map_constructor;
+    StatusOr<jobject> newLocalInstance(jobject keys, jobject values) const;
+};
+
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
@@ -59,6 +81,7 @@ public:
     // Arrays.toString()
     std::string array_to_string(jobject object);
     // Object::toString()
+    bool equals(jobject obj1, jobject obj2);
     std::string to_string(jobject obj);
     std::string to_cxx_string(jstring str);
     std::string dumpExceptionString(jthrowable throwable);
@@ -70,6 +93,14 @@ public:
     jobject create_array(int sz);
     // convert column data to Java Object Array
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
+    const std::unordered_map<int, jmethodID>& method_map() const { return _method_map; }
+
+    template <class... Args>
+    StatusOr<jobject> invoke_static_method(jmethodID method, Args&&... args) {
+        jobject res = _env->CallStaticObjectMethod(_udf_helper_class, method, args...);
+        RETURN_IF_ERROR(_check_exception_status());
+        return res;
+    }
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
     jobject batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end);
@@ -89,7 +120,7 @@ public:
     void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
     // batch call evalute by callstub
-    jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
+    StatusOr<jobject> batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
     // batch call method by reflect
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols, int rows);
     // batch call no-args function by reflect
@@ -113,23 +144,24 @@ public:
     // convert handle list to jobject array (Object[])
     jobject convert_handles_to_jobjects(FunctionContext* ctx, jobject state_ids);
 
-    // List methods
-    jobject list_get(jobject obj, int idx);
-    int list_size(jobject obj);
+    DECLARE_NEW_BOX(boolean, uint8_t, Boolean)
+    DECLARE_NEW_BOX(byte, int8_t, Byte)
+    DECLARE_NEW_BOX(short, int16_t, Short)
+    DECLARE_NEW_BOX(int, int32_t, Integer)
+    DECLARE_NEW_BOX(long, int64_t, Long)
+    DECLARE_NEW_BOX(float, float, Float)
+    DECLARE_NEW_BOX(double, double, Double)
 
-    DECLARE_NEW_BOX(uint8_t, Boolean)
-    DECLARE_NEW_BOX(int8_t, Byte)
-    DECLARE_NEW_BOX(int16_t, Short)
-    DECLARE_NEW_BOX(int32_t, Integer)
-    DECLARE_NEW_BOX(int64_t, Long)
-    DECLARE_NEW_BOX(float, Float)
-    DECLARE_NEW_BOX(double, Double)
+    const ListMeta& list_meta() const { return _list_meta; }
+    const MapMeta& map_meta() const { return _map_meta; }
+
+    StatusOr<jobject> extract_key_list(jobject map);
+    StatusOr<jobject> extract_val_list(jobject map);
 
     jobject newString(const char* data, size_t size);
 
-    Slice sliceVal(jstring jstr);
-    size_t string_length(jstring jstr);
     Slice sliceVal(jstring jstr, std::string* buffer);
+    jclass string_clazz() { return _string_class; }
     // replace '.' as '/'
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);
@@ -147,6 +179,8 @@ private:
     // pack input array to java object array
     jobjectArray _build_object_array(jclass clazz, jobject* arr, int sz);
 
+    Status _check_exception_status();
+
 private:
     inline static thread_local JNIEnv* _env;
 
@@ -162,19 +196,20 @@ private:
     jclass _object_array_class;
     jclass _string_class;
     jclass _jarrays_class;
-    jclass _list_class;
     jclass _exception_util_class;
 
     jmethodID _string_construct_with_bytes;
 
-    // List method
-    jmethodID _list_get;
-    jmethodID _list_size;
+    ListMeta _list_meta;
+    MapMeta _map_meta;
+    jmethodID _extract_keys_from_map;
+    jmethodID _extract_values_from_map;
 
     jobject _utf8_charsets;
 
     jclass _udf_helper_class;
     jmethodID _create_boxed_array;
+    std::unordered_map<int, jmethodID> _method_map;
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
     jmethodID _batch_update_state;
@@ -217,11 +252,12 @@ private:
         env->ExceptionClear();                                                     \
     }
 
-#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                                     \
-    if (auto e = env->ExceptionOccurred()) {                                                   \
-        LOCAL_REF_GUARD(e);                                                                    \
-        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);             \
-        return Status::InternalError(JVMFunctionHelper::getInstance().dumpExceptionString(e)); \
+#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                         \
+    if (auto e = env->ExceptionOccurred()) {                                       \
+        LOCAL_REF_GUARD(e);                                                        \
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
+        env->ExceptionClear();                                                     \
+        return Status::InternalError(msg);                                         \
     }
 
 // Used for UDAF serialization and deserialization,
@@ -316,6 +352,7 @@ public:
 
     // Create a new instance using the default constructor
     StatusOr<JavaGlobalRef> newInstance() const;
+    StatusOr<jobject> newLocalInstance() const;
 
 private:
     JavaGlobalRef _clazz;
@@ -346,17 +383,26 @@ public:
     static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
     static inline const char* batch_evaluate_method_name = "batchCallV";
 
-    BatchEvaluateStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
-            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+    BatchEvaluateStub(jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
 
-    FunctionContext* ctx() { return _ctx; }
-    jobject batch_evaluate(int num_rows, jobject* input, int cols);
+    StatusOr<jobject> batch_evaluate(int num_rows, jobject* input, int cols);
 
 private:
-    FunctionContext* _ctx;
     jobject _caller;
     JVMClass _stub_clazz;
     JavaGlobalRef _stub_method;
+};
+
+class JavaListStub {
+public:
+    JavaListStub(jobject list) : _list(list) {}
+    Status add(jobject element);
+    StatusOr<jobject> get(int index);
+    StatusOr<size_t> size();
+
+private:
+    jobject _list;
 };
 
 // UDAF State Lists

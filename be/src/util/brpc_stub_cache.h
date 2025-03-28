@@ -41,7 +41,6 @@
 #include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
@@ -163,7 +162,7 @@ public:
         }
         // create
         auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
-        if (!stub->reset_channel().ok()) {
+        if (!stub->reset_channel("http").ok()) {
             return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }

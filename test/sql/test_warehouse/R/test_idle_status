@@ -1,0 +1,9 @@
+-- name: test_idle_status
+admin set frontend config ("warehouse_idle_check_enable" = "true");
+-- result:
+-- !result
+shell: curl ${url}/api/idle_status
+-- result:
+0
+{"isClusterIdle":false,"clusterIdleTime":-1,"warehouses":[{"id":0,"name":"default_warehouse","isIdle":false,"idleTime":-1}]}
+-- !result
