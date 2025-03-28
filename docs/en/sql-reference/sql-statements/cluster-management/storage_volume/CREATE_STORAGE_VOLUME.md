@@ -30,8 +30,8 @@ PROPERTIES
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | The name of the storage volume. Please note that you cannot create a storage volume named `builtin_storage_volume` because it is used to create the builtin storage volume. For the naming conventions, see [System limits](../../../System_limit.md).|
-| TYPE                | The type of the remote storage system. Valid values: `S3`, `HDFS` and `AZBLOB`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage (supported from v3.1.1 onwards). `HDFS` indicates an HDFS cluster.  |
-| LOCATIONS           | The storage locations. The format is as follows:<ul><li>For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`. Note that if you want to enable the [Partitioned Prefix](#partitioned-prefix) feature for the storage volume, you can only specify the bucket name, and specifying a sub-path is not allowed.</li><li>For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.</li><li>For HDFS: `hdfs://<host>:<port>/<hdfs_path>`. `<hdfs_path>` must be an absolute path, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks`.</li><li>For WebHDFS: `webhdfs://<host>:<http_port>/<hdfs_path>`, where `<http_port>` is the HTTP port of the NameNode. `<hdfs_path>` must be an absolute path, for example, `webhdfs://127.0.0.1:50070/user/xxx/starrocks`.</li><li>For ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`, where `<ViewFS_cluster>` is the ViewFS cluster name. `<viewfs_path>` must be an absolute path, for example, `viewfs://myviewfscluster/user/xxx/starrocks`.</li></ul> |
+| TYPE                | The type of the remote storage system. Valid values: `S3`, `HDFS`, `AZBLOB`, and `ADSL2`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage (supported from v3.1.1 onwards). `ADSL2` indicates Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards). `HDFS` indicates an HDFS cluster.  |
+| LOCATIONS           | The storage locations. The format is as follows:<ul><li>For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`. Note that if you want to enable the [Partitioned Prefix](#partitioned-prefix) feature for the storage volume, you can only specify the bucket name, and specifying a sub-path is not allowed.</li><li>For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.</li><li>For Azure Data Lake Storage Gen2: `adls2://<file_system_name>/<dir_name>`. Example: `adls2://testfilesystem/starrocks`.</li><li>For HDFS: `hdfs://<host>:<port>/<hdfs_path>`. `<hdfs_path>` must be an absolute path, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks`.</li><li>For WebHDFS: `webhdfs://<host>:<http_port>/<hdfs_path>`, where `<http_port>` is the HTTP port of the NameNode. `<hdfs_path>` must be an absolute path, for example, `webhdfs://127.0.0.1:50070/user/xxx/starrocks`.</li><li>For ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`, where `<ViewFS_cluster>` is the ViewFS cluster name. `<viewfs_path>` must be an absolute path, for example, `viewfs://myviewfscluster/user/xxx/starrocks`.</li></ul> |
 | COMMENT             | The comment on the storage volume.                           |
 | PROPERTIES          | Parameters in the `"key" = "value"` pairs used to specify the properties and credential information to access the remote storage system. For detailed information, see [PROPERTIES](#properties). |
 
@@ -53,6 +53,9 @@ The table below lists all available properties of storage volumes. Following the
 | azure.blob.endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
 | azure.blob.shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage. |
 | azure.blob.sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage. |
+| azure.adls2.endpoint                | The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`. |
+| azure.adls2.shared_key              | The Shared Key used to authorize requests for your Azure Data Lake Storage Gen2e. |
+| azure.adls2.sas_token               | The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2. |
 | hadoop.security.authentication      | The authentication method. Valid values: `simple`(Default) and `kerberos`. `simple` indicates simple authentication, that is, username. `kerberos` indicates Kerberos authentication. |
 | username                            | Username used to access the NameNode in the HDFS cluster.                      |
 | hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache.                   |
@@ -178,6 +181,30 @@ Creating a storage volume on Azure Blob Storage is supported from v3.1.1 onwards
 
 :::note
 The hierarchical namespace must be disabled when you create the Azure Blob Storage Account.
+:::
+
+##### Azure Data Lake Storage Gen2
+
+Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4.1 onwards.
+
+- If you use Shared Key to access Azure Data Lake Storage Gen2, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.shared_key" = "<shared_key>"
+  ```
+
+- If you use shared access signatures (SAS) to access Azure Data Lake Storage Gen2, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.sas_token" = "<sas_token>"
+  ```
+
+:::note
+Azure Data Lake Storage Gen1 is not supported.
 :::
 
 ##### HDFS
@@ -353,6 +380,18 @@ PROPERTIES(
     "fs.viewfs.mounttable.clusterX.link./data" = "hdfs://nn1-clusterx.example.com:8020/data",
     "fs.viewfs.mounttable.clusterX.link./project" = "hdfs://nn2-clusterx.example.com:8020/project"
 );
+```
+
+Example 8: Create a storage volume `adls2` for Azure Data Lake Storage Gen2 using SAS token.
+
+```SQL
+CREATE STORAGE VOLUME adls2
+    TYPE = ADLS2
+    LOCATIONS = ("adls2://testfilesystem/starrocks")
+    PROPERTIES (
+        "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
+        "azure.adls2.sas_token" = "xxx"
+    );
 ```
 
 ## Relevant SQL statements

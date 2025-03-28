@@ -55,9 +55,9 @@ public class WarehouseProcDir implements ProcDirInterface {
         }
         Warehouse warehouse;
         try {
-            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(Long.parseLong(idOrName));
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(Long.parseLong(idOrName));
         } catch (NumberFormatException e) {
-            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(idOrName);
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(idOrName);
         }
         if (warehouse == null) {
             throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + ".\"");

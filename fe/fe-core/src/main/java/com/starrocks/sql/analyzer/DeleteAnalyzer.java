@@ -198,10 +198,9 @@ public class DeleteAnalyzer {
         analyzeProperties(deleteStatement, session);
 
         TableName tableName = deleteStatement.getTableName();
-        tableName.normalization(session);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(tableName.getCatalog(), tableName.getDb());
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }

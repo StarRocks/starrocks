@@ -94,7 +94,7 @@ public:
         if (offsets[row_num + 1] > offsets[row_num]) {
             this->data(state).update(
                     ctx->mem_pool(),
-                    *down_cast<KeyColumnType*>(ColumnHelper::get_data_column(map_column->keys_column().get())),
+                    *down_cast<const KeyColumnType*>(ColumnHelper::get_data_column(map_column->keys_column().get())),
                     map_column->values(), offsets[row_num], offsets[row_num + 1] - offsets[row_num]);
         }
     }
@@ -150,7 +150,7 @@ public:
             offsets.push_back(offsets.back() + 1);
         }
         if (dst->get()->is_nullable()) {
-            down_cast<NullableColumn*>(dst->get())->null_column_data().resize(dst->get()->size() + chunk_size);
+            down_cast<NullableColumn*>(dst->get())->null_column_data().resize(column->size());
         }
     }
 

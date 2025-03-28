@@ -125,7 +125,7 @@ DISTRIBUTED BY HASH(`c1`)
 PROPERTIES (
 "replication_num" = "3",
 "storage_format" = "DEFAULT",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "compression" = "LZ4"
 );
 
@@ -233,7 +233,7 @@ DISTRIBUTED BY HASH(id)
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "compression" = "LZ4"
 );
 

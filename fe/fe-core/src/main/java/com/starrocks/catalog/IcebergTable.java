@@ -27,6 +27,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -283,6 +284,11 @@ public class IcebergTable extends Table {
         return getNativeTable().location();
     }
 
+    @Override
+    public Map<String, String> getProperties() {
+        return getNativeTable().properties();
+    }
+
     public PartitionField getPartitionFiled(String colName) {
         org.apache.iceberg.Table nativeTable = getNativeTable();
         return nativeTable.spec().fields().stream()
@@ -295,7 +301,7 @@ public class IcebergTable extends Table {
         // For compatibility with the resource iceberg table. native table is lazy. Prevent failure during fe restarting.
         if (nativeTable == null) {
             IcebergTable resourceMappingTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(getCatalogName(), catalogDBName, catalogTableName);
+                    .getTable(new ConnectContext(), getCatalogName(), catalogDBName, catalogTableName);
             if (resourceMappingTable == null) {
                 throw new StarRocksConnectorException("Can't find table %s.%s.%s",
                         getCatalogName(), catalogDBName, catalogTableName);

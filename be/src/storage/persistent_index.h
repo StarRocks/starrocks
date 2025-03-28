@@ -21,9 +21,9 @@
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
+#include "util/bloom_filter.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 
@@ -122,6 +122,8 @@ struct IndexValue {
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
+
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
@@ -240,7 +242,7 @@ public:
     virtual Status load_wals(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // load snapshot
-    virtual bool load_snapshot(phmap::BinaryInputArchive& ar) = 0;
+    virtual Status load_snapshot(phmap::BinaryInputArchive& ar) = 0;
 
     // load according meta
     virtual Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) = 0;
@@ -364,7 +366,7 @@ public:
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     // load snapshot
-    bool load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
+    Status load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
 
     // load according meta
     Status load(const MutableIndexMetaPB& meta);
@@ -855,7 +857,7 @@ private:
     Status _build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, std::unique_ptr<Column> pk_column);
+    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, MutableColumnPtr pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);

@@ -24,7 +24,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 // edit log from removing alter job v2
@@ -48,11 +47,7 @@ public class RemoveAlterJobV2OperationLog implements Writable {
         return type;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static RemoveAlterJobV2OperationLog read(DataInput in) throws IOException {
         String json = Text.readString(in);

@@ -36,7 +36,7 @@ You can follow these steps to recover the metadata and start FE:
 
 1. Stop all FE nodes.
 2. Back up the metadata directories `meta_dir` of all FE nodes.
-3. Add the configuration `ignore_unknown_log_id = true` to the configuration files **fe.conf** of all FE nodes.
+3. Add the configuration `metadata_ignore_unknown_operation_type = true` to the configuration files **fe.conf** of all FE nodes.
 4. Start all FE nodes, and check whether your data and metadata are intact.
 5. If both your data and metadata are intact, execute the following statement to create an image file for your metadata:
 
@@ -112,7 +112,7 @@ Caused by: com.sleepycat.je.rep.ReplicaWriteException: (JE 18.3.16) Problem clos
         at com.sleepycat.je.rep.impl.node.Replica$ReplayThread.run(Replica.java:1225) ~[starrocks-bdb-je-18.3.16.jar:?]
 ```
 
-This issue occurs when the BDBJE version of the failed FE node (v18.3.16) mismatches that of the Leader FE node (v7.3.7).
+This issue occurs when the BDBJE version of the failed FE node (v18.3.*) mismatches that of the Leader FE node (v7.3.7).
 
 You can follow these steps to fix this issue:
 
@@ -151,18 +151,6 @@ You can follow these steps to fix this issue:
    ```
 
 5. After the failed node recovers to a healthy status, you need to upgrade the BDBJE packages in your cluster to **starrocks-bdb-je-18.3.16.jar** (or upgrade your StarRocks cluster to v3.0 or later), following the order of Followers first and then the Leader.
-
-##### InsufficientReplicasException
-
-You can identify this issue based on the following error message:
-
-```Plain
-com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
-```
-
-This issue occurs when the Leader node or Follower nodes use excessive memory resources, leading to Full GC.
-
-To solve this issue, you can either increase the JVM heap size or use the G1 GC algorithm.
 
 ##### InsufficientLogException
 
@@ -208,27 +196,6 @@ Caused by: com.sleepycat.je.EnvironmentFailureException: Environment invalid bec
 This issue occurs when the original Leader node hangs and becomes alive again while the surviving Follower nodes are trying to elect a new Leader node. The Follower nodes will try to establish a new connection with the original Leader node. However, the Leader node will reject the connection request because the old connection still exists. Once the request is rejected, the Follower node will set the environment as invalid and throw this exception.
 
 To solve this issue, you can either increase the JVM heap size or use the G1 GC algorithm.
-
-##### Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch
-
-You can identify this issue based on the following error message:
-
-```Plain
-Environment invalid because of previous exception: xxx Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch xxx'
-        at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:459)
-        at com.sleepycat.je.latch.LatchSupport.handleTimeout(LatchSupport.java:211)
-        at com.sleepycat.je.latch.LatchWithStatsImpl.acquireExclusive(LatchWithStatsImpl.java:87)
-        at com.sleepycat.je.log.LogBufferPool.bumpCurrent(LogBufferPool.java:527)
-        at com.sleepycat.je.log.LogManager.flushInternal(LogManager.java:1373)
-        at com.sleepycat.je.log.LogManager.flushNoSync(LogManager.java:1337)
-        at com.sleepycat.je.log.LogFlusher$FlushTask.run(LogFlusher.java:232)
-        at java.util.TimerThread.mainLoop(Timer.java:555)
-        at java.util.TimerThread.run(Timer.java:505)
-```
-
-This issue occurs when there is excessive pressure on the local disk of the FE node.
-
-To solve this issue, you can allocate a dedicated disk for the FE metadata, or replace the disk with a high-performance one.
 
 ##### DatabaseNotFoundException
 
@@ -285,6 +252,32 @@ Before proceeding to recover the metadata by following the solution provided bel
 :::
 
 You can follow these steps to fix this issue:
+
+##### Ignore Error Journal ID (Preferred)
+
+1. Shut down all FE nodes.
+2. Back up the metadata directories of all FE nodes.
+3. Locate the erroneous journal ID in the logs. `xxx` in the following log represents the erroneous journal ID.
+
+   ```Plain
+   got interrupt exception or inconsistent exception when replay journal xxx, will exit
+   ```
+
+4. Add the following configuration to all **fe.conf** files and start the FE nodes.
+
+   ```Plain
+   metadata_journal_skip_bad_journal_ids=xxx
+   ```
+
+5. If the startup still again, identify the new failed journal ID through Step 3, add it to the **fe.conf**, and then restart the nodes with the previous configurations unchanged.
+
+   ```Plain
+   metadata_journal_skip_bad_journal_ids=xxx,yyy
+   ```
+
+6. If the system still fails to start after the above steps, or if there are too many failed journal IDs, proceed to Recovery Mode.
+
+##### Recovery Mode
 
 1. Stop all FE nodes.
 2. Back up the metadata directories `meta_dir` of all FE nodes.
@@ -347,7 +340,7 @@ If the majority of the Follower nodes are not running, the FE group will not pro
   2024-01-24 08:21:44.754 UTC INFO [172.26.92.139_29917_1698226672727] Current group size: 3
   ```
 
-To solve this issue, you need to start all Follower nodes in the cluster. If they cannot be restarted, please refer to [The measure of last resort](#7-measure-of-the-last-resort).
+To solve this issue, you need to start all Follower nodes in the cluster. If they cannot be restarted, please refer to [The measure of last resort](#10-measure-of-the-last-resort).
 
 ### 2. Node IP is changed 
 
@@ -439,7 +432,74 @@ If the percentages shown in field `O` remain high, it indicates that the JVM hea
 
 To solve this issue, you must increase the JVM heap size.
 
-### 7. Measure of the last resort
+### 7. Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch
+
+You can identify this issue based on the following error message:
+
+```Plain
+Environment invalid because of previous exception: xxx Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch xxx'
+        at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:459)
+        at com.sleepycat.je.latch.LatchSupport.handleTimeout(LatchSupport.java:211)
+        at com.sleepycat.je.latch.LatchWithStatsImpl.acquireExclusive(LatchWithStatsImpl.java:87)
+        at com.sleepycat.je.log.LogBufferPool.bumpCurrent(LogBufferPool.java:527)
+        at com.sleepycat.je.log.LogManager.flushInternal(LogManager.java:1373)
+        at com.sleepycat.je.log.LogManager.flushNoSync(LogManager.java:1337)
+        at com.sleepycat.je.log.LogFlusher$FlushTask.run(LogFlusher.java:232)
+        at java.util.TimerThread.mainLoop(Timer.java:555)
+        at java.util.TimerThread.run(Timer.java:505)
+```
+
+This issue occurs when there is excessive pressure on the local disk of the FE node.
+
+To solve this issue, you can allocate a dedicated disk for the FE metadata, or replace the disk with a high-performance one.
+
+### 8. InsufficientReplicasException
+
+You can identify this issue based on the following error message:
+
+```Plain
+com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
+```
+
+This issue occurs when the Leader FE node or Follower FE nodes use excessive memory resources, leading to Full GC.
+
+To solve this issue, you can either increase the JVM heap size or use the G1 GC algorithm.
+
+### 9. UnknownMasterException
+
+You can identify this issue based on the following error message:
+
+```Plain
+com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine master from helpers at:[/xxx.xxx.xxx.xxx:9010, /xxx.xxx.xxx.xxx:9010]
+        at com.sleepycat.je.rep.elections.Learner.findMaster(Learner.java:443) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.getMasterSocket(ReplicationGroupAdmin.java:186) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.doMessageExchange(ReplicationGroupAdmin.java:607) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.getGroup(ReplicationGroupAdmin.java:406) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.starrocks.ha.BDBHA.getElectableNodes(BDBHA.java:178) ~[starrocks-fe.jar:?]
+        at com.starrocks.common.proc.FrontendsProcNode.getFrontendsInfo(FrontendsProcNode.java:96) ~[starrocks-fe.jar:?]
+        at com.starrocks.common.proc.FrontendsProcNode.fetchResult(FrontendsProcNode.java:80) ~[starrocks-fe.jar:?]
+        at com.starrocks.sql.ast.ShowProcStmt.getMetaData(ShowProcStmt.java:74) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ShowExecutor.handleShowProc(ShowExecutor.java:872) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ShowExecutor.execute(ShowExecutor.java:286) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.StmtExecutor.handleShow(StmtExecutor.java:1574) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:688) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:336) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:530) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:838) ~[starrocks-fe.jar:?]
+        at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[starrocks-fe.jar:?]
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+        at java.lang.Thread.run(Thread.java:829) ~[?:?]
+```
+
+When executing `SHOW FRONTENDS`, if the Leader FE node cannot be found, there could be several reasons:
+
+- If it is observed that more than half of the FE nodes are undergoing Full GC, and the duration is notably long.
+- Or if the log contains the keyword `java.lang.OutOfMemoryError: Java heap space`.
+
+It is because there is insufficient memory. You need to increase the JVM memory allocation.
+
+### 10. Measure of the last resort
 
 :::warning
 
@@ -459,19 +519,11 @@ Follow these steps to recover the metadata:
 2. Back up the metadata directories `meta_dir` of all FE nodes.
 3. Run the following commands on **all the servers that host the FE nodes** to identify the node with the latest metadata.
 
-   - For StarRocks v2.5 and earlier:
-
-     ```Bash
-     java -jar fe/lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
-     ```
-
-   - For StarRocks v3.0 and later:
-
-     ```Bash
-     # You need to specify the exact .jar package the node uses in the command 
-     # as the package varies according to the StarRocks version.
-     java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
-     ```
+    ```Bash
+    # You need to specify the exact .jar package the node uses in the command 
+    # as the package varies according to the StarRocks version.
+    java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
+    ```
 
    Example output:
 
@@ -515,17 +567,9 @@ Follow these steps to recover the metadata:
 
    1. Add the following configurations to **fe.conf**:
 
-      - For StarRocks v2.5, v3.0, v3.1.9 and earlier patch versions, and v3.2.4 and earlier patch versions:
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - For StarRocks v3.1.10 and later patch versions, v3.2.5 and later patch versions, and v3.3 and later:
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    2. Restart the node, and check whether your data and metadata are intact.
    3. Check whether the current FE node is the Leader FE node.
@@ -548,17 +592,9 @@ Follow these steps to recover the metadata:
    1. Change the role of the FE node from `OBSERVER` to `FOLLOWER` in the **fe/meta/image/ROLE** file.
    2. Add the following configurations to **fe.conf**:
 
-      - For StarRocks v2.5, v3.0, v3.1.9 and earlier patch versions, and v3.2.4 and earlier patch versions:
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - For StarRocks v3.1.10 and later patch versions, v3.2.5 and later patch versions, and v3.3 and later:
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    3. Restart the node, and check whether your data and metadata are intact.
    4. Check whether the current FE node is the Leader FE node.
@@ -571,27 +607,13 @@ Follow these steps to recover the metadata:
       - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
    5. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier. However, **do not restart the node**.
-   6. Drop all FE nodes except the current node. It now serves as the temporary Leader node.
-
-      ```SQL
-      -- To drop a Follower node, replace <follower_host> with the IP address (priority_networks) 
-      -- of the Follower node, and replace <follower_edit_log_port> (Default: 9010) with 
-      -- the Follower node's edit_log_port.
-      ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-      -- To drop an Observer node, replace <observer_host> with the IP address (priority_networks) 
-      -- of the Observer node, and replace <observer_edit_log_port> (Default: 9010) with 
-      -- the Observer node's edit_log_port.
-      ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-      ```
-
-   7. Add a new Follower node (on a new server) to the cluster.
+   6. Add a new Follower node (on a new server) to the cluster.
 
       ```SQL
       ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
       ```
 
-   8. Start a new FE node on the new server using the temporary Leader FE node as the helper.
+   7. Start a new FE node on the new server using the temporary Leader FE node as the helper.
 
       ```Bash
       # Replace <leader_ip> with the IP address (priority_networks) 
@@ -600,7 +622,7 @@ Follow these steps to recover the metadata:
       ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
       ```
 
-   9. Once the new FE node is started successfully, check the status and roles of both FE nodes:
+   8. Once the new FE node is started successfully, check the status and roles of both FE nodes:
 
       ```SQL
       SHOW FRONTENDS;
@@ -610,8 +632,8 @@ Follow these steps to recover the metadata:
       - If the field `Role` is `FOLLOWER`, this FE node is a Follower FE node.
       - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
-   10. If the new Follower is successfully running in the cluster, you can then stop all nodes.
-   11. Add the following configurations to the **fe.conf of the new Follower only**:
+   9. If the new Follower is successfully running in the cluster, you can then stop all nodes.
+   10. Add the following configurations to the **fe.conf of the new Follower only**:
 
        - For StarRocks v2.5, v3.0, v3.1.9 and earlier patch versions, and v3.2.4 and earlier patch versions:
 
@@ -625,8 +647,8 @@ Follow these steps to recover the metadata:
          bdbje_reset_election_group = true
          ```
 
-   12. Restart the new Follower node, and check whether your data and metadata are intact.
-   13. Check whether the current FE node is the Leader FE node.
+   11. Restart the new Follower node, and check whether your data and metadata are intact.
+   12. Check whether the current FE node is the Leader FE node.
 
        ```SQL
        SHOW FRONTENDS;
@@ -635,28 +657,14 @@ Follow these steps to recover the metadata:
        - If the field `Alive` is `true`, this FE node is properly started and added to the cluster.
        - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
-   14. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier and restart the node.
+   13. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier and restart the node.
 
     </TabItem>
 
   </Tabs>
 
-6. The surviving Follower node is now essentially the Leader node of the cluster. Drop all FE nodes except for the current node.
-
-   ```SQL
-   -- To drop a Follower node, replace <follower_host> with the IP address (priority_networks) 
-   -- of the Follower node, and replace <follower_edit_log_port> (Default: 9010) with 
-   -- the Follower node's edit_log_port.
-   ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-   -- To drop an Observer node, replace <observer_host> with the IP address (priority_networks) 
-   -- of the Observer node, and replace <observer_edit_log_port> (Default: 9010) with 
-   -- the Observer node's edit_log_port.
-   ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-   ```
-
-7. Clear the metadata directories `meta_dir` of the FE nodes that you want to add back to the cluster.
-8. Start new Follower nodes using the new Leader FE node as the helper.
+5. Clear the metadata directories `meta_dir` of the FE nodes that you want to add back to the cluster.
+6. Start new Follower nodes using the new Leader FE node as the helper.
 
    ```Bash
    # Replace <leader_ip> with the IP address (priority_networks) 
@@ -665,7 +673,7 @@ Follow these steps to recover the metadata:
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
-9. Add the Follower nodes back to the cluster.
+7. Add the Follower nodes back to the cluster.
 
    ```SQL
    ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";

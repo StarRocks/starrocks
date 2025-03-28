@@ -77,7 +77,7 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
             for (const auto& slot : desc->slots()) {
                 auto column = ColumnHelper::create_column(slot->type(), true);
                 column->append_nulls(_desired_num_rows);
-                chunk->append_column(column, slot->id());
+                chunk->append_column(std::move(column), slot->id());
             }
         }
 

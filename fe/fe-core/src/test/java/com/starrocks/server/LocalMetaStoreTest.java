@@ -324,4 +324,5 @@ public class LocalMetaStoreTest {
         Assert.assertNull(db.getTable(tableId));
         Assert.assertNull(db.getTable(tableName));
     }
+
 }

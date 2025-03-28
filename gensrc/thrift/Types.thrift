@@ -530,6 +530,7 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
     BROTLI = 12;
+    AUTO = 13;
 }
 
 enum TWriteQuorumType {
@@ -607,4 +608,9 @@ struct TSnapshotInfo {
 enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1
+}
+
+enum TNodeType {
+    Backend = 0,
+    Compute = 1
 }

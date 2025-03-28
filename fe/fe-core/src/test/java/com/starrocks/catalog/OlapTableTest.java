@@ -404,4 +404,33 @@ public class OlapTableTest {
             Assert.assertNull(partition);
         }
     }
+
+    @Test
+    public void testGetIndexesBySchema() {
+        List<Index> indexesInTable = Lists.newArrayList();
+        Column k1 = new Column("k1", new ScalarType(PrimitiveType.VARCHAR), true, null, "", "");
+        Column k2 = new Column("k2", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
+        Column k3 = new Column("k3", new ScalarType(PrimitiveType.DATE), true, null, "", "");
+        List<Column> schema = new LinkedList<Column>();
+        schema.add(k1);
+        schema.add(k2);
+        schema.add(k3);
+
+        Index index1 = new Index(1L, "index1", Lists.newArrayList(ColumnId.create("k1"), ColumnId.create("k2")),
+                                 IndexDef.IndexType.BITMAP, "comment", null);
+
+        Index index2 = new Index(2L, "index2", Lists.newArrayList(ColumnId.create("k2"), ColumnId.create("k3")),
+                                 IndexDef.IndexType.BITMAP, "comment", null);
+
+        Index index3 = new Index(3L, "index3", Lists.newArrayList(ColumnId.create("k4")), IndexDef.IndexType.BITMAP,
+                                 "comment", null);
+        indexesInTable.add(index1);
+        indexesInTable.add(index2);
+        indexesInTable.add(index3);
+
+        List<Index> result = OlapTable.getIndexesBySchema(indexesInTable, schema);
+        Assert.assertTrue(result.size() == 2);
+        Assert.assertTrue(result.get(0).getIndexName().equals("index1"));
+        Assert.assertTrue(result.get(1).getIndexName().equals("index2"));
+    }
 }

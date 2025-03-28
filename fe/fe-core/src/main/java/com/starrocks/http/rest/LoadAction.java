@@ -35,6 +35,8 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -44,8 +46,6 @@ import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadKvParams;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -142,8 +142,7 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No table selected.");
         }
 
-        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                dbName, tableName, PrivilegeType.INSERT);
+        Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
 
         if (!enableBatchWrite) {
             processNormalStreamLoad(request, response, dbName, tableName);
@@ -174,7 +173,7 @@ public class LoadAction extends RestBaseAction {
             Collections.shuffle(nodeIds);
         } else {
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, false, false, null);
+            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, true, false, null);
         }
 
         if (CollectionUtils.isEmpty(nodeIds)) {

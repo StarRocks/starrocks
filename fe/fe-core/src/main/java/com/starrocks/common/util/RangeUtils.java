@@ -83,6 +83,9 @@ public class RangeUtils {
      */
     public static void checkRangeListsMatch(List<Range<PartitionKey>> list1, List<Range<PartitionKey>> list2)
             throws DdlException {
+        if (list1.isEmpty() && list2.isEmpty()) {
+            return;
+        }
         Collections.sort(list1, RangeUtils.RANGE_COMPARATOR);
         Collections.sort(list2, RangeUtils.RANGE_COMPARATOR);
 

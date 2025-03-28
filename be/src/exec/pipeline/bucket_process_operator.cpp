@@ -42,7 +42,10 @@ Status BucketProcessContext::finish_current_sink(RuntimeState* state) {
 
 Status BucketProcessSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _ctx->sink->set_observer(observer());
+    _ctx->attach_sink_observer(state, observer());
     RETURN_IF_ERROR(_ctx->sink->prepare(state));
+    _ctx->sink->set_runtime_filter_probe_sequence(_runtime_filter_probe_sequence);
     return Status::OK();
 }
 
@@ -62,6 +65,7 @@ bool BucketProcessSinkOperator::is_finished() const {
 }
 
 Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _ctx->defer_notify_source();
     ONCE_DETECT(_set_finishing_once);
     auto defer = DeferOp([&]() {
         if (_ctx->spill_channel != nullptr) {
@@ -88,6 +92,7 @@ Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    auto notify = _ctx->defer_notify_source();
     auto info = chunk->owner_info();
     if (!chunk->is_empty()) {
         RETURN_IF_ERROR(_ctx->sink->push_chunk(state, chunk));
@@ -105,6 +110,9 @@ Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 
 Status BucketProcessSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _ctx->source->set_runtime_filter_probe_sequence(_runtime_filter_probe_sequence);
+    _ctx->source->set_observer(observer());
+    _ctx->attach_source_observer(state, observer());
     return _ctx->source->prepare(state);
 }
 // case 1: has_output() is true then call pull_chunk to pull chunk
@@ -127,6 +135,7 @@ void BucketProcessSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> BucketProcessSourceOperator::pull_chunk(RuntimeState* state) {
+    auto notify = _ctx->defer_notify_sink();
     // BucketProcessSink::set_finishing execution timing is uncertain
     ChunkPtr chunk;
     if (_ctx->source->has_output()) {

@@ -130,14 +130,14 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     return has_valid_child;
 }
 
-void IcebergMetaHelper::_init_field_mapping() {
-    for (const auto& each : _t_iceberg_schema->fields) {
-        _field_name_2_iceberg_field.emplace(Utils::format_name(each.name, _case_sensitive), &each);
+void LakeMetaHelper::_init_field_mapping() {
+    for (const auto& each : _lake_schema->fields) {
+        _field_name_2_lake_field.emplace(Utils::format_name(each.name, _case_sensitive), &each);
     }
 }
 
-bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
-                                       const TypeDescriptor* type_descriptor) const {
+bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                                    const TypeDescriptor* type_descriptor) const {
     // only check for complex type now
     // if complex type has none valid subfield, we will treat this struct type as invalid type.
     if (!parquet_field->is_complex_type()) {
@@ -159,10 +159,10 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
             }
         }
     } else if (parquet_field->type == ColumnType::STRUCT) {
-        std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_iceberg_schema{};
+        std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema{};
         std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type{};
         for (const auto& field : field_schema->children) {
-            field_id_2_iceberg_schema.emplace(field.field_id, &field);
+            field_id_2_lake_schema.emplace(field.field_id, &field);
             for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
                 if (type_descriptor->field_names[i] == field.name) {
                     field_id_2_type.emplace(field.field_id, &type_descriptor->children[i]);
@@ -173,8 +173,8 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
 
         // start to check struct type
         for (const auto& child_parquet_field : parquet_field->children) {
-            auto it = field_id_2_iceberg_schema.find(child_parquet_field.field_id);
-            if (it == field_id_2_iceberg_schema.end()) {
+            auto it = field_id_2_lake_schema.find(child_parquet_field.field_id);
+            if (it == field_id_2_lake_schema.end()) {
                 continue;
             }
 
@@ -194,31 +194,31 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     return has_valid_child;
 }
 
-void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                             std::vector<GroupReaderParam::Column>& read_cols,
-                                             std::unordered_set<std::string>& existed_column_names) const {
+void LakeMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                                          std::vector<GroupReaderParam::Column>& read_cols,
+                                          std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
         const std::string& formatted_name = Utils::format_name(materialized_column.name(), _case_sensitive);
-        auto iceberg_it = _field_name_2_iceberg_field.find(formatted_name);
-        if (iceberg_it == _field_name_2_iceberg_field.end()) {
+        auto lake_it = _field_name_2_lake_field.find(formatted_name);
+        if (lake_it == _field_name_2_lake_field.end()) {
             continue;
         }
 
-        int32_t field_id = iceberg_it->second->field_id;
+        int32_t field_id = lake_it->second->field_id;
 
         int32_t field_idx = _file_metadata->schema().get_field_idx_by_field_id(field_id);
         if (field_idx < 0) continue;
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_id(field_id);
         // check is type is invalid
-        if (!_is_valid_type(parquet_field, iceberg_it->second, &materialized_column.slot_desc->type())) {
+        if (!_is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type())) {
             continue;
         }
 
         auto parquet_type = parquet_field->physical_type;
 
         GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
-                                                        materialized_column.decode_needed, iceberg_it->second);
+                                                        materialized_column.decode_needed, lake_it->second);
         read_cols.emplace_back(column);
         existed_column_names.emplace(formatted_name);
     }

@@ -48,6 +48,7 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -112,8 +113,10 @@ public class LeaderOpExecutor {
 
     public void execute() throws Exception {
         forward();
-        LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
-        ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+            LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
+            ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        }
 
         if (result.state != null) {
             MysqlStateType state = MysqlStateType.fromString(result.state);

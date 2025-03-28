@@ -25,6 +25,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAdaptiveDopParam;
 import com.starrocks.thrift.TDescriptorTable;
@@ -119,7 +120,7 @@ public class TFragmentInstanceFactory {
         result.setProtocol_version(InternalServiceVersion.V1);
         result.setFragment(fragment.toThrift());
         result.setDesc_tbl(descTable);
-        result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_2.getValue());
+        result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
         result.setCoord(coordAddress);
 
         result.setParams(new TPlanFragmentExecParams());
@@ -147,6 +148,8 @@ public class TFragmentInstanceFactory {
         // For broker load, the ConnectContext.get() is null
         if (context != null) {
             SessionVariable sessionVariable = context.getSessionVariable();
+            final List<QueryDebugOptions.ExecDebugOption> execDebugOptions =
+                    sessionVariable.getQueryDebugOptions().getExecDebugOptions();
 
             if (isEnablePipeline) {
                 result.setIs_pipeline(true);
@@ -154,6 +157,9 @@ public class TFragmentInstanceFactory {
                 result.setEnable_shared_scan(sessionVariable.isEnableSharedScan());
                 result.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                 result.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
+                for (QueryDebugOptions.ExecDebugOption option : execDebugOptions) {
+                    result.params.addToExec_debug_options(option.toThirft());
+                }
 
                 result.setEnable_resource_group(true);
                 if (jobSpec.getResourceGroup() != null) {

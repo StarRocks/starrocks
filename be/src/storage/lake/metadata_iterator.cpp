@@ -23,13 +23,20 @@ namespace starrocks::lake {
 template <>
 StatusOr<TabletMetadataPtr> MetadataIterator<TabletMetadataPtr>::get_metadata_from_tablet_manager(
         const std::string& path) {
-    auto tablet_metadata = _manager->get_tablet_metadata(path, false);
-    if (!tablet_metadata.ok() || tablet_metadata.value()->id() == _tablet_id) {
+    ASSIGN_OR_RETURN(auto tablet_metadata, _manager->get_tablet_metadata(path, false));
+
+    if (tablet_metadata->gtid() < _max_gtid) {
+        return Status::NotFound("no more element");
+    }
+
+    _max_gtid = tablet_metadata->gtid();
+
+    if (tablet_metadata->id() == _tablet_id) {
         return tablet_metadata;
     }
 
     // Handle tablet initial metadata
-    auto metadata = std::make_shared<TabletMetadata>(*tablet_metadata.value());
+    auto metadata = std::make_shared<TabletMetadata>(*tablet_metadata);
     metadata->set_id(_tablet_id);
     return metadata;
 }

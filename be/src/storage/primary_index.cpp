@@ -173,10 +173,6 @@ public:
             auto p = _map.insert({keys[i], v});
             if (!p.second) {
                 uint64_t old = p.first->second.value;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
-                               << " rowid=" << rowid_start + i;
-                }
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             }
@@ -395,10 +391,6 @@ public:
                 auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
                 if (!p.second) {
                     uint64_t old = p.first->second.value;
-                    if ((old >> 32) == rssid) {
-                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                    }
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
@@ -415,10 +407,6 @@ public:
                 auto p = _map.emplace(FixSlice<S>(keys[i]), v);
                 if (!p.second) {
                     uint64_t old = p.first->second.value;
-                    if ((old >> 32) == rssid) {
-                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                    }
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
@@ -667,10 +655,6 @@ public:
             auto p = _map.insert({keys[i].to_string(), v});
             if (!p.second) {
                 uint64_t old = p.first->second;
-                if ((old >> 32) == rssid) {
-                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                               << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                }
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             } else {
@@ -1224,7 +1208,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     }
 
     OlapReaderStatistics stats;
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }
@@ -1353,10 +1337,6 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
                                               reinterpret_cast<IndexValue*>(old_values.data()), stat));
     for (unsigned long old : old_values) {
-        if ((old != NullIndexValue) && (old >> 32) == rssid) {
-            LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
-            st = Status::InternalError("found duplicate in upsert data");
-        }
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }

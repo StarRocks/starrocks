@@ -108,7 +108,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eq)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, call, replace, shuttleContext.isRollup());
+            return rewriteImpl(shuttleContext, call, replace);
         } else if (fn.equalsIgnoreCase(ARRAY_AGG)) {
             if (!call.isDistinct()) {
                 return null;
@@ -117,7 +117,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eq)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, call, replace, shuttleContext.isRollup());
+            return rewriteImpl(shuttleContext, call, replace);
         }
         return null;
     }
@@ -175,9 +175,9 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     @Override
-    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
-                                               CallOperator aggFunc,
-                                               ColumnRefOperator replace) {
+    public ScalarOperator rewriteAggregateFuncWithoutRollup(EquivalentShuttleContext shuttleContext,
+                                                            CallOperator aggFunc,
+                                                            ColumnRefOperator replace) {
         String fn = aggFunc.getFnName();
         if (fn.equals(ARRAY_AGG)) {
             return makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);

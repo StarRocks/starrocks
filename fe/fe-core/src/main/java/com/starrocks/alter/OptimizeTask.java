@@ -22,7 +22,6 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
@@ -103,11 +102,7 @@ public class OptimizeTask extends Task {
         return GsonUtils.GSON.fromJson(json, OptimizeTask.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public String toString() {

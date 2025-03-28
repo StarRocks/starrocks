@@ -85,4 +85,4 @@ StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详�
 
 > **说明**
 >
-> StarRocks 存算分离集群暂不支持[同步物化视图](../../using_starrocks/Materialized_view-single_table.md)。
+> 自 v3.4.0 起，StarRocks 存算分离集群支持[同步物化视图](../../using_starrocks/Materialized_view-single_table.md)。

@@ -871,12 +871,27 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Override
     public abstract Expr clone();
 
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || (obj.getClass() != this.getClass())) {
             return false;
         }
-        if (obj.getClass() != this.getClass()) {
+        Expr expr = (Expr) obj;
+        if (fn == null && expr.fn == null) {
+            return true;
+        }
+        if (fn == null || expr.fn == null) {
+            return false;
+        }
+        // Both fn_'s are not null
+        return fn.equals(expr.fn);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!equalsWithoutChild(obj)) {
             return false;
         }
         // don't compare type, this could be called pre-analysis
@@ -889,14 +904,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 return false;
             }
         }
-        if (fn == null && expr.fn == null) {
-            return true;
-        }
-        if (fn == null || expr.fn == null) {
-            return false;
-        }
-        // Both fn_'s are not null
-        return fn.equals(expr.fn);
+        return true;
     }
 
     @Override
@@ -1224,6 +1232,12 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, argNames, Type.INVALID, false);
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+    public static Function getBuiltinFunction(String name, Type[] argTypes, boolean varArgs, Type retType, Function.CompareMode mode) {
+        FunctionName fnName = new FunctionName(name);
+        Function searchDesc = new Function(fnName, argTypes, retType, varArgs);
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 

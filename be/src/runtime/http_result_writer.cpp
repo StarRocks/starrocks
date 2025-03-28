@@ -45,14 +45,14 @@ Status HttpResultWriter::init(RuntimeState* state) {
 
 // transform one row into json format
 Status HttpResultWriter::_transform_row_to_json(const Columns& result_columns, int idx) {
-    int num_columns = result_columns.size();
+    size_t num_columns = result_columns.size();
 
     _row_str.append("{\"data\":[");
-    for (auto& result_column : result_columns) {
+    for (size_t i = 0; i < num_columns; ++i) {
         std::string row;
-        ASSIGN_OR_RETURN(row, cast_type_to_json_str(result_column, idx));
+        ASSIGN_OR_RETURN(row, cast_type_to_json_str(result_columns[i], idx));
         _row_str.append(row);
-        if (result_column != result_columns[num_columns - 1]) {
+        if (i != num_columns - 1) {
             _row_str.append(",");
         }
     }

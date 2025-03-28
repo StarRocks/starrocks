@@ -55,6 +55,7 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
@@ -387,9 +388,17 @@ public class BrokerLoadJobTest {
         brokerLoadJob2.unprotectedExecuteJob();
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
+        ConnectContext context = new ConnectContext();
+        context.setStartTime();
+        brokerLoadJob2.setConnectContext(context);
+        long createTimestamp = context.getStartTime() - 1;
+        brokerLoadJob2.createTimestamp = createTimestamp;
+        brokerLoadJob2.timeoutSecond = 0;
         brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+        Assert.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
+        Assert.assertEquals(brokerLoadJob2.createTimestamp, context.getStartTime());
 
         // test when txnOperated is false
         BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
@@ -412,7 +421,7 @@ public class BrokerLoadJobTest {
         idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
 
-        // test that timeout happens in loadin task before the job timeout
+        // test that timeout happens in loading task before the job timeout
         BrokerLoadJob brokerLoadJob5 = new BrokerLoadJob();
         new Expectations() {
             {
@@ -427,6 +436,17 @@ public class BrokerLoadJobTest {
         brokerLoadJob5.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob5, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+
+        // test parse error, should not retry
+        BrokerLoadJob brokerLoadJob6 = new BrokerLoadJob();
+        brokerLoadJob6.retryTime = 1;
+        brokerLoadJob6.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = "parse error, task failed";
+        brokerLoadJob6.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        Assert.assertEquals(JobState.CANCELLED, brokerLoadJob6.getState());
+        idToTasks = Deencapsulation.getField(brokerLoadJob6, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
     }
 
     @Test
@@ -448,7 +468,7 @@ public class BrokerLoadJobTest {
     }
 
     @Test
-    public void testTaskOnResourceGroupTaskFailed(@Injectable long taskId, @Injectable FailMsg failMsg) {
+    public void testTaskFailedUserCancelType(@Injectable long taskId, @Injectable FailMsg failMsg) {
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         new MockUp<EditLog>() {
             @Mock

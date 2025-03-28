@@ -39,8 +39,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "exec/pipeline/pipeline_metrics.h"
 #include "util/metrics.h"
 #include "util/system_metrics.h"
+#include "util/table_metrics.h"
 
 namespace starrocks {
 
@@ -93,6 +95,7 @@ private:
 class StarRocksMetrics {
 public:
     // query execution
+    pipeline::PipelineExecutorMetrics pipeline_executor_metrics;
     METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_scan_executor_queuing, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
@@ -202,8 +205,11 @@ public:
     METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
 
     // Metrics for LoadChannel
+    METRICS_DEFINE_THREAD_POOL(load_channel);
     // The number that LoadChannel#add_chunks is accessed
     METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_total, MetricUnit::OPERATIONS);
+    // The number that LoadChannel#add_chunks eos is accessed
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_eos_total, MetricUnit::OPERATIONS);
     // Accumulated time that LoadChannel#add_chunks costs. The time can be divided into
     // waiting memtable, waiting async delta writer, waiting replicas, and others.
     METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_duration_us, MetricUnit::MICROSECONDS);
@@ -223,17 +229,25 @@ public:
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_execute_duration_us, MetricUnit::MICROSECONDS);
     // Accumulated time that task pends in the queue
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_pending_duration_us, MetricUnit::MICROSECONDS);
-
     // Metrics for metadata lru cache
     METRIC_DEFINE_INT_GAUGE(metadata_cache_bytes_total, MetricUnit::BYTES);
 
     // Metrics for delta writer
+    // The number of eos task that executed
+    METRIC_DEFINE_INT_COUNTER(delta_writer_commit_task_total, MetricUnit::OPERATIONS);
+    // The number of wait flush task that executed, include memory exceed and commit
+    METRIC_DEFINE_INT_COUNTER(delta_writer_wait_flush_task_total, MetricUnit::OPERATIONS);
     // Accumulated time that delta writer waits for memtable flush. It's part of
     // async_delta_writer_task_execute_duration_us
     METRIC_DEFINE_INT_COUNTER(delta_writer_wait_flush_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that delta writer preload rowset for pk table. It's part of
+    // async_delta_writer_task_execute_duration_us
+    METRIC_DEFINE_INT_COUNTER(delta_writer_pk_preload_duration_us, MetricUnit::MICROSECONDS);
     // Accumulated time that delta writer waits for secondary replicas sync. It's part of
     // async_delta_writer_task_execute_duration_us
     METRIC_DEFINE_INT_COUNTER(delta_writer_wait_replica_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that delta writer commit txn. It's part of async_delta_writer_task_execute_duration_us
+    METRIC_DEFINE_INT_COUNTER(delta_writer_txn_commit_duration_us, MetricUnit::MICROSECONDS);
 
     METRIC_DEFINE_INT_COUNTER(memtable_flush_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(memtable_finalize_duration_us, MetricUnit::MICROSECONDS);
@@ -266,6 +280,8 @@ public:
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_hit_cache, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(primary_key_table_error_state_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_duration_ms, MetricUnit::MILLISECONDS);
+    METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_total, MetricUnit::REQUESTS);
 
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
@@ -342,6 +358,7 @@ public:
     // thread pool metrics
     METRICS_DEFINE_THREAD_POOL(publish_version);
     METRICS_DEFINE_THREAD_POOL(async_delta_writer);
+    METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
     METRICS_DEFINE_THREAD_POOL(memtable_flush);
     METRICS_DEFINE_THREAD_POOL(lake_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(segment_replicate);
@@ -390,9 +407,12 @@ public:
 
     MetricRegistry* metrics() { return &_metrics; }
     SystemMetrics* system_metrics() { return &_system_metrics; }
+    TableMetricsManager* table_metrics_mgr() { return &_table_metrics_mgr; }
+    TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
+    pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
 
 private:
-    // Don't allow constrctor
+    // Don't allow constructor
     StarRocksMetrics();
 
     void _update();
@@ -405,6 +425,7 @@ private:
 
     MetricRegistry _metrics;
     SystemMetrics _system_metrics;
+    TableMetricsManager _table_metrics_mgr;
 };
 
 }; // namespace starrocks

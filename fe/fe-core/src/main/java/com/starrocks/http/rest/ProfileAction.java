@@ -57,7 +57,7 @@ public class ProfileAction extends RestBaseAction {
     }
 
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String queryId = request.getSingleParameter("query_id");
         if (queryId == null) {
             response.getContent().append("not valid parameter");

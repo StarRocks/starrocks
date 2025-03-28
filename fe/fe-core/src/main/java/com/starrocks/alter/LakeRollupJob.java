@@ -34,6 +34,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -147,19 +148,23 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
+        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
-            MaterializedIndexMeta index = table.getIndexMetaByIndexId(table.getBaseIndexId());
 
-            for (MaterializedIndex rollupIdx : physicalPartitionIdToRollupIndex.values()) {
-                numTablets += rollupIdx.getTablets().size();
+            if (enableTabletCreationOptimization) {
+                numTablets = physicalPartitionIdToRollupIndex.size();
+            } else {
+                numTablets = physicalPartitionIdToRollupIndex.values().stream().map(MaterializedIndex::getTablets)
+                        .mapToLong(List::size).sum();
             }
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
 
+            long gtid = getNextGtid();
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -179,7 +184,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         .setStorageType(TStorageType.COLUMN)
                         .setBloomFilterColumnNames(table.getBfColumnIds())
                         .setBloomFilterFpp(table.getBfFpp())
-                        .setIndexes(table.getCopiedIndexes())
+                        .setIndexes(OlapTable.getIndexesBySchema(table.getCopiedIndexes(), rollupSchema))
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
                         .setSortKeyUniqueIds(null)
                         .addColumns(rollupSchema)
@@ -189,8 +194,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
-                    ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    ComputeNode computeNode = null;
+                    try {
+                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    } catch (ErrorReportException e) {
+                        // computeNode is null
+                    }
                     if (computeNode == null) {
                         //todo: fix the error message.
                         throw new AlterCancelException("No alive backend");
@@ -213,11 +223,17 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setCompressionType(table.getCompressionType())
                             .setCreateSchemaFile(createSchemaFile)
                             .setTabletSchema(tabletSchema)
+                            .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                            .setGtid(gtid)
                             .build();
 
                     // For each partition, the schema file is created only when the first Tablet is created
                     createSchemaFile = false;
                     batchTask.addTask(task);
+
+                    if (enableTabletCreationOptimization) {
+                        break;
+                    }
                 } // end for rollupTablets
             }
         }
@@ -231,6 +247,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 throw new IllegalStateException("Table State doesn't equal to ROLLUP, it is " + table.getState() + ".");
             }
             watershedTxnId = getNextTransactionId();
+            watershedGtid = getNextGtid();
             addRollIndexToCatalog(table);
         }
 
@@ -295,8 +312,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
                             RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
 
-                    ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    ComputeNode computeNode = null;
+                    try {
+                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    } catch (ErrorReportException e) {
+                        // computeNode is null
+                    }
                     if (computeNode == null) {
                         //todo: fix the error message.
                         throw new AlterCancelException("No alive compute node");
@@ -389,7 +411,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
 
         if (!publishVersion()) {
-            LOG.info("publish version failed, will retry later. jobId={}", jobId);
             return;
         }
 
@@ -404,7 +425,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
-            table.setState(OlapTable.OlapTableState.NORMAL);
+            // There is no need to set the table state to normal,
+            // because it will be set in MaterializedViewHandler `onJobDone`
         }
 
         writeEditLog(this);
@@ -433,7 +455,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             LakeTable table = (db != null) ? db.getTable(tableId) : null;
             if (table != null) {
                 removeRollupIndex(table);
-                table.setState(OlapTable.OlapTableState.NORMAL);
             }
         }
 
@@ -493,6 +514,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             this.timeoutMs = other.timeoutMs;
 
             this.watershedTxnId = other.watershedTxnId;
+            this.watershedGtid = other.watershedGtid;
             this.commitVersionMap = other.commitVersionMap;
 
             this.physicalPartitionIdToBaseRollupTabletIdMap = other.physicalPartitionIdToBaseRollupTabletIdMap;
@@ -529,10 +551,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
                 visualiseRollupIndex(table);
-                table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.CANCELLED) {
                 removeRollupIndex(table);
-                table.setState(OlapTable.OlapTableState.NORMAL);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
@@ -580,6 +600,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     @VisibleForTesting
     public static long peekNextTransactionId() {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
+    }
+
+    public static long getNextGtid() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
     }
 
     void addRollIndexToCatalog(@NotNull LakeTable tbl) {
@@ -638,7 +662,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         return true;
     }
 
-    private boolean publishVersion() {
+    protected boolean lakePublishVersion() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
@@ -657,6 +681,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 rollUpTxnInfo.combinedTxnLog = false;
                 rollUpTxnInfo.commitTime = finishedTimeMs / 1000;
                 rollUpTxnInfo.txnType = TxnTypePB.TXN_NORMAL;
+                rollUpTxnInfo.gtid = watershedGtid;
                 // publish rollup tablets
                 Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
                         1, commitVersion, warehouseId);
@@ -666,6 +691,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 originTxnInfo.combinedTxnLog = false;
                 originTxnInfo.commitTime = finishedTimeMs / 1000;
                 originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
+                originTxnInfo.gtid = watershedGtid;
                 // publish origin tablets
                 Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
                         commitVersion, warehouseId);
@@ -735,6 +761,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         Map<Long, Long> tabletIdMap =
                 physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
         tabletIdMap.put(rollupTabletId, baseTabletId);
+    }
+
+    public String getRollupIndexName() {
+        return rollupIndexName;
     }
 
     @Override

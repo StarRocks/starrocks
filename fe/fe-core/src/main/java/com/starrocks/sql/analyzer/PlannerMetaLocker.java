@@ -26,6 +26,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -39,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -55,6 +59,8 @@ public class PlannerMetaLocker {
     // Map database id -> database
     private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
+    private UUID queryId;
+
     /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
      * lockTablesWithIntensiveDbLock can internally guarantee the order of locking,
@@ -65,13 +71,14 @@ public class PlannerMetaLocker {
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        this.queryId = session.getQueryId();
     }
 
     /**
      * Try to acquire the lock, return false if the lock cannot be obtained.
      */
     public boolean tryLock(long timeout, TimeUnit unit) {
-        Locker locker = new Locker();
+        Locker locker = new Locker(queryId);
 
         boolean isLockSuccess = false;
         List<Database> lockedDbs = Lists.newArrayList();
@@ -97,7 +104,7 @@ public class PlannerMetaLocker {
     }
 
     public void lock() {
-        Locker locker = new Locker();
+        Locker locker = new Locker(queryId);
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
@@ -155,12 +162,12 @@ public class PlannerMetaLocker {
             return null;
         }
 
-        Database db = metadataMgr.getDb(catalogName, dbName);
+        Database db = metadataMgr.getDb(session, catalogName, dbName);
         if (db == null) {
             return null;
         }
 
-        Table table = metadataMgr.getTable(catalogName, dbName, tbName);
+        Table table = metadataMgr.getTable(session, catalogName, dbName, tbName);
         if (table == null) {
             return null;
         }
@@ -199,6 +206,27 @@ public class PlannerMetaLocker {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
             put(dbAndTable);
             return super.visitDeleteStatement(node, context);
+        }
+
+        @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTbl());
+            put(dbAndTable);
+            return super.visitAlterTableStatement(statement, context);
+        }
+
+        @Override
+        public Void visitAlterViewStatement(AlterViewStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTableName());
+            put(dbAndTable);
+            return super.visitAlterViewStatement(statement, context);
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getMvName());
+            put(dbAndTable);
+            return super.visitAlterMaterializedViewStatement(statement, context);
         }
 
         @Override

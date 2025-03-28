@@ -1,0 +1,52 @@
+-- name: test_pause_on_fatal_parse_error
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `k0` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k0`)
+DISTRIBUTED BY HASH(`k0`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE ROUTINE LOAD none_pause_test ON t0
+PROPERTIES
+(
+    "format" = "json"
+)
+FROM KAFKA
+(
+    "kafka_broker_list"="${broker_list}",
+    "kafka_topic" = "pause_on_fatal_parse_error",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+-- result:
+-- !result
+CREATE ROUTINE LOAD pause_test ON t0
+PROPERTIES
+(
+    "format" = "json",
+    "pause_on_fatal_parse_error" = "true"
+)
+FROM KAFKA
+(
+    "kafka_broker_list"="${broker_list}",
+    "kafka_topic" = "pause_on_fatal_parse_error",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+-- result:
+-- !result
+function: check_routine_load_state("db_${uuid0}.none_pause_test", "RUNNING", "parse error. The value is array type in json document stream", 60)
+-- result:
+None
+-- !result
+function: check_routine_load_state("db_${uuid0}.pause_test", "PAUSED", "parse error. The value is array type in json document stream", 60)
+-- result:
+None
+-- !result

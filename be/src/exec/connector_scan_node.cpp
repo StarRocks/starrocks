@@ -74,6 +74,17 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     _estimate_scan_row_bytes();
 
+    if (tnode.__isset.lake_scan_node) {
+        if (tnode.lake_scan_node.__isset.enable_topn_filter_back_pressure &&
+            tnode.lake_scan_node.enable_topn_filter_back_pressure) {
+            _enable_topn_filter_back_pressure = true;
+            _back_pressure_max_rounds = tnode.lake_scan_node.back_pressure_max_rounds;
+            _back_pressure_num_rows = tnode.lake_scan_node.back_pressure_num_rows;
+            _back_pressure_throttle_time = tnode.lake_scan_node.back_pressure_throttle_time;
+            _back_pressure_throttle_time_upper_bound = tnode.lake_scan_node.back_pressure_throttle_time_upper_bound;
+        }
+    }
+
     return Status::OK();
 }
 

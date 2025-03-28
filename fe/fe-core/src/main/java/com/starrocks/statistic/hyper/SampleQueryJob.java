@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
+import com.starrocks.statistic.sample.SampleInfo;
 
 import java.util.List;
 
@@ -43,7 +44,11 @@ public class SampleQueryJob extends HyperQueryJob {
         List<String> sampleSQLs = Lists.newArrayList();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
-            if (partition == null || sampler.getSampleInfo(partitionId) == null || !partition.hasData()) {
+            SampleInfo sampleInfo = sampler.getSampleInfo(partitionId);
+            if (partition == null ||
+                    sampleInfo == null ||
+                    sampleInfo.getMaxSampleTabletNum() == 0 ||
+                    !partition.hasData()) {
                 // statistics job doesn't lock DB, partition may be dropped, skip it
                 continue;
             }

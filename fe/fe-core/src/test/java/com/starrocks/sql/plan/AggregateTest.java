@@ -1658,11 +1658,11 @@ public class AggregateTest extends PlanTestBase {
                 "sum(arrays_overlap(v3, [1])) as q2, " +
                 "sum(arrays_overlap(v3, [1])) as q3 FROM tarray;");
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>)))\n" +
+                "  |  output: sum(4: arrays_overlap)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
@@ -2968,6 +2968,18 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  5 <-> [5: avg, DECIMAL128(38,18), true]\n" +
                 "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testOnlyGroupByLimit() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select distinct v1 + v2 as vx from t0 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: expr\n" +
+                "  |  limit: 10");
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

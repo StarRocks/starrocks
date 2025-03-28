@@ -2,31 +2,93 @@
 displayed_sidebar: docs
 ---
 
-# Tableau Desktop
+# Tableau
 
-Tableau Desktop 支持对 StarRocks 的内部数据和外部数据进行查询和可视化处理。
+本文介绍如何使用 StarRocks Tableau JDBC Connector 连接 StarRocks 与 Tableau Desktop 和 Tableau Server。
 
-在 Tableau Desktop 中创建数据库：
+## 概述
 
-![Tableau Desktop](../../_assets/BI_tableau_1.png)
+StarRocks Tableau JDBC Connector 是一个用于 Tableau Desktop 和 Tableau Server 的定制扩展组件。它简化了 Tableau 连接 StarRocks 的流程，并增强了对标准 Tableau 功能的支持，其性能优于默认的通用 ODBC/JDBC 连接。
 
-注意以下几点：
+### 主要特性
 
-- 选择 **Other Databases(****JDBC****)** 作为数据源。
-- 在 **Dialect** 里选择 **MySQL**。
-- 在 **URL** 里，按如下 MySQL URI 格式输入 URL：
+- 支持 LDAP：支持通过密码提示进行 LDAP 登录，实现安全认证。
+- 高兼容性：在 TDVT（Tableau Design Verification Tool）测试中达到 99.99% 的兼容性，仅有一个轻微的失败案例。
 
-  ```SQL
-  jdbc:mysql://<Host>:<Port>/<Catalog>.<Databases>
-  ```
+## 前提条件
 
-  URL 参数说明如下：
+在开始之前，请确保满足以下要求：
 
-  - `Host`：StarRocks 集群的 FE 主机 IP 地址。
-  - `Port`：StarRocks 集群的 FE 查询端口，如 `9030`。
-  - `Catalog`：StarRocks 集群中的目标 Catalog。Internal Catalog 和 External Catalog 均支持。
-  - `Database`：StarRocks 集群中的目标数据库。内部数据库和外部数据库均支持。
+- Tableau 版本：Tableau 2020.4 及以上版本
+- StarRocks 版本：StarRocks v3.2 及以上版本
 
-- 在 **Username** 和 **Password** 里输入用户名和密码。
-  - **Username**：用于登录 StarRocks 集群的用户名，如 `admin`。
-  - **Password**：用于登录 StarRocks 集群的用户密码。
+## 为 Tableau Desktop 安装连接器
+
+1. 下载 [MySQL JDBC Driver 8.0.33](https://downloads.mysql.com/archives/c-j/)。
+2. 将驱动文件存放在以下目录（如果目录不存在，请手动创建）：
+
+   - macOS：`~/Library/Tableau/Drivers`
+   - Windows：`C:\Program Files\Tableau\Drivers`
+
+3. 下载 [StarRocks JDBC Connector](https://drive.google.com/file/d/1dsCyZNanceHD93vAY9fMjG9I18UGvpPl/view) 文件。
+4. 将 Connector 文件存放在以下目录：
+
+   - macOS：`~/Documents/My Tableau Repository/Connectors`
+   - Windows：`C:\Users\[Windows User]\Documents\My Tableau Repository\Connectors`
+
+5. 启动 Tableau Desktop。
+6. 进入 **Connect** -> **To a Server** -> **StarRocks** **JDBC** **by CelerData**。
+
+## 为 Tableau Server 安装连接器
+
+1. 下载 [MySQL JDBC Driver 8.0.33](https://downloads.mysql.com/archives/c-j/)。
+2. 将驱动文件存放在以下目录（如果目录不存在，请手动创建）：
+
+   - Linux：`/opt/tableau/tableau_driver/jdbc`
+   - Windows：`C:\Program Files\Tableau\Drivers`
+
+   :::info
+
+   在 Linux 系统中，必须为 "Tableau" 用户授予访问该目录的权限。
+
+   请按以下步骤操作：
+
+   1. 创建目录并复制驱动文件到指定目录：
+
+      ```Bash
+      sudo mkdir -p /opt/tableau/tableau_driver/jdbc
+
+      # 将 <path_to_driver_file_name> 替换为驱动文件的绝对路径。
+      sudo cp /<path_to_driver_file_name>.jar /opt/tableau/tableau_driver/jdbc
+      ```
+
+   2. 为 "Tableau" 用户授予权限：
+
+      ```Bash
+      # 将 <driver_file_name> 替换为驱动文件的名称。
+      sudo chmod 755 /opt/tableau/tableau_driver/jdbc/<driver_file_name>.jar
+      ```
+
+   :::
+
+3. 下载 [StarRocks JDBC Connector](https://drive.google.com/file/d/1dsCyZNanceHD93vAY9fMjG9I18UGvpPl/view) 文件。
+4. 将连接器文件存放在每个节点的以下目录：
+
+   - Linux: `/opt/tableau/connectors`
+   - Windows: `C:\Program Files\Tableau\Connectors`
+
+5. 重启 Tableau Server。
+
+   ```Bash
+   tsm restart
+   ```
+
+   :::info
+
+   每次添加、删除或更新 Connector 后，必须重启 Tableau Server 才能使更改生效。
+
+   :::
+
+## 使用说明
+
+如果需要支持 LDAP 登录，可在配置过程中切换到 **Advanced** 选项卡，并勾选 **Enable LDAP** 开关。

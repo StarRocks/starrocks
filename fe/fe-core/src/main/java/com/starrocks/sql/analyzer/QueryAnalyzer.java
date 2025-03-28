@@ -35,6 +35,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -56,7 +57,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -240,7 +240,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation subquery, Scope scope) {
+        public Void visitSubqueryRelation(SubqueryRelation subquery, Scope scope) {
             QueryRelation queryRelation = subquery.getQueryStatement().getQueryRelation();
             if (queryRelation instanceof SelectRelation) {
                 SelectRelation childSelectRelation = (SelectRelation) queryRelation;
@@ -628,9 +628,9 @@ public class QueryAnalyzer {
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
                     if (needPruneScanColumns && !column.isKey() &&
-                            !bucketColumns.contains(column.getName()) &&
-                            !partitionColumns.contains(column.getName()) &&
-                            !pruneScanColumns.contains(column.getName().toLowerCase())) {
+                            bucketColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            partitionColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            pruneScanColumns.stream().noneMatch(column.getName()::equalsIgnoreCase)) {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }
@@ -927,7 +927,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
+        public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope context) {
             if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }
@@ -1394,7 +1394,7 @@ public class QueryAnalyzer {
 
             Database db;
             try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
-                db = metadataMgr.getDb(catalogName, dbName);
+                db = metadataMgr.getDb(session, catalogName, dbName);
             }
 
             MetaUtils.checkDbNullAndReport(db, dbName);
@@ -1403,7 +1403,7 @@ public class QueryAnalyzer {
             if (tableRelation.isSyncMVQuery()) {
                 try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
                     Pair<Table, MaterializedIndexMeta> materializedIndex =
-                            metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndex(dbName, tbName);
                     if (materializedIndex != null) {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
@@ -1423,7 +1423,7 @@ public class QueryAnalyzer {
                 }
                 if (table == null) {
                     try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                        table = metadataMgr.getTable(catalogName, dbName, tbName);
+                        table = metadataMgr.getTable(session, catalogName, dbName, tbName);
                     }
                 }
             }
@@ -1455,6 +1455,10 @@ public class QueryAnalyzer {
                         }
                     }
                 }
+            }
+
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).maySetDatabaseName(db.getFullName());
             }
 
             return table;

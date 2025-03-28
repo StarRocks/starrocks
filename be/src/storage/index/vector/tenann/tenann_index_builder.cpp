@@ -25,6 +25,7 @@
 #include "tenann/factory/index_factory.h"
 
 namespace starrocks {
+
 // =============== TenAnnIndexBuilderProxy =============
 
 Status TenAnnIndexBuilderProxy::init() {
@@ -35,10 +36,19 @@ Status TenAnnIndexBuilderProxy::init() {
                         return Status::OK();
                     }).status());
 
-    if (!meta.common_params().contains("dim")) {
-        return Status::InvalidArgument("Dim is needed because it's a critical common param");
+    const auto& params = meta.common_params();
+
+    if (!params.contains(index::vector::DIM)) {
+        return Status::InvalidArgument("dim is needed because it's a critical common param");
     }
-    _dim = meta.common_params()["dim"];
+    _dim = params[index::vector::DIM];
+
+    if (!params.contains(index::vector::METRIC_TYPE)) {
+        return Status::InvalidArgument("metric_type is needed because it's a critical common param");
+    }
+    _is_input_normalized = params.contains(index::vector::IS_VECTOR_NORMED) &&
+                           params[index::vector::IS_VECTOR_NORMED] &&
+                           params[index::vector::METRIC_TYPE] == tenann::MetricType::kCosineSimilarity;
 
     auto meta_copy = meta;
     if (meta.index_type() == tenann::IndexType::kFaissIvfPq && config::enable_vector_index_block_cache) {
@@ -51,7 +61,7 @@ Status TenAnnIndexBuilderProxy::init() {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
         _index_builder->index_writer()->SetIndexCache(tenann::IndexCache::GetGlobalInstance());
-        if (_src_is_nullable) {
+        if (_is_element_nullable) {
             _index_builder->EnableCustomRowId();
         }
         _index_builder->Open(_index_path);
@@ -66,98 +76,69 @@ Status TenAnnIndexBuilderProxy::init() {
     return Status::OK();
 }
 
-Status TenAnnIndexBuilderProxy::add(const Column& data) {
-    try {
-        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(data.raw_data()),
-                                                .dim = _dim,
-                                                .size = static_cast<uint32_t>(data.size()),
-                                                .elem_type = tenann::kFloatType};
-        if (data.is_array() && data.size() != 0) {
-            const auto& cur_array = down_cast<const ArrayColumn&>(data);
-            auto offsets = cur_array.offsets();
-            size_t last_offset = 0;
-            auto* offsets_data = reinterpret_cast<uint32_t*>(offsets.mutable_raw_data());
-            for (size_t i = 1; i < offsets.size(); i++) {
-                size_t dim = offsets_data[i] - last_offset;
-                if (dim > 0 && _dim != dim) {
-                    LOG(WARNING) << "index dim: " << _dim << ", written dim: " << dim;
-                    return Status::InvalidArgument(
-                            strings::Substitute("The dimensions of the vector written are inconsistent, index dim is "
-                                                "$0 but data dim is $1, vector data is ",
-                                                _dim, dim));
-                }
-                last_offset = offsets_data[i];
-            }
+template <bool is_input_normalized>
+static Status valid_input_vector(const ArrayColumn& input_column, const size_t index_dim,
+                                 const uint8_t* is_element_nulls) {
+    if (input_column.empty()) {
+        return Status::OK();
+    }
+
+    const size_t num_rows = input_column.size();
+    const auto* offsets = reinterpret_cast<const uint32_t*>(input_column.offsets().raw_data());
+    const auto* nums = reinterpret_cast<const float*>(input_column.elements().raw_data());
+
+    for (size_t i = 0; i < num_rows; i++) {
+        const size_t input_dim = offsets[i + 1] - offsets[i];
+
+        if (input_dim != index_dim) {
+            return Status::InvalidArgument(
+                    strings::Substitute("The dimensions of the vector written are inconsistent, index dim is "
+                                        "$0 but data dim is $1",
+                                        index_dim, input_dim));
         }
 
-        _index_builder->Add({vector_view});
-    } catch (tenann::Error& e) {
-        LOG(WARNING) << e.what();
-        return Status::InternalError(e.what());
+        if constexpr (is_input_normalized) {
+            double sum = 0;
+            for (int j = 0; j < input_dim; j++) {
+                const size_t offset = offsets[i] + j;
+                if (!is_element_nulls[offset]) {
+                    sum += nums[offset] * nums[offset];
+                }
+            }
+            if (std::abs(sum - 1) > 1e-3) {
+                return Status::InvalidArgument(
+                        "The input vector is not normalized but `metric_type` is cosine_similarity and "
+                        "`is_vector_normed` is true");
+            }
+        }
     }
+
     return Status::OK();
 }
 
-Status TenAnnIndexBuilderProxy::add(const Column& data, const Column& null_map, const size_t offset) {
+Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t offset) {
+    DCHECK(array_column.is_array());
+    const auto& array_col = down_cast<const ArrayColumn&>(array_column);
+
+    DCHECK(array_col.elements_column()->is_nullable());
+    const auto& nullable_elements = down_cast<const NullableColumn&>(array_col.elements());
+    const auto& is_element_nulls = nullable_elements.null_column_ref();
+    const uint8_t* is_element_nulls_data = is_element_nulls.raw_data();
+
+    if (_is_input_normalized) {
+        RETURN_IF_ERROR(valid_input_vector<true>(array_col, _dim, is_element_nulls_data));
+    } else {
+        RETURN_IF_ERROR(valid_input_vector<false>(array_col, _dim, is_element_nulls_data));
+    }
+
     try {
-        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(data.raw_data()),
+        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(array_col.raw_data()),
                                                 .dim = _dim,
-                                                .size = static_cast<uint32_t>(data.size()),
+                                                .size = static_cast<uint32_t>(array_col.size()),
                                                 .elem_type = tenann::kFloatType};
-        if (data.is_array() && data.size() != 0) {
-            const auto& cur_array = down_cast<const ArrayColumn&>(data);
-            auto offsets = cur_array.offsets();
-            size_t last_offset = 0;
-            auto* offsets_data = reinterpret_cast<uint32_t*>(offsets.mutable_raw_data());
-            for (size_t i = 1; i < offsets.size(); i++) {
-                size_t dim = offsets_data[i] - last_offset;
-                if (dim > 0 && _dim != dim) {
-                    LOG(WARNING) << "index dim: " << _dim << ", written dim: " << dim;
-                    return Status::InvalidArgument(
-                            strings::Substitute("The dimensions of the vector written are inconsistent, index dim is "
-                                                "$0 but data dim is $1, vector data is ",
-                                                _dim, dim));
-                }
-                last_offset = offsets_data[i];
-            }
-        }
-        std::vector<int64_t> row_ids(data.size());
+        std::vector<int64_t> row_ids(array_col.size());
         std::iota(row_ids.begin(), row_ids.end(), offset);
-        _index_builder->Add({vector_view}, row_ids.data(), null_map.raw_data());
-
-    } catch (tenann::Error& e) {
-        LOG(WARNING) << e.what();
-        return Status::InternalError(e.what());
-    }
-    return Status::OK();
-}
-
-Status TenAnnIndexBuilderProxy::write(const Column& data) {
-    try {
-        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(data.raw_data()),
-                                                .dim = _dim,
-                                                .size = static_cast<uint32_t>(data.size()),
-                                                .elem_type = tenann::kFloatType};
-
-        _index_builder->Add({vector_view});
-    } catch (tenann::Error& e) {
-        LOG(WARNING) << e.what();
-        return Status::InternalError(e.what());
-    }
-    return Status::OK();
-}
-
-Status TenAnnIndexBuilderProxy::write(const Column& data, const Column& null_map) {
-    try {
-        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(data.raw_data()),
-                                                .dim = _dim,
-                                                .size = static_cast<uint32_t>(data.size()),
-                                                .elem_type = tenann::kFloatType};
-
-        std::vector<int64_t> row_ids(data.size());
-        std::iota(row_ids.begin(), row_ids.end(), 0);
-        _index_builder->Add({vector_view}, row_ids.data(), null_map.raw_data());
-
+        _index_builder->Add({vector_view}, row_ids.data(), is_element_nulls_data);
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
         return Status::InternalError(e.what());
@@ -175,10 +156,11 @@ Status TenAnnIndexBuilderProxy::flush() {
     return Status::OK();
 }
 
-void TenAnnIndexBuilderProxy::close() {
+void TenAnnIndexBuilderProxy::close() const {
     if (_index_builder && !_index_builder->is_closed()) {
         _index_builder->Close();
     }
 }
+
 } // namespace starrocks
 #endif

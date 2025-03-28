@@ -322,7 +322,7 @@ public class CatalogRecycleBinLakeTableTest {
                 ") distributed by hash(key1) buckets 3 " +
                 "properties('replication_num' = '1');", dbName));
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dbName, false);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(new ConnectContext(), dbName, false);
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
 
@@ -333,7 +333,7 @@ public class CatalogRecycleBinLakeTableTest {
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
 
         // Drop the database again.
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dbName, false);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(new ConnectContext(), dbName, false);
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
 

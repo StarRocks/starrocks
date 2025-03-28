@@ -78,7 +78,7 @@ import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
-public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource {
+public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
     private final IcebergTable table;
     private final TupleDescriptor desc;
@@ -111,14 +111,14 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
     }
 
     @Override
-    public boolean hasMoreOutput() {
+    public boolean sourceHasMoreOutput() {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             return remoteFileInfoSource.hasMoreOutput();
         }
     }
 
     @Override
-    public List<TScanRangeLocations> getOutputs(int maxSize) {
+    public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             List<TScanRangeLocations> res = new ArrayList<>();
             while (hasMoreOutput() && res.size() < maxSize) {
@@ -329,14 +329,21 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
             Class<?> javaClass = type.typeId().javaClass();
 
             String partitionValue;
-            partitionValue = field.transform().toHumanString(type,
-                    PartitionUtil.getPartitionValue(partition, index, javaClass));
 
             // currently starrocks date literal only support local datetime
             if (type.equals(Types.TimestampType.withZone())) {
-                partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
-                        PartitionUtil.getPartitionValue(partition, index, javaClass)).toLocalDateTime().toString();
+                Long value = PartitionUtil.getPartitionValue(partition, index, javaClass);
+                if (value == null) {
+                    partitionValue = "null";
+                } else {
+                    partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(
+                            TimeUtils.getTimeZone().toZoneId()), value).toLocalDateTime().toString();
+                }
+            } else {
+                partitionValue = field.transform().toHumanString(type, PartitionUtil.getPartitionValue(
+                        partition, index, javaClass));
             }
+
             partitionValues.add(partitionValue);
 
             cols.add(table.getColumn(field.name()));

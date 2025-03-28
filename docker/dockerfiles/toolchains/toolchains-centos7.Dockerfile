@@ -95,7 +95,7 @@ RUN mkdir -p ${MAVEN_INSTALL_HOME} && cd ${MAVEN_INSTALL_HOME} && \
     curl -s -k https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz | tar -xzf - --strip-components=1 && \
     ln -s ${MAVEN_INSTALL_HOME}/bin/mvn /usr/bin/mvn
 # install clang-format
-RUN ARCH=`uname -m` ; if [[ $ARCH == "aarch64" ]] ; then DOWNLOAD_URL=http://cdn-thirdparty.starrocks.com/aarch64/clang-format ; else DOWNLOAD_URL=http://cdn-thirdparty.starrocks.com/clang-format ; fi ; curl -s $DOWNLOAD_URL -o /usr/bin/clang-format && chmod +x /usr/bin/clang-format
+RUN ARCH=`uname -m` ; if [ "x$ARCH" == "xaarch64" ] ; then DOWNLOAD_URL=http://cdn-thirdparty.starrocks.com/aarch64/clang-format ; else DOWNLOAD_URL=http://cdn-thirdparty.starrocks.com/clang-format ; fi ; curl -s $DOWNLOAD_URL -o /usr/bin/clang-format && chmod +x /usr/bin/clang-format
 
 ENV STARROCKS_GCC_HOME=${GCC_INSTALL_HOME}
 ENV JAVA_HOME=${JDK_INSTALL_HOME}

@@ -254,7 +254,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     case FunctionSet.HLL_UNION:
                     case FunctionSet.PERCENTILE_UNION:
                     case FunctionSet.COUNT: {
-                        MVColumnItem item = buildAggColumnItem(new ConnectContext(), selectListItem, slots);
+                        MVColumnItem item = buildAggColumnItem(ConnectContext.buildInner(), selectListItem, slots);
                         expr = item.getDefineExpr();
                         name = item.getName();
                         break;

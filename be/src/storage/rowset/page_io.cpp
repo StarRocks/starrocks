@@ -237,8 +237,8 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
     if (opts.use_page_cache) {
         // insert this page into cache and return the cache handle
-        cache->insert(cache_key, page_slice, &cache_handle, opts.kept_in_memory);
-        *handle = PageHandle(std::move(cache_handle));
+        Status st = cache->insert(cache_key, page_slice, &cache_handle, opts.kept_in_memory);
+        *handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(page_slice);
     } else {
         *handle = PageHandle(page_slice);
     }

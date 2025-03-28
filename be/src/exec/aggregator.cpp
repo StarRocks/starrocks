@@ -42,8 +42,8 @@
 
 namespace starrocks {
 
-static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {"variance_samp", "var_samp",
-                                                                                 "stddev_samp", "covar_samp", "corr"};
+static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {
+        "variance_samp", "var_samp", "stddev_samp", "covar_samp", "corr", "max_by_v2", "min_by_v2"};
 
 static const std::string AGG_STATE_UNION_SUFFIX = "_union";
 static const std::string AGG_STATE_MERGE_SUFFIX = "_merge";
@@ -159,7 +159,8 @@ void AggregatorParams::init() {
         VLOG_ROW << fn.name.function_name << ", arg nullable " << desc.nodes[0].has_nullable_child
                  << ", result nullable " << desc.nodes[0].is_nullable;
 
-        if (fn.name.function_name == FUNCTION_COUNT) {
+        auto& func_name = fn.name.function_name;
+        if (func_name == FUNCTION_COUNT) {
             // count function is always not nullable
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
@@ -175,9 +176,8 @@ void AggregatorParams::init() {
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, has_nullable_child, is_nullable};
-            agg_fn_types[i].is_always_nullable_result =
-                    ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
-            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
+            agg_fn_types[i].is_always_nullable_result = ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(func_name);
+            if (func_name == "array_agg" || func_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
@@ -729,10 +729,12 @@ bool Aggregator::is_chunk_buffer_empty() {
 }
 
 ChunkPtr Aggregator::poll_chunk_buffer() {
+    auto notify = defer_notify_sink();
     return _limited_buffer->pull();
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
+    auto notify = defer_notify_source();
     _limited_buffer->push(chunk);
 }
 
@@ -814,12 +816,14 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge for singe stage
         if (!_is_merge_funcs[i] && !use_intermediate) {
-            _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
-                                                         _single_agg_state + _agg_states_offsets[i]);
+            _agg_functions[i]->update_batch_single_state_exception_safe(_agg_fn_ctxs[i], chunk_size,
+                                                                        _agg_input_raw_columns[i].data(),
+                                                                        _single_agg_state + _agg_states_offsets[i]);
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i],
-                                                        _agg_input_columns[i][0].get(), 0, chunk_size);
+            _agg_functions[i]->merge_batch_single_state_exception_safe(_agg_fn_ctxs[i],
+                                                                       _single_agg_state + _agg_states_offsets[i],
+                                                                       _agg_input_columns[i][0].get(), 0, chunk_size);
         }
     }
     RETURN_IF_ERROR(check_has_error());
@@ -837,12 +841,13 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge
         if (!_is_merge_funcs[i] && !use_intermediate) {
-            _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                            _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
+            _agg_functions[i]->update_batch_exception_safe(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
+                                                           _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(), _agg_states_offsets[i],
-                                           _agg_input_columns[i][0].get(), _tmp_agg_states.data());
+            _agg_functions[i]->merge_batch_exception_safe(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(),
+                                                          _agg_states_offsets[i], _agg_input_columns[i][0].get(),
+                                                          _tmp_agg_states.data());
         }
     }
     RETURN_IF_ERROR(check_has_error());
@@ -858,14 +863,14 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         if (!_is_merge_funcs[i] && !use_intermediate) {
-            _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                                        _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
-                                                        _streaming_selection);
+            _agg_functions[i]->update_batch_selectively_exception_safe(
+                    _agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i], _agg_input_raw_columns[i].data(),
+                    _tmp_agg_states.data(), _streaming_selection);
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch_selectively(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(),
-                                                       _agg_states_offsets[i], _agg_input_columns[i][0].get(),
-                                                       _tmp_agg_states.data(), _streaming_selection);
+            _agg_functions[i]->merge_batch_selectively_exception_safe(
+                    _agg_fn_ctxs[i], _agg_input_columns[i][0]->size(), _agg_states_offsets[i],
+                    _agg_input_columns[i][0].get(), _tmp_agg_states.data(), _streaming_selection);
         }
     }
     RETURN_IF_ERROR(check_has_error());
@@ -874,7 +879,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
 
 Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
-    std::vector<ColumnPtr> const_columns;
+    Columns const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
     for (auto& j : _agg_expr_ctxs[i]) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
@@ -938,14 +943,23 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
 }
 
 Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk) {
+    return output_chunk_by_streaming(input_chunk, chunk, input_chunk->num_rows(), false);
+}
+
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows,
+                                             bool use_selection) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
     auto use_intermediate_as_input = _use_intermediate_as_input();
     const auto& slots = _intermediate_tuple_desc->slots();
 
+    DCHECK(!use_selection || !_group_by_columns.empty());
+    // If using selection, then `_group_by_columns` has been filtered by `_streaming_selection`, and input_chunk has
+    // not been filtered yet. `input_chunk` is filtered by `_streaming_selection` after `evaluate_agg_fn_exprs`.
+    const size_t num_rows = use_selection ? _group_by_columns[0]->size() : num_input_rows;
+
     // build group by columns
-    size_t num_rows = input_chunk->num_rows();
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < _group_by_columns.size(); i++) {
         DCHECK_EQ(num_rows, _group_by_columns[i]->size());
@@ -964,7 +978,23 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
         DCHECK(!_group_by_columns.empty());
 
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
-        const auto num_rows = _group_by_columns[0]->size();
+        if (use_selection) {
+            for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                for (auto& agg_input_column : _agg_input_columns[i]) {
+                    // AggColumn and GroupColumn may be the same SharedPtr,
+                    // If ColumnSize and ChunkSize are not equal,
+                    // indicating that the Filter has been executed in GroupByColumn
+                    // e.g.: select c1, count(distinct c1) from t1 group by c1;
+
+                    // At present, the type of problem cannot be completely solved,
+                    // and a new solution needs to be designed to solve it completely
+                    if (agg_input_column != nullptr && agg_input_column->size() == num_input_rows) {
+                        agg_input_column->filter(_streaming_selection);
+                    }
+                }
+            }
+        }
+
         Columns agg_result_column = _create_agg_result_columns(num_rows, true);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
@@ -1041,7 +1071,7 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
 
 Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk) {
     // Streaming aggregate at least has one group by column
-    size_t chunk_size = _group_by_columns[0]->size();
+    const size_t num_input_rows = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
         // Multi GroupColumn may be have the same SharedPtr
         // If ColumnSize and ChunkSize are not equal,
@@ -1050,26 +1080,12 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 
         // At present, the type of problem cannot be completely solved,
         // and a new solution needs to be designed to solve it completely
-        if (_group_by_column->size() == chunk_size) {
+        if (_group_by_column->size() == num_input_rows) {
             _group_by_column->filter(_streaming_selection);
         }
     }
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        for (auto& agg_input_column : _agg_input_columns[i]) {
-            // AggColumn and GroupColumn may be the same SharedPtr,
-            // If ColumnSize and ChunkSize are not equal,
-            // indicating that the Filter has been executed in GroupByColumn
-            // e.g.: select c1, count(distinct c1) from t1 group by c1;
 
-            // At present, the type of problem cannot be completely solved,
-            // and a new solution needs to be designed to solve it completely
-            if (agg_input_column != nullptr && agg_input_column->size() == chunk_size) {
-                agg_input_column->filter(_streaming_selection);
-            }
-        }
-    }
-
-    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk));
+    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, num_input_rows, true));
     return Status::OK();
 }
 
@@ -1129,14 +1145,14 @@ Columns Aggregator::_create_group_by_columns(size_t num_rows) {
     return group_by_columns;
 }
 
-void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns) {
+void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                                agg_result_columns[i].get());
     }
 }
 
-void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns) {
+void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());
@@ -1359,6 +1375,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             }
         }
     }
+
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
     hash_variant.init(_state, type, _agg_stat);

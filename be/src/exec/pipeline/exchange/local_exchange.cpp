@@ -291,7 +291,7 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
         return Status::OK();
     }
 
-    std::vector<ColumnPtr> partition_columns;
+    Columns partition_columns;
     for (size_t i = 0; i < _partition_expr_ctxs.size(); i++) {
         ASSIGN_OR_RETURN(auto partition_column, _partition_expr_ctxs[i]->evaluate(chunk.get()));
         partition_columns.push_back(std::move(partition_column));
@@ -337,6 +337,13 @@ Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_dr
     } else {
         _source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk);
     }
+
+    return Status::OK();
+}
+
+Status DirectThroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t sources_num = _source->get_sources().size();
+    _source->get_sources()[(sink_driver_sequence) % sources_num]->add_chunk(chunk);
 
     return Status::OK();
 }

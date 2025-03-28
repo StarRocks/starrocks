@@ -47,50 +47,6 @@ After the data migration is completed, you need to remove the configuration `ena
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
 ```
 
-### Disable Compaction
-
-If the target cluster for data migration is a shared-data cluster, you need to manually disable Compaction before starting the data migration and re-enable it after the data migration is completed.
-
-1. You can check whether Compaction is enabled by using the following statement:
-
-   ```SQL
-   ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks';
-   ```
-
-   If `0` is returned, it indicates that Compaction is disabled.
-
-2. Dynamically disable Compaction:
-
-   ```SQL
-   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="0");
-   ```
-
-3. To prevent Compaction from automatically enabling during the data migration process in case of cluster restart, you also need to add the following configuration item in the FE configuration file **fe.conf**:
-
-   ```Properties
-   lake_compaction_max_tasks = 0
-   ```
-
-After the data migration is completed, you need to remove the configuration `lake_compaction_max_tasks = 0` from the configuration file, and dynamically enable Compaction using the following statement:
-
-```SQL
-ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
-```
-
-### Disable column filtering
-
-The optimization for unused column filtering at the Scan stage may cause a crash during queries against the migrated data. You need to disable this optimization before data migration:
-
-```SQL
-SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
-```
-
-#### enable_filter_unused_columns_in_scan_stage
-
-* **Description**: Whether to filter unused column at the Scan stage.
-* **Default**: true
-* **Introduced in**: v3.1
-
 ### Configure Data Migration (Optional)
 
 You can configure data migration operations using the following FE and BE parameters. In most cases, the default configuration can meet your needs. If you wish to use the default configuration, you can skip this step.

@@ -64,7 +64,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
-import com.starrocks.persist.CancelDisableDiskInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -131,7 +130,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
             throws DdlException {
-
         for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
             checkSameNodeExist(pair.first, pair.second);
         }
@@ -169,11 +167,12 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+    public void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
-        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
         addComputeNodeToWarehouse(newComputeNode, warehouse);
+
+        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
@@ -246,6 +245,10 @@ public class SystemInfoService implements GsonPostProcessable {
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        // add backend to DEFAULT_CLUSTER
+        setBackendOwner(newBackend);
+        addComputeNodeToWarehouse(newBackend, warehouse);
+
         // update idToBackend
         idToBackendRef.put(newBackend.getId(), newBackend);
 
@@ -253,10 +256,6 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVersions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
-
-        // add backend to DEFAULT_CLUSTER
-        setBackendOwner(newBackend);
-        addComputeNodeToWarehouse(newBackend, warehouse);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -579,16 +578,6 @@ public class SystemInfoService implements GsonPostProcessable {
         GlobalStateMgr.getCurrentState().getEditLog().logDisableDisk(new DisableDiskInfo(backend.getId(), diskList));
     }
 
-    public void cancelDisableDisks(String beHostPort, List<String> diskList) throws DdlException {
-        Backend backend = getBackendByHostPort(beHostPort);
-        for (String disk : diskList) {
-            backend.cancelDisableDisk(disk);
-        }
-
-        GlobalStateMgr.getCurrentState().getEditLog()
-                .logCancelDisableDisk(new CancelDisableDiskInfo(backend.getId(), diskList));
-    }
-
     public void replayDecommissionDisks(DecommissionDiskInfo info) {
         Backend backend = getBackend(info.getBeId());
         if (backend == null) {
@@ -631,22 +620,6 @@ public class SystemInfoService implements GsonPostProcessable {
                 backend.disableDisk(disk);
             } catch (DdlException e) {
                 LOG.warn("replay disable disk failed", e);
-            }
-        }
-    }
-
-    public void replayCancelDisableDisks(CancelDisableDiskInfo info) {
-        Backend backend = getBackend(info.getBeId());
-        if (backend == null) {
-            LOG.warn("replay cancel disable disk failed, backend:{} does not exist", info.getBeId());
-            return;
-        }
-
-        for (String disk : info.getDiskList()) {
-            try {
-                backend.cancelDisableDisk(disk);
-            } catch (DdlException e) {
-                LOG.warn("replay cancel disable disk failed", e);
             }
         }
     }

@@ -23,9 +23,9 @@ SHOW COMPUTE NODES
 ## Return
 
 ```SQL
-+---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+
-| ComputeNodeId | IP           | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | ErrMsg | Version            | CpuCores | NumRunningQueries | MemUsedPct | CpuUsedPct | HasStoragePath | StarletPort | WorkerId | WarehouseName     | TabletNum |
-+---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+
++---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+------------+
+| ComputeNodeId | IP           | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | ErrMsg | Version            | CpuCores | NumRunningQueries | MemUsedPct | CpuUsedPct | HasStoragePath | StarletPort | WorkerId | WarehouseName     | TabletNum | StatusCode |
++---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+------------+
 ```
 
 The following table describes the parameters returned by this statement.
@@ -54,6 +54,7 @@ The following table describes the parameters returned by this statement.
 | WorkerId             | The ID of the CN node for internal scheduling.                    |
 | WarehouseName        | The name of the warehouse to which the CN node belongs. The value is always `default_warehouse`. |
 | TabletNum            | The number of tablets (of cached data) on the CN node.            |
+| StatusCode           | CN status code. Valid values: <ul><li>`CONNECTING`: The CN node is being added to the cluster for the first time.</li><li>`OK`: The CN node is running.</li><li>`SHUTDOWN`: The CN node is being shut down gracefully.</li><li>`DISCONNECTED`: The CN node is disconnected.</li></ul> |
 
 ## Example
 

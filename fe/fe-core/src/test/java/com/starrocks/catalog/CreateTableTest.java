@@ -34,6 +34,9 @@
 
 package com.starrocks.catalog;
 
+import com.google.api.client.util.Lists;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.constraint.UniqueConstraint;
@@ -42,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
@@ -215,7 +219,7 @@ public class CreateTableTest {
                         + "partition by range(k2)\n" + "(partition p1 values less than(\"10\"))\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
-        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false");
+        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false", false, "");
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("create table test.tb7(key1 int, key2 varchar(10)) \n"
                         +
@@ -403,7 +407,7 @@ public class CreateTableTest {
                                 + "duplicate key(k1, k2, k3)\n" + "distributed by hash(k1) buckets 1\n"
                                 + "properties('replication_num' = '1');"));
 
-        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "true");
+        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "true", false, "");
         ExceptionChecker
                 .expectThrowsWithMsg(DdlException.class,
                         "Failed to find enough hosts with storage " +
@@ -512,7 +516,7 @@ public class CreateTableTest {
                         "PRIMARY KEY( k0, k1, k2) \n" +
                         "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
-                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
+                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"true\"," +
                         "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -559,7 +563,7 @@ public class CreateTableTest {
                         "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"DEFAULT\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");"));
     }
@@ -1953,6 +1957,23 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testPrimaryKeyDisableInMemoryIndex() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.disable_inmemory_index (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"enable_persistent_index\" = \"false\"" +
+                ");";
+        ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
     public void testPrimaryKeyNotSupportCoolDown() {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Primary key table does not support storage medium cool down currently.",
@@ -2245,6 +2266,40 @@ public class CreateTableTest {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Partition column[dt] could not be null but contains null " +
                     "value in partition[p1]."));
+        }
+    }
+
+    @Test
+    public void testChosenBackendIdBySeqWhenDiskOffline() {
+        List<Backend> backends = Lists.newArrayList();
+        Backend be0 = new Backend(10000, "127.0.0.1", 9050);
+        DiskInfo disk = new DiskInfo("/path");
+        disk.setState(DiskInfo.DiskState.ONLINE);
+        be0.setDisks(ImmutableMap.of("/path", disk));
+        backends.add(be0);
+        Backend be1 = new Backend(10001, "127.0.0.2", 9050);
+        be1.setDisks(ImmutableMap.of("/path", disk));
+        backends.add(be1);
+        Backend be2 = new Backend(10002, "127.0.0.3", 9050);
+        DiskInfo disk2 = new DiskInfo("/path");
+        disk2.setState(DiskInfo.DiskState.OFFLINE);
+        be2.setDisks(ImmutableMap.of("/path", disk2));
+        backends.add(be2);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Backend> getAvailableBackends() {
+                return backends;
+            }
+        };
+
+        try {
+            LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+            Deencapsulation.invoke(metastore, "chosenBackendIdBySeq", 3, HashMultimap.create());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Current available backends: [10000,10001]"));
+            Assert.assertTrue(e.getMessage().contains("backends without enough disk space: [10002]"));
         }
     }
 }

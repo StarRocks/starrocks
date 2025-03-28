@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
@@ -83,6 +84,10 @@ public class WarehouseAnalyzer {
 
         @Override
         public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
+            }
+
             String whName = statement.getWarehouseName();
             if (Strings.isNullOrEmpty(whName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_WAREHOUSE_NAME);

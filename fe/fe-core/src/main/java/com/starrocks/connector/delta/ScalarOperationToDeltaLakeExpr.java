@@ -138,6 +138,10 @@ public class ScalarOperationToDeltaLakeExpr {
                 return null;
             }
             Column column = context.getColumn(columnName);
+            // For struct subfield, cannot get the column for now, just return null
+            if (column == null) {
+                return null;
+            }
 
             if (operator.isNotNull()) {
                 return new Predicate("IS_NOT_NULL", column);

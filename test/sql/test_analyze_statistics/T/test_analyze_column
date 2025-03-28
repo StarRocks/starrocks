@@ -1,4 +1,4 @@
--- name: test_analyze_columnn
+-- name: test_analyze_columnn @sequential
 create database analyze_test_${uuid0};
 use analyze_test_${uuid0};
 

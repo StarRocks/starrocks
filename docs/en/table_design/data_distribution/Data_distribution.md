@@ -163,8 +163,8 @@ The partitioning method divides a table into multiple partitions. Partitioning p
 | **Partitioning method**                   | **Scenarios**                                                    | **Methods to create partitions**               |
 | ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
 | Expression partitioning (recommended) | Previously known as automatic partitioning. This partitioning method is more flexible and easy-to-use. It is suitable for most scenarios including querying and managing data based on continuous date ranges or enum values. | Automatically created during data loading |
-| Range partitioning                    | The typical scenario is to store simple, ordered data that is often queried and managed based on continuous date/numeric ranges. For instance, in some special cases, historical data needs to be partitioned by month, while recent data needs to be partitioned by day. | Created manually, dynamically, or in batch |
-| List partitioning                     | A typical scenario is to query and manage data based on enum values, and a partition needs to include data with different values for each partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this method and select `city` as the partitioning column. So a partition can store data for multiple cities belonging to the same country. | Created manually                           |
+| Range partitioning (Legacy)           | The typical scenario is to store simple, ordered data that is often queried and managed based on continuous date/numeric ranges. For instance, in some special cases, historical data needs to be partitioned by month, while recent data needs to be partitioned by day. | Created manually, dynamically, or in batch |
+| List partitioning (Legacy)            | A typical scenario is to query and manage data based on enum values, and a partition needs to include data with different values for each partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this method and select `city` as the partitioning column. So a partition can store data for multiple cities belonging to the same country. | Created manually                           |
 
 ##### How to choose partitioning columns and granularity
 
@@ -194,11 +194,65 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 
 > **NOTICE**
 >
-> Since v3.1, StarRocks's shared-data mode supports the time function expression and does not support the column expression.
+> StarRocks's shared-data mode supports the time function expression from v3.1.0 and the column expression from v3.1.1.
 
-Since v3.0, StarRocks has supported [expression partitioning](expression_partitioning.md)](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy to use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or ENUM values.
+Since v3.0, StarRocks has supported [expression partitioning](expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy to use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or ENUM values.
 
-You only need to configure a partition expression (a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
+You only need to configure a partition expression at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
+
+From v3.4 onwards, expression partitioning is further optimized to unify all partitioning strategies and supported more complex solutions. It is recommended in most cases, and will replace the other partitioning strategies in future releases.
+
+Example 1: Use a simple time function expression with a DATETIME column.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATETIME NOT NULL,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT DEFAULT '0'
+)
+DUPLICATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY time_slice(event_day, INTERVAL 7 day)
+DISTRIBUTED BY HASH(event_day, site_id)
+```
+
+Example 2: Use a column expression with multiple columns.
+
+```SQL
+CREATE TABLE t_recharge_detail1 (
+    id bigint,
+    user_id bigint,
+    recharge_money decimal(32,2), 
+    city varchar(20) not null,
+    dt varchar(20) not null
+)
+DUPLICATE KEY(id)
+PARTITION BY dt,city
+DISTRIBUTED BY HASH(`id`);
+```
+
+Example 3: Use a complex time function expression with a Unix timestamp column.
+
+```SQL
+CREATE TABLE orders (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+```
+
+Example 4: Use a mixed expression of time function expression and column expression.
+
+```SQL
+CREATE TABLE orders (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
+```
 
 #### Range partitioning
 
@@ -530,7 +584,7 @@ Multiple partitions can be created in batch at and after table creation. You can
 
 StarRocks stores data in the corresponding partitions based on the explicit mapping of the predefined value list for each partition.
 
-### Manage  partitions
+### Manage partitions
 
 #### Add partitions
 

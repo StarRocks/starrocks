@@ -47,8 +47,8 @@ using std::to_string;
 EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request)
         : _alter_tablet_req(request) {
     size_t mem_limit = static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
-    _mem_tracker =
-            std::make_unique<MemTracker>(MemTracker::SCHEMA_CHANGE_TASK, mem_limit, "schema change task", mem_tracker);
+    _mem_tracker = std::make_unique<MemTracker>(MemTrackerType::SCHEMA_CHANGE_TASK, mem_limit, "schema change task",
+                                                mem_tracker);
 }
 
 Status EngineAlterTabletTask::execute() {

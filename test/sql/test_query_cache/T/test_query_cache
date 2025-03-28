@@ -19,7 +19,7 @@ PROPERTIES
 (
     "replication_num" = "3",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 
 INSERT INTO t0
@@ -221,7 +221,7 @@ PROPERTIES
 (
     "replication_num" = "3",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 
 INSERT INTO t0_pk (ts,k0,k1,v0,v1)

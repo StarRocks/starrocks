@@ -18,10 +18,9 @@
 #include <opentelemetry/trace/span.h>
 #include <opentelemetry/trace/span_context.h>
 
+#include "common/tracer_fwd.h"
+
 namespace starrocks {
-namespace trace = opentelemetry::trace;
-using Span = opentelemetry::nostd::shared_ptr<trace::Span>;
-using SpanContext = trace::SpanContext;
 
 /**
  * Handles span creation and provides a compatible interface to `opentelemetry::trace::Tracer`.

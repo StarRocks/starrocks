@@ -18,6 +18,7 @@ displayed_sidebar: docs
   - AWS S3
   - Google Cloud Storage
   - Microsoft Azure Blob Storage
+  - NFS(NAS)
 - **文件格式：**
   - Parquet
   - ORC
@@ -32,7 +33,7 @@ displayed_sidebar: docs
 ### 语法
 
 ```SQL
-FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ])
 ```
 
 ### 参数说明
@@ -41,7 +42,17 @@ FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams
 
 #### data_location
 
-用于访问文件的 URI。可以指定路径或文件名。
+用于访问文件的 URI。
+
+可以指定路径或文件名。例如，通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` 可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下名为 `20210411` 的数据文件。
+
+您也可以用通配符指定导入某个路径下所有的数据文件。FILES 支持如下通配符：`?`、`*`、`[]`、`{}` 和 `^`。例如， 通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 路径可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下所有分区内的数据文件，通过 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` 路径可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下所有 `202104` 分区内的数据文件。
+
+:::note
+
+中间的目录也可以使用通配符匹配。
+
+:::
 
 - 要访问 HDFS，您需要将此参数指定为：
 
@@ -89,11 +100,26 @@ FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams
     -- 示例： "path" = "wasbs://testcontainer@testaccount.blob.core.windows.net/path/file.parquet"
     ```
 
+- 要访问 NFS(NAS)，您需要将此参数指定为：
+
+  ```SQL
+  "path" = "file:///<absolute_path>"
+  -- 示例： "path" = "file:///home/ubuntu/parquetfile/file.parquet"
+  ```
+
+  :::note
+
+  如需通过 `file://` 协议访问 NFS 中的文件，需要将同一 NAS 设备作为 NFS 挂载到每个 BE 或 CN 节点的相同目录下。
+
+  :::
+
 #### data_format
 
 数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
 
 特定数据文件格式需要额外参数指定细节选项。
+
+`list_files_only` 设置为 `true` 时，无需指定 `data_format`。
 
 ##### CSV
 
@@ -171,6 +197,30 @@ CSV 格式示例：
 >
 > 单个批次中的所有数据文件必须为相同的文件格式。
 
+##### Target Table Schema 检查下推
+
+从 v3.4.0 版本开始，系统支持将 Target Table Schema 检查下推到 FILES() 的扫描阶段。
+
+FILES() 的 Schema 检测并不是完全严格的。例如，在读取 CSV 文件时，任何整数列都会被推断为 BIGINT 类型，并按照此类型检查。在这种情况下，如果目标表中的相应列是 TINYINT 类型，则超出 BIGINT 类型范围的 CSV 数据行不会被过滤。
+
+为了解决这个问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_schema`，用于控制是否将 Target Table Schema 检查下推到 FILES() 的扫描阶段。通过将 `files_enable_insert_push_down_schema` 设置为 `true`，系统将在读取文件时过滤掉未通过 Target Table Schema 检查的数据行。
+
+##### 合并具有不同 Schema 的文件
+
+从 v3.4.0 版本开始，系统支持合并具有不同 Schema 的文件。默认情况下，如果检测到不存在的列，系统会返回错误。通过设置属性 `fill_mismatch_column_with` 为 `null`，可以允许系统为不存在的列赋予 NULL 值，而非返回错误。
+
+`fill_mismatch_column_with`：用于指定在合并具有不同 Schema 的文件时，系统检测到不存在的列后的处理方式。有效值包括：
+- `none`：如果检测到不存在的列，系统会返回错误。
+- `null`：系统会将不存在的列填充为 NULL 值。
+
+例如，读取的文件来自 Hive 表的不同分区，且较新的分区进行了 Schema Change。当同时读取新旧分区时，可以将 `fill_mismatch_column_with` 设置为 `null`，系统将合并新旧分区文件的 Schema ，并为不存在的列赋值为 NULL。
+
+对于 Parquet 和 ORC 文件，系统根据列名合并其 Schema。而对于 CSV 文件，系统根据列的顺序（位置）合并 Schema。
+
+##### 推断 Parquet 文件中的 STRUCT 类型
+
+从 v3.4.0 版本开始，FILES() 支持从 Parquet 文件中推断 STRUCT 类型的数据。
+
 #### StorageCredentialParams
 
 StarRocks 访问存储系统的认证配置。
@@ -240,6 +290,34 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 ```
 
 假设数据文件 **file1** 存储在路径 `/geo/country=US/city=LA/` 下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回的列的值。详细使用方法请见以下示例四。
+
+#### list_files_only
+
+自 v3.4.0 起，FILES() 支持在读取文件时只列出文件。
+
+```SQL
+"list_files_only" = "true"
+```
+
+当 `list_files_only` 设置为 `true` 时，无需指定 `data_format` 。
+
+更多信息，参考 [返回](#返回)。
+
+#### list_recursively
+
+StarRocks 还支持 `list_recursively`，用于递归列出文件和目录。只有当 `list_files_only` 设置为 `true` 时，`list_recursively` 才会生效，默认值为 `false`。
+
+```SQL
+"list_files_only" = "true",
+"list_recursively" = "true"
+```
+
+当 `list_files_only` 和 `list_recursively` 都设置为 `true` 时，StarRocks 将执行以下操作：
+
+- 如果指定的 `path` 是文件（无论是具体指定还是用通配符表示），StarRocks 将显示该文件的信息。
+- 如果指定的 `path` 是目录（无论是具体指定还是用通配符表示，也无论是否以 `/` 作为后缀），StarRocks 将显示该目录下的所有文件和子目录。
+
+更多信息，参考 [返回](#返回)。
 
 ### 返回
 
@@ -344,6 +422,87 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   10 rows in set (0.55 sec)
   ```
 
+- 在查询文件时将 `list_files_only` 设置为 `true`，系统将返回 `PATH`、`SIZE`、`IS_DIR`（给定路径是否为目录）和 `MODIFICATION_TIME`。
+
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://bucket/*.parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true"
+  );
+  +-----------------------+------+--------+---------------------+
+  | PATH                  | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +-----------------------+------+--------+---------------------+
+  | s3://bucket/1.parquet | 5221 |      0 | 2024-08-15 20:47:02 |
+  | s3://bucket/2.parquet | 5222 |      0 | 2024-08-15 20:54:57 |
+  | s3://bucket/3.parquet | 5223 |      0 | 2024-08-20 15:21:00 |
+  | s3://bucket/4.parquet | 5224 |      0 | 2024-08-15 11:32:14 |
+  +-----------------------+------+--------+---------------------+
+  4 rows in set (0.03 sec)
+  ```
+
+- 在查询文件时将 `list_files_only` 和 `list_recursively` 设置为 `true`，系统将递归列出文件和目录。
+
+  假设路径 `s3://bucket/list/` 包含以下文件和子目录：
+
+  ```Plain
+  s3://bucket/list/
+  ├── basic1.csv
+  ├── basic2.csv
+  ├── orc0
+  │   └── orc1
+  │       └── basic_type.orc
+  ├── orc1
+  │   └── basic_type.orc
+  └── parquet
+      └── basic_type.parquet
+  ```
+
+  以递归方式列出文件和目录：
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true", 
+      "list_recursively" = "true"
+  );
+  +---------------------------------------------+------+--------+---------------------+
+  | PATH                                        | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +---------------------------------------------+------+--------+---------------------+
+  | s3://bucket/list                            |    0 |      1 | 2024-12-24 22:15:59 |
+  | s3://bucket/list/basic1.csv                 |   52 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/basic2.csv                 |   34 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0                       |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1                  |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1/basic_type.orc   | 1027 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1                       |    0 |      1 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/orc1/basic_type.orc        | 1027 |      0 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/parquet                    |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/parquet/basic_type.parquet | 2281 |      0 | 2024-12-24 11:35:53 |
+  +---------------------------------------------+------+--------+---------------------+
+  10 rows in set (0.04 sec)
+  ```
+
+  以非递归方式列出该路径下与 `orc*` 匹配的文件和目录：
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/orc*", 
+      "list_files_only" = "true", 
+      "list_recursively" = "false"
+  );
+  +--------------------------------------+------+--------+---------------------+
+  | PATH                                 | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +--------------------------------------+------+--------+---------------------+
+  | s3://bucket/list/orc0/orc1           |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1/basic_type.orc | 1027 |      0 | 2024-12-24 22:16:00 |
+  +--------------------------------------+------+--------+---------------------+
+  2 rows in set (0.03 sec)
+  ```
+
 #### DESC FILES()
 
 当与 DESC 语句一同使用时，FILES() 函数会返回远端存储文件的 Schema 信息。
@@ -380,6 +539,27 @@ DESC FILES(
 +------------------+------------------+------+
 17 rows in set (0.05 sec)
 ```
+
+在查看文件时将 `list_files_only` 设置为 `true`，系统将返回 `PATH`、`SIZE`、`IS_DIR`（给定路径是否为目录）和 `MODIFICATION_TIME` 的 `Type` 和 `Null` 属性。
+
+```Plain
+DESC FILES(
+    "path" = "s3://bucket/*.parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "list_files_only" = "true"
+);
++-------------------+------------------+------+
+| Field             | Type             | Null |
++-------------------+------------------+------+
+| PATH              | varchar(1048576) | YES  |
+| SIZE              | bigint           | YES  |
+| IS_DIR            | boolean          | YES  |
+| MODIFICATION_TIME | datetime         | YES  |
++-------------------+------------------+------+
+4 rows in set (0.00 sec)
+```
+
 
 ## 使用 FILES 导出数据
 
@@ -419,7 +599,7 @@ unload_data_param ::=
 
 | **参数**          | **必填** | **说明**                                                          |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
+| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>**说明**<br />导出至 CSV 文件不支持数据压缩，需指定为 `uncompressed`。                |
 | partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例七。 |
 | single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
 | target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|
@@ -447,6 +627,15 @@ SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
+查询 NFS(NAS) 中的 Parquet 文件：
+
+```SQL
+SELECT * FROM FILES(
+  'path' = 'file:///home/ubuntu/parquetfile/*.parquet', 
+  'format' = 'parquet'
+);
+```
+
 #### 示例二：导入文件中的数据
 
 将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
@@ -462,6 +651,18 @@ INSERT INTO insert_wiki_edit
 );
 Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
+```
+
+将 NFS(NAS) 中 CSV 文件的数据插入至表 `insert_wiki_edit` 中：
+
+```SQL
+INSERT INTO insert_wiki_edit
+  SELECT * FROM FILES(
+    'path' = 'file:///home/ubuntu/csvfile/*.csv', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimiter' = '\n'
+  );
 ```
 
 #### 示例三：使用文件中的数据建表
@@ -614,6 +815,27 @@ PROPERTIES (
 1 row in set (0.27 sec)
 ```
 
+- 合并 Parquet 文件的 Schema，并将 `fill_mismatch_column_with` 为 `null` 以允许系统为不存在的列赋予 NULL 值：
+
+```SQL
+SELECT * FROM FILES(
+  "path" = "s3://inserttest/basic_type.parquet,s3://inserttest/basic_type_k2k5k7.parquet",
+  "format" = "parquet",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "aws.s3.region" = "us-west-2",
+  "fill_mismatch_column_with" = "null"
+);
++------+------+------+-------+------------+---------------------+------+------+
+| k1   | k2   | k3   | k4    | k5         | k6                  | k7   | k8   |
++------+------+------+-------+------------+---------------------+------+------+
+| NULL |   21 | NULL |  NULL | 2024-10-03 | NULL                | c    | NULL |
+|    0 |    1 |    2 |  3.20 | 2024-10-01 | 2024-10-01 12:12:12 | a    |  4.3 |
+|    1 |   11 |   12 | 13.20 | 2024-10-02 | 2024-10-02 13:13:13 | b    | 14.3 |
++------+------+------+-------+------------+---------------------+------+------+
+3 rows in set (0.03 sec)
+```
+
 #### 示例六：查看文件的 Schema 信息
 
 使用 DESC 查看 AWS S3 中 Parquet 文件 `lineorder` 的 Schema 信息。
@@ -656,8 +878,7 @@ DESC FILES(
 将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
 
 ```SQL
-INSERT INTO 
-FILES(
+INSERT INTO FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
     "hadoop.security.authentication" = "simple",
@@ -665,6 +886,26 @@ FILES(
     "password" = "xxxxx",
     "compression" = "lz4",
     "partition_by" = "sales_time"
+)
+SELECT * FROM sales_records;
+```
+
+将查询结果导出至 NFS(NAS) 中的 CSV 或 Parquet 文件中：
+
+```SQL
+-- CSV
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/csvfile/', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- Parquet
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/parquetfile/',
+    'format' = 'parquet'
 )
 SELECT * FROM sales_records;
 ```

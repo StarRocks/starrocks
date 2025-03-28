@@ -48,8 +48,8 @@
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
-#include "block_cache/block_cache.h"
-#include "block_cache/datacache_utils.h"
+#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/datacache_utils.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
@@ -76,14 +76,26 @@
 namespace starrocks {
 
 namespace {
-static void wait_for_notify_small_steps(int32_t timeout_sec, bool from_report_tablet_thread,
-                                        const std::function<bool()>& stop_waiting) {
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_sec);
+static void wait_for_disk_report_notify(const std::function<bool()>& stop_waiting) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(config::report_disk_state_interval_seconds);
     bool notified = false;
     do {
         // take 1 second per step
-        notified = StorageEngine::instance()->wait_for_report_notify(1, from_report_tablet_thread);
+        notified = StorageEngine::instance()->wait_for_report_notify(1, false);
     } while (!notified && std::chrono::steady_clock::now() < deadline && !stop_waiting());
+}
+
+static void wait_for_tablet_report_notify(const std::function<bool()>& stop_waiting) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(config::report_tablet_interval_seconds);
+    bool notified = false;
+    do {
+        // take 1 second per step
+        notified = StorageEngine::instance()->wait_for_report_notify(1, true);
+    } while (!notified
+             // if the regular report is stopped, there will be no deadline
+             && (ReportOlapTableTaskWorkerPool::is_regular_report_stopped() ||
+                 std::chrono::steady_clock::now() < deadline) &&
+             !stop_waiting());
 }
 } // namespace
 
@@ -665,8 +677,7 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         // wait for notifying until timeout
-        wait_for_notify_small_steps(config::report_disk_state_interval_seconds, false,
-                                    [&] { return worker_pool_this->_stopped.load(); });
+        wait_for_disk_report_notify([&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -695,8 +706,7 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
             // wait for notifying until timeout
-            wait_for_notify_small_steps(config::report_tablet_interval_seconds, true,
-                                        [&] { return worker_pool_this->_stopped.load(); });
+            wait_for_tablet_report_notify([&] { return worker_pool_this->_stopped.load(); });
             continue;
         }
         int64_t max_compaction_score =
@@ -717,12 +727,13 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         // wait for notifying until timeout
-        wait_for_notify_small_steps(config::report_tablet_interval_seconds, true,
-                                    [&] { return worker_pool_this->_stopped.load(); });
+        wait_for_tablet_report_notify([&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
 }
+
+std::atomic<bool> ReportOlapTableTaskWorkerPool::_regular_report_stopped(false);
 
 void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     auto* worker_pool_this = (ReportWorkgroupTaskWorkerPool*)arg_this;

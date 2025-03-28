@@ -25,6 +25,15 @@
 
 namespace starrocks {
 
+BatchWriteMgr::BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor) : _executor(std::move(executor)) {}
+
+Status BatchWriteMgr::init() {
+    std::unique_ptr<ThreadPoolToken> token =
+            _executor->get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    _txn_state_cache = std::make_unique<TxnStateCache>(config::merge_commit_txn_state_cache_capacity, std::move(token));
+    return _txn_state_cache->init();
+}
+
 Status BatchWriteMgr::register_stream_load_pipe(StreamLoadContext* pipe_ctx) {
     BatchWriteId batch_write_id = {
             .db = pipe_ctx->db, .table = pipe_ctx->table, .load_params = pipe_ctx->load_parameters};
@@ -59,7 +68,7 @@ Status BatchWriteMgr::append_data(StreamLoadContext* data_ctx) {
 StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const starrocks::BatchWriteId& batch_write_id,
                                                                         bool create_if_missing) {
     {
-        std::shared_lock<std::shared_mutex> lock(_mutex);
+        std::shared_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
         auto it = _batch_write_map.find(batch_write_id);
         if (it != _batch_write_map.end()) {
             return it->second;
@@ -69,7 +78,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
         return Status::NotFound("");
     }
 
-    std::unique_lock<std::shared_mutex> lock(_mutex);
+    std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
     if (_stopped) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
@@ -78,7 +87,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
         return it->second;
     }
 
-    auto batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
+    auto batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get(), _txn_state_cache.get());
     Status st = batch_write->init();
     if (!st.ok()) {
         LOG(ERROR) << "Fail to init batch write, " << batch_write_id << ", status: " << st;
@@ -92,7 +101,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
 void BatchWriteMgr::stop() {
     std::vector<IsomorphicBatchWriteSharedPtr> stop_writes;
     {
-        std::unique_lock<std::shared_mutex> lock(_mutex);
+        std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
         if (_stopped) {
             return;
         }
@@ -105,6 +114,10 @@ void BatchWriteMgr::stop() {
     for (auto& batch_write : stop_writes) {
         batch_write->stop();
     }
+    if (_txn_state_cache) {
+        _txn_state_cache->stop();
+    }
+    _executor->get_thread_pool()->shutdown();
 }
 
 StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
@@ -112,7 +125,9 @@ StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
         const std::map<std::string, std::string>& load_parameters, const std::string& label, long txn_id,
         const TUniqueId& load_id, int32_t batch_write_interval_ms) {
     std::string pipe_name = fmt::format("txn_{}_label_{}_id_{}", txn_id, label, print_id(load_id));
-    auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(pipe_name, batch_write_interval_ms);
+    auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(pipe_name, batch_write_interval_ms,
+                                                            config::merge_commit_stream_load_pipe_block_wait_us,
+                                                            config::merge_commit_stream_load_pipe_max_buffered_bytes);
     RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
     StreamLoadContext* ctx = new StreamLoadContext(exec_env, load_id);
     ctx->ref();
@@ -188,11 +203,10 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
         }
         ctx->timeout_second = timeout_second;
     }
-    std::string remote_host;
-    butil::ip2hostname(cntl->remote_side().ip, &remote_host);
+    auto user_ip = butil::ip2str(cntl->remote_side().ip);
     ctx->auth.user = request->user();
     ctx->auth.passwd = request->passwd();
-    ctx->auth.user_ip = remote_host;
+    ctx->auth.user_ip.assign(user_ip.c_str());
     ctx->load_parameters = get_load_parameters_from_brpc(parameters);
 
     butil::IOBuf& io_buf = cntl->request_attachment();
@@ -221,7 +235,47 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
     }
     ctx->buffer->pos += io_buf.size();
     ctx->buffer->flip();
-    ctx->status = exec_env->batch_write_mgr()->append_data(ctx);
+    ctx->receive_bytes = io_buf.size();
+    ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
+    ctx->status = append_data(ctx);
+}
+
+static TTransactionStatus::type to_thrift_txn_status(TransactionStatusPB status) {
+    switch (status) {
+    case TRANS_UNKNOWN:
+        return TTransactionStatus::UNKNOWN;
+    case TRANS_PREPARE:
+        return TTransactionStatus::PREPARE;
+    case TRANS_COMMITTED:
+        return TTransactionStatus::COMMITTED;
+    case TRANS_VISIBLE:
+        return TTransactionStatus::VISIBLE;
+    case TRANS_ABORTED:
+        return TTransactionStatus::ABORTED;
+    case TRANS_PREPARED:
+        return TTransactionStatus::PREPARED;
+    default:
+        return TTransactionStatus::UNKNOWN;
+    }
+}
+
+void BatchWriteMgr::update_transaction_state(const PUpdateTransactionStateRequest* request,
+                                             PUpdateTransactionStateResponse* response) {
+    for (int i = 0; i < request->states_size(); i++) {
+        auto& txn_state = request->states(i);
+        auto st = _txn_state_cache->push_state(txn_state.txn_id(), to_thrift_txn_status(txn_state.status()),
+                                               txn_state.reason());
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to update transaction state, txn_id: " << txn_state.txn_id()
+                         << ", txn status: " << TransactionStatusPB_Name(txn_state.status())
+                         << ", status reason: " << txn_state.reason() << ", update error: " << st;
+        } else {
+            TRACE_BATCH_WRITE << "Update transaction state, txn_id: " << txn_state.txn_id()
+                              << ", txn status: " << TransactionStatusPB_Name(txn_state.status())
+                              << ", status reason: " << txn_state.reason();
+        }
+        st.to_protobuf(response->add_results());
+    }
 }
 
 } // namespace starrocks

@@ -1,0 +1,1124 @@
+-- name: test_runtime_bitset_filter
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 bigint NULL,
+
+  c_bool_1_null BOOLEAN NULL,
+  c_bool_2_notnull BOOLEAN NOT NULL,
+
+  c_tinyint_1_null TINYINT NULL,
+  c_tinyint_2_notnull TINYINT NOT NULL,
+
+  c_smallint_1_null SMALLINT NULL,
+  c_smallint_2_notnull SMALLINT NOT NULL,
+
+  c_int_1_null INT NULL,
+  c_int_2_notnull INT NOT NULL,
+
+  c_bigint_1_null BIGINT NULL,
+  c_bigint_2_notnull BIGINT NOT NULL,
+
+  c_date_1_null date NULL,
+  c_date_2_notnull date NULL,
+
+  c_decimal64_1_null DECIMAL(18) NULL,
+  c_decimal64_2_notnull DECIMAL(18) NOT NULL,
+
+  c_str_1_null STRING NULL,
+  c_str_2_notnull STRING NOT NULL,
+
+  c_str_3_low_null STRING NULL,
+  c_str_4_low_notnull STRING NOT NULL,
+
+  c_datetime_1_seq datetime NULL,
+  c_datetime_2_seq datetime NOT NULL
+
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE t2 (
+  k1 bigint NULL,
+
+  c_bool_1_null BOOLEAN NULL,
+  c_bool_2_notnull BOOLEAN NOT NULL,
+
+  c_tinyint_1_null TINYINT NULL,
+  c_tinyint_2_notnull TINYINT NOT NULL,
+
+  c_smallint_1_null SMALLINT NULL,
+  c_smallint_2_notnull SMALLINT NOT NULL,
+
+  c_int_1_null INT NULL,
+  c_int_2_notnull INT NOT NULL,
+
+  c_bigint_1_null BIGINT NULL,
+  c_bigint_2_notnull BIGINT NOT NULL,
+
+  c_date_1_null date NULL,
+  c_date_2_notnull date NULL,
+
+  c_decimal64_1_null DECIMAL(18) NULL,
+  c_decimal64_2_notnull DECIMAL(18) NOT NULL,
+
+  c_str_1_null STRING NULL,
+  c_str_2_notnull STRING NOT NULL,
+
+  c_str_3_low_null STRING NULL,
+  c_str_4_low_notnull STRING NOT NULL,
+
+  c_datetime_1_seq datetime NULL,
+  c_datetime_2_seq datetime NOT NULL
+
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE t3 (
+  k1 bigint NULL,
+
+  c_bool_1_null BOOLEAN NULL,
+  c_bool_2_notnull BOOLEAN NOT NULL,
+
+  c_tinyint_1_null TINYINT NULL,
+  c_tinyint_2_notnull TINYINT NOT NULL,
+
+  c_smallint_1_null SMALLINT NULL,
+  c_smallint_2_notnull SMALLINT NOT NULL,
+
+  c_int_1_null INT NULL,
+  c_int_2_notnull INT NOT NULL,
+
+  c_bigint_1_null BIGINT NULL,
+  c_bigint_2_notnull BIGINT NOT NULL,
+
+  c_date_1_null date NULL,
+  c_date_2_notnull date NULL,
+
+  c_decimal64_1_null DECIMAL(18) NULL,
+  c_decimal64_2_notnull DECIMAL(18) NOT NULL,
+
+  c_str_1_null STRING NULL,
+  c_str_2_notnull STRING NOT NULL,
+
+  c_str_3_low_null STRING NULL,
+  c_str_4_low_notnull STRING NOT NULL,
+
+  c_datetime_1_seq datetime NULL,
+  c_datetime_2_seq datetime NOT NULL
+
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t2 
+SELECT 
+    idx,
+
+    idx % 2 = 0,
+    idx % 2 = 0,
+
+    idx % 128,
+    idx % 128,
+
+    idx % 32768,
+    idx % 32768,
+
+    idx % 2147483648,
+    idx % 2147483648,
+
+    idx,
+    idx,
+
+    cast(date_add('2023-01-01', interval idx day) as date),
+    cast(date_add('2023-01-01', interval idx day) as date),
+
+    idx,
+    idx,
+
+    concat('str-abc-', idx),
+    concat('str-abc-', idx),
+
+    concat('str-abc-', idx % 256),
+    concat('str-abc-', idx % 256),
+
+    cast(date_add('2023-01-01', interval idx second) as datetime),
+    cast(date_add('2023-01-01', interval idx second) as datetime)
+FROM __row_util
+order by idx
+limit 100000;
+-- result:
+-- !result
+INSERT INTO t2 
+SELECT 
+    idx,
+
+    NULL,
+    idx % 2 = 0,
+
+    NULL,
+    idx % 128,
+
+    NULL,
+    idx % 32768,
+
+    NULL,
+    idx % 2147483648,
+
+    NULL,
+    idx,
+
+    NULL,
+    cast(date_add('2023-01-01', interval idx day) as date),
+
+    NULL,
+    idx,
+
+    NULL,
+    concat('str-abc-', idx),
+
+    NULL,
+    concat('str-abc-', idx % 256),
+
+    NULL,
+    cast(date_add('2023-01-01', interval idx second) as datetime)
+FROM __row_util
+order by idx
+limit 100000, 10000;
+-- result:
+-- !result
+INSERT INTO t3 
+SELECT 
+    idx,
+
+    idx % 2 = 0,
+    idx % 2 = 0,
+
+    idx % 128,
+    idx % 128,
+
+    idx % 32768,
+    idx % 32768,
+
+    idx * 37 % 2147483648 ,
+    idx * 37 % 2147483648,
+
+    idx * 37,
+    idx * 37,
+
+    cast(date_add('2023-01-01', interval idx * 37 day) as date),
+    cast(date_add('2023-01-01', interval idx * 37 day) as date),
+
+    idx * 37,
+    idx * 37,
+
+    concat('str-abc-', idx),
+    concat('str-abc-', idx),
+
+    concat('str-abc-', idx % 256),
+    concat('str-abc-', idx % 256),
+
+    cast(date_add('2023-01-01', interval idx second) as datetime),
+    cast(date_add('2023-01-01', interval idx second) as datetime)
+FROM __row_util
+order by idx
+limit 100000;
+-- result:
+-- !result
+INSERT INTO t3 
+SELECT 
+    idx,
+
+    NULL,
+    idx % 2 = 0,
+
+    NULL,
+    idx % 128,
+
+    NULL,
+    idx % 32768,
+
+    NULL,
+    idx * 37 % 2147483648,
+
+    NULL,
+    idx * 37,
+
+    NULL,
+    cast(date_add('2023-01-01', interval idx * 37 day) as date),
+
+    NULL,
+    idx * 37,
+
+    NULL,
+    concat('str-abc-', idx),
+
+    NULL,
+    concat('str-abc-', idx % 256),
+
+    NULL,
+    cast(date_add('2023-01-01', interval idx second) as datetime)
+FROM __row_util
+order by idx
+limit 100000, 10000;
+-- result:
+-- !result
+INSERT INTO t1
+SELECT 
+    idx,
+
+    idx % 2 = 0,
+    idx % 2 = 0,
+
+    idx % 128,
+    idx % 128,
+
+    idx % 32768,
+    idx % 32768,
+
+    idx % 2147483648,
+    idx % 2147483648,
+
+    idx,
+    idx,
+
+    cast(date_add('2023-01-01', interval idx day) as date),
+    cast(date_add('2023-01-01', interval idx day) as date),
+
+    idx,
+    idx,
+
+    concat('str-abc-', idx),
+    concat('str-abc-', idx),
+
+    concat('str-abc-', idx % 256),
+    concat('str-abc-', idx % 256),
+
+    cast(date_add('2023-01-01', interval idx second) as datetime),
+    cast(date_add('2023-01-01', interval idx second) as datetime)
+FROM __row_util;
+-- result:
+-- !result
+INSERT INTO t1
+SELECT 
+    idx,
+
+    NULL,
+    idx % 2 = 0,
+
+    NULL,
+    idx % 128,
+
+    NULL,
+    idx % 32768,
+
+    NULL,
+    idx % 2147483648,
+
+    NULL,
+    idx,
+
+    NULL,
+    cast(date_add('2023-01-01', interval idx day) as date),
+
+    NULL,
+    idx,
+
+    NULL,
+    concat('str-abc-', idx),
+
+    NULL,
+    concat('str-abc-', idx % 256),
+
+    NULL,
+    cast(date_add('2023-01-01', interval idx second) as datetime)
+FROM __row_util
+order by idx
+limit 100000, 10000;
+-- result:
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_bool_1_null);
+-- result:
+6400000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_bool_2_notnull);
+-- result:
+6450000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_tinyint_1_null);
+-- result:
+100000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_tinyint_2_notnull);
+-- result:
+100780
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_smallint_1_null);
+-- result:
+3907840
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_smallint_2_notnull);
+-- result:
+4338192
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_int_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_int_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_bigint_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_bigint_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_date_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_date_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_decimal64_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_decimal64_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_str_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_str_2_notnull);
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_str_3_low_null);
+-- result:
+50000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_str_4_low_notnull);
+-- result:
+50390
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_datetime_1_seq);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 using(c_datetime_2_seq);
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 on t1.c_bool_1_null <=> w1.c_bool_1_null;
+-- result:
+6400000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 on t1.c_bool_2_notnull <=> w1.c_bool_2_notnull;
+-- result:
+6450000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 on t1.c_tinyint_1_null <=> w1.c_tinyint_1_null;
+-- result:
+100000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 on t1.c_tinyint_2_notnull <=> w1.c_tinyint_2_notnull;
+-- result:
+100780
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_smallint_1_null <=> t2.c_smallint_1_null;
+-- result:
+103907840
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_smallint_2_notnull <=> t2.c_smallint_2_notnull;
+-- result:
+4338192
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_int_1_null <=> t2.c_int_1_null;
+-- result:
+100100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_int_2_notnull <=> t2.c_int_2_notnull;
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_bigint_1_null <=> t2.c_bigint_1_null;
+-- result:
+100100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_bigint_2_notnull <=> t2.c_bigint_2_notnull;
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_date_1_null <=> t2.c_date_1_null;
+-- result:
+100100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_date_2_notnull <=> t2.c_date_2_notnull;
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_decimal64_1_null <=> t2.c_decimal64_1_null;
+-- result:
+100100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_decimal64_2_notnull <=> t2.c_decimal64_2_notnull;
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_str_1_null <=> t2.c_str_1_null;
+-- result:
+100100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_str_2_notnull <=> t2.c_str_2_notnull;
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 on t1.c_str_3_low_null <=> w1.c_str_3_low_null;
+-- result:
+50000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 on t1.c_str_4_low_notnull <=> w1.c_str_4_low_notnull;
+-- result:
+50390
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_datetime_1_seq <=> t2.c_datetime_1_seq;
+-- result:
+100100000
+-- !result
+select count(1)
+from t1 join [broadcast] t2 on t1.c_datetime_2_seq <=> t2.c_datetime_2_seq;
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from (select distinct c_bool_1_null from t1)t join [broadcast] w1 using(c_bool_1_null);
+-- result:
+10
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from (select distinct c_bool_2_notnull from t1)t join [broadcast] w1 using(c_bool_2_notnull);
+-- result:
+10
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from (select distinct c_tinyint_1_null from t1)t join [broadcast] w1 using(c_tinyint_1_null);
+-- result:
+10
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from (select distinct c_tinyint_2_notnull from t1)t join [broadcast] w1 using(c_tinyint_2_notnull);
+-- result:
+10
+-- !result
+select count(1)
+from (select distinct c_smallint_1_null from t1)t join [broadcast] t2 using(c_smallint_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from (select distinct c_smallint_2_notnull from t1)t join [broadcast] t2 using(c_smallint_2_notnull);
+-- result:
+110000
+-- !result
+select count(1)
+from (select distinct c_int_1_null from t1)t join [broadcast] t2 using(c_int_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from (select distinct c_int_2_notnull from t1)t join [broadcast] t2 using(c_int_2_notnull);
+-- result:
+110000
+-- !result
+select count(1)
+from (select distinct c_bigint_1_null from t1)t join [broadcast] t2 using(c_bigint_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from (select distinct c_bigint_2_notnull from t1)t join [broadcast] t2 using(c_bigint_2_notnull);
+-- result:
+110000
+-- !result
+select count(1)
+from (select distinct c_date_1_null from t1)t join [broadcast] t2 using(c_date_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from (select distinct c_date_2_notnull from t1)t join [broadcast] t2 using(c_date_2_notnull);
+-- result:
+110000
+-- !result
+select count(1)
+from (select distinct c_decimal64_1_null from t1)t join [broadcast] t2 using(c_decimal64_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from (select distinct c_decimal64_2_notnull from t1)t join [broadcast] t2 using(c_decimal64_2_notnull);
+-- result:
+110000
+-- !result
+select count(1)
+from (select distinct c_str_1_null from t1)t join [broadcast] t2 using(c_str_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from (select distinct c_str_2_notnull from t1)t join [broadcast] t2 using(c_str_2_notnull);
+-- result:
+110000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+) 
+select count(1)
+from (select distinct c_str_3_low_null from t1)t join [broadcast] w1 using(c_str_3_low_null);
+-- result:
+10
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from (select distinct c_str_4_low_notnull from t1)t join [broadcast] w1 using(c_str_4_low_notnull);
+-- result:
+10
+-- !result
+select count(1)
+from (select distinct c_datetime_1_seq from t1)t join [broadcast] t2 using(c_datetime_1_seq);
+-- result:
+100000
+-- !result
+select count(1)
+from (select distinct c_datetime_2_seq from t1)t join [broadcast] t2 using(c_datetime_2_seq);
+-- result:
+110000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [shuffle] w1 using(c_bool_1_null);
+-- result:
+6400000
+-- !result
+with w1 as (
+   select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [shuffle] w1 using(c_bool_2_notnull);
+-- result:
+6450000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [shuffle] w1 using(c_tinyint_1_null);
+-- result:
+100000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [shuffle] w1 using(c_tinyint_2_notnull);
+-- result:
+100780
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_smallint_1_null);
+-- result:
+3907840
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_smallint_2_notnull);
+-- result:
+4338192
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_int_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_int_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_bigint_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_bigint_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_date_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_date_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_decimal64_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_decimal64_2_notnull);
+-- result:
+120000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_str_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_str_2_notnull);
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [shuffle] w1 using(c_str_3_low_null);
+-- result:
+50000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [shuffle] w1 using(c_str_4_low_notnull);
+-- result:
+50390
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_datetime_1_seq);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [shuffle] t2 using(c_datetime_2_seq);
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] w1 using(c_bool_1_null);
+-- result:
+6400000
+-- !result
+with w1 as (
+   select * from t2 order by k1 limit 10
+)
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] w1 using(c_bool_2_notnull);
+-- result:
+6450000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] w1 using(c_tinyint_1_null);
+-- result:
+100000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] w1 using(c_tinyint_2_notnull);
+-- result:
+100780
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_smallint_1_null);
+-- result:
+3907840
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_smallint_2_notnull);
+-- result:
+4338192
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_int_1_null);
+-- result:
+100000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_int_2_notnull);
+-- result:
+120000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_bigint_1_null);
+-- result:
+100000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_bigint_2_notnull);
+-- result:
+120000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_date_1_null);
+-- result:
+100000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_date_2_notnull);
+-- result:
+120000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_decimal64_1_null);
+-- result:
+100000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_decimal64_2_notnull);
+-- result:
+120000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_str_1_null);
+-- result:
+100000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_str_2_notnull);
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] w1 using(c_str_3_low_null);
+-- result:
+50000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] w1 using(c_str_4_low_notnull);
+-- result:
+50390
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_datetime_1_seq);
+-- result:
+100000
+-- !result
+select /*+SET_VAR(enable_join_runtime_bitset_filter=false)*/ count(1)
+from t1 join [broadcast] t2 using(c_datetime_2_seq);
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t3 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_bool_1_null);
+-- result:
+6400000
+-- !result
+with w1 as (
+    select * from t3 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_bool_2_notnull);
+-- result:
+6450000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_tinyint_1_null);
+-- result:
+100000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_tinyint_2_notnull);
+-- result:
+100780
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_smallint_1_null);
+-- result:
+3907840
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_smallint_2_notnull);
+-- result:
+4338192
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_int_1_null);
+-- result:
+34594
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_int_2_notnull);
+-- result:
+34864
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_bigint_1_null);
+-- result:
+34594
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_bigint_2_notnull);
+-- result:
+34864
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_date_1_null);
+-- result:
+34594
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_date_2_notnull);
+-- result:
+34864
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_decimal64_1_null);
+-- result:
+34594
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_decimal64_2_notnull);
+-- result:
+34864
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_str_1_null);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_str_2_notnull);
+-- result:
+120000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+) 
+select count(1)
+from t1 join [broadcast] w1 using(c_str_3_low_null);
+-- result:
+50000
+-- !result
+with w1 as (
+    select * from t2 order by k1 limit 10
+)
+select count(1)
+from t1 join [broadcast] w1 using(c_str_4_low_notnull);
+-- result:
+50390
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_datetime_1_seq);
+-- result:
+100000
+-- !result
+select count(1)
+from t1 join [broadcast] t3 using(c_datetime_2_seq);
+-- result:
+120000
+-- !result
+select count(1)
+from 
+    t1 
+    join [broadcast] t2 on t1.c_int_1_null = t2.c_int_1_null
+    join [shuffle] t3 on t1.c_int_1_null = t3.c_int_1_null;
+-- result:
+2702
+-- !result
+select count(1)
+from 
+    t1 
+    join [broadcast] t2 on t1.c_int_1_null = t2.c_int_1_null
+    join [shuffle] t3 on t1.c_date_1_null = t3.c_date_1_null;
+-- result:
+2702
+-- !result
+select count(1)
+from 
+    (select distinct c_int_1_null from t1) t1
+    join [broadcast] t2 on t1.c_int_1_null = t2.c_int_1_null
+    join [shuffle] t3 on t1.c_int_1_null = t3.c_int_1_null;
+-- result:
+2702
+-- !result
+select count(1)
+from 
+    (select distinct c_int_1_null,c_date_1_null from t1) t1
+    join [broadcast] t2 on t1.c_int_1_null = t2.c_int_1_null
+    join [shuffle] t3 on t1.c_date_1_null = t3.c_date_1_null;
+-- result:
+2702
+-- !result

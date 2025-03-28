@@ -32,6 +32,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.starrocks.statistic.base.PartitionSampler.HIGH_WEIGHT_READ_RATIO;
+import static com.starrocks.statistic.base.PartitionSampler.LOW_WEIGHT_READ_RATIO;
+import static com.starrocks.statistic.base.PartitionSampler.MEDIUM_HIGH_WEIGHT_READ_RATIO;
+import static com.starrocks.statistic.base.PartitionSampler.MEDIUM_LOW_WEIGHT_READ_RATIO;
+
 public class HyperStatisticSQLs {
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 
@@ -54,6 +59,7 @@ public class HyperStatisticSQLs {
     //| max            | varchar(1048576) | NO   | false | <null>  |       |
     //| min            | varchar(1048576) | NO   | false | <null>  |       |
     //| update_time    | datetime         | NO   | false | <null>  |       |
+    //| collection_size| bigint           | NO   | false | <null>  |       |
     public static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
@@ -62,7 +68,8 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
-            ", $minFunction " + // VARCHAR
+            ", $minFunction" + // VARCHAR
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
             " FROM `$dbName`.`$tableName` partition `$partitionName`";
 
     public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
@@ -74,6 +81,7 @@ public class HyperStatisticSQLs {
             ", cast(0 as BIGINT)" + // BIGINT, null_count
             ", $maxFunction" + // VARCHAR, max
             ", $minFunction " + // VARCHAR, min
+            ", cast(-1 as BIGINT) " + // BIGINT, collection_size
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`) [_META_]";
 
     public static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
@@ -84,7 +92,8 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY, ndv
             ", cast($countNullFunction as BIGINT)" + // BIGINT, null_count
             ", ''" + // VARCHAR, max
-            ", '' " + // VARCHAR, min
+            ", ''" + // VARCHAR, min
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT, collection_size
             " FROM base_cte_table ";
 
     public static final String BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
@@ -95,8 +104,30 @@ public class HyperStatisticSQLs {
             ", $hllFunction" + // VARBINARY
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
-            ", $minFunction " + // VARCHAR
+            ", $minFunction" + // VARCHAR
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT, collection_size
             " FROM base_cte_table ";
+
+    public static final String FULL_MULTI_COLUMN_STATISTICS_SELECT_TEMPLATE =
+            "SELECT cast($version as INT), $columnIdsStr, cast($ndvFunction as BIGINT) from `$dbName`.`$tableName`";
+
+    public static final String SAMPLE_MULTI_COLUMN_STATISTICS_SELECT_TMEPLATE = "$base_cte_table " +
+            "SELECT\n" +
+            "    cast($version as INT),\n" +
+            "    $columnIdsStr,\n" +
+            "    cast($ndvFunction as BIGINT)\n" +
+            "FROM (\n" +
+            "    SELECT\n" +
+            "        t0.`column_key`,\n" +
+            "        COUNT(1) as count\n" +
+            "    FROM (\n" +
+            "        SELECT\n" +
+            "            combined_column_key AS column_key\n" +
+            "        FROM\n" +
+            "            `base_cte_table`\n" +
+            "    ) as t0\n" +
+            "    GROUP BY t0.column_key \n" +
+            ") AS t1;";
 
     public static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
@@ -108,7 +139,7 @@ public class HyperStatisticSQLs {
         VelocityContext context = new VelocityContext();
         String columnNameStr = stats.getColumnNameStr();
         String quoteColumnName = stats.getQuotedColumnName();
-        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
+        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION_V5);
         context.put("partitionId", p.getId());
         context.put("columnNameStr", columnNameStr);
         context.put("partitionName", p.getName());
@@ -125,14 +156,14 @@ public class HyperStatisticSQLs {
         SampleInfo info = sampler.getSampleInfo(p.getId());
         List<String> groupSQLs = Lists.newArrayList();
         StringBuilder sqlBuilder = new StringBuilder();
-        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getHighWeightTablets(),
-                sampler.getHighRatio(), "t_high"));
-        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getMediumHighWeightTablets(),
-                sampler.getMediumHighRatio(), "t_medium_high"));
-        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getMediumLowWeightTablets(),
-                sampler.getMediumLowRatio(), "t_medium_low"));
-        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getLowWeightTablets(),
-                sampler.getLowRatio(), "t_low"));
+        groupSQLs.add(generateRatioTable(tableName, info.getHighWeightTablets(),
+                HIGH_WEIGHT_READ_RATIO, "t_high"));
+        groupSQLs.add(generateRatioTable(tableName, info.getMediumHighWeightTablets(),
+                MEDIUM_HIGH_WEIGHT_READ_RATIO, "t_medium_high"));
+        groupSQLs.add(generateRatioTable(tableName, info.getMediumLowWeightTablets(),
+                MEDIUM_LOW_WEIGHT_READ_RATIO, "t_medium_low"));
+        groupSQLs.add(generateRatioTable(tableName, info.getLowWeightTablets(),
+                LOW_WEIGHT_READ_RATIO, "t_low"));
         if (groupSQLs.stream().allMatch(Objects::isNull)) {
             groupSQLs.add("SELECT * FROM " + tableName + " LIMIT " + Config.statistic_sample_collect_rows);
         }
@@ -150,23 +181,30 @@ public class HyperStatisticSQLs {
             context.put("countNullFunction", stat.getSampleNullCount(info));
             context.put("maxFunction", stat.getMax());
             context.put("minFunction", stat.getMin());
+            context.put("collectionSizeFunction", stat.getCollectionSize());
             groupSQLs.add(HyperStatisticSQLs.build(context, template));
         }
         sqlBuilder.append(String.join(" UNION ALL ", groupSQLs));
         return sqlBuilder.toString();
     }
 
-    private static String generateRatioTable(String table, long limit,
-                                             List<TabletStats> tablets, double ratio, String alias) {
+    private static String generateRatioTable(String table, List<TabletStats> tablets, double ratio, String alias) {
         if (tablets.isEmpty()) {
             return null;
         }
-        return String.format(" SELECT * FROM (SELECT * " +
-                        " FROM %s tablet(%s) " +
-                        " WHERE rand() <= %f " +
-                        " LIMIT %d) %s",
-                table,
-                tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", ")),
-                ratio, limit, alias);
+
+        String tabletHint =
+                tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", "));
+        if (!Config.enable_use_table_sample_collect_statistics) {
+            return String.format(" SELECT * FROM (SELECT * " +
+                            " FROM %s tablet(%s) " +
+                            " WHERE rand() <= %f " +
+                            " ) %s",
+                    table, tabletHint, ratio, alias);
+        } else {
+            int percent = (int) (ratio * 100);
+            return String.format(" SELECT * FROM (SELECT * FROM %s TABLET(%s) SAMPLE('percent'='%d')) %s",
+                    table, tabletHint, percent, alias);
+        }
     }
 }

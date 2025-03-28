@@ -64,10 +64,15 @@ public:
 
     ~MultiCastLocalExchangeSinkOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return _exchanger->support_event_scheduler(); }
+
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<MultiCastLocalExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence,
                                                                     _exchanger);
     }
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<MultiCastLocalExchanger> _exchanger;

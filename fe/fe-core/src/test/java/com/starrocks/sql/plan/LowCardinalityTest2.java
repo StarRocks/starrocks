@@ -17,9 +17,11 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -141,7 +143,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `low_card_t2` (\n" +
@@ -158,7 +160,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
@@ -303,6 +305,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewriteLength() throws Exception {
+        String sql = "select length(dept_name), char_length(dept_name) from dept group by dept_name,state";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  2:Project\n" +
+                "  |  <slot 4> : DictDecode(6: dept_name, [length(<place-holder>)])\n" +
+                "  |  <slot 5> : DictDecode(6: dept_name, [char_length(<place-holder>)])"));
+    }
+
+    @Test
     public void testDecodeNodeRewrite5() throws Exception {
         String sql = "select S_ADDRESS from supplier where S_ADDRESS " +
                 "like '%Customer%Complaints%' group by S_ADDRESS ";
@@ -356,6 +367,43 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(enableLowCardinalityOptimize);
             connectContext.getSessionVariable().setNewPlanerAggStage(newPlannerAggStage);
         }
+    }
+
+    @Test
+    public void testIdentifyBlocking() throws Exception {
+        String sql = "select * from low_card_t1 order by 1";
+        boolean hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(cpc) from low_card_t1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "(select sum(cpc) from low_card_t1) union all (select sum(cpc) from low_card_t2)";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertFalse(hasBlockingNode);
+        sql = "(select sum(cpc) from low_card_t1) union all (select sum(cpc) from low_card_t2) order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(ss) from " +
+                "((select sum(cpc) as ss from low_card_t1) union all (select sum(cpc) as ss from low_card_t2)) x";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select * from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertFalse(hasBlockingNode);
+        sql = "select * from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
+        sql = "select sum(a.cpc) from low_card_t1 a join low_card_t2 b on a.cpc = b.cpc order by 1";
+        hasBlockingNode = new DecodeCollector.CheckBlockingNode().check(
+                UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPhysicalPlan());
+        Assert.assertTrue(hasBlockingNode);
     }
 
     @Test
@@ -1645,7 +1693,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
     @Test
     public void testMetaScan2() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
 
         Assert.assertTrue(plan, plan.contains("  0:MetaScan\n" +
@@ -1657,15 +1705,16 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
                 "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
-                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), " +
+                "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:INT))])]"));
     }
 
     @Test
     public void testMetaScan3() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a)\n" +
+                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a, 255)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +

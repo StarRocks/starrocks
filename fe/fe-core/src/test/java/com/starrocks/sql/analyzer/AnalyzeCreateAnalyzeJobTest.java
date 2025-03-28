@@ -18,11 +18,13 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -154,5 +156,21 @@ public class AnalyzeCreateAnalyzeJobTest {
         starRocksAssert.ddl("drop analyze " + jobId);
         analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
         Assert.assertEquals(0, analyzeJobs.size());
+    }
+
+    @Test
+    public void testPrepareAnalyzeJob() {
+        StatisticAutoCollector statisticAutoCollector = GlobalStateMgr.getCurrentState().getStatisticAutoCollector();
+        statisticAutoCollector.prepareDefaultJob();
+        List<NativeAnalyzeJob> jobs = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
+
+        NativeAnalyzeJob defaultJob = jobs.stream().filter(NativeAnalyzeJob::isDefaultJob).findFirst().get();
+        Assert.assertSame(StatsConstants.AnalyzeType.FULL, defaultJob.getAnalyzeType());
+
+        Config.enable_collect_full_statistic = false;
+        statisticAutoCollector.prepareDefaultJob();
+        jobs = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
+        Assert.assertSame(StatsConstants.AnalyzeType.SAMPLE, jobs.get(0).getAnalyzeType());
+        Config.enable_collect_full_statistic = true;
     }
 }

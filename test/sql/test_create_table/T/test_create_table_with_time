@@ -1,0 +1,49 @@
+-- name: test_create_table_with_time
+
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time TIME not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time array<TIME> not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time map<bigint, TIME> not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time struct<c1 bigint, c2 TIME> not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);

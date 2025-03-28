@@ -15,14 +15,22 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
+
 public abstract class ShowStmt extends StatementBase {
     protected Predicate predicate;
+    protected LimitElement limitElement;
+    protected List<OrderByElement> orderByElements;
+    protected List<OrderByPair> orderByPairs;
 
     protected ShowStmt(NodePosition pos) {
         super(pos);
@@ -40,6 +48,22 @@ public abstract class ShowStmt extends StatementBase {
 
     public QueryStatement toSelectStmt() throws AnalysisException {
         return null;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public List<OrderByPair> getOrderByPairs() {
+        return orderByPairs;
+    }
+
+    public void setOrderByPairs(List<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
+    }
+
+    public LimitElement getLimitElement() {
+        return limitElement;
     }
 
     @Override

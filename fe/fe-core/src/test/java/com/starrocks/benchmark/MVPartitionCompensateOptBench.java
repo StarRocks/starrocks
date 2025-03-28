@@ -19,7 +19,7 @@ import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.common.QueryDebugOptions;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -31,7 +31,7 @@ import org.junit.rules.TestRule;
 import java.util.List;
 
 @Ignore
-public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
+public class MVPartitionCompensateOptBench extends MVTestBase {
 
     private static final int MV_NUMS = 100;
     private static final int BENCHMARK_RUNS = 10;
@@ -41,7 +41,7 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
 
     @BeforeClass
     public static void setup() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "table_with_day_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition1");
         starRocksAssert.withTable(cluster, "table_with_day_partition2");

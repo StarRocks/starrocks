@@ -63,25 +63,25 @@ public:
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         array->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
         array->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-        auto* array_values = new_fake_const_expr(array, type_arr_int);
+        auto* array_values = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(array_values);
 
         // null
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(Datum{}); // null
-        auto* const_null = new_fake_const_expr(array, type_arr_int);
+        auto* const_null = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(const_null);
 
         // [null]
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(DatumArray{Datum()});
-        auto* null_array = new_fake_const_expr(array, type_arr_int);
+        auto* null_array = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(null_array);
 
         // []
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(DatumArray{}); // []
-        auto empty_array = new_fake_const_expr(array, type_arr_int);
+        auto empty_array = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(empty_array);
 
         // [null]
@@ -91,39 +91,39 @@ public:
         array->append_datum(DatumArray{Datum()}); // [null]
         array->append_datum(DatumArray{});        // []
         array->append_datum(Datum{});             // NULL
-        auto* array_special = new_fake_const_expr(array, type_arr_int);
+        auto* array_special = new_fake_const_expr(std::move(array), type_arr_int);
         _array_expr.push_back(array_special);
 
         // const([1,4]...)
         array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
-        auto const_col = ConstColumn::create(array, 3);
-        auto* const_array = new_fake_const_expr(const_col, type_arr_int);
+        auto const_col = ConstColumn::create(std::move(array), 3);
+        auto* const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
 
         // const(null...)
         array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(Datum{}); // null...
-        const_col = ConstColumn::create(array, 3);
-        const_array = new_fake_const_expr(const_col, type_arr_int);
+        const_col = ConstColumn::create(std::move(array), 3);
+        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
 
         // const([null]...)
         array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum()}); // [null]...
-        const_col = ConstColumn::create(array, 3);
-        const_array = new_fake_const_expr(const_col, type_arr_int);
+        const_col = ConstColumn::create(std::move(array), 3);
+        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
 
         // const([]...)
         array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{}); // []...
-        const_col = ConstColumn::create(array, 3);
-        const_array = new_fake_const_expr(const_col, type_arr_int);
+        const_col = ConstColumn::create(std::move(array), 3);
+        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
         _array_expr.push_back(const_array);
     }
 
-    FakeConstExpr* new_fake_const_expr(ColumnPtr value, const TypeDescriptor& type) {
+    FakeConstExpr* new_fake_const_expr(MutableColumnPtr&& value, const TypeDescriptor& type) {
         TExprNode node;
         node.__set_node_type(TExprNodeType::INT_LITERAL);
         node.__set_num_children(0);
@@ -480,7 +480,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 if (data_column->is_nullable()) {
                     data_column = down_cast<NullableColumn*>(data_column.get())->data_column();
                 }
-                auto array_col = std::dynamic_pointer_cast<ArrayColumn>(data_column);
+                auto array_col = ArrayColumn::dynamic_pointer_cast(data_column);
                 ASSERT_EQ(2, array_col->elements_column()->type_size());
             }
             Expr::close(expr_ctxs, &_runtime_state);

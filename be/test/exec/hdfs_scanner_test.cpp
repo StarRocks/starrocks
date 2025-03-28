@@ -18,12 +18,13 @@
 
 #include <memory>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -80,6 +81,9 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     }
     _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
     _runtime_state->init_instance_mem_tracker();
+    pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
+    fragment_context->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_ctx(fragment_context);
 }
 
 Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
@@ -116,6 +120,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->file_size = range->file_length;
     param->scan_range = range;
     param->tuple_desc = tuple_desc;
+    param->runtime_filter_collector = _pool.add(new RuntimeFilterProbeCollector());
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
     std::vector<SlotDescriptor*> mat_slots;
@@ -1677,13 +1682,13 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ASSERT_TRUE(status.ok()) << status.message();
 
         // build runtime filter.
-        JoinRuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, LogicalType::TYPE_BIGINT);
-        f->init(10);
+        RuntimeFilter* f = RuntimeFilterHelper::create_runtime_bloom_filter(&_pool, LogicalType::TYPE_BIGINT, 0);
+        f->get_membership_filter()->init(10);
         ColumnPtr column = ColumnHelper::create_column(tuple_desc->slots()[0]->type(), false);
         auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
         c->append(tc.max_value);
         c->append(tc.min_value);
-        ASSERT_OK(RuntimeFilterHelper::fill_runtime_bloom_filter(column, LogicalType::TYPE_BIGINT, f, 0, false));
+        ASSERT_OK(RuntimeFilterHelper::fill_runtime_filter(column, LogicalType::TYPE_BIGINT, f, 0, false));
 
         ASSERT_OK(rf_probe_desc.init(0, &probe_expr_ctx));
         rf_probe_desc.set_runtime_filter(f);
@@ -2715,6 +2720,7 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
         param->scanner_conjunct_ctxs.push_back(ctx);
+        param->all_conjunct_ctxs.push_back(ctx);
     }
     {
         std::vector<TExprNode> nodes;
@@ -2724,6 +2730,7 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
         param->scanner_conjunct_ctxs.push_back(ctx);
+        param->all_conjunct_ctxs.push_back(ctx);
     }
 
     ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
@@ -3170,7 +3177,7 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    param->iceberg_schema = &schema;
+    param->lake_schema = &schema;
 
     _debug_rows_per_call = 10;
     Status status = scanner->init(_runtime_state, *param);

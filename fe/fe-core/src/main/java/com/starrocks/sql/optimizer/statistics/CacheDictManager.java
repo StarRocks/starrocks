@@ -25,6 +25,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,9 +53,9 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
     private static final Set<Long> FORBIDDEN_DICT_TABLE_IDS = Sets.newConcurrentHashSet();
 
-    public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
+    public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
 
-    private CacheDictManager() {
+    public CacheDictManager() {
     }
 
     private static final CacheDictManager INSTANCE = new CacheDictManager();
@@ -107,6 +108,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
             .maximumSize(Config.statistic_dict_columns)
+            .executor(ThreadPoolManager.getDictCacheThread())
             .buildAsync(dictLoader);
 
     private Optional<ColumnDict> deserializeColumnDict(long tableId, ColumnId columnName, TStatisticData statisticData) {
@@ -190,7 +192,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             if (!realResult.isPresent()) {
                 LOG.debug("Invalidate column {} dict cache because don't present", columnName);
                 dictStatistics.synchronous().invalidate(columnIdentifier);
-            } else if (realResult.get().getVersionTime() < versionTime) {
+            } else if (realResult.get().getVersion() < versionTime) {
                 LOG.debug("Invalidate column {} dict cache because out of date", columnName);
                 dictStatistics.synchronous().invalidate(columnIdentifier);
             } else {
@@ -264,14 +266,14 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 Optional<ColumnDict> columnOptional = future.get();
                 if (columnOptional.isPresent()) {
                     ColumnDict columnDict = columnOptional.get();
-                    long lastVersion = columnDict.getVersionTime();
-                    long dictCollectVersion = columnDict.getCollectedVersionTime();
+                    long lastVersion = columnDict.getVersion();
+                    long dictCollectVersion = columnDict.getCollectedVersion();
                     if (collectVersion != dictCollectVersion) {
                         LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
                         removeGlobalDict(tableId, columnName);
                         return;
                     }
-                    columnDict.updateVersionTime(versionTime);
+                    columnDict.updateVersion(versionTime);
                     LOG.info("update dict for table {} column {} from version {} to {}", tableId, columnName,
                             lastVersion, versionTime);
                 }

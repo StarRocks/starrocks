@@ -105,6 +105,7 @@ public class TableScanPredicateExtractor {
     // currently, we only allow single-column predicates that not contain lambda expressions to be pushed down.
     private class CanFullyPushDownVisitor extends ScalarOperatorVisitor<Boolean, CanFullyPushDownVisitorContext> {
         private final Map<ColumnRefOperator, Column> columnRefOperatorColumnMap;
+
         public CanFullyPushDownVisitor(Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
             this.columnRefOperatorColumnMap = columnRefOperatorColumnMap;
         }

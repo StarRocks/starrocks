@@ -64,12 +64,14 @@ import com.starrocks.http.rest.CheckDecommissionAction;
 import com.starrocks.http.rest.ConnectionAction;
 import com.starrocks.http.rest.ExecuteSqlAction;
 import com.starrocks.http.rest.FeatureAction;
+import com.starrocks.http.rest.GetClusterSnapshotRestoreStateAction;
 import com.starrocks.http.rest.GetDdlStmtAction;
 import com.starrocks.http.rest.GetLoadInfoAction;
 import com.starrocks.http.rest.GetLogFileAction;
 import com.starrocks.http.rest.GetSmallFileAction;
 import com.starrocks.http.rest.GetStreamLoadState;
 import com.starrocks.http.rest.HealthAction;
+import com.starrocks.http.rest.IdleAction;
 import com.starrocks.http.rest.LoadAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
 import com.starrocks.http.rest.MetricsAction;
@@ -175,6 +177,7 @@ public class HttpServer {
         // rest action
         HealthAction.registerAction(controller);
         FeatureAction.registerAction(controller);
+        GetClusterSnapshotRestoreStateAction.registerAction(controller);
         MetricsAction.registerAction(controller);
         ShowMetaInfoAction.registerAction(controller);
         ShowProcAction.registerAction(controller);
@@ -197,6 +200,7 @@ public class HttpServer {
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
         SyncCloudTableMetaAction.registerAction(controller);
+        IdleAction.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);

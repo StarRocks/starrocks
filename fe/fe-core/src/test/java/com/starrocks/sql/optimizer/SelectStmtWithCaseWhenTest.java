@@ -55,7 +55,7 @@ class SelectStmtWithCaseWhenTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
@@ -64,6 +64,7 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable(createTblStmtStr);
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")

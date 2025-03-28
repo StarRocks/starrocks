@@ -23,11 +23,11 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewriteNestedMVTest extends MvRewriteTestBase {
+public class MvRewriteNestedMVTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         starRocksAssert.withTable(cluster, "depts");

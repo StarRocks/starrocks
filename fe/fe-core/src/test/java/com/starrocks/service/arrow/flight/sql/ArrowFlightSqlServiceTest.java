@@ -57,6 +57,11 @@ public class ArrowFlightSqlServiceTest {
             }
 
             {
+                server.awaitTermination();
+                times = 0;
+            }
+
+            {
                 server.awaitTermination(anyLong, TimeUnit.SECONDS);
                 result = true;
                 times = 1;

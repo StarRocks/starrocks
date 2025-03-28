@@ -115,6 +115,8 @@ public:
     size_t version_count() const;
     Version max_version() const;
 
+    bool belonged_to_cloud_native() const override { return false; }
+
     // propreties encapsulated in TabletSchema
     KeysType keys_type() const;
     size_t num_columns_with_max_version() const;
@@ -350,6 +352,9 @@ public:
     int64_t committed_rowset_size() { return _committed_rs_map.size(); }
 
     void on_shutdown() override;
+
+    // get average row size
+    int64_t get_average_row_size();
 
 private:
     int64_t _mem_usage() { return sizeof(Tablet); }

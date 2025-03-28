@@ -71,7 +71,6 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -100,7 +99,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         DISABLE,    // 0: disable query rewrite
         LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
         CHECKED,    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
-        NOCHECK;   // 3: enable query rewrite, and rewrite without any check
+        NOCHECK,    // 3: enable query rewrite, and rewrite without any check
+        FORCE_MV;   // 4: force to use mv, if mv contains no ttl; otherwise, use mv for partitions are in ttl range and
+        // use base table for partitions are out of ttl range
 
         public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
             return CHECKED;
@@ -1075,10 +1076,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static TableProperty read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class);

@@ -297,6 +297,7 @@ For multi-table Join queries, the optimizer usually selects the optimal Join exe
 - Bucket Shuffle Join
   
   If the Join equijoin expression in the Join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the Join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally.
+  Tables participating in Bucket Shuffle Join must be either non-partitioned or colocated.
 
   ~~~SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;

@@ -72,6 +72,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
+    // https://docs.aws.amazon.com/glue/latest/dg/aws-glue-api-catalog-databases.html
+    public static final String AWS_GLUE_CATALOG_ID = "aws.glue.catalog_id";
 
     // Credential for Azure storage
     // For Azure Blob Storage
@@ -91,8 +93,10 @@ public class CloudConfigurationConstants {
     public static final String AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY = "azure.adls2.oauth2_use_managed_identity";
     public static final String AZURE_ADLS2_OAUTH2_TENANT_ID = "azure.adls2.oauth2_tenant_id";
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_ID = "azure.adls2.oauth2_client_id";
+    public static final String AZURE_ADLS2_ENDPOINT = "azure.adls2.endpoint";
     public static final String AZURE_ADLS2_STORAGE_ACCOUNT = "azure.adls2.storage_account";
     public static final String AZURE_ADLS2_SHARED_KEY = "azure.adls2.shared_key";
+    public static final String AZURE_ADLS2_SAS_TOKEN = "azure.adls2.sas_token";
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_SECRET = "azure.adls2.oauth2_client_secret";
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT = "azure.adls2.oauth2_client_endpoint";
 

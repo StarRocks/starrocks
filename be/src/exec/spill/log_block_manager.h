@@ -64,7 +64,8 @@ public:
 private:
     StatusOr<LogBlockContainerPtr> get_or_create_container(const DirPtr& dir, const TUniqueId& fragment_instance_id,
                                                            int32_t plan_node_id, const std::string& plan_node_name,
-                                                           bool direct_io, BlockAffinityGroup affinity_group);
+                                                           bool direct_io, size_t block_size,
+                                                           BlockAffinityGroup affinity_group);
 
 private:
     typedef phmap::flat_hash_map<uint64_t, LogBlockContainerPtr> ContainerMap;

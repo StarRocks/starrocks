@@ -48,6 +48,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
+    protected static final String MATERIALIZED_VIEW_NAME = "mv0";
 
     // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
     private  String traceLogModule = "";
@@ -90,9 +91,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected class MVRewriteChecker {
-        private String mv;
         private final String query;
+        private String mvDBName;
         private String rewritePlan;
+        private String mv;
         private Exception exception;
         private String properties;
         private String traceLog;
@@ -108,10 +110,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker(String mv, String query) {
-            this(mv, query, null);
+            this(null, mv, query, null);
         }
 
-        public MVRewriteChecker(String mv, String query, String properties) {
+        public MVRewriteChecker(String mvDBName, String mv, String query, String properties) {
+            this.mvDBName = mvDBName;
             this.mv = mv;
             this.query = query;
             this.properties = properties;
@@ -126,12 +129,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 // create mv if needed
                 if (mv != null && !mv.isEmpty()) {
                     LOG.info("start to create mv:" + mv);
-                    String properties = this.properties != null ? "PROPERTIES (\n" +
-                            this.properties + ")" : "";
-                    String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                            " REFRESH MANUAL " +
-                            properties + " AS " +
-                            mv;
+                    String properties = Strings.isNullOrEmpty(this.properties) ? "" : "PROPERTIES (\n" +
+                            this.properties + ")";
+                    String mvName = getMVName();
+                    String mvSQL = String.format("CREATE MATERIALIZED VIEW %s \n" +
+                            " REFRESH MANUAL \n%s AS %s", mvName, properties, mv);
+                    System.out.println(mvSQL);
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
@@ -155,13 +158,18 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
                 if (mv != null && !mv.isEmpty()) {
                     try {
-                        starRocksAssert.dropMaterializedView("mv0");
+                        starRocksAssert.dropMaterializedView(getMVName());
                     } catch (Exception e) {
                         LOG.warn("drop materialized view failed:", e);
                     }
                 }
             }
             return this;
+        }
+
+        private String getMVName() {
+            return Strings.isNullOrEmpty(mvDBName) ? MATERIALIZED_VIEW_NAME
+                    : String.format("%s.%s", mvDBName, MATERIALIZED_VIEW_NAME);
         }
 
         public String getTraceLog() {
@@ -260,7 +268,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) throws RuntimeException {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        return testRewriteOK(null, mv, query, properties);
+    }
+
+    protected MVRewriteChecker testRewriteOK(String mvDBName, String mv, String query, String properties) throws RuntimeException {
+        MVRewriteChecker fixture = new MVRewriteChecker(mvDBName, mv, query, properties);
         MVRewriteChecker checker = fixture.rewrite();
         if (checker.getException() != null) {
             throw new RuntimeException(checker.getException());
@@ -269,7 +281,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, properties);
         return fixture.rewrite().failed();
     }
 
@@ -278,12 +290,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected MVRewriteChecker testRewriteNonmatch(String mv, String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, null);
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, null);
         return fixture.rewrite().nonMatch();
     }
 
     protected MVRewriteChecker rewrite(String mv, String query, String properties) throws Exception {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        MVRewriteChecker fixture = new MVRewriteChecker(null, mv, query, properties);
         MVRewriteChecker checker = fixture.rewrite();
         if (checker.getException() != null) {
             throw checker.getException();

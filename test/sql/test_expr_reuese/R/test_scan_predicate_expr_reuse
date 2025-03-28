@@ -1,0 +1,201 @@
+-- name: test_scan_predicate_expr_reuse
+CREATE TABLE `t` (
+  `v1` bigint NOT NULL COMMENT "",
+  `v2` bigint NULL COMMENT "",
+  `v3` bigint NULL COMMENT "",
+  `v4` array<string> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t select generate_series, generate_series, generate_series, array_repeat(cast(generate_series as string), 5) from table(generate_series(1, 100));
+-- result:
+-- !result
+select * from t where v1 = 10 and v2 = v3;
+-- result:
+10	10	10	["10","10","10","10","10"]
+-- !result
+select * from t where v1 = 10 or v2 = v3 order by v1 limit 3;
+-- result:
+1	1	1	["1","1","1","1","1"]
+2	2	2	["2","2","2","2","2"]
+3	3	3	["3","3","3","3","3"]
+-- !result
+select * from t where v1 = v3 and (v2 = 5 or v3 = 10) order by v1;
+-- result:
+5	5	5	["5","5","5","5","5"]
+10	10	10	["10","10","10","10","10"]
+-- !result
+select * from t where v1 < 10 and array_max(array_map(x->length(x) + v2, v4)) > 0 order by v1;
+-- result:
+1	1	1	["1","1","1","1","1"]
+2	2	2	["2","2","2","2","2"]
+3	3	3	["3","3","3","3","3"]
+4	4	4	["4","4","4","4","4"]
+5	5	5	["5","5","5","5","5"]
+6	6	6	["6","6","6","6","6"]
+7	7	7	["7","7","7","7","7"]
+8	8	8	["8","8","8","8","8"]
+9	9	9	["9","9","9","9","9"]
+-- !result
+set enable_scan_predicate_expr_reuse = false;
+-- result:
+-- !result
+select * from t where v1 = 10 and v2 = v3;
+-- result:
+10	10	10	["10","10","10","10","10"]
+-- !result
+select * from t where v1 = 10 or v2 = v3 order by v1 limit 3;
+-- result:
+1	1	1	["1","1","1","1","1"]
+2	2	2	["2","2","2","2","2"]
+3	3	3	["3","3","3","3","3"]
+-- !result
+select * from t where v1 = v3 and (v2 = 5 or v3 = 10) order by v1;
+-- result:
+5	5	5	["5","5","5","5","5"]
+10	10	10	["10","10","10","10","10"]
+-- !result
+select * from t where v1 < 10 and array_max(array_map(x->length(x) + v2, v4)) > 0 order by v1;
+-- result:
+1	1	1	["1","1","1","1","1"]
+2	2	2	["2","2","2","2","2"]
+3	3	3	["3","3","3","3","3"]
+4	4	4	["4","4","4","4","4"]
+5	5	5	["5","5","5","5","5"]
+6	6	6	["6","6","6","6","6"]
+7	7	7	["7","7","7","7","7"]
+8	8	8	["8","8","8","8","8"]
+9	9	9	["9","9","9","9","9"]
+-- !result
+CREATE TABLE `t0` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v1` array<bigint(20)> NULL COMMENT "",
+  `v2` array<bigint(20)> NULL COMMENT "",
+  `v3` array<bigint(20)> NULL COMMENT "",
+  `v4` struct<a int(11), b struct<a int(11)>> NULL COMMENT "",
+  `v5` struct<a int(11), b struct<a array<bigint(20)>>> NULL COMMENT "",
+  `v6` map<int(11),int(11)> NULL COMMENT "",
+  `v7` map<int(11),int(11)> NULL COMMENT "",
+  `v8` json NULL COMMENT "",
+  `v9` json NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 values 
+(1,[1],[1],[1],row(1,row(1)),row(1,row([1])),map{1:1},map{1:1,2:2},parse_json('{"a":{"b":1}}'),parse_json('{"a":1,"b":[1]}')),
+(2,[2],[2],[2],row(2,row(2)),row(2,row([2])),map{1:1},map{1:2,2:2},parse_json('{"a":{"b":2}}'),parse_json('{"a":1,"b":[1]}')),
+(3,[3],[3],[3],row(3,row(3)),row(3,row([3])),map{1:1},map{1:3,2:2},parse_json('{"a":{"b":3}}'),parse_json('{"a":1,"b":[1]}')),
+(4,[4],[4],[4],row(4,row(4)),row(4,row([4])),map{1:1},map{1:4,2:2},parse_json('{"a":{"b":4}}'),parse_json('{"a":1,"b":[1]}')),
+(5,[5],[5],[5],row(5,row(5)),row(5,row([5])),map{1:1},map{1:5,2:2},parse_json('{"a":{"b":5}}'),parse_json('{"a":1,"b":[1]}'));
+-- result:
+-- !result
+select k from t0 where v1[1] = v2[1] order by k;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select k from t0 where v1[1] = v2[1] order by k limit 1;
+-- result:
+1
+-- !result
+select k,v1 from t0 where v1[1] = v2[1] order by k;
+-- result:
+1	[1]
+2	[2]
+3	[3]
+4	[4]
+5	[5]
+-- !result
+select k,v2 from t0 where v1[1] = v2[1] order by k;
+-- result:
+1	[1]
+2	[2]
+3	[3]
+4	[4]
+5	[5]
+-- !result
+select k from t0 where array_length(v1) = array_length(v2) order by k;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select k from t0 where array_length(v1) = array_length(v5.b.a) order by k;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select k,v5 from t0 where array_length(v1) = array_length(v5.b.a) order by k;
+-- result:
+1	{"a":1,"b":{"a":[1]}}
+2	{"a":2,"b":{"a":[2]}}
+3	{"a":3,"b":{"a":[3]}}
+4	{"a":4,"b":{"a":[4]}}
+5	{"a":5,"b":{"a":[5]}}
+-- !result
+select k,v5.a from t0 where array_length(v1) = array_length(v5.b.a) order by k;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+select k from t0 where array_max(array_map(x->x+k, v5.b.a)) > 0 order by k;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select k from t0 where array_max(array_map((x,y,z)->x+y+z, v5.b.a, map_keys(v6), v1)) > 0 order by k;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select k,v5.a from t0 where array_max(array_map((x,y,z)->x+y+z, v5.b.a, map_keys(v6), v1)) > 0 order by k;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+select k from t0 where v8->'$.a.b' = v9->'$.a' order by k;
+-- result:
+1
+-- !result
+select k,v9->'$.b' from t0 where v8->'$.a.b' = v9->'$.a' order by k;
+-- result:
+1	[1]
+-- !result
+select k from t0 where cardinality(v1) + cardinality(v5.b.a) > 0 and cardinality(v1) + cardinality(v5.b.a) + cardinality(v6) > 0 order by k;
+-- result:
+1
+2
+3
+4
+5
+-- !result

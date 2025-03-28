@@ -17,13 +17,13 @@
 #include "column/chunk_extra_data.h"
 
 namespace starrocks {
-void ChunkExtraColumnsData::filter(const Buffer<uint8_t>& selection) const {
+void ChunkExtraColumnsData::filter(const Buffer<uint8_t>& selection) {
     for (auto& col : _columns) {
         col->filter(selection);
     }
 }
 
-void ChunkExtraColumnsData::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) const {
+void ChunkExtraColumnsData::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& col : _columns) {
         col->filter_range(selection, from, to);
     }
@@ -36,11 +36,11 @@ ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
         columns[i]->reserve(size);
     }
     auto extra_data_metas = _data_metas;
-    return std::make_shared<ChunkExtraColumnsData>(extra_data_metas, columns);
+    return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(columns));
 }
 
 void ChunkExtraColumnsData::append(const ChunkExtraColumnsData& src, size_t offset, size_t count) {
-    auto src_columns = src.columns();
+    auto& src_columns = src.columns();
     DCHECK_EQ(src_columns.size(), _columns.size());
     for (size_t i = 0; i < _columns.size(); ++i) {
         _columns[i]->append(*src_columns[i], offset, count);
@@ -49,7 +49,7 @@ void ChunkExtraColumnsData::append(const ChunkExtraColumnsData& src, size_t offs
 
 void ChunkExtraColumnsData::append_selective(const ChunkExtraColumnsData& src, const uint32_t* indexes, uint32_t from,
                                              uint32_t size) {
-    auto src_columns = src.columns();
+    auto& src_columns = src.columns();
     DCHECK_EQ(src_columns.size(), _columns.size());
     for (size_t i = 0; i < _columns.size(); ++i) {
         _columns[i]->append_selective(*src_columns[i], indexes, from, size);

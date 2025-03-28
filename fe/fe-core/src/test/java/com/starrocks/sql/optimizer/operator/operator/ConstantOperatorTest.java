@@ -62,7 +62,7 @@ public class ConstantOperatorTest {
     }
 
     @Test
-    public void testCaseToDateInvalid() {
+    public void testCastToDateInvalid() {
         String[] testCases = {
                 // Invalid year.
                 "20190-05-31",
@@ -110,7 +110,7 @@ public class ConstantOperatorTest {
     }
 
     @Test
-    public void testCaseDateToNumber() throws Exception {
+    public void testCastDateToNumber() throws Exception {
         ConstantOperator date = ConstantOperator.createDate(LocalDateTime.of(2023, 01, 01, 0, 0));
         ConstantOperator datetime = ConstantOperator.createDatetime(LocalDateTime.of(2023, 01, 01, 0, 0, 0));
 
@@ -140,6 +140,14 @@ public class ConstantOperatorTest {
 
         ConstantOperator datetimeDoubleNumber = ConstantOperator.createDouble(20230101000000L);
         Assert.assertEquals(datetimeDoubleNumber, datetime.castTo(Type.DOUBLE).get());
+    }
+
+    @Test
+    public void testCastTimeToDateTime() {
+        LocalDateTime now = LocalDateTime.now().withNano(0);
+        ConstantOperator time = ConstantOperator.createTime(now.getHour() * 3600D + now.getMinute() * 60D + now.getSecond());
+        ConstantOperator datetime = ConstantOperator.createDatetime(now);
+        Assert.assertEquals(datetime, time.castTo(Type.DATETIME).get());
     }
 
     @Test

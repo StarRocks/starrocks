@@ -858,4 +858,34 @@ public class BackupHandlerTest {
         } catch (Exception e1) {
         }
     }
+
+    @Test
+    public void testGetRunningBackupRestoreCount() {
+        handler = new BackupHandler();
+
+        BackupJob backupJob = new BackupJob("l1", 20000, "test1", null, 3600000, null, 1);
+        handler.replayAddJob(backupJob);
+        RestoreJob restoreJob = new RestoreJob("l2", "", 20001, "test2", null, true, 3, 3600000, null, 1, null, null);
+        handler.replayAddJob(restoreJob);
+
+        Map<Long, Long> result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(Long.valueOf(2), result.get(0L));
+
+        backupJob.setState(BackupJob.BackupJobState.CANCELLED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(1), result.get(0L));
+
+        backupJob.setState(BackupJob.BackupJobState.FINISHED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(1), result.get(0L));
+
+        restoreJob.setState(RestoreJob.RestoreJobState.CANCELLED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(0), result.get(0L));
+
+        restoreJob.setState(RestoreJob.RestoreJobState.FINISHED);
+        result = handler.getRunningBackupRestoreCount();
+        Assert.assertEquals(Long.valueOf(0), result.get(0L));
+    }
 }

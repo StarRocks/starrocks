@@ -3574,6 +3574,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+##### starlet_fslib_s3client_request_timeout_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
+- Introduced in: v3.3.9
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3768,16 +3777,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### loop_count_wait_fragments_finish
 
-- Default: 0
+- Default: 2
 - Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Unit: -
+- Is mutable: Yes
+- Description: The number of loops to be waited when the BE/CN process exits. Each loop is a fixed interval of 10 seconds. You can set it to `0` to disable the loop wait. From v3.4 onwards, this item is changed to mutable and its default value is changed from `0` to `2`.
+- Introduced in: v2.5
 
 ### Data Lake
 
@@ -3920,11 +3927,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_enable
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to enable Data Cache. `true` indicates Data Cache is enabled, and `false` indicates Data Cache is disabled.
+- Description: Whether to enable Data Cache. `true` indicates Data Cache is enabled, and `false` indicates Data Cache is disabled. The default value is changed to `true` from v3.3.
 - Introduced in: -
 
 ##### datacache_mem_size
@@ -3942,25 +3949,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
-- Introduced in: -
-
-##### datacache_disk_path
-
-- Default: `${STARROCKS_HOME}/datacache/`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;).
-- Introduced in: -
-
-##### datacache_meta_path
-
-- Default: `${STARROCKS_HOME}/datacache/`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the `$STARROCKS_HOME` path.
+- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
 - Introduced in: -
 
 ##### datacache_auto_adjust_enable
@@ -3974,20 +3963,20 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_disk_high_level
 
-- Default: 80
+- Default: 90
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache.
+- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache. From v3.4.0 onwards, the default value is changed from `80` to `90`.
 - Introduced in: v3.3.0
 
 ##### datacache_disk_safe_level
 
-- Default: 70
+- Default: 80
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible.
+- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible. From v3.4.0 onwards, the default value is changed from `70` to `80`.
 - Introduced in: v3.3.0
 
 ##### datacache_disk_low_level
@@ -4037,12 +4026,41 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_tiered_cache_enable
 
-- Default: true
+- Default: false 
 - Type: Boolean
 - Unit: -
 - Is mutable: No
 - Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
 - Introduced in: v3.2.5
+
+##### datacache_eviction_policy
+
+- Default: slru
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The eviction policy of Data Cache. Valid values: `lru` (least recently used) and `slru` (Segmented LRU).
+- Introduced in: v3.4.0
+
+##### datacache_inline_item_count_limit
+
+- Default: 130172
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
+- Introduced in: v3.4.0
+
+<!--
+##### datacache_unified_instance_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use a unified Data Cache instance for queries against external catalogs and cloud-native tables (in shared-data clusters).
+- Introduced in: v3.4.0
+-->
 
 ##### query_max_memory_limit_percent
 

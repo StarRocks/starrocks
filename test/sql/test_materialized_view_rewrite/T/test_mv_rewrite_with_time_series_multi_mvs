@@ -53,6 +53,8 @@ refresh materialized view test_mv3 with sync mode;
 [UC]analyze table test_mv3 WITH SYNC MODE;
 
 set enable_materialized_view_rewrite=true;
+set enable_materialized_view_timeseries_agg_pushdown_rewrite=true;
+set enable_materialized_view_multi_stages_rewrite=false;
 
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;")

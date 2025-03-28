@@ -84,7 +84,8 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                 result = handlePrepareTransaction(
                         db, label,
                         Optional.ofNullable(requestBody.getCommittedTablets()).orElse(new ArrayList<>(0)),
-                        Optional.ofNullable(requestBody.getFailedTablets()).orElse(new ArrayList<>(0))
+                        Optional.ofNullable(requestBody.getFailedTablets()).orElse(new ArrayList<>(0)),
+                        timeoutMillis
                 );
                 break;
             case TXN_COMMIT:
@@ -124,7 +125,8 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
     private TransactionResult handlePrepareTransaction(Database db,
                                                        String label,
                                                        List<TabletCommitInfo> committedTablets,
-                                                       List<TabletFailInfo> failedTablets) throws StarRocksException {
+                                                       List<TabletFailInfo> failedTablets,
+                                                       long timeoutMillis) throws StarRocksException {
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
         long txnId = txnState.getTransactionId();
@@ -133,7 +135,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         switch (txnStatus) {
             case PREPARE:
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
-                        dbId, txnId, committedTablets, failedTablets, new MiniLoadTxnCommitAttachment());
+                        dbId, txnId, committedTablets, failedTablets, new MiniLoadTxnCommitAttachment(), timeoutMillis);
                 result.addResultEntry(TransactionResult.TXN_ID_KEY, txnId);
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
@@ -162,7 +164,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         switch (txnStatus) {
             case PREPARED:
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .commitPreparedTransaction(db, txnId, timeoutMillis);
+                        .commitPreparedTransaction(db.getId(), txnId, timeoutMillis);
                 result.addResultEntry(TransactionResult.TXN_ID_KEY, txnId);
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;

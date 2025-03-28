@@ -19,11 +19,11 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
+public class MvRewriteMultiTableJoinTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         prepareDatas();
     }
 
@@ -104,7 +104,7 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "\"replication_num\"=\"1\",\n" +
                 "\"in_memory\"=\"false\",\n" +
                 "\"storage_format\"=\"DEFAULT\",\n" +
-                "\"enable_persistent_index\"=\"false\",\n" +
+                "\"enable_persistent_index\"=\"true\",\n" +
                 "\"compression\"=\"LZ4\"\n" +
                 ")");
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +

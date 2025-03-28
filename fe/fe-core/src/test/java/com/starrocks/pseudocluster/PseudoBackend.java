@@ -74,6 +74,8 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PUpdateTransactionStateRequest;
+import com.starrocks.proto.PUpdateTransactionStateResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
@@ -1095,6 +1097,11 @@ public class PseudoBackend {
         @Override
         public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request) {
+            throw new org.apache.commons.lang.NotImplementedException("TODO");
         }
     }
 

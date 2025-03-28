@@ -38,16 +38,6 @@ When you load a data file into a StarRocks table, the data of the data file may 
   
   If the data file is generated from Apache Hive™, you can extract partition field values from the file path.
 
-## Prerequisites
-
-### Broker Load
-
-See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](../loading/cloud_storage_load.md).
-
-### Routine load
-
-If you choose [Routine Load](./RoutineLoad.md), make sure that topics are created in your Apache Kafka® cluster. Assume that you have created two topics: `topic1` and `topic2`.
-
 ## Data examples
 
 1. Create data files in your local file system.
@@ -272,7 +262,7 @@ If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execu
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
 COLUMNS TERMINATED BY ",",
-COLUMNS (user_id, user_gender, event_date, event_type)
+COLUMNS (user_id, user_gender, event_date, event_type),
 WHERE event_type = 1
 FROM KAFKA
 (

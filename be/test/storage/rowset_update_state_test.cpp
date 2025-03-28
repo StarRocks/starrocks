@@ -239,7 +239,7 @@ TEST_F(RowsetUpdateStateTest, with_deletes) {
     Int64Column deletes;
     deletes.append_numbers(delete_keys.data(), sizeof(int64_t) * delete_keys.size());
     RowsetSharedPtr rowset = create_rowset(_tablet, keys, &deletes);
-    auto st = _tablet->rowset_commit(2, rowset, 0);
+    auto st = _tablet->rowset_commit(2, rowset, 2000);
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_EQ(2, _tablet->updates()->max_version());
 }

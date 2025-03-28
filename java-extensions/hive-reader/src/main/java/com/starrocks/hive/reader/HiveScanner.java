@@ -196,9 +196,18 @@ public class HiveScanner extends ConnectorScanner {
         deserializer = getDeserializer(jobConf, properties, serde);
         rowInspector = getTableObjectInspector(deserializer);
         for (int i = 0; i < requiredFields.length; i++) {
-            StructField field = rowInspector.getStructFieldRef(requiredFields[i]);
-            structFields[i] = field;
-            fieldInspectors[i] = field.getFieldObjectInspector();
+            StructField field = null;
+            try {
+                // for avro file, schema could be defined in the field is `SerDe.avro.schema.url`
+                // if schema is incompatible, field can not be found.
+                field = rowInspector.getStructFieldRef(requiredFields[i]);
+            } catch (RuntimeException e) {
+                LOG.warn("Failed to find field", e);
+            }
+            if (field != null) {
+                structFields[i] = field;
+                fieldInspectors[i] = field.getFieldObjectInspector();
+            }
         }
         key = (Writable) reader.createKey();
         value = (Writable) reader.createValue();
@@ -241,7 +250,10 @@ public class HiveScanner extends ConnectorScanner {
                 }
                 Object rowData = deserializer.deserialize(value);
                 for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
+                    Object fieldData = null;
+                    if (structFields[i] != null) {
+                        fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
+                    }
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {

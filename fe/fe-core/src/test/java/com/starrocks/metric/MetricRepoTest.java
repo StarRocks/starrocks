@@ -16,7 +16,9 @@ package com.starrocks.metric;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -27,6 +29,8 @@ public class MetricRepoTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        // init brpc so brpc metrics can be collected
+        BrpcProxy.getBackendService(new TNetworkAddress("127.0.0.1", 12345));
         PlanTestBase.beforeClass();
 
         starRocksAssert.withDatabase("test_metric");
@@ -61,6 +65,7 @@ public class MetricRepoTest extends PlanTestBase {
         String json = visitor.build();
         Assert.assertTrue(StringUtils.isNotEmpty(json));
         Assert.assertTrue(json.contains("test_metric"));
+        Assert.assertTrue(json.contains("brpc_pool_numactive"));
     }
 
 }

@@ -62,7 +62,9 @@ public class Daemon extends Thread {
     public synchronized void start() {
         if (isRunning.compareAndSet(false, true)) {
             isStopped.set(false);
-            super.start();
+            if (getState() == State.NEW) {
+                super.start();
+            }
         }
     }
 
@@ -99,7 +101,7 @@ public class Daemon extends Thread {
             }
 
             try {
-                Thread.sleep(intervalMs);
+                Thread.sleep(getInterval());
             } catch (InterruptedException e) {
                 LOG.error("InterruptedException: ", e);
             }

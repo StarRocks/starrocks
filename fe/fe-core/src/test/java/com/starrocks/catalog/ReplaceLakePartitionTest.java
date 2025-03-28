@@ -25,15 +25,13 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
-import mockit.Expectations;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collection;
@@ -59,15 +57,43 @@ public class ReplaceLakePartitionTest {
     private StarOSAgent starOSAgent;
 
     @Mocked
-    private WarehouseManager warehouseManager;
-
-    @Mocked
     private EditLog editLog;
 
     public ReplaceLakePartitionTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
-        warehouseManager = new WarehouseManager();
-        warehouseManager.initDefaultWarehouse();
+    }
+
+    @Before
+    public void setUp() {
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logErasePartition(long partitionId) {
+                return;
+            }
+        };
     }
 
     LakeTable buildLakeTableWithTempPartition(PartitionType partitionType) {
@@ -122,49 +148,6 @@ public class ReplaceLakePartitionTest {
     }
 
     private void erasePartitionOrTableAndUntilFinished(long id) {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
-                return shardInfo;
-            }
-        };
-
-        new MockUp<EditLog>() {
-            @Mock
-            public void logErasePartition(long partitionId) {
-                return;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getBackgroundWarehouse() {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
         while (GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(id) != null) {
             ExceptionChecker.expectThrowsNoException(()
                     -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));

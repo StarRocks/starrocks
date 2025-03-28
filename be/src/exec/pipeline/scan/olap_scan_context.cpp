@@ -52,14 +52,17 @@ void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_i
     auto key = std::make_pair(operator_seq, source_index);
     VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
                             _active_inputs.size());
-    _active_inputs.emplace(key);
+    _num_active_inputs += _active_inputs.emplace(key).second;
 }
 
 void OlapScanContext::detach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
     VLOG_ROW << fmt::format("detach_shared_input ({}, {}), remain {}", operator_seq, source_index,
                             _active_inputs.size());
-    _active_inputs.erase(key);
+    int erased = _active_inputs.erase(key);
+    if (erased && _num_active_inputs.fetch_sub(1) == 1) {
+        _active_inputs_empty = true;
+    }
 }
 
 bool OlapScanContext::has_active_input() const {
@@ -111,7 +114,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 
     // eval_const_conjuncts.
     Status status;
-    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
+    RETURN_IF_ERROR(ScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     if (!status.ok()) {
         return status;
     }
@@ -129,7 +132,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
         enable_column_expr_predicate = thrift_olap_scan_node.enable_column_expr_predicate;
     }
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = &_obj_pool;
@@ -142,8 +145,8 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
 
-    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
-    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.
     RETURN_IF_ERROR(cm.parse_conjuncts());

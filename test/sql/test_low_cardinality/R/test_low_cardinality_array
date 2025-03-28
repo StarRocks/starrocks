@@ -10,7 +10,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -27,7 +27,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -414,7 +414,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -504,7 +504,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"

@@ -31,6 +31,9 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
+#pragma once
+
 #ifdef WITH_TENANN
 #include "storage/del_vector.h"
 #include "storage/range.h"
@@ -39,10 +42,10 @@
 
 namespace starrocks {
 
-class DelIdFilter : public tenann::IdFilter {
+class DelIdFilter final : public tenann::IdFilter {
 public:
-    DelIdFilter(const SparseRange<>& scan_range);
-    ~DelIdFilter() = default;
+    explicit DelIdFilter(const SparseRange<>& scan_range);
+    ~DelIdFilter() override = default;
 
     bool IsMember(tenann::idx_t id) const override;
 

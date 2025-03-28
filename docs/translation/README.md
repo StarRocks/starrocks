@@ -1,16 +1,18 @@
 # Translating docs with GPT
 
-This README describes using GPT-4o to translate from Chinese to English, or from English to Chinese. The system used is specific to Docusaurus Markdown and MDX. We are using code provided by Weights and Biases, as they also use Docusaurus and have expertise with LLMs.
+This README describes using GPT-4o to translate from Chinese to English, or from English to Chinese or Japanese. The system used is specific to Docusaurus Markdown and MDX. We are using code provided by Weights and Biases, as they also use Docusaurus and have expertise with LLMs.
 
-To translate an English doc:
+## 1. Build the Docker image
 
-## Set up the environment
+  See the [README in the `DanRoscigno/gpt-translate` repo](https://github.com/DanRoscigno/gpt_translate/blob/main/README.md). Build the Docker image from there.
+
+## 2. Set up the environment
 
 There are three environment variables that need to be set in the file starrocks/docs/translation/.env:
 
 > Tip
 >
-> Copy the file `starrocks/translation/.env.sample` to `starrocks/translation/.env` and edit with your API keys, or contact the Doc team leader for keys.
+> Copy the file `starrocks/docs/translation/.env.sample` to `starrocks/docs/translation/.env` and edit with your API keys, or contact the Doc team leader for keys.
 
 - OPENAI_API_KEY
 - WANDB_API_KEY
@@ -27,8 +29,7 @@ OPENAI_API_KEY=sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 WANDB_API_KEY=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 GIT_PYTHON_REFRESH=quiet
 ```
-
-## Files to translate
+## 3. Identify the files to translate
 
 Provide the paths of the files to translate in the file `starrocks/docs/translation/files.txt`
 
@@ -42,24 +43,24 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 <tr>
 <td>
 
-### From English to Chinese
+#### From English to Chinese or Japanese
 
 `starrocks/docs/translation/files.txt`
 
 ```bash
-../en/quick_start/quick_start.md
+../en/quick_start/routine-load.md
 ../en/deployment/helm.md
 ```
 
 </td>
 <td>
 
-### From Chinese to English
+#### From Chinese to English
 
 `starrocks/docs/translation/files.txt`
 
 ```bash
-../zh/quick_start/quick_start.md
+../zh/quick_start/routine-load.md
 ../zh/deployment/helm.md
 ```
 
@@ -67,16 +68,23 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 </tr>
 </table>
 
-## Build the Docker image
+> Tip:
+>
+> Use `find` to get all of the Markdown files under a directory. For example, to translate alll of the include files under `docs/en/_assets/`:
+>
+> ```bash
+> find ../en/_assets -type f -name "*\.md*" > files.txt
+> ```
 
-This probably only needs to be done once unless the folks from Weights and Biases modify the Python package `gpt_translate`.
+Also:
 
-```bash
-cd docs/translation
-docker build -f translation.Dockerfile -t translate .
-```
+> Note:
+>
+> Known issues:
+>
+> Pydantic error about serialization: There is an error coming up after the translation is complete. I have not debugged this yet, I will see if the author of the tranlation package can help, he knows way more about Python than I do.
 
-## Translate the docs
+## 4. Translate the docs
 
 Change dir back up to the `starrocks` folder so that you can mount the `docs/` folder in the container.
 
@@ -97,6 +105,18 @@ docker run -v ./docs:/docs \
   --env-file ./docs/translation/.env \
   translate \
   bash /docs/translation/scripts/en-to-zh.translate.sh
+```
+
+</td>
+<td>
+
+### From English to Japanese
+
+```bash
+docker run -v ./docs:/docs \
+  --env-file ./docs/translation/.env \
+  translate \
+  bash /docs/translation/scripts/en-to-ja.translate.sh
 ```
 
 </td>

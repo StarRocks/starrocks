@@ -75,7 +75,7 @@ public class UseDbStmtTest {
                 result = true;
                 minTimes = 0;
 
-                metadataMgr.getDb("default_catalog", "db");
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "db");
                 result = db;
                 minTimes = 0;
             }
@@ -83,6 +83,7 @@ public class UseDbStmtTest {
 
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(UserIdentity.ROOT);
         StatementBase statement = SqlParser.parseSingleStatement("use default_catalog.db",
                 ctx.getSessionVariable().getSqlMode());
 

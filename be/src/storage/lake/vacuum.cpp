@@ -274,21 +274,23 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     return Status::OK();
 }
 
-static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, int64_t tablet_id,
+static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, TabletInfoPB& tablet_info,
                                       int64_t grace_timestamp, int64_t min_retain_version,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
-                                      int64_t* total_datafile_size) {
+                                      int64_t* total_datafile_size, int64_t* vacuumed_version) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     auto final_retain_version = min_retain_version;
     auto version = final_retain_version;
+    auto tablet_id = tablet_info.tablet_id();
+    auto min_version = std::max(1L, tablet_info.min_version());
     // grace_timestamp <= 0 means no grace timestamp
     auto skip_check_grace_timestamp = grace_timestamp <= 0;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
     // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
-    while (version > 0) {
+    while (version >= min_version) {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
@@ -347,15 +349,20 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     }
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
-
     if (!skip_check_grace_timestamp) {
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
+        // The final_retain_version is set to min_retain_version or minmum exist version which has garbage files.
+        // So we set vacuumed_version to `final_retain_version - 1` to avoid the garbage files of final_retain_version can
+        // not be deleted
+        *vacuumed_version = final_retain_version - 1;
         return Status::OK();
     }
+    *vacuumed_version = final_retain_version;
     DCHECK_LE(version, final_retain_version);
     for (auto v = version + 1; v < final_retain_version; v++) {
         RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
     }
+    tablet_info.set_min_version(final_retain_version);
     return Status::OK();
 }
 
@@ -370,10 +377,12 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
 }
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
-                                     const std::vector<int64_t>& tablet_ids, int64_t min_retain_version,
-                                     int64_t grace_timestamp, int64_t* vacuumed_files, int64_t* vacuumed_file_size) {
+                                     std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
+                                     int64_t grace_timestamp, int64_t* vacuumed_files, int64_t* vacuumed_file_size,
+                                     int64_t* vacuumed_version) {
     DCHECK(tablet_mgr != nullptr);
-    DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
+    DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
+                          [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
     DCHECK(min_retain_version >= 0);
     DCHECK(grace_timestamp >= 0);
     DCHECK(vacuumed_files != nullptr);
@@ -382,17 +391,24 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
     };
-
-    for (auto tablet_id : tablet_ids) {
+    int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
+    for (auto& tablet_info : tablet_infos) {
+        int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
-                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size));
+        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
+                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size,
+                                                &tablet_vacuumed_version));
         RETURN_IF_ERROR(datafile_deleter.finish());
         RETURN_IF_ERROR(metafile_deleter.finish());
+        if (final_vacuum_version > tablet_vacuumed_version) {
+            // set partition vacuumed_version to min tablet vacuumed version
+            final_vacuum_version = tablet_vacuumed_version;
+        }
         (*vacuumed_files) += datafile_deleter.delete_count();
         (*vacuumed_files) += metafile_deleter.delete_count();
     }
+    *vacuumed_version = final_vacuum_version;
     return Status::OK();
 }
 
@@ -448,8 +464,8 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     if (UNLIKELY(tablet_mgr == nullptr)) {
         return Status::InvalidArgument("tablet_mgr is null");
     }
-    if (UNLIKELY(request.tablet_ids_size() == 0)) {
-        return Status::InvalidArgument("tablet_ids is empty");
+    if (UNLIKELY(request.tablet_ids_size() == 0 && request.tablet_infos_size() == 0)) {
+        return Status::InvalidArgument("both tablet_ids and tablet_infos are empty");
     }
     if (UNLIKELY(request.min_retain_version() <= 0)) {
         return Status::InvalidArgument("value of min_retain_version is zero or negative");
@@ -458,24 +474,41 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         return Status::InvalidArgument("value of grace_timestamp is zero or nagative");
     }
 
-    auto tablet_ids = std::vector<int64_t>(request.tablet_ids().begin(), request.tablet_ids().end());
-    auto root_loc = tablet_mgr->tablet_root_location(tablet_ids[0]);
+    auto tablet_infos = std::vector<TabletInfoPB>();
+    if (request.tablet_infos_size() > 0) {
+        tablet_infos.reserve(request.tablet_infos_size());
+        tablet_infos.insert(tablet_infos.begin(), request.tablet_infos().begin(), request.tablet_infos().end());
+    } else { // This is a request from older version FE
+        tablet_infos.reserve(request.tablet_ids_size());
+        for (const auto& tablet_id : request.tablet_ids()) {
+            auto& tablet_info = tablet_infos.emplace_back();
+            tablet_info.set_tablet_id(tablet_id);
+            tablet_info.set_min_version(0);
+        }
+    }
+    auto root_loc = tablet_mgr->tablet_root_location(tablet_infos[0].tablet_id());
     auto min_retain_version = request.min_retain_version();
     auto grace_timestamp = request.grace_timestamp();
     auto min_active_txn_id = request.min_active_txn_id();
 
     int64_t vacuumed_files = 0;
     int64_t vacuumed_file_size = 0;
+    int64_t vacuumed_version = 0;
 
-    std::sort(tablet_ids.begin(), tablet_ids.end());
+    std::sort(tablet_infos.begin(), tablet_infos.end(),
+              [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); });
 
-    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_ids, min_retain_version, grace_timestamp,
-                                           &vacuumed_files, &vacuumed_file_size));
+    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
+                                           &vacuumed_files, &vacuumed_file_size, &vacuumed_version));
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
     }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);
+    response->set_vacuumed_version(vacuumed_version);
+    for (const auto& tablet_info : tablet_infos) {
+        response->add_tablet_infos()->CopyFrom(tablet_info);
+    }
     return Status::OK();
 }
 

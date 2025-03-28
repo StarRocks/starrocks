@@ -13,7 +13,7 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <paimon.version>0.8.2</paimon.version>
+        <paimon.version>1.0.1</paimon.version>
     </properties>
 
     <dependencies>
@@ -55,6 +55,12 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.thrift</groupId>
+            <artifactId>libthrift</artifactId>
+            <version>0.20.0</version>
         </dependency>
 
         <dependency>

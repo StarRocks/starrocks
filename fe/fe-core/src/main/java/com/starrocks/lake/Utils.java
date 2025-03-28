@@ -43,7 +43,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -54,9 +53,10 @@ public class Utils {
     }
 
     public static Long chooseNodeId(ShardInfo shardInfo) {
-        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
-        if (!ids.isEmpty()) {
-            return ids.iterator().next();
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(shardInfo);
+        } catch (StarRocksException e) {
+            // do nothing
         }
         try {
             return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
@@ -101,14 +101,15 @@ public class Utils {
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, long warehouseId)
             throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, warehouseId);
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, warehouseId, null);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                            long baseVersion, long newVersion,
                                            Map<Long, Double> compactionScores,
                                            Map<ComputeNode, List<Long>> nodeToTablets,
-                                           long warehouseId)
+                                           long warehouseId,
+                                           Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
         if (nodeToTablets == null) {
             nodeToTablets = new HashMap<>();
@@ -121,6 +122,7 @@ public class Utils {
             warehouseId = warehouseManager.getBackgroundWarehouse().getId();
         }
 
+        List<Long> rebuildPindexTabletIds = new ArrayList<>();
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
@@ -132,6 +134,10 @@ public class Utils {
                 }
             }
             nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
+            if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
+                rebuildPindexTabletIds.add(tablet.getId());
+                LOG.info("lake tablet {} publish rebuild pindex version {}", tablet.getId(), baseVersion);
+            }
         }
 
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
@@ -143,6 +149,9 @@ public class Utils {
             request.tabletIds = entry.getValue(); // todo: limit the number of Tablets sent to a single node
             request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
             request.txnInfos = txnInfos;
+            if (!rebuildPindexTabletIds.isEmpty()) {
+                request.rebuildPindexTabletIds = rebuildPindexTabletIds;
+            }
 
             ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -161,6 +170,9 @@ public class Utils {
                 if (compactionScores != null && response != null && response.compactionScores != null) {
                     compactionScores.putAll(response.compactionScores);
                 }
+                if (baseVersion == 1 && tabletRowNum != null && response != null && response.tabletRowNums != null) {
+                    tabletRowNum.putAll(response.tabletRowNums);
+                }
             } catch (Exception e) {
                 throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
             }
@@ -169,10 +181,10 @@ public class Utils {
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, Map<Long, Double> compactionScores,
-                                      long warehouseId)
+                                      long warehouseId, Map<Long, Long> tabletRowNums)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
-        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, warehouseId);
+        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, warehouseId, tabletRowNums);
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long version, long warehouseId)

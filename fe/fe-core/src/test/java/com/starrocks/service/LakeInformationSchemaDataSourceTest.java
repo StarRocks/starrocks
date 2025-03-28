@@ -16,8 +16,6 @@ package com.starrocks.service;
 
 import com.google.gson.Gson;
 import com.starrocks.server.RunMode;
-import com.starrocks.service.ExecuteEnv;
-import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;

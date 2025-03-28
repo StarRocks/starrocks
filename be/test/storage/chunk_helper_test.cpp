@@ -240,7 +240,7 @@ TEST_F(ChunkHelperTest, SegmentedChunk) {
 
     EXPECT_EQ(409600, segmented_chunk->num_rows());
     EXPECT_EQ(7, segmented_chunk->num_segments());
-    EXPECT_EQ(8043542, segmented_chunk->memory_usage());
+    EXPECT_EQ(7781406, segmented_chunk->memory_usage());
     EXPECT_EQ(2, segmented_chunk->columns().size());
     auto column0 = segmented_chunk->columns()[0];
     EXPECT_EQ(false, column0->is_nullable());
@@ -254,7 +254,7 @@ TEST_F(ChunkHelperTest, SegmentedChunk) {
     segmented_chunk->reset();
     EXPECT_EQ(0, segmented_chunk->num_rows());
     EXPECT_EQ(7, segmented_chunk->num_segments());
-    EXPECT_EQ(8043542, segmented_chunk->memory_usage());
+    EXPECT_EQ(7781406, segmented_chunk->memory_usage());
 
     // slicing
     segmented_chunk = build_segmented_chunk();
@@ -300,7 +300,7 @@ ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols,
     auto chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < cols; i++) {
         auto col = Int8Column::create(rows, reserve_size);
-        chunk->append_column(col, i);
+        chunk->append_column(std::move(col), i);
     }
     return chunk;
 }

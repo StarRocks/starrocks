@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
@@ -25,13 +26,12 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -42,13 +42,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.mv.MVCorrelation;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -61,6 +58,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -69,9 +67,10 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.planner.MaterializedViewTestBase.getRefBaseTablePartitionColumn;
 
-public class MvRewritePreprocessorTest extends MvRewriteTestBase {
+public class MvRewritePreprocessorTest extends MVTestBase {
     @BeforeClass
-    public static void before() throws Exception {
+    public static void beforeClass() throws Exception {
+        MVTestBase.beforeClass();
         starRocksAssert.useTable("t0");
         starRocksAssert.useTable("t1");
         starRocksAssert.useTable("t2");
@@ -96,21 +95,6 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
     @Test
     public void testOptimizer() throws Exception {
-        Optimizer optimizer = new Optimizer();
-        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleBased());
-        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizer.getOptimizerConfig().isRuleSetTypeDisable(RuleSetType.AGGREGATE_REWRITE));
-
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRule(RuleType.TF_MERGE_TWO_PROJECT);
-        optimizerConfig.disableRuleSet(RuleSetType.PUSH_DOWN_PREDICATE);
-        Optimizer optimizer1 = new Optimizer(optimizerConfig);
-        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleBased());
-        Assert.assertFalse(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_AGG_RULE));
-        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
-        Assert.assertFalse(optimizer1.getOptimizerConfig().isRuleSetTypeDisable(RuleSetType.COLLECT_CTE));
-        Assert.assertTrue(optimizer1.getOptimizerConfig().isRuleSetTypeDisable(RuleSetType.PUSH_DOWN_PREDICATE));
-
         String sql = "select v1, sum(v3) from t0 where v1 < 10 group by v1";
         Pair<String, ExecPlan> result = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertNotNull(result);
@@ -122,13 +106,32 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                 .transformWithSelectLimit(query.getQueryRelation());
-        OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+        Assert.assertFalse(optimizerContext.getOptimizerOptions().isRuleBased());
+        Assert.assertFalse(optimizerContext.getOptimizerOptions().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
+        Assert.assertFalse(optimizerContext.getOptimizerOptions().isRuleDisable(RuleType.GP_AGGREGATE_REWRITE));
+
+        OptExpression expr = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assert.assertTrue(expr.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator);
         Assert.assertNotNull(expr.getInputs().get(0).getOp().getPredicate());
 
-        OptExpression expr1 = optimizer1.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+        OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
+        optimizerOptions.disableRule(RuleType.TF_MERGE_TWO_PROJECT);
+        optimizerOptions.disableRule(RuleType.GP_PUSH_DOWN_PREDICATE);
+        OptimizerContext optimizerContext1 = OptimizerFactory.mockContext(connectContext, columnRefFactory,
+                optimizerOptions);
+        Optimizer optimizer1 = OptimizerFactory.create(optimizerContext1);
+        Assert.assertTrue(optimizerContext1.getOptimizerOptions().isRuleBased());
+        Assert.assertFalse(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.TF_MERGE_TWO_AGG_RULE));
+        Assert.assertTrue(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.TF_MERGE_TWO_PROJECT));
+        Assert.assertFalse(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.GP_COLLECT_CTE));
+        Assert.assertTrue(optimizerContext1.getOptimizerOptions().isRuleDisable(RuleType.GP_PUSH_DOWN_PREDICATE));
+
+        OptExpression expr1 = optimizer1.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
 
         // test timeout
@@ -139,7 +142,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
         OptExpression tree = OptExpression.create(new LogicalTreeAnchorOperator(), logicalPlan.getRoot());
         optimizer1.getContext().getTaskScheduler().pushTask(
-                new RewriteTreeTask(rootTaskContext, tree, Lists.newArrayList(timeoutRule), true));
+                new RewriteTreeTask(rootTaskContext, tree, timeoutRule, true));
         try {
             optimizer1.getContext().getTaskScheduler().executeTasks(rootTaskContext);
         } catch (Exception e) {
@@ -167,9 +170,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                 .transformWithSelectLimit(query.getQueryRelation());
-        Optimizer optimizer = new Optimizer();
-        OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext, columnRefFactory));
+        OptExpression expr = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
         Assert.assertNotNull(expr);
         Assert.assertEquals(2, optimizer.getContext().getCandidateMvs().size());
 
@@ -212,9 +215,10 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transformWithSelectLimit(query.getQueryRelation());
-            Optimizer optimizer = new Optimizer();
-            OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext,
+                    columnRefFactory));
+            OptExpression expr = optimizer.optimize(logicalPlan.getRoot(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
             Assert.assertNotNull(expr);
             Assert.assertEquals(1, optimizer.getContext().getCandidateMvs().size());
             MaterializationContext materializationContext = optimizer.getContext().getCandidateMvs().iterator().next();
@@ -224,25 +228,16 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             Pair<Table, Column> partitionTableAndColumn = getRefBaseTablePartitionColumn(mv);
             Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-            ScalarOperator scalarOperator = materializationContext.getMvPartialPartitionPredicate();
-            if (scalarOperator != null) {
-                Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
-                Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
-            }
-
             refreshMaterializedView("test", "mv_4");
             executeInsertSql(connectContext, "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
-            Optimizer optimizer2 = new Optimizer();
-            OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Optimizer optimizer2 = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext,
+                    columnRefFactory));
+            OptExpression expr2 = optimizer2.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
             Assert.assertNotNull(expr2);
             MaterializationContext materializationContext2 =
                     optimizer2.getContext().getCandidateMvs().iterator().next();
             Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
-            ScalarOperator scalarOperator2 = materializationContext2.getMvPartialPartitionPredicate();
-            if (scalarOperator2 != null) {
-                Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
-            }
             starRocksAssert.dropMaterializedView("mv_4");
         }
 
@@ -259,28 +254,19 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             QueryStatement query = (QueryStatement) stmt;
 
-            Optimizer optimizer3 = new Optimizer();
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transformWithSelectLimit(query.getQueryRelation());
-            OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Optimizer optimizer3 =
+                    OptimizerFactory.create(OptimizerFactory.mockContext(connectContext, columnRefFactory));
+            OptExpression expr3 = optimizer3.optimize(logicalPlan.getRoot(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
             Assert.assertNotNull(expr3);
             MaterializationContext materializationContext3 =
                     optimizer3.getContext().getCandidateMvs().iterator().next();
             Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
             List<LogicalScanOperator> scanExpr3 = MvUtils.getScanOperator(materializationContext3.getMvExpression());
             Assert.assertEquals(1, scanExpr3.size());
-            ScalarOperator scalarOperator3 = materializationContext3.getMvPartialPartitionPredicate();
-            if (scalarOperator3 != null) {
-                Assert.assertNotNull(scalarOperator3);
-                Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
-                Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
-                Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
-                Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
-                ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
-                Assert.assertEquals("k1", columnRef.getName());
-            }
             LogicalOlapScanOperator scanOperator = materializationContext3.getScanMvOperator();
             Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
         }
@@ -288,8 +274,8 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
     private Pair<MvRewritePreprocessor, OptExpression> buildMvProcessor(String query) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        OptimizerConfig optimizerConfig = new OptimizerConfig();
-        OptimizerContext context = new OptimizerContext(new Memo(), columnRefFactory, connectContext, optimizerConfig);
+        OptimizerOptions optimizerOptions = new OptimizerOptions();
+        OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory, optimizerOptions);
 
         try {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(query, connectContext);
@@ -339,14 +325,14 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
-                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Set<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
                 Assert.assertEquals(4, relatedMVs.size());
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
                 // disable plan cache will make the test more stable
                 connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
-                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertTrue(validMVs.size() >= 1);
                 if (validMVs.size() == 2) {
                     Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
@@ -369,12 +355,12 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
-                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Set<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
                 Assert.assertEquals(4, relatedMVs.size());
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
-                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertTrue(validMVs.size() == 2);
                 Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_2"));
             }
@@ -417,14 +403,14 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
-                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Set<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
                 Assert.assertEquals(4, relatedMVs.size());
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
                 // disable plan cache will make the test more stable
                 connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
-                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertTrue(validMVs.size() >= 1);
                 if (validMVs.size() == 2) {
                     Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
@@ -451,13 +437,13 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
-                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Set<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
                 Assert.assertEquals(4, relatedMVs.size());
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
-                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(2, validMVs.size());
                 Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_2"));
 
@@ -484,54 +470,54 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
             long currentTime = System.currentTimeMillis();
             {
-                Queue<MvRewritePreprocessor.MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
                 for (int i = 0; i < 5; i++) {
                     String mvName = String.format("mv_%s", i + 1);
                     MaterializedView mv = getMv(DB_NAME, mvName);
                     mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
-                    MvRewritePreprocessor.MVCorrelation mvCorrelation = new MvRewritePreprocessor.MVCorrelation(mv,
+                    MVCorrelation mvCorrelation = new MVCorrelation(mv,
                             i, i, currentTime + i * 10);
                     bestRelatedMVs.add(mvCorrelation);
                 }
 
                 for (int i = 0; i < 5; i++) {
-                    MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", i + 1);
                     Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
                 }
             }
 
             {
-                Queue<MvRewritePreprocessor.MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
                 for (int i = 0; i < 5; i++) {
                     String mvName = String.format("mv_%s", i + 1);
                     MaterializedView mv = getMv(DB_NAME, mvName);
                     mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
-                    MvRewritePreprocessor.MVCorrelation mvCorrelation = new MvRewritePreprocessor.MVCorrelation(mv,
+                    MVCorrelation mvCorrelation = new MVCorrelation(mv,
                             1, i, currentTime + i * 10);
                     bestRelatedMVs.add(mvCorrelation);
                 }
 
                 for (int i = 0; i < 5; i++) {
-                    MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", 5 - i);
                     Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
                 }
             }
 
             {
-                Queue<MvRewritePreprocessor.MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
                 for (int i = 0; i < 5; i++) {
                     String mvName = String.format("mv_%s", i + 1);
                     MaterializedView mv = getMv(DB_NAME, mvName);
                     mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
-                    MvRewritePreprocessor.MVCorrelation mvCorrelation = new MvRewritePreprocessor.MVCorrelation(mv,
+                    MVCorrelation mvCorrelation = new MVCorrelation(mv,
                             1, 0, currentTime + i * 10);
                     bestRelatedMVs.add(mvCorrelation);
                 }
 
                 for (int i = 0; i < 5; i++) {
-                    MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", i + 1);
                     Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
                 }
@@ -566,13 +552,13 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
-                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Set<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
                 Assert.assertEquals(5, relatedMVs.size());
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4", "mv_5"));
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
-                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(2, validMVs.size());
                 Assert.assertTrue(containsMV(validMVs, "mv_4", "mv_5"));
 
@@ -618,20 +604,19 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
-                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Set<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
                 Assert.assertEquals(relatedMVs.size(), mvNum);
-                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(validMVs.size(), oldVal);
                 Set<String> expectMvs = Sets.newHashSet();
                 for (int i = 0; i < oldVal; i++) {
                     String mvName = String.format("mv_%s", mvNum - i - 1);
                     expectMvs.add(mvName);
                 }
-                for (MaterializedView mv : validMVs) {
-                    Assert.assertTrue(expectMvs.contains(mv.getName()));
+                for (MaterializedViewWrapper wrapper : validMVs) {
+                    Assert.assertTrue(expectMvs.contains(wrapper.getMV().getName()));
                 }
-                Set<MvRewritePreprocessor.MvWithPlanContext> mvWithPlanContexts =
-                        preprocessor.getMvWithPlanContext(validMVs);
+                List<MaterializedViewWrapper> mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
                 Assert.assertEquals(mvWithPlanContexts.size(), oldVal * 2);
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
@@ -653,8 +638,8 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
     }
 
-    private boolean containsMV(Set<MaterializedView> mvs, String... expects) {
-        Set<String> mvNames = mvs.stream().map(mv -> mv.getName()).collect(Collectors.toSet());
+    private boolean containsMV(Collection<MaterializedViewWrapper> mvs, String... expects) {
+        Set<String> mvNames = mvs.stream().map(mv -> mv.getMV().getName()).collect(Collectors.toSet());
         if (mvNames.size() != Arrays.stream(expects).count()) {
             return false;
         }
@@ -673,7 +658,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         starRocksAssert.withMaterializedView(sql, (obj) -> {
             String mvName = (String) obj;
             MaterializedView mv = getMv(DB_NAME, mvName);
-            MvPlanContext mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, true);
+            MvPlanContext mvPlanContext = getOptimizedPlan(mv, true);
             Assert.assertTrue(!mvPlanContext.isValidMvPlan());
         });
     }
@@ -691,9 +676,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         starRocksAssert.withMaterializedView(sql, (obj) -> {
             String mvName = (String) obj;
             MaterializedView mv = getMv(DB_NAME, mvName);
-            MvPlanContext mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, true);
+            MvPlanContext mvPlanContext = getOptimizedPlan(mv, true);
             Assert.assertTrue(!mvPlanContext.isValidMvPlan());
-            mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, false);
+            mvPlanContext = getOptimizedPlan(mv, false);
             Assert.assertTrue(mvPlanContext.isValidMvPlan());
 
 
@@ -703,16 +688,129 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             OptExpression logicalTree = result.second;
 
             Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
-            Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+            Set<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
             Assert.assertEquals(1, relatedMVs.size());
             Assert.assertTrue(containsMV(relatedMVs, "invalid_plan_mv"));
 
-            Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+            List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
             Assert.assertEquals(1, validMVs.size());
             Assert.assertTrue(containsMV(validMVs, "invalid_plan_mv"));
-            Set<MvRewritePreprocessor.MvWithPlanContext> mvWithPlanContexts =
-                    preprocessor.getMvWithPlanContext(validMVs);
+            List<MaterializedViewWrapper> mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
             Assert.assertEquals(1, mvWithPlanContexts.size());
+        });
+    }
+
+    @Test
+    public void testValidPlanWithoutForce() {
+        String sql = "create materialized view invalid_plan_mv distributed by random " +
+                "as select count(v1) as cnt from t1 group by k1";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            CachingMvPlanContextBuilder.getInstance().invalidateAstFromCache(mv);
+            String status = mv.getQueryRewriteStatus();
+            Assert.assertTrue(status.equalsIgnoreCase("UNKNOWN: MV plan is not in cache, valid check is unknown"));
+        });
+    }
+
+    @Test
+    public void testChooseBestRelatedMVsWithDifferentLevels() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view mv_1 distributed by random as select k1, v1, v2 from t1 where k1 > 1;",
+                "create materialized view mv_2 distributed by random as select k1, v1, v2 from t1 where k1 > 2;",
+                "create materialized view mv_3 distributed by random as select k1, v1, v2 from t1 where k1 > 3;",
+                "create materialized view mv_4 distributed by random as select k1, v1, v2 from t1 where k1 > 4;",
+                "create materialized view mv_5 distributed by random as select k1, v1, v2 from t1 where k1 > 5;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            final long currentTime = System.currentTimeMillis();
+            final String query = "select k1, v1, v2 from t1 where k1 > 10";
+            final Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+            final MvRewritePreprocessor preprocessor = result.first;
+            final Table t1 = getTable(DB_NAME, "t1");
+            final OptExpression logicalTree = result.second;
+            final Set<Table> queryTables = ImmutableSet.of(t1);
+
+            // correlation with different levels and same other params
+            {
+                Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                for (int i = 0; i < 5; i++) {
+                    String mvName = String.format("mv_%s", i + 1);
+                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    mv.getRefreshScheme().setLastRefreshTime(currentTime);
+                    MVCorrelation mvCorrelation = new MVCorrelation(mv,
+                            1, 1, currentTime, i);
+                    bestRelatedMVs.add(mvCorrelation);
+                }
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVsByCorrelations(bestRelatedMVs, 5);
+                for (int i = 0; i < 5; i++) {
+                    MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    Assert.assertEquals(String.format("mv_%s", 5 - i), mvCorrelation.getMv().getName());
+                    Assert.assertEquals(String.format("mv_%s", i + 1), validMVs.get(i).getMV().getName());
+                }
+
+            }
+
+            // correlation with different mvQueryIntersectedTablesNum and same other params
+            {
+                Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                for (int i = 0; i < 5; i++) {
+                    String mvName = String.format("mv_%s", i + 1);
+                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    mv.getRefreshScheme().setLastRefreshTime(currentTime);
+                    MVCorrelation mvCorrelation = new MVCorrelation(mv,
+                            i, 1, currentTime, 0);
+                    bestRelatedMVs.add(mvCorrelation);
+                }
+
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVsByCorrelations(bestRelatedMVs, 5);
+                for (int i = 0; i < 5; i++) {
+                    MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    Assert.assertEquals(String.format("mv_%s", i + 1), mvCorrelation.getMv().getName());
+                    Assert.assertEquals(String.format("mv_%s", 5 - i), validMVs.get(i).getMV().getName());
+                }
+            }
+
+            // correlation with different mvQueryScanOpNumDiff and same other params
+            {
+                Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                for (int i = 0; i < 5; i++) {
+                    String mvName = String.format("mv_%s", i + 1);
+                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    mv.getRefreshScheme().setLastRefreshTime(currentTime);
+                    MVCorrelation mvCorrelation = new MVCorrelation(mv,
+                            1, i, currentTime, 0);
+                    bestRelatedMVs.add(mvCorrelation);
+                }
+
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVsByCorrelations(bestRelatedMVs, 5);
+                for (int i = 0; i < 5; i++) {
+                    MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    Assert.assertEquals(String.format("mv_%s", 5 - i), mvCorrelation.getMv().getName());
+                    Assert.assertEquals(String.format("mv_%s", i + 1), validMVs.get(i).getMV().getName());
+                }
+            }
+
+            // correlation with different current times and same other params
+            {
+                Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                for (int i = 0; i < 5; i++) {
+                    String mvName = String.format("mv_%s", i + 1);
+                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    mv.getRefreshScheme().setLastRefreshTime(currentTime);
+                    MVCorrelation mvCorrelation = new MVCorrelation(mv,
+                            1, 1, currentTime + i * 10, 0);
+                    bestRelatedMVs.add(mvCorrelation);
+                }
+
+                List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVsByCorrelations(bestRelatedMVs, 5);
+                for (int i = 0; i < 5; i++) {
+                    MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    Assert.assertEquals(String.format("mv_%s", i + 1), mvCorrelation.getMv().getName());
+                    Assert.assertEquals(String.format("mv_%s", 5 - i), validMVs.get(i).getMV().getName());
+                }
+            }
         });
     }
 }

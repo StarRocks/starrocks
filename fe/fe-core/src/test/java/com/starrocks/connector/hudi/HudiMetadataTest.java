@@ -73,7 +73,8 @@ public class HudiMetadataTest {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+                metastore, executorForHmsRefresh, executorForHmsRefresh,
+                100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hudiRemoteFileIO = new HudiRemoteFileIO(new Configuration());
@@ -101,7 +102,7 @@ public class HudiMetadataTest {
 
     @Test
     public void testListDbNames() {
-        List<String> databaseNames = hudiMetadata.listDbNames();
+        List<String> databaseNames = hudiMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
         CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
@@ -109,13 +110,13 @@ public class HudiMetadataTest {
 
     @Test
     public void testListTableNames() {
-        List<String> databaseNames = hudiMetadata.listTableNames("db1");
+        List<String> databaseNames = hudiMetadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
     }
 
     @Test
     public void testTableExists() {
-        boolean exists = hudiMetadata.tableExists("db1", "table1");
+        boolean exists = hudiMetadata.tableExists(new ConnectContext(), "db1", "table1");
         Assert.assertTrue(exists);
     }
 
@@ -128,7 +129,7 @@ public class HudiMetadataTest {
 
     @Test
     public void testGetDb() {
-        Database database = hudiMetadata.getDb("db1");
+        Database database = hudiMetadata.getDb(new ConnectContext(), "db1");
         Assert.assertEquals("db1", database.getFullName());
 
     }

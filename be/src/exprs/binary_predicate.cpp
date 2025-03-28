@@ -347,7 +347,7 @@ public:
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, l->size());
         }
 
-        auto is_null_predicate = [&](const ColumnPtr& column) {
+        auto is_null_predicate = [&](const ColumnPtr& column) -> ColumnPtr {
             if (!column->is_nullable() || !column->has_null()) {
                 return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());
             }

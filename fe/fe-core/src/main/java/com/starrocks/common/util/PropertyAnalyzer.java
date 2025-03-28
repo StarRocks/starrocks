@@ -426,7 +426,8 @@ public class PropertyAnalyzer {
     public static String analyzePartitionRetentionCondition(Database db,
                                                             OlapTable olapTable,
                                                             Map<String, String> properties,
-                                                            boolean removeProperties) {
+                                                            boolean removeProperties,
+                                                            Map<Expr, Expr> exprToAdjustMap) {
         String partitionRetentionCondition = "";
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
@@ -446,8 +447,9 @@ public class PropertyAnalyzer {
             // validate retention condition
             TableName tableName = new TableName(db.getFullName(), olapTable.getName());
             ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
+
             try {
-                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false);
+                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false, exprToAdjustMap);
             } catch (Exception e) {
                 throw new SemanticException("Failed to validate retention condition: " + e.getMessage());
             }
@@ -872,7 +874,7 @@ public class PropertyAnalyzer {
 
     // analyzeCompressionType will parse the compression type from properties
     public static Pair<TCompressionType, Integer> analyzeCompressionType(
-                                                    Map<String, String> properties) throws AnalysisException {
+            Map<String, String> properties) throws AnalysisException {
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
         if (ConnectContext.get() != null) {
             String defaultCompression = ConnectContext.get().getSessionVariable().getDefaultTableCompression();
@@ -922,16 +924,13 @@ public class PropertyAnalyzer {
         return defaultVal;
     }
 
-    public static Pair<Boolean, Boolean> analyzeEnablePersistentIndex(Map<String, String> properties, boolean isPrimaryKey) {
+    public static boolean analyzeEnablePersistentIndex(Map<String, String> properties) {
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
             String val = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
             properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
-            return Pair.create(Boolean.parseBoolean(val), true);
+            return Boolean.parseBoolean(val);
         } else {
-            if (isPrimaryKey) {
-                return Pair.create(Config.enable_persistent_index_by_default, false);
-            }
-            return Pair.create(false, false);
+            return true;
         }
     }
 
@@ -1129,9 +1128,10 @@ public class PropertyAnalyzer {
         return val;
     }
 
-    public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, OlapTable table) {
+    public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, Table table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
+        ConnectContext context = new ConnectContext();
 
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
@@ -1150,7 +1150,7 @@ public class PropertyAnalyzer {
                 List<String> columnNames = parseResult.second;
                 if (table.isMaterializedView()) {
                     Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                            context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
                     if (uniqueConstraintTable == null) {
                         throw new SemanticException(String.format("table: %s does not exist", tableName));
                     }
@@ -1168,11 +1168,11 @@ public class PropertyAnalyzer {
         return analyzedUniqueConstraints;
     }
 
-    private static Pair<BaseTableInfo, Table> analyzeForeignKeyConstraintTablePath(String tablePath,
+    private static Pair<BaseTableInfo, Table> analyzeForeignKeyConstraintTablePath(String catalogName,
+                                                                                   String tablePath,
                                                                                    String foreignKeyConstraintDesc,
                                                                                    Database db) {
         String[] parts = tablePath.split("\\.");
-        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String dbName = db.getFullName();
         String tableName = "";
         if (parts.length == 3) {
@@ -1192,13 +1192,15 @@ public class PropertyAnalyzer {
         if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
             throw new SemanticException(String.format("catalog: %s do not exist", catalogName));
         }
-        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
+        ConnectContext context = new ConnectContext();
+        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (parentDb == null) {
             throw new SemanticException(
                     String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
         }
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(catalogName, dbName, tableName);
+                .getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new SemanticException(String.format("catalog:%s, database: %s, table:%s do not exist",
                     catalogName, dbName, tableName));
@@ -1233,7 +1235,7 @@ public class PropertyAnalyzer {
         if (parentTableKeyType == KeysType.AGG_KEYS) {
             throw new SemanticException(
                     String.format("do not support reference agg table:%s", parentTable.getName()));
-        } else if (parentTableKeyType == KeysType.DUP_KEYS) {
+        } else {
             // for DUP_KEYS type olap table or external table
             if (!parentTable.hasUniqueConstraints() && mvUniqueConstraints.isEmpty()) {
                 throw new SemanticException(
@@ -1257,13 +1259,6 @@ public class PropertyAnalyzer {
                             String.format("columns:%s are not dup table:%s's unique constraint", parentColumns,
                                     parentTable.getName()));
                 }
-            }
-        } else {
-            // for PRIMARY_KEYS and UNIQUE_KEYS type table
-            // parent columns should be keys
-            if (!((OlapTable) parentTable).isKeySet(Sets.newHashSet(parentColumns))) {
-                throw new SemanticException(String.format("columns:%s are not key columns of table:%s",
-                        parentColumns, parentTable.getName()));
             }
         }
     }
@@ -1303,21 +1298,17 @@ public class PropertyAnalyzer {
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
                 // analyze table exist for foreign key constraint
-                Pair<BaseTableInfo, Table> parentTablePair = analyzeForeignKeyConstraintTablePath(targetTablePath,
-                        foreignKeyConstraintDesc, db);
+                Pair<BaseTableInfo, Table> parentTablePair = analyzeForeignKeyConstraintTablePath(analyzedTable.getCatalogName(),
+                        targetTablePath, foreignKeyConstraintDesc, db);
                 BaseTableInfo parentTableInfo = parentTablePair.first;
                 Table parentTable = parentTablePair.second;
                 List<ColumnId> parentColumnIds = MetaUtils.getColumnIdsByColumnNames(parentTable, parentColumnNames);
                 Pair<BaseTableInfo, Table> childTablePair = Pair.create(null, analyzedTable);
                 Table childTable = analyzedTable;
                 if (analyzedTable.isMaterializedView()) {
-                    childTablePair = analyzeForeignKeyConstraintTablePath(sourceTablePath, foreignKeyConstraintDesc,
-                            db);
+                    childTablePair = analyzeForeignKeyConstraintTablePath(analyzedTable.getCatalogName(),
+                            sourceTablePath, foreignKeyConstraintDesc, db);
                     childTable = childTablePair.second;
-                } else {
-                    if (!analyzedTable.isNativeTable()) {
-                        throw new SemanticException("do not support add foreign key on external table");
-                    }
                 }
                 List<ColumnId> childColumnIds = MetaUtils.getColumnIdsByColumnNames(childTable, childColumnNames);
 
@@ -1410,7 +1401,8 @@ public class PropertyAnalyzer {
     public static void analyzeMVProperties(Database db,
                                            MaterializedView materializedView,
                                            Map<String, String> properties,
-                                           boolean isNonPartitioned) throws DdlException {
+                                           boolean isNonPartitioned,
+                                           Map<Expr, Expr> exprAdjustedMap) throws DdlException {
         try {
             // replicated storage
             materializedView.setEnableReplicatedStorage(
@@ -1474,7 +1466,7 @@ public class PropertyAnalyzer {
                             + " is only supported by partitioned materialized-view");
                 }
                 String ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, materializedView,
-                        properties, true);
+                        properties, true, exprAdjustedMap);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
                 materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
@@ -1497,7 +1489,7 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
                 materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
-                if (!materializedView.getPartitionInfo().isRangePartition()) {
+                if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
                             + " does not support non-range-partitioned materialized view.");
                 }

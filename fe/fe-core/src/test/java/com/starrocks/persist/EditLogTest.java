@@ -174,14 +174,14 @@ public class EditLogTest {
         pb.type = EncryptionKeyTypePB.NORMAL_KEY;
         pb.createTime = 3L;
         DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        JournalEntity entity = new JournalEntity();
-        entity.setOpCode(OperationType.OP_ADD_KEY);
-        entity.setData(new Text(GsonUtils.GSON.toJson(pb)));
-        entity.write(buffer);
+        JournalEntity entity = new JournalEntity(OperationType.OP_ADD_KEY, new Text(GsonUtils.GSON.toJson(pb)));
+        buffer.writeShort(entity.opCode());
+        entity.data().write(buffer);
+
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        JournalEntity replayEntry = new JournalEntity();
-        replayEntry.readFields(in);
-        Assert.assertEquals(OperationType.OP_ADD_KEY, replayEntry.getOpCode());
+        short opCode = in.readShort();
+        JournalEntity replayEntry = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, in));
+        Assert.assertEquals(OperationType.OP_ADD_KEY, replayEntry.opCode());
     }
 
     @Test
@@ -193,9 +193,7 @@ public class EditLogTest {
         pb.plainKey = new byte[16];
         pb.type = EncryptionKeyTypePB.NORMAL_KEY;
         pb.createTime = 3L;
-        JournalEntity journal = new JournalEntity();
-        journal.setOpCode(OperationType.OP_ADD_KEY);
-        journal.setData(new Text(GsonUtils.GSON.toJson(pb)));
+        JournalEntity journal = new JournalEntity(OperationType.OP_ADD_KEY, new Text(GsonUtils.GSON.toJson(pb)));
         EditLog editLog = new EditLog(null);
         editLog.loadJournal(mgr, journal);
         Assert.assertEquals(1, mgr.getKeyMgr().numKeys());
@@ -203,10 +201,8 @@ public class EditLogTest {
 
     @Test
     public void testLoadJournalException(@Mocked GlobalStateMgr globalStateMgr) {
-        JournalEntity journal = new JournalEntity();
-        journal.setOpCode(OperationType.OP_SAVE_NEXTID);
         // set data to null, and it will throw NPE in loadJournal()
-        journal.setData(null);
+        JournalEntity journal = new JournalEntity(OperationType.OP_SAVE_NEXTID, null);
 
         EditLog editLog = new EditLog(null);
         new Expectations() {

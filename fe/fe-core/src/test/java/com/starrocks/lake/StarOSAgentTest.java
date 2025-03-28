@@ -17,7 +17,6 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.CreateShardGroupInfo;
@@ -28,12 +27,15 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.ReplicationType;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
+import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.Config;
@@ -56,7 +58,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -74,7 +75,7 @@ public class StarOSAgentTest {
     @Before
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
-        starosAgent.init(null);
+        starosAgent.initForTest();
         Config.cloud_native_storage_type = "S3";
     }
 
@@ -394,11 +395,11 @@ public class StarOSAgentTest {
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
                 .build();
         ReplicaInfo replica2 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.SECONDARY)
+                .setReplicaRole(ReplicaRole.PRIMARY)
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(2L).setWorkerState(WorkerState.ON).build())
                 .build();
         ReplicaInfo replica3 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.SECONDARY)
+                .setReplicaRole(ReplicaRole.PRIMARY)
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(3L).setWorkerState(WorkerState.OFF).build())
                 .build();
         List<ReplicaInfo> replicas = Lists.newArrayList(replica1, replica2, replica3);
@@ -449,9 +450,10 @@ public class StarOSAgentTest {
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "Failed to get primary backend. shard id: 10",
-                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
+                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
-        Assert.assertEquals(Sets.newHashSet(), getBackendIdsByShard(10L, 0));
+        Assert.assertEquals(Lists.newArrayList(),
+                starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
         workerToNode.put(1L, 10001L);
         workerToNode.put(2L, 10002L);
@@ -459,9 +461,10 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
-        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
-                getBackendIdsByShard(10L, 0));
+        Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        Assert.assertEquals(Lists.newArrayList(10001L, 10002L, 10003L),
+                starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
 
     @Test
@@ -728,8 +731,39 @@ public class StarOSAgentTest {
         Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
     }
 
-    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
-        return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
+    @Test
+    public void testCreateWorkerGroup() throws StarClientException, DdlException, StarRocksException {
+        new MockUp<StarClient>() {
+            @Mock
+            public WorkerGroupDetailInfo createWorkerGroup(String serviceId, String owner, WorkerGroupSpec spec,
+                                                           Map<String, String> labels, Map<String, String> properties,
+                                                           int replicaNumber, ReplicationType replicationType,
+                                                           WarmupLevel warmupLevel) throws StarClientException {
+                return WorkerGroupDetailInfo.newBuilder().build();
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        starosAgent.createWorkerGroup("size");
+        starosAgent.createWorkerGroup("size", 1);
+        starosAgent.createWorkerGroup("size", 1, ReplicationType.SYNC);
+        starosAgent.createWorkerGroup("size", 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
+    }
+
+    @Test
+    public void testUpdateWorkerGroup() throws StarClientException, DdlException, StarRocksException {
+        new MockUp<StarClient>() {
+            @Mock
+            public WorkerGroupDetailInfo updateWorkerGroup(String serviceId, long groupId, Map<String, String> labels,
+                                                           Map<String, String> properties, int replicaNumber,
+                                                           ReplicationType replicationType, WarmupLevel warmupLevel)
+                    throws StarClientException {
+                return WorkerGroupDetailInfo.newBuilder().build();
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        starosAgent.updateWorkerGroup(123, 1);
+        starosAgent.updateWorkerGroup(123, 1, ReplicationType.SYNC);
+        starosAgent.updateWorkerGroup(123, 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
     }
 
     @Test

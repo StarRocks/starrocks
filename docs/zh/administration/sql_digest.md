@@ -92,7 +92,10 @@ WHERE digest IN (SELECT digest FROM top_sql);
 ## 参数化规则
 
 - SQL 中的常量值会被归一化。例如，包含 `WHERE a = 1` 和 `WHERE a = 2` 的相同类型 SQL 会生成相同的 Digest。
-- 对于 IN 谓词会进行归一化。例如，包含 `IN (1,2,3)` 和 `IN (1,2)` 的相同类型 SQL 会生成相同的 Digest
-- 对于 `LIMIT N` 会进行归一化。例如，包含 `LIMIT 10` 和 `LIMIT 30` 的相同类型 SQL 会生成相同的 Digest
+- 对于 IN 谓词会进行归一化。例如，包含 `IN (1,2,3)` 和 `IN (1,2)` 的相同类型 SQL 会生成相同的 Digest。
+- 对于 `LIMIT N` 会进行归一化。例如，包含 `LIMIT 10` 和 `LIMIT 30` 的相同类型 SQL 会生成相同的 Digest。
+
+<!--
 - 对于 `INSERT VALUES` 语句，多组 `VALUES` 会被归一化。
+-->
 

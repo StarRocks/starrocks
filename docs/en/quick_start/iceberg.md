@@ -29,7 +29,7 @@ import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL Workbench.
 
 ### curl
 

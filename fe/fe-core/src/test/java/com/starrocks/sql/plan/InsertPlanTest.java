@@ -850,26 +850,24 @@ public class InsertPlanTest extends PlanTestBase {
             }
         };
 
-
         new Expectations(metadata) {
             {
-                metadata.getDb("iceberg_catalog", "iceberg_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
                 result = new Database(12345566, "iceberg_db");
                 minTimes = 0;
 
-
-                metadata.getTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+                metadata.getTable((ConnectContext) any, "iceberg_catalog", "iceberg_db", "iceberg_table");
                 result = icebergTable;
                 minTimes = 0;
             }
         };
-
 
         new MockUp<MetaUtils>() {
             @Mock
             public Database getDatabase(String catalogName, String tableName) {
                 return new Database(12345566, "iceberg_db");
             }
+
             @Mock
             public com.starrocks.catalog.Table getSessionAwareTable(
                     ConnectContext context, Database database, TableName tableName) {

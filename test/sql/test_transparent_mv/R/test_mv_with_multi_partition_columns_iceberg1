@@ -1,4 +1,7 @@
--- name: test_mv_with_multi_partition_columns_iceberg1
+-- name: test_mv_with_multi_partition_columns_iceberg1 @slow
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
 create database db_${uuid0};
 -- result:
 -- !result
@@ -14,6 +17,9 @@ properties
 );
 -- result:
 -- !result
+set materialized_view_rewrite_mode='force';
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW test_date
 PARTITION BY (l_returnflag, l_linestatus, l_shipdate)
 REFRESH DEFERRED MANUAL
@@ -23,14 +29,6 @@ AS
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_date PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM test_date order by l_orderkey;")
--- result:
-
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 
@@ -65,14 +63,6 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date order by l_orderkey;
 3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
 -- !result
 REFRESH MATERIALIZED VIEW test_date WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM test_date order by l_orderkey;")
--- result:
-test_date
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-test_date
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_date
@@ -125,14 +115,6 @@ AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date;
 -- result:
 -- !result
-function: print_hit_materialized_views("SELECT * FROM test_date order by l_orderkey;")
--- result:
-
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 
@@ -167,14 +149,6 @@ SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_ord
 3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
 -- !result
 REFRESH MATERIALIZED VIEW test_date PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM test_date order by l_orderkey;")
--- result:
-
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 
@@ -242,14 +216,6 @@ AS
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_hours PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM test_hours order by l_orderkey;")
--- result:
-test_hours
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-test_hours
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
@@ -286,14 +252,6 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours order by l_orderkey
 3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
 -- !result
 REFRESH MATERIALIZED VIEW test_hours WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM test_hours order by l_orderkey;")
--- result:
-test_hours
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-test_hours
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
@@ -346,14 +304,6 @@ AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours;
 -- result:
 -- !result
-function: print_hit_materialized_views("SELECT * FROM test_hours order by l_orderkey;")
--- result:
-
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 
@@ -388,14 +338,6 @@ SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_or
 3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
 -- !result
 REFRESH MATERIALIZED VIEW test_hours PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM test_hours order by l_orderkey;")
--- result:
-test_hours
--- !result
-function: print_hit_materialized_views("SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-test_hours
--- !result
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours

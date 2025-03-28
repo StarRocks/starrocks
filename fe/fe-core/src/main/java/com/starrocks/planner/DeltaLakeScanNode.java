@@ -26,6 +26,7 @@ import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaUtils;
@@ -211,5 +212,10 @@ public class DeltaLakeScanNode extends ScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    @Override
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+        scanRangeSource.setSampleStrategy(strategy);
     }
 }

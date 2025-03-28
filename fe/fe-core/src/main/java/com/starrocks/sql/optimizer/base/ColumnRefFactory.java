@@ -25,6 +25,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -121,6 +122,14 @@ public class ColumnRefFactory {
 
     public Column getColumn(ColumnRefOperator columnRef) {
         return columnRefToColumns.get(columnRef);
+    }
+
+    public Pair<Table, Column> getTableAndColumn(ColumnRefOperator columnRef) {
+        Column column = getColumn(columnRef);
+        if (column == null) {
+            return null;
+        }
+        return Pair.create(columnRefToTable.get(columnRef), column);
     }
 
     public void updateColumnToRelationIds(int columnId, int tableId) {

@@ -22,7 +22,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Set;
@@ -63,10 +62,7 @@ public class BatchDropInfo implements Writable {
                 && this.indexIdSet.equals(otherBatchDropInfo.indexIdSet);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static BatchDropInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);

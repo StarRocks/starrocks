@@ -42,6 +42,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -85,6 +86,9 @@ public class View extends Table {
     // for persist
     @SerializedName(value = "m")
     private long sqlMode = 0L;
+
+    @SerializedName(value = "s")
+    private boolean security = false;
 
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
@@ -132,8 +136,21 @@ public class View extends Table {
         return inlineViewDef;
     }
 
+    // show create view that from files() need remove the credential
+    public String getInlineViewDefWithoutCredential() {
+        return AstToSQLBuilder.toSQL(getQueryStatement());
+    }
+
     public long getSqlMode() {
         return sqlMode;
+    }
+
+    public void setSecurity(boolean security) {
+        this.security = security;
+    }
+
+    public boolean isSecurity() {
+        return security;
     }
 
     /**

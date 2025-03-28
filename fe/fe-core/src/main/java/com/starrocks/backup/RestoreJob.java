@@ -94,6 +94,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -110,6 +111,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -221,6 +223,10 @@ public class RestoreJob extends AbstractJob {
 
     public RestoreJobState getState() {
         return state;
+    }
+
+    protected void setState(RestoreJobState state) {
+        this.state = state;
     }
 
     public RestoreFileMapping getFileMapping() {
@@ -1072,9 +1078,9 @@ public class RestoreJob extends AbstractJob {
         PartitionInfo localPartitionInfo = localTbl.getPartitionInfo();
         Preconditions.checkState(localPartitionInfo.isRangePartition());
 
-        // generate new partition id
-        long newPartId = globalStateMgr.getNextId();
-        remotePart.getDefaultPhysicalPartition().setIdForRestore(newPartId);
+        // generate new logical partition id
+        long newLogicalPartId = globalStateMgr.getNextId();
+        remotePart.setIdForRestore(newLogicalPartId);
 
         // indexes
         Map<String, Long> localIdxNameToId = localTbl.getIndexNameToId();
@@ -1091,17 +1097,25 @@ public class RestoreJob extends AbstractJob {
             }
         }
 
-        for (PhysicalPartition physicalPartition : remotePart.getSubPartitions()) {
-            // generate new physical partition id
-            if (physicalPartition.getId() != newPartId) {
+        List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(remotePart.getSubPartitions());
+        origPhysicalPartitions.forEach(physicalPartition -> {
+            // after refactor, the first physicalPartition id is different from logical partition id
+            if (physicalPartition.getParentId() != newLogicalPartId) {
                 remotePart.removeSubPartition(physicalPartition.getId());
-
-                long newPhysicalPartId = globalStateMgr.getNextId();
-                physicalPartition.setIdForRestore(newPhysicalPartId);
-                physicalPartition.setParentId(newPartId);
+                remoteTbl.removePhysicalPartition(physicalPartition);
+            }
+        });
+        origPhysicalPartitions.forEach(physicalPartition -> {
+            // after refactor, the first physicalPartition id is different from logical partition id
+            if (physicalPartition.getParentId() != newLogicalPartId) {
+                physicalPartition.setIdForRestore(globalStateMgr.getNextId());
+                physicalPartition.setParentId(newLogicalPartId);
                 remotePart.addSubPartition(physicalPartition);
                 remoteTbl.addPhysicalPartition(physicalPartition);
             }
+        });
+
+        for (PhysicalPartition physicalPartition : remotePart.getSubPartitions()) {
             // save version info for creating replicas
             long visibleVersion = physicalPartition.getVisibleVersion();
 
@@ -1276,17 +1290,18 @@ public class RestoreJob extends AbstractJob {
     }
 
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
-        for (MaterializedIndex restoreIdx : restorePart.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.VISIBLE)) {
-            int schemaHash = restoreTbl.getSchemaHashByIndexId(restoreIdx.getId());
-            TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(),
-                    restorePart.getDefaultPhysicalPartition().getId(),
-                    restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
-            for (Tablet restoreTablet : restoreIdx.getTablets()) {
-                globalStateMgr.getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
-                    globalStateMgr.getTabletInvertedIndex()
-                            .addReplica(restoreTablet.getId(), restoreReplica);
+        // ensure modify for all physical partitions, not only for the first one (default physical partition)
+        for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
+            for (MaterializedIndex restoreIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                int schemaHash = restoreTbl.getSchemaHashByIndexId(restoreIdx.getId());
+                TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), physicalPartition.getId(),
+                        restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
+                for (Tablet restoreTablet : restoreIdx.getTablets()) {
+                    globalStateMgr.getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                    for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
+                        globalStateMgr.getTabletInvertedIndex()
+                                .addReplica(restoreTablet.getId(), restoreReplica);
+                    }
                 }
             }
         }
@@ -1545,6 +1560,7 @@ public class RestoreJob extends AbstractJob {
                 status = st;
             }
             MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
+            WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1740,6 +1756,11 @@ public class RestoreJob extends AbstractJob {
         return jobInfo.getInfo();
     }
 
+    // for UT
+    protected void addRestoredTable(OlapTable table) {
+        this.restoredTbls.add(table);
+    }
+
     @Override
     public boolean isDone() {
         if (state == RestoreJobState.FINISHED || state == RestoreJobState.CANCELLED) {
@@ -1802,10 +1823,12 @@ public class RestoreJob extends AbstractJob {
                 for (Table restoreTbl : restoredTbls) {
                     LOG.info("remove restored table when cancelled: {}", restoreTbl.getName());
                     for (Partition part : restoreTbl.getPartitions()) {
-                        for (MaterializedIndex idx : part.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            for (Tablet tablet : idx.getTablets()) {
-                                globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
+                        // ensure clear all physical partitions, not only for the first one (default physical partition)
+                        for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
+                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                for (Tablet tablet : idx.getTablets()) {
+                                    globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
+                                }
                             }
                         }
                     }
@@ -1865,6 +1888,7 @@ public class RestoreJob extends AbstractJob {
             return;
         }
 
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         LOG.info("finished to cancel restore job. is replay: {}. {}", isReplay, this);
     }
 

@@ -27,20 +27,22 @@
 #include "types/bitmap_value.h"
 
 namespace starrocks {
+
 class ArrayColumn;
+
 class VectorIndexWriter {
 public:
     static void create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& vector_index_file_path,
-                       bool is_nullable, std::unique_ptr<VectorIndexWriter>* res);
-
-    VectorIndexWriter() = default;
-    ~VectorIndexWriter() = default;
+                       bool is_element_nullable, std::unique_ptr<VectorIndexWriter>* res);
 
     VectorIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index, std::string vector_index_file_path,
-                      bool is_nullable)
+                      bool is_element_nullable)
             : _tablet_index(tablet_index),
               _vector_index_file_path(std::move(vector_index_file_path)),
-              _is_nullable(is_nullable){};
+              _is_element_nullable(is_element_nullable) {
+        // Element of array column must be nullable.
+        DCHECK(_is_element_nullable);
+    }
 
     Status init();
 
@@ -54,8 +56,6 @@ public:
 
     uint64_t total_mem_footprint() const { return estimate_buffer_size(); }
 
-    bool is_nullable() const { return _is_nullable; }
-
 private:
     std::shared_ptr<TabletIndex> _tablet_index;
     std::string _vector_index_file_path;
@@ -68,7 +68,7 @@ private:
 
     // size of null_bit column is the same size with buffer_column
     // e.g. buffer_column: [1, NULL, 3, NULL, 4], null_column: [0, 1, 0, 1, 0]
-    bool _is_nullable;
+    const bool _is_element_nullable;
     size_t _next_row_id = 0;
     size_t _row_size = 0;
     size_t _buffer_size = 0;

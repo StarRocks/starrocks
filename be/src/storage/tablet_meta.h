@@ -165,7 +165,7 @@ public:
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
     void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
-                            DataDir* data_dir);
+                            DataDir* data_dir, bool is_primary_key);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
     const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }

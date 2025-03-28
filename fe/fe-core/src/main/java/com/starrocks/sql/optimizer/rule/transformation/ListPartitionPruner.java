@@ -43,11 +43,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
@@ -65,6 +65,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ListPartitionPruner implements PartitionPruner {
@@ -261,7 +262,7 @@ public class ListPartitionPruner implements PartitionPruner {
         }
         List<String> result = Lists.newArrayList(partitionColumnNames);
 
-        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+        Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
             return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
         };
         Consumer<SlotRef> slotRefConsumer = (slot) -> {
@@ -277,7 +278,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
                     for (ColumnRefOperator ref : columnRefOperatorList) {
                         result.add(ref.getName());
@@ -304,7 +305,7 @@ public class ListPartitionPruner implements PartitionPruner {
         if (!deduceExtraConjuncts) {
             return;
         }
-        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+        Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
             return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
         };
         // The GeneratedColumn doesn't have the correct type info, let's help it
@@ -324,7 +325,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
 
                     for (ColumnRefOperator ref : columnRefOperatorList) {
@@ -437,8 +438,10 @@ public class ListPartitionPruner implements PartitionPruner {
             return null;
         }
 
-        // Fold constants
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        // implicit cast
+        result = rewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
+        // fold constant
         result = rewriter.rewrite(result, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
         return result;
     }

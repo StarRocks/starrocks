@@ -17,7 +17,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
-import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

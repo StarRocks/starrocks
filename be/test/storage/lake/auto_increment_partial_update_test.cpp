@@ -142,9 +142,9 @@ public:
             }
             auto c2 = Int64Column::create();
             c2->append_numbers(v2.data(), v2.size() * sizeof(int64_t));
-            return Chunk({c0, c1, c2}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
         } else {
-            return Chunk({c0, c1}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
         }
     }
 

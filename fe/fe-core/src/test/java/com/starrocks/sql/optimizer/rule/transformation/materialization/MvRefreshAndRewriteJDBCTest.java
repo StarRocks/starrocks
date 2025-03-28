@@ -33,11 +33,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
+public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =

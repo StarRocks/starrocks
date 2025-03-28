@@ -21,23 +21,18 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class TabletSampler {
-    private final double tabletsSampleRatio;
-
-    private final double tabletReadRatio;
+    private double tabletsSampleRatio;
 
     private final int maxSize;
 
     private final List<TabletStats> tablets = Lists.newArrayList();
 
-    private final long sampleRowsLimit;
 
     private long totalRows;
 
-    public TabletSampler(double tabletsSampleRatio, double tabletReadRatio, int maxSize, long sampleRowsLimit) {
+    public TabletSampler(double tabletsSampleRatio, int maxSize) {
         this.tabletsSampleRatio = tabletsSampleRatio;
-        this.tabletReadRatio = tabletReadRatio;
         this.maxSize = maxSize;
-        this.sampleRowsLimit = sampleRowsLimit;
     }
 
     public void addTabletStats(TabletStats tablet) {
@@ -53,12 +48,12 @@ public class TabletSampler {
                 .limit(number).collect(Collectors.toList());
     }
 
-    public long getTotalRows() {
-        return totalRows;
+    public void adjustTabletSampleRatio() {
+        this.tabletsSampleRatio *= 2;
     }
 
-    public long getSampleRows() {
-        return (long) Math.min(sampleRowsLimit, Math.max(totalRows * tabletReadRatio, 1L));
+    public long getTotalRows() {
+        return totalRows;
     }
 
     public long getTotalTablets() {

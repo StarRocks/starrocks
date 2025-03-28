@@ -9,7 +9,7 @@ displayed_sidebar: docs
 Creates an external catalog. You can use external catalogs to query data in external data sources without loading data into StarRocks or creating external tables. Currently, you can create the following types of external catalogs:
 
 - [Hive catalog](../../../data_source/catalog/hive_catalog.md): used for querying data from Apache Hive™.
-- [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md): used for querying data from Apache Iceberg.
+- [Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md): used for querying data from Apache Iceberg.
 - [Hudi catalog](../../../data_source/catalog/hudi_catalog.md): used for querying data from Apache Hudi.
 - [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md): used to query data from Delta Lake.
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
@@ -36,7 +36,7 @@ PROPERTIES ("key"="value", ...)
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | Yes          | The name of the external catalog. For the naming conventions, see [System limits](../../System_limit.md). |
 | comment       | No           | The description of the external catalog. |
-| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md), and [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md). |
+| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md), and [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md). |
 
 ## Examples
 

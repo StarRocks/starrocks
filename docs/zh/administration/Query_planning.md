@@ -427,6 +427,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
 * Bucket Shuffle Join
   
   如果关联查询中 Join 等值表达式命中表 A 的分桶键 ，尤其是在表 A 和表 B 均是大表的情况下，您可以设置 Join hint 为 Bucket Shuffle Join。表 B 数据会按照表 A 数据的分布方式，Shuffle 到表 A 数据所在机器上，再进行 Join 操作。Bucket Shuffle Join 是在 Broadcast Join 的基础上进一步优化，Shuffle B 表的数据量全局只有一份，比 Broadcast Join 少传输了很多倍数据量。
+  参与 Bucket Shuffle Join 的表必须是非分区表或者 Colocate Join 表。
 
   ```SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;

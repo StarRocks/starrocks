@@ -118,7 +118,7 @@ public:
             return {};
         }
         dst_columns.emplace_back(std::move(dst_bitmap_col));
-        return std::make_pair(dst_columns, dst_offset_col);
+        return std::make_pair(std::move(dst_columns), std::move(dst_offset_col));
     }
 };
 } // namespace starrocks

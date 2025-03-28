@@ -22,7 +22,7 @@ public class InvalidConfException extends DdlException {
         super(msg);
     }
 
-    public InvalidConfException(String msg, Throwable e) {
-        super(msg, e);
+    public InvalidConfException(ErrorCode errorCode, Object... objs) {
+        super(errorCode, objs);
     }
 }

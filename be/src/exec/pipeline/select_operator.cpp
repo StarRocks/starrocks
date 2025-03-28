@@ -64,8 +64,8 @@ StatusOr<ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
                 _pre_output_chunk = std::move(_curr_chunk);
                 return output_chunk;
             } else {
-                Columns& dest_columns = _pre_output_chunk->columns();
-                Columns& src_columns = _curr_chunk->columns();
+                auto& dest_columns = _pre_output_chunk->columns();
+                auto& src_columns = _curr_chunk->columns();
                 size_t num_rows = cur_size;
                 // copy the new read chunk to the reserved
                 for (size_t i = 0; i < dest_columns.size(); i++) {
@@ -85,18 +85,13 @@ bool SelectOperator::need_input() const {
 }
 
 Status SelectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    _curr_chunk = chunk;
     if (!_common_exprs.empty()) {
-        _curr_chunk = std::make_shared<Chunk>();
-        for (const auto& [slot_id, _] : chunk->get_slot_id_to_index_map()) {
-            _curr_chunk->append_column(chunk->get_column_by_slot_id(slot_id), slot_id);
-        }
         SCOPED_TIMER(_conjuncts_timer);
         for (const auto& [slot_id, expr] : _common_exprs) {
             ASSIGN_OR_RETURN(auto col, expr->evaluate(_curr_chunk.get()));
             _curr_chunk->append_column(col, slot_id);
         }
-    } else {
-        _curr_chunk = chunk;
     }
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, _curr_chunk.get()));
     {

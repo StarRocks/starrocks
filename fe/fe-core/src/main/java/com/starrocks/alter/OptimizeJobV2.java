@@ -274,7 +274,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
                         + " from " + ParseUtil.backquote(tableName) + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
-            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
+            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName, warehouseId);
             rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
             rewriteTask.setLastVersion(partitionLastVersion.get(i));

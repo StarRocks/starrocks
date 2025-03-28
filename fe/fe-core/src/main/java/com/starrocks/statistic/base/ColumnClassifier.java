@@ -45,7 +45,11 @@ public class ColumnClassifier {
 
             if (table.getColumn(columnName) != null) {
                 if (columnType.canStatistic()) {
-                    columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
+                    if (!columnType.isCollectionType()) {
+                        columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
+                    } else {
+                        columnStats.add(new CollectionTypeColumnStats(columnName, columnType));
+                    }
                 } else {
                     unSupportStats.add(new ComplexTypeColumnStats(columnName, columnType));
                 }

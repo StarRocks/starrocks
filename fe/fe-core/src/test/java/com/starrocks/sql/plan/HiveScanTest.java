@@ -111,6 +111,18 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 assertNotContains(plan, "___count___");
             }
         }
+        // bad cases
+        {
+            String[] sqlString = {
+                    "select distinct l_shipdate from lineitem_par",
+                    "select count(distinct l_shipdate) from lineitem_par",
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                // just make sure it's not stuck.
+                String plan = getFragmentPlan(sql);
+            }
+        }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
     }
 

@@ -15,14 +15,15 @@ class StarrocksImpl(MySQLImpl):
         *,
         version_table: str,
         version_table_schema: Optional[str],
-        version_table_pk: bool,
+        version_table_pk: bool, # ignored as StarRocks requires a primary key
         **kw,
     ) -> Table:
         return Table(
-            "alembic_version",
+            version_table,
             MetaData(),
             Column("id", BIGINT, autoincrement=True, primary_key=True),
             Column("version_num", VARCHAR(32), primary_key=False),
+            schema=version_table_schema,
             starrocks_primary_key="id",
         )
 

@@ -147,6 +147,7 @@ public class AgentTaskTest {
                 .setCompressionType(TCompressionType.LZ4_FRAME)
                 .setTabletSchema(tabletSchema)
                 .setEnableTabletCreationOptimization(false)
+                .setTimeoutMs(3600)
                 .build();
 
         // drop
@@ -220,6 +221,8 @@ public class AgentTaskTest {
         Assert.assertEquals(TTaskType.CREATE, request.getTask_type());
         Assert.assertEquals(createReplicaTask.getSignature(), request.getSignature());
         Assert.assertNotNull(request.getCreate_tablet_req());
+        Assert.assertTrue(request.getCreate_tablet_req().isSetTimeout_ms());
+        Assert.assertEquals(3600, request.getCreate_tablet_req().getTimeout_ms());
 
         // drop
         TAgentTaskRequest request2 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, dropTask);

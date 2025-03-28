@@ -19,47 +19,27 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.Map;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.MOCK_PAIMON_CATALOG_NAME;
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
-import static com.starrocks.utframe.UtFrameUtils.getFragmentPlan;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBase {
+public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MOCK_PAIMON_CATALOG_NAME, temp.newFolder().toURI().toString());
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     @Test
@@ -85,7 +65,7 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
                     Assert.assertEquals(1, partitions.size());
 
                     String query = "SELECT pk, d  FROM `paimon0`.`pmn_db1`.`unpartitioned_table` as a";
-                    String plan = getFragmentPlan(connectContext, query);
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, "     TABLE: paimon_parttbl_mv2\n" +
                             "     PREAGGREGATION: ON\n" +
                             "     partitions=1/1");
@@ -130,7 +110,7 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
 
                     String query = "SELECT d, count(pk) FROM " +
                             "`paimon0`.`pmn_db1`.`partitioned_table` as a group by d;";
-                    String plan = getFragmentPlan(connectContext, query);
+                    String plan = getFragmentPlan(query);
                     System.out.println(plan);
                     PlanTestBase.assertContains(plan, "     TABLE: paimon_parttbl_mv1\n" +
                             "     PREAGGREGATION: ON\n" +

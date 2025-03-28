@@ -289,6 +289,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 - 使用 SQL 语句时，支持自动进行谓词下推。如过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 Flink Connector 中并转换成适用于 StarRocks 的语句后，再执行查询，不需要额外配置。
 - 不支持 LIMIT 语句。
 - StarRocks 暂时不支持 Checkpoint 机制。因此，如果读取任务失败，则无法保证数据一致性。
+- 建表中的字段顺序需要与StarRocks表建表的字段顺序一致。
 
 ### 使用 Flink DataStream 读取数据
 

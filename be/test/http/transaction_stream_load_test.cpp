@@ -426,7 +426,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_put_fail) {
         Status status = Status::InternalError("TestFail");
         status.to_thrift(&k_stream_load_put_result.status);
         action.on_header(&request);
-        action.handle(&request);
 
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
@@ -858,13 +857,13 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     ctx->format = old_format;
 }
 
-TEST_F(TransactionStreamLoadActionTest, free_handler_ctx) {
+TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
     TransactionStreamLoadAction action(&_env);
     auto ctx = new StreamLoadContext(&_env);
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
-    ctx->label = "free_handler_ctx";
+    ctx->label = "release_resource_for_success_request";
     ctx->body_sink = std::make_shared<StreamLoadPipe>();
     bool remove_from_stream_context_mgr = false;
     DeferOp defer([&]() {
@@ -899,17 +898,23 @@ TEST_F(TransactionStreamLoadActionTest, free_handler_ctx) {
         request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
         request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
         ASSERT_EQ(0, action.on_header(&request));
-        StreamLoadContext* req_ctx = (StreamLoadContext*)request.handler_ctx();
-        ASSERT_EQ(ctx, req_ctx);
         ASSERT_EQ(3, ctx->num_refs());
         ASSERT_FALSE(ctx->lock.try_lock());
         ASSERT_TRUE(k_response_str.empty());
         action.on_chunk_data(&request);
         ASSERT_EQ(3, ctx->num_refs());
         ASSERT_FALSE(ctx->lock.try_lock());
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoad::send_reply");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("TransactionStreamLoad::send_reply", [&](void* arg) {
+            ASSERT_EQ(2, ctx->num_refs());
+            ASSERT_TRUE(ctx->lock.try_lock());
+            ctx->lock.unlock();
+        });
         action.handle(&request);
-        ASSERT_EQ(3, ctx->num_refs());
-        ASSERT_FALSE(ctx->lock.try_lock());
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
         ASSERT_STREQ("OK", doc["Status"].GetString());
@@ -917,8 +922,31 @@ TEST_F(TransactionStreamLoadActionTest, free_handler_ctx) {
     ASSERT_EQ(2, ctx->num_refs());
     ASSERT_TRUE(ctx->lock.try_lock());
     ctx->lock.unlock();
+}
 
-    // on_header fail
+TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) {
+    TransactionStreamLoadAction action(&_env);
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "release_resource_for_on_header_failure";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+    ASSERT_TRUE(ctx->lock.try_lock());
+    ctx->lock.unlock();
+
+    // on_header fail because of invalid format
     {
         k_response_str = "";
         HttpRequest request(_evhttp_req);
@@ -933,22 +961,50 @@ TEST_F(TransactionStreamLoadActionTest, free_handler_ctx) {
         request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
-        request._headers.emplace(HTTP_DB_KEY, ctx->db + "x");
+        request._headers.emplace(HTTP_DB_KEY, ctx->db);
         request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
         request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+        request._headers.emplace(HTTP_FORMAT_KEY, "unknown");
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoad::send_reply");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("TransactionStreamLoad::send_reply", [&](void* arg) {
+            ASSERT_EQ(3, ctx->num_refs());
+            ASSERT_TRUE(ctx->lock.try_lock());
+            ctx->lock.unlock();
+        });
         ASSERT_EQ(-1, action.on_header(&request));
-        StreamLoadContext* req_ctx = (StreamLoadContext*)request.handler_ctx();
-        ASSERT_EQ(nullptr, req_ctx);
-        ASSERT_EQ(2, ctx->num_refs());
-        ASSERT_TRUE(ctx->lock.try_lock());
-        ctx->lock.unlock();
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
-        ASSERT_NE(nullptr,
-                  std::strstr(doc["Message"].GetString(), "Request database dbx not equal transaction database db"));
+        ASSERT_STREQ("INTERNAL_ERROR", doc["Status"].GetString());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "unknown data format, format=unknown"));
     }
     ASSERT_EQ(2, ctx->num_refs());
+    ASSERT_TRUE(ctx->lock.try_lock());
+    ctx->lock.unlock();
+}
+
+TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
+    TransactionStreamLoadAction action(&_env);
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "release_resource_for_not_handle";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
     ASSERT_TRUE(ctx->lock.try_lock());
     ctx->lock.unlock();
 
@@ -971,8 +1027,6 @@ TEST_F(TransactionStreamLoadActionTest, free_handler_ctx) {
         request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
         request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
         ASSERT_EQ(0, action.on_header(&request));
-        StreamLoadContext* req_ctx = (StreamLoadContext*)request.handler_ctx();
-        ASSERT_EQ(ctx, req_ctx);
         ASSERT_EQ(3, ctx->num_refs());
         ASSERT_FALSE(ctx->lock.try_lock());
         ASSERT_TRUE(k_response_str.empty());

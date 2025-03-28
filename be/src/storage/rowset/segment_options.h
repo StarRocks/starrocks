@@ -23,9 +23,10 @@
 #include "runtime/global_dict/types.h"
 #include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_filter_predicate.h"
+#include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -57,6 +58,7 @@ public:
 
     PredicateTree pred_tree;
     PredicateTree pred_tree_for_zone_map;
+    RuntimeFilterPredicates runtime_filter_preds;
 
     DisjunctivePredicates delete_predicates;
 
@@ -78,7 +80,7 @@ public:
     bool use_page_cache = false;
     // temporary data does not allow caching
     bool temporary_data = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
@@ -92,7 +94,7 @@ public:
     SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     const std::atomic<bool>* is_cancelled = nullptr;
 
@@ -116,6 +118,10 @@ public:
     // 1. Regular block smapling: Bernoulli sampling on page-id
     // 2. Partial-Sorted block: leverage data ordering to improve the evenness
     TTableSampleOptions sample_options;
+
+    bool enable_join_runtime_filter_pushdown = false;
+
+    bool read_by_generated_column_adding = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

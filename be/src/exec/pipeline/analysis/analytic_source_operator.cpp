@@ -14,7 +14,15 @@
 
 #include "analytic_source_operator.h"
 
+#include "exec/pipeline/source_operator.h"
+
 namespace starrocks::pipeline {
+
+Status AnalyticSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _analytor->attach_source_observer(state, observer());
+    return Status::OK();
+}
 
 bool AnalyticSourceOperator::has_output() const {
     return !_analytor->is_chunk_buffer_empty();
@@ -25,6 +33,7 @@ bool AnalyticSourceOperator::is_finished() const {
 }
 
 Status AnalyticSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _analytor->defer_notify_sink();
     return _analytor->set_finished();
 }
 

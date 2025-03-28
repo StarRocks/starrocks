@@ -97,7 +97,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Before
     public void setUp() {
         // clear the block list
-        SimpleScheduler.getHostBlacklist().hostBlacklist.clear();
+        SimpleScheduler.getHostBlacklist().clear();
         factory = new DefaultSharedDataWorkerProvider.Factory();
 
         // Generate mock Workers
@@ -255,7 +255,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testSelectNextWorker() throws StarRocksException {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.hostBlacklist.clear();
+        blockList.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
@@ -350,7 +350,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testIsDataNodeAvailable() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.hostBlacklist.clear();
+        blockList.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
@@ -523,7 +523,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testNormalBackendSelectorWithSharedDataWorkerProvider() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.hostBlacklist.clear();
+        blockList.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
 
@@ -588,7 +588,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testCollocationBackendSelectorWithSharedDataWorkerProvider() {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
-        blockList.hostBlacklist.clear();
+        blockList.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
 

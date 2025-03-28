@@ -49,7 +49,7 @@ struct UrlExtractParameterTest : public ::testing::Test {
     };
 };
 
-void test_url_extract_parameter(Columns columns, const std::string& expect, bool only_null,
+void test_url_extract_parameter(const Columns& columns, const std::string& expect, bool only_null,
                                 std::function<bool(int)> row_is_null) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ctx->set_constant_columns(columns);
@@ -90,14 +90,14 @@ TEST_F(UrlExtractParameterTest, constNull) {
 
         auto url_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(url, 10);
         auto param_key_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(url, 10);
-        test_url_extract_parameter({ColumnHelper::create_const_null_column(10), param_key_col}, "", true,
+        test_url_extract_parameter({ColumnHelper::create_const_null_column(10), param_key_col->clone()}, "", true,
                                    [](int i) { return false; });
-        test_url_extract_parameter({url_col, ColumnHelper::create_const_null_column(10)}, "", true,
+        test_url_extract_parameter({url_col->clone(), ColumnHelper::create_const_null_column(10)}, "", true,
                                    [](int i) { return false; });
         test_url_extract_parameter({ColumnHelper::create_const_null_column(10),
-                                    ColumnHelper::unfold_const_column(varchar_type, 10, param_key_col)},
+                                    ColumnHelper::unfold_const_column(varchar_type, 10, param_key_col->clone())},
                                    "", true, [](int i) { return false; });
-        test_url_extract_parameter({ColumnHelper::unfold_const_column(varchar_type, 10, url_col),
+        test_url_extract_parameter({ColumnHelper::unfold_const_column(varchar_type, 10, url_col->clone()),
                                     ColumnHelper::create_const_null_column(10)},
                                    "", true, [](int i) { return false; });
     }
@@ -112,7 +112,7 @@ TEST_F(UrlExtractParameterTest, constUrlAndParamKey) {
 
         auto url_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(url, 10);
         auto param_key_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(param_key, 10);
-        Columns columns{url_col, param_key_col};
+        Columns columns{url_col->clone(), param_key_col->clone()};
         test_url_extract_parameter(columns, expect, only_null, [](int i) { return false; });
     }
 }
@@ -135,9 +135,11 @@ TEST_F(UrlExtractParameterTest, constUrl) {
             param_key_col->append(param_key);
             null_col->append(row_is_null(i) ? DATUM_NULL : DATUM_NOT_NULL);
         }
-        test_url_extract_parameter({url_col, param_key_col}, expect, only_null, [](int i) { return false; });
-        test_url_extract_parameter({url_col, NullableColumn::create(param_key_col, null_col)}, expect, only_null,
-                                   row_is_null);
+        test_url_extract_parameter({url_col->clone(), param_key_col->clone()}, expect, only_null,
+                                   [](int i) { return false; });
+        test_url_extract_parameter(
+                {url_col->clone(), NullableColumn::create(std::move(param_key_col), std::move(null_col))}, expect,
+                only_null, row_is_null);
     }
 }
 
@@ -159,9 +161,11 @@ TEST_F(UrlExtractParameterTest, constParamKey) {
             url_col->append(url);
             null_col->append(row_is_null(i) ? DATUM_NULL : DATUM_NOT_NULL);
         }
-        test_url_extract_parameter({url_col, param_key_col}, expect, only_null, [](int i) { return false; });
-        test_url_extract_parameter({NullableColumn::create(url_col, null_col), param_key_col}, expect, only_null,
-                                   row_is_null);
+        test_url_extract_parameter({url_col->clone(), param_key_col->clone()}, expect, only_null,
+                                   [](int i) { return false; });
+        test_url_extract_parameter(
+                {NullableColumn::create(url_col->clone(), std::move(null_col)), param_key_col->clone()}, expect,
+                only_null, row_is_null);
     }
 }
 
@@ -189,14 +193,17 @@ TEST_F(UrlExtractParameterTest, nonConstUrlAndParamKey) {
             null_col0->append(row_is_null0(i) ? DATUM_NULL : DATUM_NOT_NULL);
             null_col1->append(row_is_null1(i) ? DATUM_NULL : DATUM_NOT_NULL);
         }
-        test_url_extract_parameter({url_col, param_key_col}, expect, only_null, [](int i) { return false; });
-        test_url_extract_parameter({NullableColumn::create(url_col, null_col0), param_key_col}, expect, only_null,
-                                   row_is_null0);
-        test_url_extract_parameter({url_col, NullableColumn::create(param_key_col, null_col1)}, expect, only_null,
-                                   row_is_null1);
+        test_url_extract_parameter({url_col->clone(), param_key_col->clone()}, expect, only_null,
+                                   [](int i) { return false; });
         test_url_extract_parameter(
-                {NullableColumn::create(url_col, null_col0), NullableColumn::create(param_key_col, null_col1)}, expect,
-                only_null, [=](int i) { return row_is_null0(i) || row_is_null1(i); });
+                {NullableColumn::create(url_col->clone(), null_col0->clone()), param_key_col->clone()}, expect,
+                only_null, row_is_null0);
+        test_url_extract_parameter(
+                {url_col->clone(), NullableColumn::create(param_key_col->clone(), null_col1->clone())}, expect,
+                only_null, row_is_null1);
+        test_url_extract_parameter({NullableColumn::create(url_col->clone(), null_col0->clone()),
+                                    NullableColumn::create(param_key_col->clone(), null_col1->clone())},
+                                   expect, only_null, [=](int i) { return row_is_null0(i) || row_is_null1(i); });
     }
 }
 

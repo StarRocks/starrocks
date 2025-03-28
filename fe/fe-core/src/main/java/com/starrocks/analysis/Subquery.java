@@ -90,12 +90,8 @@ public class Subquery extends Expr {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-
-        if (!super.equals(o)) {
+    public boolean equalsWithoutChild(Object o) {
+        if (!super.equalsWithoutChild(o)) {
             return false;
         }
 
@@ -131,6 +127,6 @@ public class Subquery extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitSubquery(this, context);
+        return visitor.visitSubqueryExpr(this, context);
     }
 }

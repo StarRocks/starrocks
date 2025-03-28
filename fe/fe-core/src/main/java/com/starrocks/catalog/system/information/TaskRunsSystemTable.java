@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.information;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
@@ -26,7 +27,6 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -198,7 +198,10 @@ public class TaskRunsSystemTable extends SystemTable {
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         status.getDbName());
             } catch (AccessDeniedException e) {
                 continue;

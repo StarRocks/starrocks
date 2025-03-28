@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.common.util.concurrent.lock;
 
 import java.util.ArrayList;
@@ -21,6 +22,15 @@ public class AutoCloseableLock implements AutoCloseable {
     private final Long dbId;
     private final List<Long> tableList;
     private final LockType lockType;
+
+    public AutoCloseableLock(Long dbId, List<Long> tableList, LockType lockType) {
+        this.locker = new Locker();
+        this.dbId = dbId;
+        this.tableList = new ArrayList<>(tableList);
+        this.lockType = lockType;
+
+        locker.lockTablesWithIntensiveDbLock(dbId, tableList, lockType);
+    }
 
     public AutoCloseableLock(Locker locker, Long dbId, List<Long> tableList, LockType lockType) {
         this.locker = locker;

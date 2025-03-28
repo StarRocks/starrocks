@@ -15,6 +15,8 @@
 package com.starrocks.statistic.sample;
 
 import com.starrocks.common.Config;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 
 import java.util.List;
@@ -52,7 +54,7 @@ public class SampleInfo {
         this.lowWeightTablets = null;
     }
 
-    public SampleInfo(String dbName, String tableName, double tabletSampleRatio,
+    public SampleInfo(double tabletSampleRatio,
                       long sampleRowCount, long totalRowCount,
                       List<TabletStats> highWeightTablets,
                       List<TabletStats> mediumHighWeightTablets,
@@ -70,6 +72,10 @@ public class SampleInfo {
 
     public long getTotalRowCount() {
         return totalRowCount;
+    }
+
+    public double getRowSampleRatio() {
+        return rowSampleRatio;
     }
 
     public List<TabletStats> getHighWeightTablets() {
@@ -97,17 +103,22 @@ public class SampleInfo {
     }
 
     public int getMaxSampleTabletNum() {
-        int max = highWeightTablets.size();
-        max = Math.max(max, mediumHighWeightTablets.size());
-        max = Math.max(max, mediumLowWeightTablets.size());
-        max = Math.max(max, lowWeightTablets.size());
+        int max = getHighWeightTablets().size();
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getLowWeightTablets().size());
         return max;
     }
 
     public String generateComplexTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                 List<ColumnStats> complexTypeStats) {
         String sep = ", ";
-        String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME + " VALUES ";
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+
+        String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME + columnNames + " VALUES ";
         StringJoiner joiner = new StringJoiner(sep, prefix, ";");
 
         for (ColumnStats columnStats : complexTypeStats) {
@@ -132,14 +143,16 @@ public class SampleInfo {
         return joiner.toString();
     }
 
-
-
     public String generatePrimitiveTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                   List<ColumnStats> primitiveTypeStats,
                                                   TabletSampleManager manager) {
         String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME;
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
         StringBuilder builder = new StringBuilder();
-        builder.append(prefix).append(" ");
+        builder.append(prefix).append(columnNames).append(" ");
         builder.append("WITH base_cte_table as (");
         String queryDataSql = generateQueryDataSql(tableName, dbName, primitiveTypeStats, manager);
         builder.append(queryDataSql).append(") ");
@@ -227,8 +240,14 @@ public class SampleInfo {
         hint.append(tabletStats.stream()
                 .map(e -> String.valueOf(e.getTabletId()))
                 .collect(Collectors.joining(", ", "(", ")")));
-        hint.append(" WHERE rand() <= ").append(readRatio);
-        hint.append(" LIMIT ").append(sampleRowsLimit);
+
+        if (Config.enable_use_table_sample_collect_statistics) {
+            int percent = Math.max(1, Math.min(100, (int) (readRatio * 100)));
+            hint.append(String.format(" SAMPLE('percent'='%d') LIMIT %d ", percent, sampleRowsLimit));
+        } else {
+            hint.append(" WHERE rand() <= ").append(readRatio);
+            hint.append(" LIMIT ").append(sampleRowsLimit);
+        }
         return hint.toString();
     }
 

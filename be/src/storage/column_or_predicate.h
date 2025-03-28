@@ -20,7 +20,7 @@
 
 namespace starrocks {
 
-class ColumnOrPredicate : public ColumnPredicate {
+class ColumnOrPredicate final : public ColumnPredicate {
 public:
     explicit ColumnOrPredicate(const TypeInfoPtr& type_info, ColumnId cid) : ColumnPredicate(type_info, cid) {}
 

@@ -112,6 +112,8 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
+    _agg_group_by_with_limit = false;
+    _aggregator->params()->enable_pipeline_share_limit = false;
 
     return Status::OK();
 }
@@ -197,18 +199,21 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         return _spill_all_data(state, true);
     } else if (build_hash_table) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
-        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+        TRY_CATCH_ALLOC_SCOPE_START()
+        _aggregator->build_hash_map(chunk_size);
+        _aggregator->try_convert_to_two_level_map();
         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
+        TRY_CATCH_ALLOC_SCOPE_END()
 
         _aggregator->update_num_input_rows(chunk_size);
         RETURN_IF_ERROR(_aggregator->check_has_error());
         _continuous_low_reduction_chunk_num = 0;
     } else {
+        TRY_CATCH_ALLOC_SCOPE_START()
         // selective preaggregation
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
+            _aggregator->build_hash_map_with_selection(chunk_size);
         }
 
         size_t hit_count = SIMD::count_zero(_aggregator->streaming_selection());
@@ -240,6 +245,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         }
 
         _aggregator->update_num_input_rows(hit_count);
+        TRY_CATCH_ALLOC_SCOPE_END()
         RETURN_IF_ERROR(_aggregator->check_has_error());
     }
 

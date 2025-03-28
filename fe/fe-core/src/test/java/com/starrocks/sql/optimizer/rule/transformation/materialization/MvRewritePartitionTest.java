@@ -28,11 +28,11 @@ import org.junit.runners.MethodSorters;
 import java.util.List;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewritePartitionTest extends MvRewriteTestBase {
+public class MvRewritePartitionTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "table_with_day_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition1");
         starRocksAssert.withTable(cluster, "table_with_day_partition2");
@@ -246,8 +246,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "AGGREGATE");
             PlanTestBase.assertContains(plan, "TABLE: test_partition_tbl_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=5/6\n" +
-                    "     rollup: test_partition_tbl_mv1");
+                    "     PREDICATES: 5: k1 >= '2020-01-01'\n" +
+                    "     partitions=5/6");
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv1");
     }
@@ -496,7 +496,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     "on a.k1=b.k1  where a.k1 >= '2020-01-01' and b.k1 >= '2020-01-01' group by a.v1, a.v2, b.v1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 9: b_k1 IS NOT NULL\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 >= '2020-01-01', 9: b_k1 IS NOT NULL\n" +
                     "     partitions=5/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -636,6 +636,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     cluster.runSql("test", String.format("refresh materialized view %s partition " +
                             "start('%s') end('%s') with sync mode;", mvName, param.refreshStart, param.refreshEnd));
                     for (PCompensateExpect expect : param.expectPartitionPredicates) {
+                        System.out.println(expect);
                         if (!Strings.isNullOrEmpty(expect.partitionPredicate)) {
                             String query = String.format("select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
                                     "from table_with_day_partition a\n" +
@@ -669,7 +670,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", false, true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", false),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", true, true),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
@@ -678,8 +679,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                 PCompensateExpect.create("subdate(a.id_date, interval 1 day)='1991-03-29'", false, true),
                                 PCompensateExpect.create("adddate(a.id_date, interval 1 day)='1991-03-31'", false, true),
                                 // with partition expressions && partition expressions can be pruned
-                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", false),
-                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", false)
+                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", true, true),
+                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", true, true)
                         )
                 ),
                 // partition: slot
@@ -689,7 +690,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", false, true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", false),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", true, true),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
@@ -698,12 +699,13 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                 PCompensateExpect.create("subdate(a.id_date, interval 1 day)='1991-03-29'", false, true),
                                 PCompensateExpect.create("adddate(a.id_date, interval 1 day)='1991-03-31'", false, true),
                                 // with partition expressions && partition expressions can be pruned
-                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", false),
-                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", false)
+                                PCompensateExpect.create("cast(a.id_date as string)='1991-03-30'", true, true),
+                                PCompensateExpect.create("cast(a.id_date as string) >='1991-03-30'", true, true)
                         )
                 )
         );
         for (PartitionCompensateParam param : params) {
+            System.out.println(param);
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);

@@ -83,7 +83,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
-import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -150,6 +149,7 @@ import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -175,20 +175,20 @@ import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 public class LeaderImpl {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
 
-    private final ReportHandler reportHandler = new ReportHandler();
-
-    public LeaderImpl() {
-        reportHandler.start();
-        MemoryUsageTracker.registerMemoryTracker("Report", reportHandler);
-    }
-
     public TMasterResult finishTask(TFinishTaskRequest request) {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            TStatus status;
+            if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
+                status = new TStatus(TStatusCode.LEADER_TRANSFERRED);
+            } else {
+                status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            }
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
+            LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
+                    request.getTask_type(), request.getSignature());
             return result;
         }
         TStatus tStatus = new TStatus(TStatusCode.OK);
@@ -729,6 +729,27 @@ public class LeaderImpl {
         TransactionState txnState = publishVersionTask.getTxnState();
         if (txnState != null) {
             txnState.updatePublishTaskFinishTime();
+
+            // Used to collect statistics when the partition is first imported
+            // TODO(stephen): support insert into multiple tables in a transaction
+            if (txnState.getSourceType() == LoadJobSourceType.INSERT_STREAMING &&
+                    txnState.getIdToTableCommitInfos().size() == 1 &&
+                    request.isSetFinish_tablet_infos() &&
+                    !request.getFinish_tablet_infos().isEmpty()) {
+                Map<Long, PartitionCommitInfo> idToPartitionCommitInfo = txnState.getIdToTableCommitInfos().values()
+                        .iterator().next().getIdToPartitionCommitInfo();
+                List<TTabletInfo> tabletInfos = request.getFinish_tablet_infos();
+                for (TTabletInfo tabletInfo : tabletInfos) {
+                    long partitionId = tabletInfo.getPartition_id();
+                    PartitionCommitInfo commitInfo = idToPartitionCommitInfo.get(partitionId);
+                    if (commitInfo != null && commitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
+                        long rowCount = tabletInfo.getRow_count();
+                        long tabletId = tabletInfo.getTablet_id();
+                        Map<Long, Long> tableIdToRowCount = commitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+                        tableIdToRowCount.put(tabletId, rowCount);
+                    }
+                }
+            }
         }
 
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
@@ -873,7 +894,7 @@ public class LeaderImpl {
             result.setStatus(status);
             return result;
         }
-        return reportHandler.handleReport(request);
+        return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
     }
 
     private void finishAlterTask(AgentTask task) {

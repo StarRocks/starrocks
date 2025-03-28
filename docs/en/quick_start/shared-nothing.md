@@ -38,7 +38,7 @@ There is a lot of information in this document, and it is presented with the ste
 
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL Workbench.
 
 ### curl
 

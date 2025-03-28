@@ -19,12 +19,14 @@
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "util/fixed_hash_map.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -91,9 +93,10 @@ using SliceAggTwoLevelHashSet =
 
 template <typename HashSet, typename Impl>
 struct AggHashSet {
-    AggHashSet() = default;
+    AggHashSet(size_t chunk_size, AggStatistics* agg_stat_) : agg_stat(agg_stat_) {}
     using HHashSetType = HashSet;
     HashSet hash_set;
+    AggStatistics* agg_stat;
 
     ////// Common Methods ////////
     void build_hash_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
@@ -117,6 +120,7 @@ constexpr bool is_no_prefetch_set = no_prefetch_set<T>::value;
 // handle one number hash key
 template <LogicalType logical_type, typename HashSet>
 struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumberKey<logical_type, HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetOfOneNumberKey<logical_type, HashSet>>;
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
     using ColumnType = RunTimeColumnType<logical_type>;
@@ -124,7 +128,8 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     using FieldType = RunTimeCppType<logical_type>;
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
-    AggHashSetOfOneNumberKey(int32_t chunk_size) {}
+    template <class... Args>
+    AggHashSetOfOneNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -152,8 +157,8 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
-        auto* column = down_cast<ColumnType*>(key_columns[0].get());
-        auto& keys = column->get_data();
+        const auto* column = down_cast<const ColumnType*>(key_columns[0].get());
+        const auto& keys = column->get_data();
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (compute_and_allocate) {
@@ -167,8 +172,8 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
-        auto* column = down_cast<ColumnType*>(key_columns[0].get());
-        auto& keys = column->get_data();
+        const auto* column = down_cast<const ColumnType*>(key_columns[0].get());
+        const auto& keys = column->get_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -181,7 +186,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
         }
     }
 
-    void insert_keys_to_columns(const ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(const ResultVector& keys, Columns& key_columns, size_t chunk_size) {
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
         column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
     }
@@ -194,6 +199,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 template <LogicalType logical_type, typename HashSet>
 struct AggHashSetOfOneNullableNumberKey
         : public AggHashSet<HashSet, AggHashSetOfOneNullableNumberKey<logical_type, HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetOfOneNullableNumberKey<logical_type, HashSet>>;
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
     using ColumnType = RunTimeColumnType<logical_type>;
@@ -202,7 +208,8 @@ struct AggHashSetOfOneNullableNumberKey
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
-    AggHashSetOfOneNullableNumberKey(int32_t chunk_size) {}
+    template <class... Args>
+    AggHashSetOfOneNullableNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -235,10 +242,10 @@ struct AggHashSetOfOneNullableNumberKey
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
-        auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-        auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
+        const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
+        const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
-        auto& keys = data_column->get_data();
+        const auto& keys = data_column->get_data();
 
         if (nullable_column->has_null()) {
             for (size_t i = 0; i < chunk_size; ++i) {
@@ -266,9 +273,9 @@ struct AggHashSetOfOneNullableNumberKey
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
-        auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-        auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
-        auto& keys = data_column->get_data();
+        const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
+        const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
+        const auto& keys = data_column->get_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -281,7 +288,7 @@ struct AggHashSetOfOneNullableNumberKey
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<ColumnType*>(nullable_column->mutable_data_column());
         column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
@@ -296,11 +303,13 @@ struct AggHashSetOfOneNullableNumberKey
 
 template <typename HashSet>
 struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStringKey<HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetOfOneStringKey<HashSet>>;
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
     using ResultVector = Buffer<Slice>;
 
-    AggHashSetOfOneStringKey(int32_t chunk_size) {}
+    template <class... Args>
+    AggHashSetOfOneStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -324,7 +333,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
-        auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
+        auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
         for (size_t i = 0; i < chunk_size; ++i) {
             auto tmp = column->get_slice(i);
             if constexpr (compute_and_allocate) {
@@ -344,7 +353,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
-        auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
+        const auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
             cache[i] = KeyType(column->get_slice(i));
@@ -366,7 +375,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
         keys.resize(chunk_size);
         column->append_strings(keys.data(), keys.size());
@@ -379,12 +388,13 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
 
 template <typename HashSet>
 struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetOfOneNullableStringKey<HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetOfOneNullableStringKey<HashSet>>;
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
-    // using ResultVector = typename std::vector<Slice>;
     using ResultVector = Buffer<Slice>;
 
-    AggHashSetOfOneNullableStringKey(int32_t chunk_size) {}
+    template <class... Args>
+    AggHashSetOfOneNullableStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -411,8 +421,8 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
-        auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-        auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
+        const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
 
         if (nullable_column->has_null()) {
@@ -441,8 +451,8 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
-        auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
-        auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
+        const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
 
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -463,8 +473,8 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         }
     }
 
-    void _handle_data_key_column(BinaryColumn* data_column, size_t row, MemPool* pool, Filter* not_founds) {
-        auto tmp = data_column->get_slice(row);
+    void _handle_data_key_column(const BinaryColumn* data_column, size_t row, MemPool* pool, Filter* not_founds) {
+        const auto tmp = data_column->get_slice(row);
         KeyType key(tmp);
 
         this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
@@ -474,12 +484,12 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         });
     }
 
-    void _handle_data_key_column(BinaryColumn* data_column, size_t row, Filter* not_founds) {
-        auto key = data_column->get_slice(row);
+    void _handle_data_key_column(const BinaryColumn* data_column, size_t row, Filter* not_founds) {
+        const auto key = data_column->get_slice(row);
         (*not_founds)[row] = !this->hash_set.contains(key);
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
         DCHECK(key_columns[0]->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
@@ -496,13 +506,15 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
 
 template <typename HashSet>
 struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerializedKey<HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetOfSerializedKey<HashSet>>;
     using Iterator = typename HashSet::iterator;
-    // using ResultVector = typename std::vector<Slice>;
     using ResultVector = Buffer<Slice>;
     using KeyType = typename HashSet::key_type;
 
-    AggHashSetOfSerializedKey(int32_t chunk_size)
-            : _mem_pool(std::make_unique<MemPool>()),
+    template <class... Args>
+    AggHashSetOfSerializedKey(int32_t chunk_size, Args&&... args)
+            : Base(chunk_size, std::forward<Args>(args)...),
+              _mem_pool(std::make_unique<MemPool>()),
               _buffer(_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {}
 
@@ -587,7 +599,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         return max_size;
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
         // When GroupBy has multiple columns, the memory is serialized by row.
         // If the length of a row is relatively long and there are multiple columns,
         // deserialization by column will cause the memory locality to deteriorate,
@@ -595,14 +607,14 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         if (keys.size() > 0 && keys[0].size > 64) {
             // deserialize by row
             for (size_t i = 0; i < chunk_size; i++) {
-                for (const auto& key_column : key_columns) {
+                for (auto& key_column : key_columns) {
                     keys[i].data =
                             (char*)(key_column->deserialize_and_append(reinterpret_cast<const uint8_t*>(keys[i].data)));
                 }
             }
         } else {
             // deserialize by column
-            for (const auto& key_column : key_columns) {
+            for (auto& key_column : key_columns) {
                 key_column->deserialize_and_append_batch(keys, chunk_size);
             }
         }
@@ -623,6 +635,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
 
 template <typename HashSet>
 struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSetOfSerializedKeyFixedSize<HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetOfSerializedKeyFixedSize<HashSet>>;
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
     using FixedSizeSliceKey = typename HashSet::key_type;
@@ -632,8 +645,10 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     int fixed_byte_size = -1; // unset state
     static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
 
-    AggHashSetOfSerializedKeyFixedSize(int32_t chunk_size)
-            : _mem_pool(std::make_unique<MemPool>()),
+    template <class... Args>
+    AggHashSetOfSerializedKeyFixedSize(int32_t chunk_size, Args&&... args)
+            : Base(chunk_size, std::forward<Args>(args)...),
+              _mem_pool(std::make_unique<MemPool>()),
               buffer(_mem_pool->allocate(max_fixed_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
@@ -702,7 +717,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
         DCHECK(fixed_byte_size != -1);
         tmp_slices.reserve(chunk_size);
 
@@ -721,7 +736,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
         }
 
         // deserialize by column
-        for (const auto& key_column : key_columns) {
+        for (auto& key_column : key_columns) {
             key_column->deserialize_and_append_batch(tmp_slices, chunk_size);
         }
     }

@@ -42,7 +42,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.HeartbeatResponse;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
@@ -73,10 +72,7 @@ public class HbPackage implements Writable {
         return GsonUtils.GSON.fromJson(Text.readString(in), HbPackage.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Deprecated
     public void readFields(DataInput in) throws IOException {

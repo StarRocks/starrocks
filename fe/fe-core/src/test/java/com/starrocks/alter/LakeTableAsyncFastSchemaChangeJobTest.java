@@ -89,6 +89,10 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         alterTable(connectContext, sql);
         AlterJobV2 alterJob = getAlterJob(table);
         alterJob.run();
+        while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            alterJob.run();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
         return alterJob;
     }

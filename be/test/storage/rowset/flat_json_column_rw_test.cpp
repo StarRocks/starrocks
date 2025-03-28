@@ -140,7 +140,7 @@ protected:
         }
 
         if (is_nullable) {
-            return NullableColumn::create(json_col, null_col);
+            return NullableColumn::create(std::move(json_col), std::move(null_col));
         }
         return json_col;
     }
@@ -304,7 +304,7 @@ TEST_F(FlatJsonColumnRWTest, testNullNormalFlatJson) {
     null_col->append(1);
     null_col->append(0);
 
-    ColumnPtr write_nl_col = NullableColumn::create(write_col, null_col);
+    ColumnPtr write_nl_col = NullableColumn::create(std::move(write_col), std::move(null_col));
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));

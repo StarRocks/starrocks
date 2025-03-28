@@ -36,14 +36,14 @@ ARG RUN_AS_USER
 ARG GROUP=starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        binutils-dev default-jdk mysql-client curl vim tree net-tools less tzdata locales pigz inotify-tools rclone gdb && \
+        binutils-dev openjdk-17-jdk mysql-client curl vim tree net-tools less tzdata locales pigz inotify-tools rclone gdb && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
         rm -rf /var/lib/apt/lists/*
-ENV JAVA_HOME=/lib/jvm/default-java
-
-RUN touch /.dockerenv
+RUN touch /.dockerenv ; ARCH=`uname -m` && cd /lib/jvm && \
+    if [ "$ARCH" = "aarch64" ] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
+ENV JAVA_HOME=/lib/jvm/java-17-openjdk
 
 WORKDIR $STARROCKS_ROOT
 

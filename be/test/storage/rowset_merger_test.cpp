@@ -96,10 +96,10 @@ public:
         return Status::OK();
     }
 
-    std::unique_ptr<Column> all_pks;
+    MutableColumnPtr all_pks;
     vector<uint32_t> all_rssids;
 
-    vector<std::unique_ptr<Column>> non_key_columns;
+    vector<MutableColumnPtr> non_key_columns;
 };
 
 class RowsetMergerTest : public testing::Test {
@@ -314,8 +314,8 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    writer.non_key_columns.emplace_back(Int16Column::create_mutable());
-    writer.non_key_columns.emplace_back(Int32Column::create_mutable());
+    writer.non_key_columns.emplace_back(Int16Column::create());
+    writer.non_key_columns.emplace_back(Int32Column::create());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
 
     ASSERT_EQ(pks.size(), writer.all_pks->size());
@@ -422,8 +422,8 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    writer.non_key_columns.emplace_back(Int16Column::create_mutable());
-    writer.non_key_columns.emplace_back(Int32Column::create_mutable());
+    writer.non_key_columns.emplace_back(Int16Column::create());
+    writer.non_key_columns.emplace_back(Int32Column::create());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
 
     ASSERT_EQ(pks.size(), writer.all_pks->size());

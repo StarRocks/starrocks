@@ -1,0 +1,47 @@
+-- name: test_iceberg_view
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0} as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
+-- result:
+1	2024-08-08 15:32:51.751000
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
+-- result:
+-- !result
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+-- result:
+1	beijing
+2	shanghai
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+E: (1064, 'Invalid view version: Cannot add multiple queries for dialect starrocks')
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+E: (1064, 'Invalid view version: Cannot add multiple queries for dialect starrocks')
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} modify dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+-- result:
+1	beijing	zhangsan
+2	shanghai	lisi
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} set properties ('k1'='v1');
+-- result:
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

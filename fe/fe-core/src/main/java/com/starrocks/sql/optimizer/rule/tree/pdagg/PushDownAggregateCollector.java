@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -41,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
+import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStats;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -55,6 +57,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT;
 
 /*
  * Collect all can be push down aggregate context, to get which aggregation can be
@@ -473,9 +478,51 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         List<ColumnStatistic>[] cards = new List[] {lower, medium, high};
 
-        groupBys.getStream().map(factory::getColumnRef)
-                .map(s -> ExpressionStatisticCalculator.calculate(s, statistics))
-                .forEach(s -> cards[groupByCardinality(s, statistics.getOutputRowCount())].add(s));
+        Set<ColumnRefOperator> columnRefOperators = groupBys.getStream()
+                .map(factory::getColumnRef)
+                .collect(Collectors.toSet());
+
+        double maxSingleColumnDistinct = 0.0;
+        double maxMultiColumnDistinct = 0.0;
+        Set<ColumnStatistic> columnStatistics = new HashSet<>();
+
+        Pair<Set<ColumnRefOperator>, MultiColumnCombinedStats> mcStats = statistics.getLargestSubsetMCStats(columnRefOperators);
+
+        if (sessionVariable.isCboPushDownAggWithMultiColumnStats() && mcStats != null && !mcStats.first.isEmpty()) {
+            double ndv = Math.max(1, mcStats.second.getNdv());
+            ColumnStatistic multiColumnStat = ColumnStatistic.builder().setDistinctValuesCount(ndv).build();
+            columnStatistics.add(multiColumnStat);
+            maxMultiColumnDistinct = ndv;
+
+            Set<ColumnRefOperator> remainedColumns = new HashSet<>(columnRefOperators);
+            remainedColumns.removeAll(mcStats.first);
+
+            for (ColumnRefOperator col : remainedColumns) {
+                ColumnStatistic stat = ExpressionStatisticCalculator.calculate(col, statistics);
+                columnStatistics.add(stat);
+                maxSingleColumnDistinct = Math.max(maxSingleColumnDistinct, stat.getDistinctValuesCount());
+            }
+        } else {
+            for (ColumnRefOperator col : columnRefOperators) {
+                ColumnStatistic stat = ExpressionStatisticCalculator.calculate(col, statistics);
+                columnStatistics.add(stat);
+                maxSingleColumnDistinct = Math.max(maxSingleColumnDistinct, stat.getDistinctValuesCount());
+            }
+        }
+
+        double outputRowCount = statistics.getOutputRowCount();
+        for (ColumnStatistic stat : columnStatistics) {
+            cards[groupByCardinality(stat, outputRowCount)].add(stat);
+        }
+
+        if (pushDownMode == PUSH_DOWN_AGG_AUTO && context.immediateChildOfSmallBroadcastJoin) {
+            if (maxSingleColumnDistinct > SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT) {
+                return false;
+            }
+            if (maxMultiColumnDistinct > SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT) {
+                return false;
+            }
+        }
 
         double lowerCartesian = lower.stream().map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b)
                 .orElse(Double.MAX_VALUE);
@@ -516,15 +563,10 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             }
         }
 
-        // 2. forbidden rules
-        // 2.1 target is the immediate child of a small broadcast join and the cardinality of the aggregation is not lower.
-        if (pushDownMode == PUSH_DOWN_AGG_AUTO && context.immediateChildOfSmallBroadcastJoin) {
-            return false;
-        }
 
-        // 2.2 high cardinality >= 2
-        // 2.3 medium cardinality > 2
-        // 2.4 high cardinality = 1 and medium cardinality > 0
+        // 2.1 high cardinality >= 2
+        // 2.2 medium cardinality > 2
+        // 2.3 high cardinality = 1 and medium cardinality > 0
         if (high.size() >= 2 || medium.size() > 2 || (high.size() == 1 && !medium.isEmpty())) {
             return false;
         }
@@ -553,9 +595,9 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         return false;
     }
 
-    // high(2): cardinality/count > MEDIUM_AGGREGATE
-    // medium(1): cardinality/count <= MEDIUM_AGGREGATE and > LOW_AGGREGATE
-    // lower(0): cardinality/count < LOW_AGGREGATE
+    // high(2): row_count / cardinality < MEDIUM_AGGREGATE_EFFECT_COEFFICIENT
+    // medium(1): row_count / cardinality >= MEDIUM_AGGREGATE_EFFECT_COEFFICIENT and < LOW_AGGREGATE_EFFECT_COEFFICIENT
+    // lower(0): row_count / cardinality >= LOW_AGGREGATE_EFFECT_COEFFICIENT
     private int groupByCardinality(ColumnStatistic statistic, double rowCount) {
         if (statistic.isUnknown()) {
             return 2;
@@ -586,7 +628,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         }
         double rightRows = rightStatistics.getOutputRowCount();
         return rightRows <= sessionVariable.getBroadcastRowCountLimit() &&
-                rightRows <= StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_ROW_COUNT_UPPER_BOUND;
+                rightRows <= sessionVariable.getCboPushDownAggregateOnBroadcastJoinRowCountLimit();
     }
 
     /**

@@ -191,7 +191,7 @@ public class StorageCoolDownTest {
                 "\"dynamic_partition.prefix\" = \"p\",\n" +
                 "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_ttl\" = \"1 days\",\n" +

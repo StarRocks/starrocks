@@ -345,7 +345,7 @@ In the **fe.log** of the Leader FE node, search for records like `begin to gener
 **PromSQL**
 
 ```Bash
-starrocks_fe_thread_pool{job="$job_name"} > 3000
+starrocks_fe_thread_pool{job="$job_name", type!="completed_task_count"} > 3000
 ```
 
 **Alert Description**
@@ -429,6 +429,7 @@ Check the logs of the Leader FE node to find information about the loading error
 (sum by (job_name)(starrocks_fe_routine_load_max_lag_of_partition{job="$job_name",instance="$fe_mater"})) > 300000
 starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="NEED_SCHEDULE"} > 3
 starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="PAUSED"} > 0
+starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="UNSTABLE"} > 0
 ```
 
 **Alert Description**
@@ -436,6 +437,7 @@ starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="PAUSED"} 
 - An alert is triggered when over 300,000 entries are delayed in consumption.
 - An alert is triggered when the number of pending Routine Load tasks exceeds 3.
 - An alert is triggered when there are tasks in the `PAUSED` state.
+- An alert is triggered when there are tasks in the `UNSTABLE` state.
 
 **Resolution**
 

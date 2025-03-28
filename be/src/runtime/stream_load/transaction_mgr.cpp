@@ -251,8 +251,8 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
-        if (!ctx->lock.try_lock()) {
-            st = Status::TransactionInProcessing("Transaction in processing, please retry later");
+        st = ctx->try_lock();
+        if (!st.ok()) {
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
@@ -309,7 +309,7 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     // 2. begin transaction
     ctx->begin_txn_ts = UnixSeconds();
     int64_t begin_nanos = MonotonicNanos();
-    ctx->last_active_ts = ctx->begin_txn_ts;
+    ctx->last_active_ts = ctx->begin_txn_ts.load();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
     ctx->begin_txn_cost_nanos = MonotonicNanos() - begin_nanos;
 
@@ -396,31 +396,23 @@ void TransactionMgr::_clean_stream_context() {
     for (const auto& id : ids) {
         auto ctx = _exec_env->stream_context_mgr()->get(id);
         if (ctx != nullptr) {
-            int64_t now = UnixSeconds();
-            // try lock fail means transaction in processing
-            if (ctx->lock.try_lock()) {
-                // abort timeout transaction
-                if ((now - ctx->begin_txn_ts) > ctx->timeout_second && ctx->timeout_second > 0) {
-                    ctx->status = Status::Aborted(fmt::format("transaction is aborted by timeout."));
+            Status status;
+            if (ctx->tsl_reach_timeout()) {
+                status = Status::Aborted(
+                        fmt::format("transaction is aborted by timeout {} seconds.", ctx->timeout_second));
+            } else if (ctx->tsl_reach_idle_timeout(interval)) {
+                status = Status::Aborted(
+                        fmt::format("transaction is aborted by idle timeout {} seconds.", ctx->idle_timeout_sec));
+            }
+            if (!status.ok()) {
+                if (ctx->lock.try_lock()) {
+                    ctx->timeout_detected.store(true, std::memory_order_release);
+                    ctx->status = status;
                     auto st = _rollback_transaction(ctx);
-                    LOG(INFO) << "Abort transaction " << ctx->brief() << " since timeout " << ctx->timeout_second
-                              << " begin ts " << ctx->begin_txn_ts << " status " << st;
+                    LOG(INFO) << "Abort transaction " << ctx->brief() << ", reason: " << status.message()
+                              << ", abort status: " << st;
+                    ctx->lock.unlock();
                 }
-
-                if (ctx->body_sink != nullptr) {
-                    if (!ctx->body_sink->exhausted()) {
-                        ctx->last_active_ts = UnixSeconds();
-                    }
-                }
-
-                if ((now - ctx->last_active_ts) > ctx->idle_timeout_sec + interval && ctx->idle_timeout_sec > 0) {
-                    ctx->status = Status::Aborted(fmt::format("transaction is aborted by idle timeout."));
-                    auto st = _rollback_transaction(ctx);
-                    LOG(INFO) << "Abort transaction " << ctx->brief() << " since idle timeout "
-                              << ctx->idle_timeout_sec + interval << " last active ts " << ctx->last_active_ts
-                              << " status " << st;
-                }
-                ctx->lock.unlock();
             }
             if (ctx->unref()) {
                 delete ctx;

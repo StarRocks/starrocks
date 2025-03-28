@@ -178,7 +178,7 @@ private:
 
             ColumnPtr string_col = _translate_string(element, element->size());
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
-            return ConstColumn::create(ArrayColumn::create(string_col, offsets), num_rows);
+            return ConstColumn::create(ArrayColumn::create(string_col, std::move(offsets)), num_rows);
         } else if (array->is_nullable()) {
             auto nullable = down_cast<NullableColumn*>(array.get());
             array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
@@ -189,7 +189,7 @@ private:
 
             ColumnPtr string_col = _translate_string(element, element->size());
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
-            return NullableColumn::create(ArrayColumn::create(string_col, offsets), array_null);
+            return NullableColumn::create(ArrayColumn::create(string_col, std::move(offsets)), array_null);
         } else {
             array_col = down_cast<ArrayColumn*>(array.get());
             auto element = array_col->elements_column();
@@ -197,7 +197,7 @@ private:
 
             ColumnPtr string_col = _translate_string(element, element->size());
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
-            return ArrayColumn::create(string_col, offsets);
+            return ArrayColumn::create(string_col, std::move(offsets));
         }
     }
 
@@ -271,7 +271,7 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
     // assign convert mapping column
     dict_opt_ctx->convert_column = result_column;
     // build code convert map
-    dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE + 1);
+    dict_opt_ctx->code_convert_map.resize(codes.size() + 1);
     for (int i = 0; i < codes.size(); ++i) {
         dict_opt_ctx->code_convert_map[codes[i]] = i;
     }

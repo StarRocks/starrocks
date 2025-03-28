@@ -27,7 +27,7 @@ starrocks://<User>:<Password>@<Host>:<Port>/<Catalog>.<Database>
 ```
 
 ## Example
-Python connector supports only Python 3 and SQLAlchemy 2:
+Python connector supports only Python 3 and SQLAlchemy 1.4 and 2:
 ```
 from sqlalchemy import create_engine, Integer, insert
 from sqlalchemy.schema import Table, MetaData, Column

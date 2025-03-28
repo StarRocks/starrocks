@@ -186,6 +186,9 @@ public class Replica implements Writable {
     // the corresponding replica. This variable is in-memory only.
     private long maxRowsetCreationTime = -1L;
 
+    // The data checksum of this replica
+    private long checksum = -1L;
+
     public Replica() {
     }
 
@@ -294,6 +297,10 @@ public class Replica implements Writable {
         return maxRowsetCreationTime;
     }
 
+    public long getChecksum() {
+        return checksum;
+    }
+
     public long getPathHash() {
         return pathHash;
     }
@@ -346,6 +353,10 @@ public class Replica implements Writable {
 
         maxRowsetCreationTime = newCreationTime;
         return true;
+    }
+
+    public void setChecksum(long checksum) {
+        this.checksum = checksum;
     }
 
     public boolean needFurtherRepair() {

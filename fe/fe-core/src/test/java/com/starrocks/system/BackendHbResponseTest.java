@@ -16,6 +16,7 @@ package com.starrocks.system;
 
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
@@ -74,17 +75,16 @@ public class BackendHbResponseTest {
         hbPackage.addHbResponse(hbResponse);
 
         DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        JournalEntity entity = new JournalEntity();
-        entity.setOpCode(OperationType.OP_HEARTBEAT_V2);
-        entity.setData(hbPackage);
-        entity.write(buffer);
+        JournalEntity entity = new JournalEntity(OperationType.OP_HEARTBEAT_V2, hbPackage);
+        buffer.writeShort(entity.opCode());
+        entity.data().write(buffer);
 
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        JournalEntity replayEntry = new JournalEntity();
-        replayEntry.readFields(in);
+        short opCode = in.readShort();
+        JournalEntity replayEntry = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, in));
 
-        Assert.assertEquals(OperationType.OP_HEARTBEAT_V2, replayEntry.getOpCode());
-        HbPackage replayHbPackage = (HbPackage) replayEntry.getData();
+        Assert.assertEquals(OperationType.OP_HEARTBEAT_V2, replayEntry.opCode());
+        HbPackage replayHbPackage = (HbPackage) replayEntry.data();
         Assert.assertEquals(1, replayHbPackage.getHbResults().size());
         HeartbeatResponse replayHbResponse = replayHbPackage.getHbResults().get(0);
         Assert.assertEquals(HeartbeatResponse.Type.BACKEND, replayHbResponse.getType());

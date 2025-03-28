@@ -4,9 +4,15 @@ keywords: ['fenqu']
 sidebar_position: 30
 ---
 
-# 动态分区
+# 动态分区（不推荐）
 
 动态分区功能开启后，您可以按需为新数据动态地创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。
+
+:::note
+
+从 v3.4 开始，[表达式分区](./expression_partitioning.md)方式进一步优化，以统一所有分区策略，并支持更复杂的解决方案。在大多数情况下，建议您使用表达式分区。表达式分区将在未来版本中逐渐取代动态分区策略。
+
+:::
 
 ## 创建支持动态分区的表
 
@@ -67,6 +73,16 @@ SHOW PARTITIONS FROM site_access;
 ```
 
 假设当前时间为 2020-03-25，在调度动态分区时，会删除分区上界小于 2020-03-22 的分区，同时在调度时会创建今后 3 天的分区。则如上语句的返回结果中，`Range` 列显示当前分区的信息如下：
+
+```SQL
+[types: [DATE]; keys: [2020-03-25]; ‥types: [DATE]; keys: [2020-03-26]; )
+[types: [DATE]; keys: [2020-03-26]; ‥types: [DATE]; keys: [2020-03-27]; )
+[types: [DATE]; keys: [2020-03-27]; ‥types: [DATE]; keys: [2020-03-28]; )
+[types: [DATE]; keys: [2020-03-28]; ‥types: [DATE]; keys: [2020-03-29]; )
+```
+
+如果你希望在建表时同时创建历史分区，需要指定 `dynamic_partition.history_partition_num` 来定义要创建的历史分区数量。在建表时指定 `dynamic_partition.history_partition_num` 为 `3`，
+则会创建过去 3 天的历史分区，则如上语句的返回结果中，`Range` 列显示当前分区的信息如下：
 
 ```SQL
 [types: [DATE]; keys: [2020-03-22]; ‥types: [DATE]; keys: [2020-03-23]; )

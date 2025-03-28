@@ -73,7 +73,7 @@ TEST_P(FlatJsonQueryTestFixture2, flat_json_query) {
     jf.flatten(json_col.get());
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
-    Columns columns{flat_json, builder.build(true)};
+    Columns columns{std::move(flat_json), builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
     std::ignore =
@@ -177,7 +177,7 @@ TEST_P(FlatJsonQueryErrorTestFixture, json_query) {
     jf.flatten(json_col.get());
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
-    Columns columns{flat_json, builder.build(true)};
+    Columns columns{std::move(flat_json), builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
     std::ignore =
@@ -229,11 +229,11 @@ TEST_P(FlatJsonExistsTestFixture2, flat_json_exists_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(std::move(flat_json));
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(std::move(path_column));
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -309,11 +309,11 @@ TEST_P(FlatJsonLengthTestFixture2, flat_json_length_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(std::move(flat_json));
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(std::move(path_column));
     }
 
     // ctx.get()->set_constant_columns(columns);
@@ -367,7 +367,7 @@ TEST_P(FlatJsonKeysTestFixture2, json_keys) {
     auto flat_json = JsonColumn::create();
     auto flat_json_ptr = flat_json.get();
 
-    Columns columns{flat_json, builder.build(true)};
+    Columns columns{std::move(flat_json), builder.build(true)};
 
     JsonFlattener jf(param_flat_path, param_flat_type, false);
     jf.flatten(json_column.get());
@@ -444,7 +444,7 @@ public:
         jf.flatten(ints.get());
         flat_json_ptr->set_flat_columns(flat_path, flat_type, jf.mutable_result());
 
-        Columns columns{flat_json, builder.build(true)};
+        Columns columns{std::move(flat_json), builder.build(true)};
 
         _ctx->set_constant_columns(columns);
         std::ignore = JsonFunctions::native_json_path_prepare(_ctx.get(),

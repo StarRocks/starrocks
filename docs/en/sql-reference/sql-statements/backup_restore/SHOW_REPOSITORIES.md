@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SHOW REPOSITORIES
 
-## Description
-
 Views the repositories created in StarRocks.
 
 ## Syntax

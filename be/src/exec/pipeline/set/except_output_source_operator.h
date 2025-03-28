@@ -31,6 +31,8 @@ public:
         _except_ctx->ref();
     }
 
+    Status prepare(RuntimeState* state) override;
+
     bool has_output() const override { return _except_ctx->is_probe_finished() && !_except_ctx->is_output_finished(); }
 
     bool is_finished() const override { return _except_ctx->is_probe_finished() && _except_ctx->is_output_finished(); }
@@ -53,6 +55,7 @@ public:
             : SourceOperatorFactory(id, "except_output_source", plan_node_id),
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dependency_index(dependency_index) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ExceptOutputSourceOperator>(this, _id, _plan_node_id, driver_sequence,

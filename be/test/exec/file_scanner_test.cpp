@@ -61,9 +61,9 @@ TEST_F(FileScannerTest, sample_schema) {
                 {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)}};
 
         RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema1.parquet",
+        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema3.parquet",
                                              test_exec_dir + "/test_data/parquet_data/schema2.parquet",
-                                             test_exec_dir + "/test_data/parquet_data/schema3.parquet"});
+                                             test_exec_dir + "/test_data/parquet_data/schema1.parquet"});
 
         scan_range.params.__set_schema_sample_file_count(1);
 
@@ -159,7 +159,7 @@ TEST_F(FileScannerTest, sample_schema) {
     }
 
     {
-        // sample 1 file.
+        // sample 2 file.
         // file1: col1,int64
         // file4: col1,int64; COL1,int64
         // result: duplicated column name
@@ -173,6 +173,72 @@ TEST_F(FileScannerTest, sample_schema) {
         auto st = FileScanner::sample_schema(&state, scan_range, &schema);
         //Identical names in upper/lower cases, files: [/work/starrocks-main/be/test/exec/test_data/parquet_data/schema4.parquet] [/work/starrocks-main/be/test/exec/test_data/parquet_data/schema1.parquet], names: [COL1] [col1]"
         EXPECT_TRUE(st.is_not_supported());
+    }
+}
+
+TEST_F(FileScannerTest, select_sample_files) {
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(1, 0, &sample_file_indexes);
+        ASSERT_TRUE(sample_file_indexes.empty());
+        FileScanner::sample_files(0, 1, &sample_file_indexes);
+        ASSERT_TRUE(sample_file_indexes.empty());
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 1, &sample_file_indexes);
+        std::vector<size_t> expect = {9};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(1, 10, &sample_file_indexes);
+        std::vector<size_t> expect = {0};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 2, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 9};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 3, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 5, 9};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 4, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 3, 6, 9};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 5, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 2, 5, 7, 9};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 6, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 2, 4, 5, 7, 9};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 10, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+        ASSERT_EQ(expect, sample_file_indexes);
     }
 }
 

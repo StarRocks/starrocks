@@ -8,7 +8,7 @@ keywords: ['materialized', 'view', 'views']
 
 This topic describes how to understand, create, use, and manage an asynchronous materialized view. Asynchronous materialized views are supported from StarRocks v2.4 onwards.
 
-Compared with synchronous materialized views, asynchronous materialized views support multi-table join and more aggregate functions. The refresh of asynchronous materialized views can be triggered manually or by scheduled tasks. You can also refresh some of the partitions instead of the whole materialized view, greatly reducing the cost of refresh. In addition, asynchronous materialized views support a variety of query rewrite scenarios, allowing automatic, transparent query acceleration.
+Compared with synchronous materialized views, asynchronous materialized views support multi-table join and more aggregate functions. The refresh of asynchronous materialized views can be triggered manually, regualrly at pre-specified intervals, or automatically at data changes in the base table. You can also refresh some of the partitions instead of the whole materialized view, greatly reducing the cost of refresh. In addition, asynchronous materialized views support a variety of query rewrite scenarios, allowing automatic, transparent query acceleration.
 
 For the scenario and usage of the synchronous materialized views (Rollup), see [Synchronous materialized view (Rollup)](../Materialized_view-single_table.md).
 
@@ -45,7 +45,7 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   Currently, StarRocks supports two generic refreshing strategies:
 
-  - ASYNC: Asynchronous refresh mode. Each time the base table data changes, the materialized view is automatically refreshed according to the pre-defined refresh interval.
+  - ASYNC: Asynchronous refresh mode. Materialized views can be refreshed automatically when the data in the base table changes, or at regular intervals based on specified intervals.
   - MANUAL: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
 
 - **Query rewrite**
@@ -175,6 +175,7 @@ GROUP BY order_id;
 > - The query statement used to create a materialized view does not support random functions, including rand(), random(), uuid(), and sleep().
 > - Asynchronous materialized views support a variety of data types. For more information, see [CREATE MATERIALIZED VIEW - Supported data types](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md#supported-data-types).
 > - By default, executing a CREATE MATERIALIZED VIEW statement immediately triggers the refresh task, which can consume a certain proportion of the system resources. If you want to defer the refresh task, you can add the REFRESH DEFERRED parameter to your CREATE MATERIALIZED VIEW statement.
+> - Materialized view can only be created in default_catalog. You could either create it with default_catalog.database.mv, or switch to default_catalog through `set catalog <default_catalog>` statement.
 
 - **About refresh mechanisms of asynchronous materialized views**
 

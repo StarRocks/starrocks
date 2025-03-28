@@ -68,7 +68,7 @@ public class CreateViewTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"in_memory\" = \"false\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");")
                 .withView("create view test_null_view as select * from site_access;");
@@ -99,7 +99,7 @@ public class CreateViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
