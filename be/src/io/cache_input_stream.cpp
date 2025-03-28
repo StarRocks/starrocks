@@ -22,6 +22,9 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
 #include "service/backend_options.h"
+#include "common/status.h"
+#include "gutil/strings/fastmem.h"
+#include "io/input_stream.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
@@ -436,6 +439,121 @@ StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
         _populate_to_cache(s.data(), _offset, count, sb);
     }
     return s;
+}
+
+StatusOr<std::unique_ptr<ZeroCopyInputStream>> CacheInputStream::try_peek() {
+    if (_offset >= _size) {
+        return Status::EndOfFile("");
+    }
+
+    const int64_t block_id = _offset / _block_size;
+
+    int64_t block_offset = block_id * _block_size;
+    int64_t load_size = std::min(_block_size, _size - block_offset);
+    int64_t shift = _offset - block_offset;
+
+    // check block map
+    auto iter = _block_map.find(block_id);
+    if (iter != _block_map.end()) {
+        BlockBuffer& block = iter->second;
+        auto zero_copy_stream = std::make_unique<BlockBufferAsZeroCopyInputStream>(block, shift, load_size);
+        return std::move(zero_copy_stream);
+    }
+
+    SharedBufferPtr sb = nullptr;
+    {
+        // try to find data from shared buffer
+        auto ret = _sb_stream->find_shared_buffer(_offset, 1);
+        if (ret.ok()) {
+            sb = ret.value();
+            if (sb->buffer.capacity() > 0) {
+                auto shift = _offset - sb->offset;
+                auto zero_copy_stream = std::make_unique<SharedBufferAsZeroCopyInputStream>(sb, shift, sb->size);
+                if (_enable_populate_cache) {
+                    // TODO check
+                    _populate_to_cache((const char*)sb->buffer.data() + block_offset - sb->offset, block_offset,
+                                       std::min(load_size, sb->offset + sb->size - _offset), sb);
+                }
+                return std::move(zero_copy_stream);
+            }
+        }
+    }
+
+    // read cache
+    Status res;
+    int64_t read_cache_ns = 0;
+    BlockBuffer block;
+    ReadCacheOptions options;
+    size_t read_size = 0;
+    {
+        options.use_adaptor = _enable_cache_io_adaptor;
+        SCOPED_RAW_TIMER(&read_cache_ns);
+        if (_enable_block_buffer) {
+            res = _cache->read(_cache_key, block_offset, load_size, &block.buffer, &options);
+            read_size = load_size;
+        } else {
+            return Status::NotSupported("todo");
+        }
+    }
+
+    // ok() or is_resource_busy() means block is already cached
+    if (res.ok() || res.is_resource_busy()) {
+        _already_populated_blocks.emplace(block_id);
+    }
+
+    if (res.ok()) {
+        _stats.read_cache_bytes += read_size;
+        _stats.read_cache_count += 1;
+        _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
+        _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
+        _stats.read_cache_ns += read_cache_ns;
+        if (_enable_cache_io_adaptor) {
+            _cache->record_read_local_cache(read_size, read_cache_ns / 1000);
+        }
+        if (_enable_block_buffer) {
+            block.offset = block_offset;
+            _block_map[block_id] = block;
+            auto zero_copy_stream = std::make_unique<BlockBufferAsZeroCopyInputStream>(block, shift, load_size);
+            return std::move(zero_copy_stream);
+        }
+
+    } else if (res.is_resource_busy()) {
+        _stats.skip_read_cache_count += 1;
+        _stats.skip_read_cache_bytes += read_size;
+    } else {
+        int64_t read_remote_ns = 0;
+        int64_t previous_remote_bytes = _sb_stream->shared_io_bytes() + _sb_stream->direct_io_bytes();
+        if (sb) {
+            const uint8_t* buffer = nullptr;
+            {
+                SCOPED_RAW_TIMER(&read_remote_ns);
+                RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, block_offset, 1, sb));
+            }
+
+            _deduplicate_shared_buffer(sb);
+            if (_enable_populate_cache) {
+                _populate_to_cache((char*)buffer, block_offset, std::min(load_size, sb->offset + sb->size - _offset), sb);
+            }
+
+            if (_enable_cache_io_adaptor) {
+                int64_t delta_remote_bytes =
+                        _sb_stream->shared_io_bytes() + _sb_stream->direct_io_bytes() - previous_remote_bytes;
+                if (delta_remote_bytes > 0) {
+                    _cache->record_read_remote_storage(_block_size,
+                                                       _calculate_remote_latency_per_block(delta_remote_bytes, read_remote_ns),
+                                                       !_can_try_peer_cache());
+                }
+            }
+
+            auto shift = _offset - sb->offset;
+            auto zero_copy_stream = std::make_unique<SharedBufferAsZeroCopyInputStream>(sb, shift, sb->size);
+            return std::move(zero_copy_stream);
+        } else {
+            return Status::NotSupported("todo");
+        }
+    }
+
+    return Status::NotSupported("todo");
 }
 
 static void empty_deleter(void*) {}

@@ -161,7 +161,6 @@ private:
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;
     std::unique_ptr<PageReader> _page_reader;
-    io::SeekableInputStream* _stream;
 
     LevelDecoder _def_level_decoder;
     LevelDecoder _rep_level_decoder;

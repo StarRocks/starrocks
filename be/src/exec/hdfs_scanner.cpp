@@ -19,6 +19,7 @@
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
+#include "io/cache_input_stream.h"
 #include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
@@ -56,6 +57,10 @@ public:
     StatusOr<std::string_view> peek(int64_t count) override {
         auto st = _stream->peek(count);
         return st;
+    }
+
+    StatusOr<std::unique_ptr<io::ZeroCopyInputStream>> try_peek() override {
+        return _stream->try_peek();
     }
 
     StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {

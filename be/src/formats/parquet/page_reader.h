@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
 #include "util/slice.h"
 
@@ -37,7 +38,7 @@ struct ColumnReaderOptions;
 // Used to parse page header of column chunk. This class don't parse page's type.
 class PageReader {
 public:
-    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values,
+    PageReader(size_t start, size_t length, size_t num_values,
                const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec);
 
     ~PageReader() = default;
@@ -84,7 +85,7 @@ private:
     std::string& _current_page_cache_key();
     StatusOr<Slice> _read_and_decompress_internal(bool need_fill_buf);
 
-    io::SeekableInputStream* const _stream;
+    std::shared_ptr<io::SeekableInputStream> _stream;
     tparquet::PageHeader _cur_header;
 
     uint64_t _offset = 0;

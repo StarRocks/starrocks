@@ -89,17 +89,18 @@ public:
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
+    StatusOr<std::unique_ptr<ZeroCopyInputStream>> try_peek() override;
 
     Status skip(int64_t count) override {
         _offset += count;
         return _sb_stream->skip(count);
     }
 
-protected:
     struct BlockBuffer {
         int64_t offset;
         IOBuffer buffer;
     };
+protected:
     using SharedBufferPtr = SharedBufferedInputStream::SharedBufferPtr;
 
     // Read block from local, if not found, will return Status::NotFound();
@@ -144,6 +145,48 @@ private:
     inline int64_t _calculate_remote_latency_per_block(int64_t io_bytes, int64_t read_time_ns);
     // Record already populated blocks, avoid duplicate populate
     std::unordered_set<int64_t> _already_populated_blocks{};
+};
+
+class SharedBufferAsZeroCopyInputStream : public ZeroCopyInputStream {
+public:
+    SharedBufferAsZeroCopyInputStream(SharedBufferedInputStream::SharedBufferPtr sb, size_t off, size_t size) : _sb(std::move(sb)), _offset(off) {
+        _limit = size - off;
+    }
+    bool next(const void** data, int* size) {
+        if (_limit > 0) {
+            *data = _sb->buffer.data() + _offset;
+            *size = _limit;
+            _limit = 0;
+            return true;
+        }
+        return false;
+    }
+
+private:
+    SharedBufferedInputStream::SharedBufferPtr _sb;
+    size_t _offset;
+    size_t _limit;
+};
+
+class BlockBufferAsZeroCopyInputStream : public ZeroCopyInputStream {
+public:
+    BlockBufferAsZeroCopyInputStream(const CacheInputStream::BlockBuffer& bb, size_t off, size_t size) {
+        _bb = std::make_unique<butil::IOBufAsZeroCopyInputStream>(bb.buffer.const_raw_buf());
+        _bb->Skip(off);
+        _limit = size - off;
+    }
+    bool next(const void** data, int* size) {
+        if (_limit > 0) {
+            _bb->Next(data, size);
+            _limit -= (size_t)size;
+            return true;
+        }
+        return false;
+    }
+
+private:
+    std::unique_ptr<butil::IOBufAsZeroCopyInputStream> _bb;
+    size_t _limit;
 };
 
 } // namespace starrocks::io
