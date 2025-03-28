@@ -879,49 +879,44 @@ public class ShowExecutor {
 
     // Show databases statement
     private void handleShowDb() {
-        GlobalStateMgr.getCurrentState().tryLock(true);
-        try {
-            ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
-            List<List<String>> rows = Lists.newArrayList();
-            List<String> dbNames;
-            String catalogName;
-            if (showDbStmt.getCatalogName() == null) {
-                catalogName = connectContext.getCurrentCatalog();
-            } else {
-                catalogName = showDbStmt.getCatalogName();
-            }
-            dbNames = metadataMgr.listDbNames(catalogName);
-
-            PatternMatcher matcher = null;
-            if (showDbStmt.getPattern() != null) {
-                matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
-                        CaseSensibility.DATABASE.getCaseSensibility());
-            }
-            Set<String> dbNameSet = Sets.newTreeSet();
-            for (String dbName : dbNames) {
-                // Filter dbname
-                if (matcher != null && !matcher.match(dbName)) {
-                    continue;
-                }
-
-                try {
-                    Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
-                            connectContext.getCurrentRoleIds(), catalogName, dbName);
-                } catch (AccessDeniedException e) {
-                    continue;
-                }
-
-                dbNameSet.add(dbName);
-            }
-
-            for (String dbName : dbNameSet) {
-                rows.add(Lists.newArrayList(dbName));
-            }
-
-            resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
-        } finally {
-            GlobalStateMgr.getCurrentState().unlock();
+        ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+        List<String> dbNames;
+        String catalogName;
+        if (showDbStmt.getCatalogName() == null) {
+            catalogName = connectContext.getCurrentCatalog();
+        } else {
+            catalogName = showDbStmt.getCatalogName();
         }
+        dbNames = metadataMgr.listDbNames(catalogName);
+
+        PatternMatcher matcher = null;
+        if (showDbStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
+                    CaseSensibility.DATABASE.getCaseSensibility());
+        }
+        Set<String> dbNameSet = Sets.newTreeSet();
+        for (String dbName : dbNames) {
+            // Filter dbname
+            if (matcher != null && !matcher.match(dbName)) {
+                continue;
+            }
+
+            try {
+                Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), catalogName, dbName);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+
+            dbNameSet.add(dbName);
+        }
+
+        for (String dbName : dbNameSet) {
+            rows.add(Lists.newArrayList(dbName));
+        }
+
+        resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
     }
 
     // Show table statement.
@@ -2512,7 +2507,7 @@ public class ShowExecutor {
                                     .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
                             dynamicPartitionScheduler
                                     .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG),
-                                String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
+                            String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
                 }
             } finally {
                 db.readUnlock();
