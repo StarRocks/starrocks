@@ -58,6 +58,8 @@ public class Frontend extends JsonWriter {
     private String host;
     @SerializedName(value = "e")
     private int editLogPort;
+    @SerializedName(value = "fid")
+    private int fid = 0;
 
     private int queryPort;
     private int rpcPort;
@@ -78,6 +80,14 @@ public class Frontend extends JsonWriter {
     }
 
     public Frontend(FrontendNodeType role, String nodeName, String host, int editLogPort) {
+        this.role = role;
+        this.nodeName = nodeName;
+        this.host = host;
+        this.editLogPort = editLogPort;
+    }
+
+    public Frontend(int fid, FrontendNodeType role, String nodeName, String host, int editLogPort) {
+        this.fid = fid;
         this.role = role;
         this.nodeName = nodeName;
         this.host = host;
@@ -151,6 +161,14 @@ public class Frontend extends JsonWriter {
         this.isAlive = isAlive;
     }
 
+    public int getFid() {
+        return fid;
+    }
+
+    public void setFid(int fid) {
+        this.fid = fid;
+    }
+
     /**
      * handle Frontend's heartbeat response.
      */
@@ -181,7 +199,7 @@ public class Frontend extends JsonWriter {
 
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive ?
-                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+                    HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,

@@ -143,7 +143,6 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().getBestMatchedUserIdentity(user, host);
             if (authenticationInfo == null) {
                 String msg = String.format("Can not find kerberos authentication with [user: %s, remoteIp: %s].", user, host);
-                //LOG.error(msg);
                 throw new Exception(msg);
             }
             String userRealm = authenticationInfo.getValue().getTextForAuthPlugin();
@@ -161,5 +160,10 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }
+    }
+
+    @Override
+    public byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
+        return authMoreDataPacket(user, host);
     }
 }
