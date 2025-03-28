@@ -15,6 +15,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
@@ -38,13 +40,12 @@ import java.util.List;
 
 public class ShowBasicStatsMetaStmt extends ShowStmt {
 
-    public ShowBasicStatsMetaStmt(Predicate predicate) {
-        this(predicate, NodePosition.ZERO);
-    }
-
-    public ShowBasicStatsMetaStmt(Predicate predicate, NodePosition pos) {
+    public ShowBasicStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
+                                  LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
+        this.limitElement = limitElement;
+        this.orderByElements = orderByElements;
     }
 
     private static final ShowResultSetMetaData META_DATA =
