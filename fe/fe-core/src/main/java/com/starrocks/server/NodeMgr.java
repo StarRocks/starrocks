@@ -219,6 +219,9 @@ public class NodeMgr {
     }
 
     public Frontend getFrontend(Integer frontendId) {
+        if (frontendId == 0) {
+            return getMySelf();
+        }
         return frontendIds.get(frontendId);
     }
 

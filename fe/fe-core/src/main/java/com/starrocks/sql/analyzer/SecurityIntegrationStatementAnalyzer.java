@@ -57,7 +57,7 @@ public class SecurityIntegrationStatementAnalyzer {
             Preconditions.checkNotNull(securityIntegration);
             securityIntegration.checkProperty();
 
-            AuthenticationMgr authenticationMgr = GlobalStateMgr.getServingState().getAuthenticationMgr();
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
             if (authenticationMgr.getSecurityIntegration(statement.getName()) != null) {
                 throw new SemanticException("security integration '" + statement.getName() + "' already exists");
             }
