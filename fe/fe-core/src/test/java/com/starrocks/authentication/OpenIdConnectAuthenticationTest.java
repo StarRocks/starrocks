@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
@@ -70,7 +71,7 @@ public class OpenIdConnectAuthenticationTest {
         serializer.writeInt1(0);
         serializer.writeLenEncodedString(openIdConnectJson);
         try {
-            provider.authenticate("harbor", "%", serializer.toArray(), null, null);
+            provider.authenticate(new ConnectContext(), "harbor", "%", serializer.toArray(), null, null);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

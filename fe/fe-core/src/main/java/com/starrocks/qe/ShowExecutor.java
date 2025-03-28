@@ -2538,7 +2538,7 @@ public class ShowExecutor {
                         entry.getKey().toString(),
                         userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
                         userAuthenticationInfo.getAuthPlugin(),
-                        userAuthenticationInfo.getTextForAuthPlugin()));
+                        userAuthenticationInfo.getAuthString()));
             }
 
             return new ShowResultSet(statement.getMetaData(), userAuthInfos);
