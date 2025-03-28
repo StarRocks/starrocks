@@ -120,8 +120,8 @@ public class AuthenticationHandler {
             context.setCurrentRoleIds(authenticatedUser);
             context.setAuthDataSalt(randomString);
 
-            UserProperty userProperty = context.getGlobalStateMgr().getAuthenticationMgr()
-                    .getUserProperty(authenticatedUser.getUser());
+            UserProperty userProperty =
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(authenticatedUser.getUser());
             context.updateByUserProperty(userProperty);
         }
         context.setQualifiedUser(user);
