@@ -119,6 +119,10 @@ public class AuthenticationHandler {
         if (!authenticatedUser.isEphemeral()) {
             context.setCurrentRoleIds(authenticatedUser);
             context.setAuthDataSalt(randomString);
+
+            UserProperty userProperty =
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(authenticatedUser.getUser());
+            context.updateByUserProperty(userProperty);
         }
         context.setQualifiedUser(user);
 
