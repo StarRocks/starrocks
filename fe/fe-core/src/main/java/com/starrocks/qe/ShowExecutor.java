@@ -418,48 +418,43 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowDatabasesStatement(ShowDbStmt statement, ConnectContext context) {
-            GlobalStateMgr.getCurrentState().tryLock(true);
-            try {
-                List<List<String>> rows = Lists.newArrayList();
-                List<String> dbNames;
-                String catalogName;
-                if (statement.getCatalogName() == null) {
-                    catalogName = context.getCurrentCatalog();
-                } else {
-                    catalogName = statement.getCatalogName();
-                }
-                dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames(catalogName);
-
-                PatternMatcher matcher = null;
-                if (statement.getPattern() != null) {
-                    matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
-                            CaseSensibility.DATABASE.getCaseSensibility());
-                }
-                Set<String> dbNameSet = Sets.newTreeSet();
-                for (String dbName : dbNames) {
-                    // Filter dbname
-                    if (matcher != null && !matcher.match(dbName)) {
-                        continue;
-                    }
-
-                    try {
-                        Authorizer.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(),
-                                context.getCurrentRoleIds(), catalogName, dbName);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    dbNameSet.add(dbName);
-                }
-
-                for (String dbName : dbNameSet) {
-                    rows.add(Lists.newArrayList(dbName));
-                }
-
-                return new ShowResultSet(((ShowDbStmt) statement).getMetaData(), rows);
-            } finally {
-                GlobalStateMgr.getCurrentState().unlock();
+            List<List<String>> rows = Lists.newArrayList();
+            List<String> dbNames;
+            String catalogName;
+            if (statement.getCatalogName() == null) {
+                catalogName = context.getCurrentCatalog();
+            } else {
+                catalogName = statement.getCatalogName();
             }
+            dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames(catalogName);
+
+            PatternMatcher matcher = null;
+            if (statement.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.DATABASE.getCaseSensibility());
+            }
+            Set<String> dbNameSet = Sets.newTreeSet();
+            for (String dbName : dbNames) {
+                // Filter dbname
+                if (matcher != null && !matcher.match(dbName)) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(),
+                            context.getCurrentRoleIds(), catalogName, dbName);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                dbNameSet.add(dbName);
+            }
+
+            for (String dbName : dbNameSet) {
+                rows.add(Lists.newArrayList(dbName));
+            }
+
+            return new ShowResultSet(((ShowDbStmt) statement).getMetaData(), rows);
         }
 
         public ShowResultSet visitShowTableStatement(ShowTableStmt statement, ConnectContext context) {
