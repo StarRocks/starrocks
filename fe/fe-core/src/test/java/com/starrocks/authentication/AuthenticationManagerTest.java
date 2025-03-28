@@ -26,7 +26,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -382,8 +381,7 @@ public class AuthenticationManagerTest {
         DDLStmtExecutor.execute(dropStmt, ctx);
         Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
-        // can't get max connection after all test user are dropped
-        Assert.assertThrows(SemanticException.class, () -> manager.getMaxConn("test"));
+        Assert.assertEquals(AuthenticationMgr.DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER, manager.getMaxConn("test"));
     }
 
     @Test
