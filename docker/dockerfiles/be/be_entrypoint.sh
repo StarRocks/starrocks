@@ -114,10 +114,11 @@ collect_env_info
 add_self $svc_name || exit $?
 log_stderr "run start_be.sh"
 
-if [[ "$COREDUMP_ENABLED" == "true" ]]; then
-  # start inotifywait loop daemon to monitor core dump generation
-  $STARROCKS_ROOT/upload_coredump.sh &
-fi
+# disable it on purpose because the rclone package is removed in celerdata repository
+#if [[ "$COREDUMP_ENABLED" == "true" ]]; then
+#  # start inotifywait loop daemon to monitor core dump generation
+#  $STARROCKS_ROOT/upload_coredump.sh &
+#fi
 
 
 addition_args=
