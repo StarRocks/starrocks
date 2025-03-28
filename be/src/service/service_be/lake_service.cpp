@@ -228,12 +228,14 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
                         auto score = compaction_score(_tablet_mgr, metadata);
-                        auto tablet = _tablet_mgr->get_tablet(tablet_id);
                         std::lock_guard l(response_mtx);
                         response->mutable_compaction_scores()->insert({tablet_id, score});
                         if (request->base_version() == 1) {
+                            int64_t row_nums = std::accumulate(
+                                    metadata->rowsets().begin(), metadata->rowsets().end(), 0,
+                                    [](int64_t sum, const auto& rowset) { return sum + rowset.num_rows(); });
                             // Used to collect statistics when the partition is first imported
-                            response->mutable_tablet_row_nums()->insert({tablet_id, tablet->num_rows()});
+                            response->mutable_tablet_row_nums()->insert({tablet_id, row_nums});
                         }
                     } else {
                         g_publish_version_failed_tasks << 1;
