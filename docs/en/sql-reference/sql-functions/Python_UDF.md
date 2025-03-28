@@ -5,6 +5,10 @@ sidebar_position: 0.91
 
 # Python UDF
 
+:::experimental
+experimental feature
+:::
+
 This topic describes how to develop User Defined Functions (UDF) using Python.
 
 Since v3.4.0, StarRocks supports creating Python UDFs.
