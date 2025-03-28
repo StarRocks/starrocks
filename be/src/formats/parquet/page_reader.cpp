@@ -23,12 +23,15 @@
 
 #include "cache/object_cache/object_cache.h"
 #include "common/compiler_util.h"
+#include "common/status.h"
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
-#include "parquet_types.h"
+#include "io/compressed_input_stream.h"
 #include "runtime/exec_env.h"
+#include "util/compression/stream_compression.h"
+#include "util/lazy_slice.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -39,9 +42,9 @@ static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 // 16MB is borrowed from Arrow
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
-PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values,
+PageReader::PageReader(uint64_t start_offset, uint64_t length, uint64_t num_values,
                        const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec)
-        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values), _opts(opts), _codec(codec) {
+        : _stream(opts.file->stream()), _finish_offset(start_offset + length), _num_values_total(num_values), _opts(opts), _codec(codec) {
     if (_opts.use_file_pagecache) {
         _cache = CacheEnv::GetInstance()->external_table_page_cache();
         _init_page_cache_key();
@@ -215,56 +218,31 @@ StatusOr<Slice> PageReader::read_and_decompress_page_data() {
 }
 
 StatusOr<Slice> PageReader::_read_and_decompress_internal(bool need_fill_buf) {
+    RETURN_IF_ERROR(_stream->seek(_offset));
     bool is_compressed = _codec != tparquet::CompressionCodec::UNCOMPRESSED;
-    if (is_compressed && _compress_codec == nullptr) {
-        auto compress_type = ParquetUtils::convert_compression_codec(_codec);
-        RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
+    // TODO deal with uncompressed data
+    if (!is_compressed || (_cur_header.type == tparquet::PageType::DATA_PAGE_V2 && _cur_header.data_page_header_v2.__isset.is_compressed && !_cur_header.data_page_header_v2.is_compressed)) {
+        return Status::NotSupported("to be done");
     }
-    RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
+
+    size_t filled = 0;
+    if (_cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
+        filled = _cur_header.data_page_header_v2.definition_levels_byte_length + _cur_header.data_page_header_v2.repetition_levels_byte_length;
+        RETURN_IF_ERROR(_stream->read(_uncompressed_buf->data(), filled));
+    }
+
+    auto compress_type = ParquetUtils::convert_compression_codec(_codec);
+    std::unique_ptr<StreamCompression> dec;
+    RETURN_IF_ERROR(StreamCompression::create_decompressor(compress_type, &dec));
+    auto compressed_input_stream =
+            std::make_unique<io::CompressedInputStream>(_stream, std::shared_ptr<StreamCompression>(dec.release()));
+    auto decompress_filler = std::make_unique<DecompressFiller>(std::move(compressed_input_stream));
 
     size_t uncompressed_size = _cur_header.uncompressed_page_size;
-    size_t read_size = is_compressed ? _cur_header.compressed_page_size : uncompressed_size;
-    std::vector<uint8_t>& read_buffer = is_compressed ? *_compressed_buf : *_uncompressed_buf;
-    _opts.stats->request_bytes_read += read_size;
-    _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
-
-    // check if we can zero copy read.
-    Slice read_data;
-    auto ret = _peek(read_size);
-    if (!need_fill_buf && ret.ok() && ret.value().size() == read_size) {
-        _opts.stats->bytes_read += read_size;
-        // peek dos not advance offset.
-        RETURN_IF_ERROR(_skip_bytes(read_size));
-        read_data = Slice(ret.value().data(), read_size);
-    } else {
-        read_buffer.reserve(read_size);
-        read_data = Slice(read_buffer.data(), read_size);
-        RETURN_IF_ERROR(_read_bytes(read_data.data, read_data.size));
-    }
-
-    // if it's compressed, we have to uncompress page
-    // otherwise we just assign slice.
-    Slice uncompressed_data;
-    if (is_compressed &&
-        (_cur_header.type != tparquet::PageType::DATA_PAGE_V2 ||
-         !(_cur_header.data_page_header_v2.__isset.is_compressed) ||
-         (_cur_header.data_page_header_v2.is_compressed))) {
-        raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size);
-        uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
-
-        if (_cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
-            uint32_t bytes_level_size = _cur_header.data_page_header_v2.definition_levels_byte_length + _cur_header.data_page_header_v2.repetition_levels_byte_length;
-            memcpy(uncompressed_data.data, read_data.data, bytes_level_size);
-            read_data.remove_prefix(bytes_level_size);
-            uncompressed_data.remove_prefix(bytes_level_size);
-            RETURN_IF_ERROR(_compress_codec->decompress(read_data, &uncompressed_data));
-            uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
-        } else {
-            RETURN_IF_ERROR(_compress_codec->decompress(read_data, &uncompressed_data));
-        }
-    } else {
-        uncompressed_data = read_data;
-    }
+    raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size);
+    auto lazy_slice = std::make_unique<LazySlice>(reinterpret_cast<char *>(_uncompressed_buf->data()), uncompressed_size, filled, std::move(decompress_filler));
+    RETURN_IF_ERROR(lazy_slice->try_to_trigger_fill(filled, uncompressed_size));
+    auto uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
     return uncompressed_data;
 }
 
