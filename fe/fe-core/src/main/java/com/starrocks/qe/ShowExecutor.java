@@ -40,6 +40,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LikePredicate;
+import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -152,6 +155,7 @@ import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -2364,7 +2368,10 @@ public class ShowExecutor {
                     LOG.warn("analyze job {} meta not found, {}", job.getId(), e);
                 }
             }
+
             rows = doPredicate(statement, statement.getMetaData(), rows);
+            rows = doOrderBy(rows, statement.getOrderByPairs());
+            rows = doLimit(rows, statement.getLimitElement());
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
@@ -2384,7 +2391,10 @@ public class ShowExecutor {
                     // pass
                 }
             }
+
             rows = doPredicate(statement, statement.getMetaData(), rows);
+            rows = doOrderBy(rows, statement.getOrderByPairs());
+            rows = doLimit(rows, statement.getLimitElement());
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
@@ -2417,6 +2427,8 @@ public class ShowExecutor {
             }
 
             rows = doPredicate(statement, statement.getMetaData(), rows);
+            rows = doOrderBy(rows, statement.getOrderByPairs());
+            rows = doLimit(rows, statement.getLimitElement());
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
@@ -2450,6 +2462,8 @@ public class ShowExecutor {
             }
 
             rows = doPredicate(statement, statement.getMetaData(), rows);
+            rows = doOrderBy(rows, statement.getOrderByPairs());
+            rows = doLimit(rows, statement.getLimitElement());
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
@@ -2888,23 +2902,115 @@ public class ShowExecutor {
                 return rows;
             }
 
-            SlotRef slotRef = (SlotRef) predicate.getChild(0);
-            StringLiteral stringLiteral = (StringLiteral) predicate.getChild(1);
-            List<List<String>> returnRows = new ArrayList<>();
-            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+            List<Expr> conjuncts = AnalyzerUtils.extractConjuncts(predicate);
+            if (conjuncts.isEmpty()) {
+                return rows;
+            }
 
-            int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
-            if (binaryPredicate.getOp().isEquivalence()) {
-                for (List<String> row : rows) {
-                    if (row.get(idx).equals(stringLiteral.getStringValue())) {
-                        returnRows.add(row);
-                    }
-                }
+            List<List<String>> returnRows = new ArrayList<>(rows);
+
+            for (Expr expr : conjuncts) {
+                returnRows = applyPredicate(expr, showResultSetMetaData, returnRows);
             }
 
             return returnRows;
         }
+
+        private List<List<String>> applyPredicate(Expr expr,
+                                                  ShowResultSetMetaData showResultSetMetaData,
+                                                  List<List<String>> rows) {
+            List<List<String>> filteredRows = new ArrayList<>();
+
+            if (expr instanceof BinaryPredicate) {
+                BinaryPredicate binaryPredicate = expr.cast();
+                SlotRef slotRef = binaryPredicate.getChild(0).cast();
+                StringLiteral stringLiteral = binaryPredicate.getChild(1).cast();
+
+                int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
+                String targetValue = stringLiteral.getStringValue();
+
+                for (List<String> row : rows) {
+                    if (row.get(idx).equals(targetValue)) {
+                        filteredRows.add(row);
+                    }
+                }
+            } else if (expr instanceof LikePredicate) {
+                LikePredicate likePredicate = expr.cast();
+                SlotRef slotRef = likePredicate.getChild(0).cast();
+                StringLiteral stringLiteral = likePredicate.getChild(1).cast();
+
+                int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
+                String pattern = stringLiteral.getStringValue();
+
+                PatternMatcher matcher = PatternMatcher.createMysqlPattern(pattern, false);
+
+                for (List<String> row : rows) {
+                    String value = row.get(idx);
+                    if (matcher.match(value)) {
+                        filteredRows.add(row);
+                    }
+                }
+            }
+
+            return filteredRows;
+        }
+
+
+        private List<List<String>> doOrderBy(List<List<String>> rows, List<OrderByPair> orderByPairs) {
+            if (rows.isEmpty() || CollectionUtils.isEmpty(orderByPairs)) {
+                return rows;
+            }
+
+            OrderByPair[] orderByPairArr = orderByPairs.toArray(new OrderByPair[0]);
+            rows.sort((row1, row2) -> {
+                for (OrderByPair pair : orderByPairArr) {
+                    int index = pair.getIndex();
+                    if (index >= row1.size() || index >= row2.size()) {
+                        continue;
+                    }
+
+                    String val1 = row1.get(index);
+                    String val2 = row2.get(index);
+
+                    int cmp;
+                    try {
+                        double d1 = Double.parseDouble(val1);
+                        double d2 = Double.parseDouble(val2);
+                        cmp = Double.compare(d1, d2);
+                    } catch (NumberFormatException e) {
+                        cmp = val1.compareTo(val2);
+                    }
+
+                    if (cmp != 0) {
+                        return pair.isDesc() ? -cmp : cmp;
+                    }
+                }
+                return 0;
+            });
+
+            return rows;
+        }
+
+        private List<List<String>> doLimit(List<List<String>> rows, LimitElement limitElement) {
+            if (rows.isEmpty() || limitElement == null || !limitElement.hasLimit()) {
+                return rows;
+            }
+            long limit = limitElement.getLimit();
+            long offset = limitElement.getOffset();
+            if (offset >= rows.size()) {
+                rows = Lists.newArrayList();
+            } else if (limit != -1L) {
+                if ((limit + offset) < rows.size()) {
+                    rows = rows.subList((int) offset, (int) (limit + offset));
+                } else {
+                    rows = rows.subList((int) offset, rows.size());
+                }
+            }
+
+            return rows;
+        }
     }
+
     private static ShowMaterializedViewStatus getASyncMVStatus(Map<String, List<TaskRunStatus>> mvNameTaskMap,
                                                                String dbName,
                                                                MaterializedView mvTable) {

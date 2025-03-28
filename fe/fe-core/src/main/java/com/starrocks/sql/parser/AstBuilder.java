@@ -2853,12 +2853,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             predicate = (Predicate) visit(context.expression());
         }
 
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+
         if (context.STATUS() != null) {
-            return new ShowAnalyzeStatusStmt(predicate, pos);
+            return new ShowAnalyzeStatusStmt(predicate, orderByElements, limitElement, pos);
         } else if (context.JOB() != null) {
-            return new ShowAnalyzeJobStmt(predicate, pos);
+            return new ShowAnalyzeJobStmt(predicate, orderByElements, limitElement, pos);
         } else {
-            return new ShowAnalyzeJobStmt(predicate, pos);
+            return new ShowAnalyzeJobStmt(predicate, orderByElements, limitElement, pos);
         }
     }
 
@@ -2869,7 +2878,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             predicate = (Predicate) visit(context.expression());
         }
 
-        return new ShowBasicStatsMetaStmt(predicate, createPos(context));
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+
+        return new ShowBasicStatsMetaStmt(predicate, orderByElements, limitElement, createPos(context));
     }
 
     @Override
@@ -2879,7 +2898,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             predicate = (Predicate) visit(context.expression());
         }
 
-        return new ShowHistogramStatsMetaStmt(predicate, createPos(context));
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+
+        return new ShowHistogramStatsMetaStmt(predicate, orderByElements, limitElement, createPos(context));
     }
 
     private AnalyzeStmt histogramStatement(StarRocksParser.HistogramStatementContext context) {
