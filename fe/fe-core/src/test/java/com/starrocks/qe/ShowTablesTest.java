@@ -16,6 +16,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -73,6 +74,7 @@ public class ShowTablesTest {
 
     @Test
     public void testShowTableVerbose() throws Exception {
+        String mysqlTableType = Table.getTableTypeForMysql();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
@@ -84,7 +86,7 @@ public class ShowTablesTest {
         Assert.assertEquals("VIEW", resultSet.getString(1));
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
+        Assert.assertEquals(mysqlTableType, resultSet.getString(1));
         Assert.assertFalse(resultSet.next());
     }
 
