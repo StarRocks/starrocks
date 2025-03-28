@@ -43,10 +43,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
@@ -271,5 +274,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return hiveMetadata.getCloudConfiguration();
+    }
+
+    @Override
+    public Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
+                                          ScalarOperator predicate, FileContent content) {
+        ConnectorMetadata metadata = metadataOfTable(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
+        return metadata.getDeleteFiles(icebergTable, snapshotId, predicate, content);
     }
 }
