@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
@@ -67,7 +68,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                     authenticationMgr.getBestMatchedUserIdentity(userIdentity.getUser(), userIdentity.getHost());
             if (userAuthenticationInfoEntry != null) {
                 try {
-                    authenticate(userIdentity.getUser(), userIdentity.getHost(),
+                    authenticate(null, userIdentity.getUser(), userIdentity.getHost(),
                             password.getBytes(StandardCharsets.UTF_8), null, userAuthenticationInfoEntry.getValue());
                 } catch (AuthenticationException e) {
                     return;
@@ -96,12 +97,13 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name());
         info.setPassword(passwordScrambled);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
+        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
         return info;
     }
 
     @Override
     public void authenticate(
+            ConnectContext context,
             String user,
             String host,
             byte[] remotePassword,

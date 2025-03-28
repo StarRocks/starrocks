@@ -280,7 +280,7 @@ public class MysqlProto {
         if (localUser != null) {
             UserAuthenticationInfo authInfo = localUser.getValue();
             switchAuthPlugin = AuthPlugin.covertFromServerToClient(authInfo.getAuthPlugin());
-            provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin());
+            provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin(), authInfo.getAuthString());
         } else {
             for (String authMechanism : Config.authentication_chain) {
                 if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
