@@ -222,8 +222,9 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
 
     EXPECT_TRUE(conv->read_string(col.get(), "", options));
     EXPECT_TRUE(conv->read_string(col.get(), "apple_banana_\\N", options));
+    EXPECT_TRUE(conv->read_string(col.get(), "__", options));
 
-    EXPECT_EQ(2, col->size());
+    EXPECT_EQ(3, col->size());
     // []
     EXPECT_EQ(0, col->get(0).get_array().size());
     // ["apple","banana",null]
@@ -231,6 +232,11 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
     EXPECT_EQ("apple", col->get(1).get_array()[0].get_slice());
     EXPECT_EQ("banana", col->get(1).get_array()[1].get_slice());
     EXPECT_TRUE(col->get(1).get_array()[2].is_null());
+    // ["","",""]
+    EXPECT_EQ(3, col->get(2).get_array().size());
+    EXPECT_EQ("", col->get(2).get_array()[0].get_slice());
+    EXPECT_EQ("", col->get(2).get_array()[1].get_slice());
+    EXPECT_EQ("", col->get(2).get_array()[2].get_slice());
 }
 
 // NOLINTNEXTLINE
