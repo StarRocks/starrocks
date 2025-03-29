@@ -27,3 +27,4 @@ SELECT sleep(30);
 
 select latest_source_position from information_schema.routine_load_jobs where name = "rl_offset_lag" order by id desc limit 1;
 select offset_lag from information_schema.routine_load_jobs where name = "rl_offset_lag" order by id desc limit 1;
+select timestamp_progress from information_schema.routine_load_jobs where name = "rl_offset_lag" order by id desc limit 1;
