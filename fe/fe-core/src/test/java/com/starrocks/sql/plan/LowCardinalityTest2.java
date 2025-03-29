@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
@@ -1752,6 +1753,25 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type");
+    }
+
+    @Test
+    public void testMetaScanException() throws Exception {
+        String sql = "select dict_merge(t1a, 10000000000) from test_all_type [_META_]";
+        try {
+            String plan = getFragmentPlan(sql);
+            Assert.fail();
+        } catch (SemanticException e) {
+            assertContains(e.getMessage(), "The second parameter of DICT_MERGE must be a constant positive integer");
+        }
+        sql = "select dict_merge(t1a, -1) from test_all_type [_META_]";
+        try {
+            String plan = getFragmentPlan(sql);
+            Assert.fail();
+        } catch (SemanticException e) {
+            assertContains(e.getMessage(), "The second parameter of DICT_MERGE must be a constant positive integer");
+        }
+
     }
 
     @Test
