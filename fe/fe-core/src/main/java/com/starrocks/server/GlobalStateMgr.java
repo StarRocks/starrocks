@@ -1477,9 +1477,7 @@ public class GlobalStateMgr {
         // ES state store
         esRepository.start();
 
-        if (Config.enable_hms_events_incremental_sync) {
-            metastoreEventsProcessor.start();
-        }
+        metastoreEventsProcessor.start();
 
         connectorTableMetadataProcessor.start();
 
