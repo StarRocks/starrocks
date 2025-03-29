@@ -74,6 +74,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.spm.SPMPlanner;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
@@ -117,6 +118,9 @@ public class StatementPlanner {
             }
         }
 
+        SPMPlanner spmPlanner = new SPMPlanner(session);
+        stmt = spmPlanner.plan(stmt);
+
         boolean needWholePhaseLock = true;
         // 1. For all queries, we need db lock when analyze phase
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
@@ -145,6 +149,9 @@ public class StatementPlanner {
                     long planStartTime = OptimisticVersion.generate();
                     unLock(plannerMetaLocker);
                     plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime);
+                }
+                if (spmPlanner.getBaseline() != null) {
+                    plan.setUseBaseline(spmPlanner.getBaseline().getId());
                 }
                 setOutfileSink(queryStmt, plan);
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.SELECT);
