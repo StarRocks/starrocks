@@ -596,18 +596,30 @@ public class AstToStringBuilder {
                 }
 
                 String selectItemLabel;
+                StringBuilder sb = new StringBuilder();
                 SelectListItem item = selectList.getItems().get(i);
                 if (!item.isStar()) {
                     String aliasSql = null;
                     if (item.getAlias() != null) {
                         aliasSql = "AS " + item.getAlias();
                     }
-                    selectItemLabel = visit(item.getExpr()) + ((aliasSql == null) ? "" : " " + aliasSql);
+                    sb.append(visit(item.getExpr()) + ((aliasSql == null) ? "" : " " + aliasSql));
                 } else if (item.getTblName() != null) {
-                    selectItemLabel = item.getTblName().toString() + ".*";
+                    sb.append(item.getTblName().toString() + ".*");
                 } else {
-                    selectItemLabel = "*";
+                    sb.append("*");
                 }
+
+                if (!item.getExcludedColumns().isEmpty()) {
+                    sb.append(" EXCLUDE( ");
+                    sb.append(
+                            item.getExcludedColumns().stream()
+                            .map(col -> "\"" + col + "\"")
+                            .collect(Collectors.joining(", "))
+                    );
+                    sb.append(")");
+                }
+                selectItemLabel = sb.toString();
 
                 sqlBuilder.append(selectItemLabel);
             }

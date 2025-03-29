@@ -1,0 +1,18 @@
+-- name: test_all_column_exclude @slow
+CREATE TABLE test_table ( id INT, name VARCHAR(50), age INT, email VARCHAR(100)) DUPLICATE KEY(id);
+
+INSERT INTO test_table VALUES (1, 'Alice', 25, 'alice@example.com'),(2, 'Bob', 30, 'bob@example.com');
+SELECT * EXCLUDE (age) FROM test_table;
+SELECT * EXCLUDE (name, email) FROM test_table;
+SELECT test_table.* EXCLUDE (email) FROM test_table;
+SELECT * EXCLUDE (id) FROM test_table WHERE age > 25;
+SELECT t1.* EXCLUDE (email), t2.department FROM test_table t1 JOIN department_table t2 ON t1.id = t2.emp_id;
+SELECT * EXCLUDE (age) AS t FROM test_table;
+
+SELECT * EXCLUDE (invalid_col) FROM test_table;
+SELECT test_table.* EXCLUDE (department) FROM test_table;
+SELECT * EXCLUDE (age) FROM test_table WHERE id = 1;
+SELECT id, name EXCLUDE (name) FROM test_table; 
+SELECT * EXCLUDE (id, name, age, email) FROM test_table;
+SELECT * EXCLUDE (age, age) FROM test_table;
+SELECT * EXCLUDE (NAME) FROM test_table; 
