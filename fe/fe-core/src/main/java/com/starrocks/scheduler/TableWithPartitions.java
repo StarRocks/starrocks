@@ -15,9 +15,8 @@
 package com.starrocks.scheduler;
 
 import com.google.api.client.util.Lists;
-import com.google.common.collect.Range;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PRangeCell;
 
 import java.util.List;
@@ -41,18 +40,18 @@ public class TableWithPartitions {
         return partitionNames;
     }
 
-    public List<PRangeCell> getSortedPartitionRanges(Map<String, Range<PartitionKey>> partitinRangeMap) {
+    public List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap) {
         return getSortedPartitionRanges(partitinRangeMap, this.partitionNames);
     }
 
-    public static List<PRangeCell> getSortedPartitionRanges(Map<String, Range<PartitionKey>> partitinRangeMap,
+    public static List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap,
                                                             Set<String> partitionNames) {
         if (partitionNames == null || partitionNames.isEmpty()) {
             return Lists.newArrayList();
         }
         return partitionNames.stream()
                 .filter(partitinRangeMap::containsKey)
-                .map(p -> new PRangeCell(partitinRangeMap.get(p)))
+                .map(p -> (PRangeCell) partitinRangeMap.get(p))
                 .sorted(PRangeCell::compareTo)
                 .collect(Collectors.toList());
     }

@@ -23,6 +23,7 @@ namespace starrocks::pipeline {
 Status LocalMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _sort_context->ref();
+    _sort_context->attach_source_observer(state, observer());
     return Status::OK();
 }
 void LocalMergeSortSourceOperator::close(RuntimeState* state) {
@@ -40,6 +41,7 @@ Status LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
 }
 
 Status LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
+    auto defer = _sort_context->defer_notify_sink();
     _sort_context->cancel();
     return _sort_context->set_finished();
 }

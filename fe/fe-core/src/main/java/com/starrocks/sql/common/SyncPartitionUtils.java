@@ -44,10 +44,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -88,9 +90,9 @@ public class SyncPartitionUtils {
 
     private static final String DEFAULT_PREFIX = "p";
 
-    public static RangePartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                    Map<String, Range<PartitionKey>> mvRangeMap,
-                                                                    RangePartitionDiffer differ) {
+    public static PartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                               Map<String, Range<PartitionKey>> mvRangeMap,
+                                                               RangePartitionDiffer differ) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         RangeSet<PartitionKey> ranges = TreeRangeSet.create();
@@ -105,21 +107,19 @@ public class SyncPartitionUtils {
                 RangePartitionDiffer.simpleDiff(unique, mvRangeMap);
     }
 
-
     public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
-        RangePartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
+        PartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
         if (MapUtils.isNotEmpty(diff.getAdds()) || MapUtils.isNotEmpty(diff.getDeletes())) {
             return true;
         }
         return false;
     }
 
-
-    public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                 Map<String, Range<PartitionKey>> mvRangeMap,
-                                                                 FunctionCallExpr functionCallExpr,
-                                                                 RangePartitionDiffer differ) {
+    public static PartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                            Map<String, Range<PartitionKey>> mvRangeMap,
+                                                            FunctionCallExpr functionCallExpr,
+                                                            RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
@@ -154,11 +154,11 @@ public class SyncPartitionUtils {
     }
 
     @NotNull
-    private static RangePartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
-                                                            Map<String, Range<PartitionKey>> rollupRange,
-                                                            RangePartitionDiffer differ) {
+    private static PartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
+                                                       Map<String, Range<PartitionKey>> rollupRange,
+                                                       RangePartitionDiffer differ) {
         // TODO: Callers may use `List<PartitionRange>` directly.
-        RangePartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
+        PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
                 RangePartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
         return diff;
     }
@@ -195,8 +195,8 @@ public class SyncPartitionUtils {
     /**
      * Convert base table with partition expression with the associated partition expressions.
      * eg: Create MV mv1
-     *      partition by tbl1.dt
-     *      as select * from tbl1 join on tbl2 on tbl1.dt = date_trunc('month', tbl2.dt)
+     * partition by tbl1.dt
+     * as select * from tbl1 join on tbl2 on tbl1.dt = date_trunc('month', tbl2.dt)
      * This method will format tbl1's range partition key directly, and will format tbl2's partition range key by
      * using `date_trunc('month', tbl2.dt)`.
      * TODO: now `date_trunc` is supported, should support like to_date(ds) + 1 day ?
@@ -604,7 +604,7 @@ public class SyncPartitionUtils {
         for (String refBaseTableAssociatedPartition : refBaseTableAssociatedPartitions) {
             if (!baseTableVersionInfoMap.containsKey(refBaseTableAssociatedPartition)) {
                 LOG.warn("WARNING: mvPartitionNameRefBaseTablePartitionMap {} failed to tracked the materialized view {} " +
-                        "partition {}", Joiner.on(",").join(mvPartitionNameRefBaseTablePartitionMap.keySet()),
+                                "partition {}", Joiner.on(",").join(mvPartitionNameRefBaseTablePartitionMap.keySet()),
                         mv.getName(), mvPartitionName);
                 continue;
             }
@@ -614,7 +614,6 @@ public class SyncPartitionUtils {
         // finally remove the dropped materialized view partition
         mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
     }
-
 
     private static boolean isMVPartitionNameRefBaseTablePartitionMapEnough(
             Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
@@ -673,7 +672,7 @@ public class SyncPartitionUtils {
         if (!versionMap.containsKey(baseTableInfo)) {
             // version map should always contain ref base table's version info.
             LOG.warn("Base ref table {} is not found in the base table version info map when " +
-                    "materialized view {} drops partition:{}",
+                            "materialized view {} drops partition:{}",
                     baseTableInfo, mv.getName(), mvPartitionName);
             return;
         }
@@ -751,9 +750,17 @@ public class SyncPartitionUtils {
         if (StringUtils.isEmpty(tableName.getCatalog()) || InternalCatalog.isFromDefault(tableName)) {
             return;
         }
+        List<Expr> mvPartitionRefTableExprs = mv.getPartitionRefTableExprs();
+        if (CollectionUtils.isEmpty(mvPartitionRefTableExprs)) {
+            return;
+        }
+        // TODO: support multiple partition columns
+        if (mvPartitionRefTableExprs.size() > 1) {
+            return;
+        }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
-        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
-                tableName.getDb(), tableName.getTbl());
+        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
 
         if (baseTable == null) {
             return;

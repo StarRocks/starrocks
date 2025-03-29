@@ -112,19 +112,20 @@ public class MultiJoinNode {
 
         if (joinOperator.getProjection() != null) {
             Projection projection = joinOperator.getProjection();
-
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                if (!entry.getValue().isColumnRef()
-                        && entry.getValue().getUsedColumns().isIntersect(node.inputAt(0).getOutputColumns())
-                        && entry.getValue().getUsedColumns().isIntersect(node.inputAt(1).getOutputColumns())) {
-                    atoms.add(node);
-                    return;
-                }
-
-                if (!entry.getKey().equals(entry.getValue())) {
-                    expressionMap.put(entry.getKey(), entry.getValue());
-                }
+            boolean fromTwoChildren = projection.getColumnRefMap().values().stream().anyMatch(v -> {
+                ColumnRefSet useRefs = v.getUsedColumns();
+                return !v.isColumnRef() && useRefs.isIntersect(node.inputAt(0).getOutputColumns())
+                        && useRefs.isIntersect(node.inputAt(1).getOutputColumns());
+            });
+            if (fromTwoChildren) {
+                atoms.add(node);
+                return;
             }
+            projection.getColumnRefMap().forEach((k, v) -> {
+                if (!k.equals(v)) {
+                    expressionMap.put(k, v);
+                }
+            });
         }
 
         flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap);

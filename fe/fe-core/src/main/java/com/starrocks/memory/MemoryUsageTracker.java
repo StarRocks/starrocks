@@ -26,6 +26,7 @@ import com.starrocks.qe.QeProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,10 +70,17 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Task", currentState.getTaskManager().getTaskRunManager());
         registerMemoryTracker("TabletInvertedIndex", currentState.getTabletInvertedIndex());
         registerMemoryTracker("LocalMetastore", currentState.getLocalMetastore());
+        registerMemoryTracker("Report", currentState.getReportHandler());
+
+        // MV
+        registerMemoryTracker("MV", currentState.getMaterializedViewMgr().getMvTimelinessMgr());
 
         registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
         registerMemoryTracker("Agent", new AgentTaskTracker());
+        if (currentState.getStatisticStorage() instanceof CachedStatisticStorage) {
+            registerMemoryTracker("Statistics", (CachedStatisticStorage) currentState.getStatisticStorage());
+        }
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
         if (qeProcessor instanceof QeProcessorImpl) {

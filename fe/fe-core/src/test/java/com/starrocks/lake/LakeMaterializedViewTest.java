@@ -29,6 +29,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
@@ -37,7 +38,9 @@ import com.starrocks.catalog.MaterializedView.RefreshType;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
@@ -125,6 +128,7 @@ public class LakeMaterializedViewTest {
         long mvId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+        long physicalPartitionId = 6L;
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -149,7 +153,7 @@ public class LakeMaterializedViewTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // refresh scheme
         MvRefreshScheme mvRefreshScheme = new MvRefreshScheme();
@@ -391,6 +395,9 @@ public class LakeMaterializedViewTest {
         long indexId = 3L;
         long partition1Id = 20L;
         long partition2Id = 21L;
+        long physicalPartitionId1 = 22L;
+        long physicalPartitionId2 = 23L;
+
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -417,7 +424,7 @@ public class LakeMaterializedViewTest {
         TabletMeta tabletMeta1 = new TabletMeta(dbId, mvId, partition1Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet1 = new LakeTablet(tablet1Id);
         index1.addTablet(tablet1, tabletMeta1);
-        Partition partition1 = new Partition(partition1Id, "p1", index1, distributionInfo);
+        Partition partition1 = new Partition(partition1Id, physicalPartitionId1, "p1", index1, distributionInfo);
 
         LocalDate upper1 = LocalDate.now().minus(duration);
         LocalDate lower1 = upper1.minus(duration);
@@ -430,7 +437,7 @@ public class LakeMaterializedViewTest {
         TabletMeta tabletMeta2 = new TabletMeta(dbId, mvId, partition2Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet2 = new LakeTablet(tablet2Id);
         index2.addTablet(tablet2, tabletMeta2);
-        Partition partition2 = new Partition(partition2Id, "p2", index1, distributionInfo);
+        Partition partition2 = new Partition(partition2Id, physicalPartitionId2, "p2", index1, distributionInfo);
 
         LocalDate upper2 = LocalDate.now();
         LocalDate lower2 = upper2.minus(duration);
@@ -454,5 +461,38 @@ public class LakeMaterializedViewTest {
         // Test
         Assert.assertFalse(mv.isEnableFillDataCache(partition1));
         Assert.assertTrue(mv.isEnableFillDataCache(partition2));
+    }
+
+    @Test
+    public void testBuildRecyclePartitionInfo() {
+        long dbId = 1L;
+        long mvId = 2L;
+        long partitionId = 3L;
+        Partition partition = new Partition(partitionId, null, null);
+
+        // range partition
+        PartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList());
+        rangePartitionInfo.setIsInMemory(partitionId, true);
+        LakeMaterializedView mv1 =
+                new LakeMaterializedView(mvId, dbId, "mv1", null, null, rangePartitionInfo, null, null);
+
+        RecyclePartitionInfo recyclePartitionInfo = mv1.buildRecyclePartitionInfo(dbId, partition);
+        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeRangePartitionInfo);
+
+        // un-partitioned
+        PartitionInfo singlePartitionInfo = new PartitionInfo(PartitionType.UNPARTITIONED);
+        singlePartitionInfo.setIsInMemory(partitionId, true);
+        LakeMaterializedView mv2 =
+                new LakeMaterializedView(mvId, dbId, "mv1", null, null, singlePartitionInfo, null, null);
+        recyclePartitionInfo = mv2.buildRecyclePartitionInfo(dbId, partition);
+        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeUnPartitionInfo);
+
+        // list partition
+        PartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+        listPartitionInfo.setIsInMemory(partitionId, true);
+        LakeMaterializedView mv3 =
+                new LakeMaterializedView(mvId, dbId, "mv1", null, null, listPartitionInfo, null, null);
+        recyclePartitionInfo = mv3.buildRecyclePartitionInfo(dbId, partition);
+        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeListPartitionInfo);
     }
 }

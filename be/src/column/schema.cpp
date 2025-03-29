@@ -43,15 +43,18 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
         : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     _fields.resize(cids.size());
     auto ori_sort_idxes = schema->sort_key_idxes();
-    std::unordered_set<ColumnId> scids(ori_sort_idxes.begin(), ori_sort_idxes.end());
+    std::map<ColumnId, int32_t> cids_to_field_id;
     for (int i = 0; i < cids.size(); i++) {
         if (cids[i] >= schema->_fields.size()) {
             _fields.resize(_fields.size() - 1);
             continue;
         }
         _fields[i] = schema->_fields[cids[i]];
-        if (scids.find(cids[i]) != scids.end()) {
-            _sort_key_idxes.emplace_back(i);
+        cids_to_field_id[cids[i]] = i;
+    }
+    for (auto idx : ori_sort_idxes) {
+        if (cids_to_field_id.count(idx) > 0) {
+            _sort_key_idxes.emplace_back(cids_to_field_id[idx]);
         }
     }
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };

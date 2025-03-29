@@ -25,6 +25,7 @@ OPTS=$(getopt \
   -l 'daemon' \
   -l 'helper:' \
   -l 'host_type:' \
+  -l 'cluster_snapshot' \
   -l 'debug' \
   -l 'logconsole' \
   -- "$@")
@@ -34,15 +35,17 @@ eval set -- "$OPTS"
 RUN_DAEMON=0
 HELPER=
 HOST_TYPE=
+CLUSTER_SNAPSHOT=
 ENABLE_DEBUGGER=0
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
 # min jdk version required
-MIN_JDK_VERSION=11
+MIN_JDK_VERSION=17
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
         --helper) HELPER=$2 ; shift 2 ;;
         --host_type) HOST_TYPE=$2 ; shift 2 ;;
+        --cluster_snapshot) CLUSTER_SNAPSHOT="-cluster_snapshot" ; shift ;;
         --debug) ENABLE_DEBUGGER=1 ; shift ;;
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --) shift ;  break ;;
@@ -106,39 +109,12 @@ if [[ "$JAVA_VERSION" -lt $MIN_JDK_VERSION ]]; then
     exit -1
 fi
 
-# ### Things to know about environment variables of JAVA_OPTS, JAVA_OPTS_FOR_JDK_9 and JAVA_OPTS_FOR_JDK_11
-# * It is historic reason and backwards compatibility consideration to have separate JAVA_OPTS
-#   for diffferent versions of JDK, so that when the user upgrades or downgrades the JDK version,
-#   the JAVA_OPTS won't be suddenly broken.
-# * Ideally, the user will only care about the `JAVA_OPTS`, don't set any JAVA_OPTS_FOR_JDK_*
-# * JAVA_OPTS/JAVA_OPTS_FOR_JDK_9/JAVA_OPTS_FOR_JDK_11 can be either set in the shell before invoking
-#   this script, or can be set in `fe.conf` which will be loaded automatically by `export_env_from_conf`
-#
-# ### Precedence of environment variables
-# For JDK11, it takes the following precedences:
-#    JAVA_OPTS_FOR_JDK_11 > JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
-# (The `JAVA_OPTS_FOR_JDK_9` here is just for historic reason)
-# For JDK9, it takes the following precedences:
-#    JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
-# For all remain jdk versions, only JAVA_OPTS takes effect.
-#
-# NOTE: try not adding new JAVA_OPTS_FOR_JDK_## for a new JDK version.
-#
-final_java_opt=
-case $JAVA_VERSION in
-  11)
-    # take JAVA_OPTS_FOR_JDK_11 or JAVA_OPTS_FOR_JDK_9 if the former is empty
-    final_java_opt=${JAVA_OPTS_FOR_JDK_11:-$JAVA_OPTS_FOR_JDK_9}
-    final_java_opt=${final_java_opt:-$JAVA_OPTS}
-    ;;
-  9)
-    # take JAVA_OPTS_FOR_JDK_9 or JAVA_OPTS if the former is empty
-    final_java_opt=${JAVA_OPTS_FOR_JDK_9:-$JAVA_OPTS}
-    ;;
-  *)
-    final_java_opt=$JAVA_OPTS
-    ;;
-esac
+final_java_opt=${JAVA_OPTS}
+# Compatible with scenarios upgraded from jdk11
+if [ ! -z "${JAVA_OPTS_FOR_JDK_11}" ] ; then
+    echo "Warning: Configuration parameter JAVA_OPTS_FOR_JDK_11 is not supported, JAVA_OPTS is the only place to set jvm parameters"
+    final_java_opt=${JAVA_OPTS_FOR_JDK_11}
+fi
 
 if [ -z "$final_java_opt" ] ; then
     # lookup fails, provide a fixed opts with best guess that may or may not work
@@ -228,7 +204,7 @@ echo "start time: $(date), server uptime: $(uptime)"
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null &
+    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null &
 else
-    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null
+    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null
 fi

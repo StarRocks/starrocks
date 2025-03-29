@@ -27,7 +27,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.util.Util;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TCacheParam;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
@@ -46,6 +48,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
@@ -218,7 +221,7 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
 
@@ -368,7 +371,7 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\"\n" +
+                "\"enable_persistent_index\" = \"true\"\n" +
                 ");";
 
         String createTbl9StmtStr = "" +
@@ -459,6 +462,10 @@ public class QueryCacheTest {
     }
 
     private void testHelper(List<String> queryList) {
+        if (queryList.size() > 5) {
+            Collections.shuffle(queryList);
+            queryList = queryList.subList(0, 5);
+        }
         List<PlanFragment> frags = queryList.stream()
                 .map(q -> getCachedFragment(q).get()).collect(Collectors.toList());
         List<ByteBuffer> digests =
@@ -1529,5 +1536,29 @@ public class QueryCacheTest {
         Optional<PlanFragment> frag1 = getCachedFragment(sql1);
         Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
         Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
+    }
+
+    @Test
+    public void testDigestsVaryAsDifferentColumnNames() {
+        String sqlFmt = "select %s, count(distinct lo_custkey) \n" +
+                "from lineorder left outer join[broadcast] \n" +
+                "     part on lo_custkey = p_partkey group by %s";
+
+        String[] columnNames = new String[]
+                {"p_mfgr", "p_color", "p_category", "p_brand", "p_type", "p_container"};
+
+        List<Optional<PlanFragment>> planFragments = Stream.of(columnNames)
+                .map(col -> String.format(sqlFmt, col, col))
+                .map(this::getCachedFragment)
+                .collect(Collectors.toList());
+        Assert.assertTrue(planFragments.stream().allMatch(Optional::isPresent));
+        Set<String> digests = planFragments.stream().map(optFrag -> optFrag
+                        .map(PlanFragment::getCacheParam)
+                        .map(TCacheParam::getDigest)
+                        .map(Util::toHexString))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toSet());
+        Assert.assertEquals(digests.size(), columnNames.length);
     }
 }

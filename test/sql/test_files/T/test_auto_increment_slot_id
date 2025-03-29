@@ -1,0 +1,30 @@
+-- name: test_incorrect_slot_id
+
+create database test_incorrect_slot_id;
+use test_incorrect_slot_id;
+create table t_incorrect_slot_id (
+    val BIGINT NOT NULL,
+    auto_inc_id  BIGINT AUTO_INCREMENT
+) ENGINE = olap
+DUPLICATE KEY(val)
+PROPERTIES (
+"compression" = "LZ4",
+"replication_num" = "1"
+);
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/csv_format/test_auto_increment_incorrect_slot_id.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+insert into t_incorrect_slot_id(val) SELECT $1 as val FROM FILES(
+    "path"="oss://${oss_bucket}/test_files/csv_format/${uuid0}/test_auto_increment_incorrect_slot_id.csv",
+    "format"="csv",
+    "csv.column_separator"=",",
+    "csv.enclose"="\"",
+    "csv.escape"="\\"
+);
+
+select * from t_incorrect_slot_id;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
+drop table t_incorrect_slot_id;
+drop database test_incorrect_slot_id;

@@ -34,7 +34,6 @@ namespace starrocks::pipeline {
 class MemLimitedChunkQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
-        ASSERT_OK(GlobalEnv::GetInstance()->init());
         TUniqueId dummy_query_id = generate_uuid();
         auto path = config::storage_root_path + "/spill_test_data/" + print_id(dummy_query_id);
         auto fs = FileSystem::Default();
@@ -227,7 +226,7 @@ TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
 
     ASSERT_OK(queue.push(builder.get_next()));
     // after push the third chunk, there are 2 blocks and the 1st should be flushed
-    int32_t submitted_flush_tasks = 0, finished_flush_task = 0;
+    std::atomic_int submitted_flush_tasks = 0, finished_flush_task = 0;
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_flush_task", [&](void* arg) {
         LOG(INFO) << "before execute flush task";
@@ -236,7 +235,6 @@ TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
     });
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_execute_flush_task", [&](void* arg) {
         LOG(INFO) << "after execute flush task";
-        ASSERT_EQ(queue._has_flush_io_task, false);
         finished_flush_task++;
     });
     DeferOp defer([]() {
@@ -307,7 +305,6 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
     });
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_execute_flush_task", [&](void* arg) {
         LOG(INFO) << "after execute flush task";
-        ASSERT_EQ(queue._has_flush_io_task, false);
         finished_flush_task++;
     });
     DeferOp defer([]() {
@@ -344,7 +341,6 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
     });
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_execute_flush_task", [&](void* arg) {
         LOG(INFO) << "after execute flush task";
-        ASSERT_EQ(queue._has_flush_io_task, false);
         finished_flush_task++;
     });
     ASSERT_FALSE(queue.can_push());

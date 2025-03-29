@@ -68,4 +68,17 @@ Status ColumnOrPredicate::convert_to(const ColumnPredicate** output, const TypeI
     return Status::OK();
 }
 
+std::string ColumnOrPredicate::debug_string() const {
+    std::stringstream ss;
+    ss << "OR(";
+    for (size_t i = 0; i < _child.size(); i++) {
+        if (i != 0) {
+            ss << ", ";
+        }
+        ss << i << ":" << _child[i]->debug_string();
+    }
+    ss << ")";
+    return ss.str();
+}
+
 } // namespace starrocks

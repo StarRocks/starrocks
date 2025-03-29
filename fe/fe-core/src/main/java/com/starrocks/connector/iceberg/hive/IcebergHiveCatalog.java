@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg.hive;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
@@ -41,6 +42,8 @@ import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveCatalog;
+import org.apache.iceberg.view.View;
+import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,6 +55,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_METASTORE_URIS;
@@ -93,6 +97,12 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
     }
 
+    @VisibleForTesting
+    public IcebergHiveCatalog(HiveCatalog hiveCatalog, Configuration conf) {
+        this.delegate = hiveCatalog;
+        this.conf = conf;
+    }
+
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
         return IcebergCatalogType.HIVE_CATALOG;
@@ -116,7 +126,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) {
+    public void createDB(String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -140,7 +150,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void dropDb(String dbName) throws MetaNotFoundException {
+    public void dropDB(String dbName) throws MetaNotFoundException {
         Database database;
         try {
             database = getDB(dbName);
@@ -199,6 +209,26 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @Override
     public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
         delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
+    }
+
+    @Override
+    public ViewBuilder getViewBuilder(TableIdentifier identifier) {
+        return delegate.buildView(identifier);
+    }
+
+    @Override
+    public boolean dropView(String dbName, String viewName) {
+        return delegate.dropView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+    }
+
+    @Override
+    public View getView(String dbName, String viewName) {
+        return delegate.loadView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+    }
+
+    @Override
+    public Map<String, String> loadNamespaceMetadata(Namespace ns) {
+        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
     }
 
     @Override

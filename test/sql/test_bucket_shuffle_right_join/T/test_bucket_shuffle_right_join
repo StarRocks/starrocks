@@ -1,0 +1,165 @@
+-- name: test_bucket_shuffle_right_join
+ DROP TABLE if exists t0;
+
+ CREATE TABLE if not exists t0
+ (
+ c0 BIGINT NOT NULL,
+ c1 BIGINT NOT NULL,
+ c2 BIGINT NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`c0` )
+ COMMENT "OLAP"
+ DISTRIBUTED BY HASH(`c0` ) BUCKETS 9
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default" 
+ );
+ DROP TABLE if exists t1;
+
+ CREATE TABLE if not exists t1
+ (
+ c0 BIGINT NOT NULL,
+ c1 BIGINT NOT NULL,
+ c2 BIGINT NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`c0` )
+ COMMENT "OLAP"
+ DISTRIBUTED BY HASH(`c0` ) BUCKETS 9
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default" 
+ );
+ DROP TABLE if exists t2;
+
+ CREATE TABLE if not exists t2
+ (
+ c0 BIGINT NOT NULL,
+ c1 BIGINT NOT NULL,
+ c2 BIGINT NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`c0` )
+ COMMENT "OLAP"
+ DISTRIBUTED BY HASH(`c0` ) BUCKETS 9
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default" 
+ );
+INSERT INTO t0
+(c0, c1, c2)
+VALUES
+('0', '0', '0'),
+('1', '1', '1'),
+('2', '2', '2'),
+('3', '3', '3'),
+('4', '4', '4'),
+('5', '5', '5'),
+('6', '6', '6'),
+('7', '7', '7'),
+('8', '8', '8'),
+('9', '9', '9');
+
+INSERT INTO t1
+(c0, c1, c2)
+select * from t0;
+
+INSERT INTO t2
+(c0, c1, c2)
+select * from t0;
+
+ DROP TABLE if exists r;
+
+ CREATE TABLE if not exists r
+ (
+ fp BIGINT  NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`fp` )
+ COMMENT "OLAP"
+ DISTRIBUTED BY HASH(`fp` ) BUCKETS 1
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default" 
+ );
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (0)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (0)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (1)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (1)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (2)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (2)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (3)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (3)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (4)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (4)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (5)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (5)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (6)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (6)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (7)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (7)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (8)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (8)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;
+truncate table r;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (9)) t1 right outer join[bucket] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[bucket] t2 on t2.c0 = t1.c0) as t;
+INSERT INTO r
+(fp)
+select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(c1,0))+murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(ab,0)))) as fingerprint from (select t0.c0,t0.c1,t0.c2,t1.c2 as ab from (select * from t1 where c0 in (9)) t1 right outer join[shuffle] (select if(murmur_hash3_32(c0)=0,c0,NULL) as c0,c1,c2 from t0) t0 on t0.c0 = t1.c0 left join[shuffle] t2 on t2.c0 = t1.c0) as t;
+select assert_true(count(fp)=2), assert_true(count(distinct fp)=1) from r;

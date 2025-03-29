@@ -107,7 +107,7 @@ public class LocationMismatchRepairTest {
 
     private void printTabletReplicaInfo(OlapTable table) {
         table.getPartitions().forEach(partition -> {
-            partition.getBaseIndex().getTablets().forEach(tablet -> {
+            partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().forEach(tablet -> {
                 StringBuffer stringBuffer = new StringBuffer();
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {

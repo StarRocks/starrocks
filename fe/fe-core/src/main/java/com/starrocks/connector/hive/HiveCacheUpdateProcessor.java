@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
@@ -95,10 +94,9 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
 
     @Override
     public void refreshTable(String dbName, Table table, boolean onlyCachedPartitions) {
-        if (table instanceof HiveMetaStoreTable) {
-            HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-            metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
-            refreshRemoteFiles(table, Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions);
+        if (table.isHMSTable()) {
+            metastore.refreshTable(table.getCatalogDBName(), table.getCatalogTableName(), onlyCachedPartitions);
+            refreshRemoteFiles(table, Operator.UPDATE, getExistPaths(table), onlyCachedPartitions);
             if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
                 processSchemaChange(dbName, (HiveTable) table);
             }
@@ -109,12 +107,11 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
     }
 
     public void refreshTableBackground(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         List<HivePartitionName> refreshPartitionNames = metastore.refreshTableBackground(
-                hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
+                table.getCatalogDBName(), table.getCatalogTableName(), onlyCachedPartitions);
 
         if (refreshPartitionNames != null) {
-            Map<BasePartitionInfo, Partition> updatedPartitions = getUpdatedPartitions(hmsTbl, refreshPartitionNames);
+            Map<BasePartitionInfo, Partition> updatedPartitions = getUpdatedPartitions(table, refreshPartitionNames);
             if (!updatedPartitions.isEmpty()) {
                 // update partition remote files cache
                 List<String> updatedPaths = updatedPartitions.values().stream().map(Partition::getFullPath)
@@ -123,8 +120,8 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                 refreshRemoteFilesBackground(table, updatedPaths, onlyCachedPartitions, executor);
 
                 LOG.info("{}.{}.{} partitions has updated, updated partition size is {}, " +
-                                "refresh partition and file success", hmsTbl.getCatalogName(), hmsTbl.getDbName(),
-                        hmsTbl.getTableName(), updatedPartitions.size());
+                                "refresh partition and file success", table.getCatalogName(), table.getCatalogDBName(),
+                        table.getCatalogTableName(), updatedPartitions.size());
             }
 
             // update partitionUpdatedTimes
@@ -145,10 +142,9 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         }
     }
 
-    private Map<BasePartitionInfo, Partition> getUpdatedPartitions(HiveMetaStoreTable table,
-                                                                   List<HivePartitionName> refreshPartitionNames) {
-        String dbName = table.getDbName();
-        String tblName = table.getTableName();
+    private Map<BasePartitionInfo, Partition> getUpdatedPartitions(Table table, List<HivePartitionName> refreshPartitionNames) {
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
 
         Map<BasePartitionInfo, Partition> toCheckUpdatedPartitionInfoMap = Maps.newHashMap();
         if (table.isUnPartitioned()) {
@@ -180,10 +176,10 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         return updatedPartitions;
     }
 
-    private List<String> getExistPaths(HiveMetaStoreTable table) {
+    private List<String> getExistPaths(Table table) {
         List<String> existPaths;
-        String dbName = table.getDbName();
-        String tblName = table.getTableName();
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
 
         if (table.isUnPartitioned()) {
             String path = metastore.getPartition(dbName, tblName, Lists.newArrayList()).getFullPath();
@@ -201,9 +197,8 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
     }
 
     public void refreshPartition(Table table, List<String> hivePartitionNames) {
-        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-        String hiveDbName = hmsTable.getDbName();
-        String hiveTableName = hmsTable.getTableName();
+        String hiveDbName = table.getCatalogDBName();
+        String hiveTableName = table.getCatalogTableName();
         List<HivePartitionName> partitionNames = hivePartitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(hiveDbName, hiveTableName, partitionName))
                 .collect(Collectors.toList());
@@ -225,7 +220,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
     private void processSchemaChange(String srDbName, HiveTable hiveTable) {
         boolean isSchemaChange = false;
         HiveTable resourceMappingCatalogTable = (HiveTable) metastore.getTable(
-                hiveTable.getDbName(), hiveTable.getTableName());
+                hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName());
         for (Column column : resourceMappingCatalogTable.getColumns()) {
             Column baseColumn = hiveTable.getColumn(column.getName());
             if (baseColumn == null) {

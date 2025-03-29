@@ -22,7 +22,7 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 [partition_desc]
 [distribution_desc]
 [rollup_index]
-[ORDER BY (column_definition1,...)]
+[ORDER BY (column_name1,...)]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
@@ -642,8 +642,7 @@ To use your StarRocks Shared-data cluster, you must create cloud-native tables w
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>",
-    "enable_async_write_back" = "{ true | false }"
+    "datacache.partition_duration" = "<string_value>"
 )
 ```
 
@@ -664,18 +663,77 @@ PROPERTIES (
   >
   > This property is available only when `datacache.enable` is set to `true`.
 
-- `enable_async_write_back`: Whether to allow data to be written into object storage asynchronously. Default: `false`.
-
-  - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
-  - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
-
 #### Set fast schema evolution
 
 `fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+
   > **NOTE**
   >
-  > - This parameter is supported for shared-nothing clusters since v3.2.0, and shared-data clusters since v3.3.0.
-  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter `enable_fast_schema_evolution`.
+  > - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
+  > - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
+
+#### Forbid Base Compaction
+
+`base_compaction_forbidden_time_ranges`: The time range within which Base Compaction is forbidden for the table. When this property is set, the system performs Base Compaction on eligible tablets only outside the specified time range. This property is supported from v3.2.13.
+
+> **NOTE**
+>
+> Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
+
+The value of `base_compaction_forbidden_time_ranges` follows the [Quartz cron syntax](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm), and only supports these fields: `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`, where `<minute>` must be `*`.
+
+```Plain
+crontab_param_value ::= [ "" | crontab ]
+
+crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
+```
+
+- When this property is not set or set to `""` (an empty string), Base Compaction is not forbidden at any time.
+- When this property is set to `* * * * *`, Base Compaction is always forbidden.
+- Other values follow the Quartz cron syntax.
+  - An independent value indicates the unit time of a field. For example, `8` in the `<hour>` field means 8:00-8:59.
+  - A value range indicates the time range of a field. For example, `8-9` in the `<hour>` field means 8:00-9:59.
+  - Multiple value ranges separated by commas indicate multiple time ranges of the field.
+  - `<day of the week>` has a starting value of `1` for Sunday, and `7` stands for Saturday.
+
+Example:
+
+```SQL
+-- Forbid Base Compaction from 8:00 am to 9:00 pm every day.
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
+
+-- Forbid Base Compaction from 0:00 am to 5:00 am and from 9:00 pm to 11:00 pm every day.
+'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
+
+-- Forbid Base Compaction from Monday to Friday (that is, allow it on Saturday and Sunday).
+'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
+
+-- Forbid Base Compaction from 8:00 am to 9:00 pm every working day (that is, Monday to Friday).
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
+```
+
+#### Specify Common Partition Expression TTL
+
+From v3.4.1 onwards, StarRocks native tables support Common Partition Expression TTL.
+
+`partition_retention_condition`: The expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly.
+- The expression can only contain partition columns and constants. Non-partition columns are not supported.
+- Common Partition Expression applies to List partitions and Range partitions differently:
+  - For tables with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
+  - For tables with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
+
+Example:
+
+```SQL
+-- Retain the data from the last three months. Column `dt` is the partition column of the table.
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+To disable this feature, you can use the ALTER TABLE statement to set this property as an empty string:
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
+```
 
 ## Examples
 

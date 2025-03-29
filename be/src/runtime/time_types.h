@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cctz/time_zone.h>
+
 #include <cstdint>
 #include <string>
 
@@ -214,18 +216,21 @@ public:
 
     inline static bool check(int year, int month, int day, int hour, int minute, int second, int microsecond);
 
+    inline static int get_timezone_offset_by_timestamp(Timestamp timestamp, const cctz::time_zone& ctz);
+    inline static int get_timezone_offset_by_epoch_seconds(int64_t seconds_from_epoch, const cctz::time_zone& ctz);
+
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
     template <TimeUnit UNIT>
     static Timestamp sub(Timestamp timestamp, int count);
 
-    template <bool use_iso8601_format = false>
+    template <bool use_iso8601_format = false, bool igonre_microsecond = false>
     static std::string to_string(Timestamp timestamp);
 
     // Returns the length of formatted string or -1 if the size of buffer too
     // small to fill the formatted string.
-    template <bool use_iso8601_format = false>
+    template <bool use_iso8601_format = false, bool igonre_microsecond = false>
     static int to_string(Timestamp timestamp, char* s, size_t n);
 
     inline static double time_to_literal(double time);
@@ -364,6 +369,23 @@ bool timestamp::check(int year, int month, int day, int hour, int minute, int se
     return date::check(year, month, day) && check_time(hour, minute, second, microsecond);
 }
 
+int timestamp::get_timezone_offset_by_timestamp(Timestamp timestamp, const cctz::time_zone& ctz) {
+    int64_t days = timestamp::to_julian(timestamp);
+    int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * SECS_PER_DAY;
+    return get_timezone_offset_by_epoch_seconds(seconds_from_epoch, ctz);
+}
+
+int timestamp::get_timezone_offset_by_epoch_seconds(int64_t seconds_from_epoch, const cctz::time_zone& ctz) {
+    // if system_clock duration is nanoseconds(libstdc++), and to avoid overflow
+    // std::numeric_limits<int64_t>::max() / 1'000'000'000
+    // std::numeric_limits<int64_t>::min() / 1'000'000'000
+    static constexpr int64_t MIN_SECONDS = -9223372036;
+    static constexpr int64_t MAX_SECONDS = 9223372036;
+    seconds_from_epoch = std::max(MIN_SECONDS, std::min(MAX_SECONDS, seconds_from_epoch));
+    std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
+    return ctz.lookup(tp).offset;
+}
+
 inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {
     Timestamp time = to_time(timestamp);
 
@@ -417,7 +439,9 @@ double timestamp::time_to_literal(double time) {
 Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
     int64_t second = seconds + timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
-    return timestamp::from_julian_and_time(day, second * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
+
+    int64_t microseconds = (second % SECS_PER_DAY) * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC;
+    return timestamp::from_julian_and_time(day, microseconds);
 }
 
 bool timestamp::check_time(int hour, int minute, int second, int microsecond) {
@@ -482,16 +506,16 @@ inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, i
     return to_date(julian, year, month, day);
 }
 
-template <bool use_iso8601_format>
+template <bool use_iso8601_format, bool igonre_microsecond>
 std::string timestamp::to_string(Timestamp timestamp) {
     std::string s;
     raw::make_room(&s, 26);
-    int len = to_string<use_iso8601_format>(timestamp, s.data(), s.size());
+    int len = to_string<use_iso8601_format, igonre_microsecond>(timestamp, s.data(), s.size());
     s.resize(len);
     return s;
 }
 
-template <bool use_iso8601_format>
+template <bool use_iso8601_format, bool igonre_microsecond>
 int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
     int year, month, day;
     int hour, minute, second, microsecond;
@@ -519,6 +543,9 @@ int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
     /* Second */
     to[17] = (char)('0' + (second / 10));
     to[18] = (char)('0' + (second % 10));
+    if constexpr (igonre_microsecond) {
+        return 19;
+    }
     if (use_iso8601_format || microsecond > 0) {
         if (n < 26) {
             return -1;

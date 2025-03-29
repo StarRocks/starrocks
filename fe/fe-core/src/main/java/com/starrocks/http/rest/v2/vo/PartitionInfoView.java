@@ -17,16 +17,19 @@ package com.starrocks.http.rest.v2.vo;
 import com.google.gson.annotations.SerializedName;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.PartitionUtils;
+import com.starrocks.load.PartitionUtils.RangePartitionBoundary;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -118,6 +121,9 @@ public class PartitionInfoView {
         @SerializedName("endKeys")
         private List<Object> endKeys;
 
+        @SerializedName("inKeys")
+        private List<List<Object>> inKeys;
+
         @SerializedName("storagePath")
         private String storagePath;
 
@@ -132,7 +138,8 @@ public class PartitionInfoView {
          */
         public static PartitionView createFrom(PartitionInfo partitionInfo, Partition partition) {
             PartitionView pvo = new PartitionView();
-            pvo.setId(partition.getId());
+            long partitionId = partition.getId();
+            pvo.setId(partitionId);
             pvo.setName(partition.getName());
 
             Optional.ofNullable(partition.getDistributionInfo()).ifPresent(distributionInfo -> {
@@ -140,9 +147,11 @@ public class PartitionInfoView {
                 pvo.setDistributionType(distributionInfo.getTypeStr());
             });
 
-            pvo.setVisibleVersion(partition.getVisibleVersion());
-            pvo.setVisibleVersionTime(partition.getVisibleVersionTime());
-            pvo.setNextVersion(partition.getNextVersion());
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
+            pvo.setVisibleVersion(physicalPartition.getVisibleVersion());
+            pvo.setVisibleVersionTime(physicalPartition.getVisibleVersionTime());
+            pvo.setNextVersion(physicalPartition.getNextVersion());
 
             PartitionType partitionType = partitionInfo.getType();
             switch (partitionType) {
@@ -154,19 +163,28 @@ public class PartitionInfoView {
                     break;
                 case RANGE:
                     RangePartitionInfo rpi = (RangePartitionInfo) partitionInfo;
-                    PartitionUtils.RangePartitionBoundary boundary =
-                            PartitionUtils.calRangePartitionBoundary(rpi.getRange(partition.getId()));
+                    RangePartitionBoundary boundary =
+                            PartitionUtils.calRangePartitionBoundary(rpi.getRange(partitionId));
                     pvo.setMinPartition(boundary.isMinPartition());
                     pvo.setMaxPartition(boundary.isMaxPartition());
                     pvo.setStartKeys(boundary.getStartKeys());
                     pvo.setEndKeys(boundary.getEndKeys());
                     break;
-                // LIST/EXPR_RANGE_V2
+                case LIST:
+                    ListPartitionInfo lpi = (ListPartitionInfo) partitionInfo;
+                    List<List<Object>> keys = PartitionUtils.calListPartitionKeys(
+                            Optional.ofNullable(lpi.getMultiLiteralExprValues())
+                                    .map(exprVals -> exprVals.get(partitionId)).orElse(new ArrayList<>(0)),
+                            Optional.ofNullable(lpi.getLiteralExprValues())
+                                    .map(exprVals -> exprVals.get(partitionId)).orElse(new ArrayList<>(0))
+                    );
+                    pvo.setInKeys(keys);
+                    break;
                 default:
                     // TODO add more type support in the future
             }
 
-            List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            List<MaterializedIndex> allIndices = physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             if (CollectionUtils.isNotEmpty(allIndices)) {
                 MaterializedIndex materializedIndex = allIndices.get(0);
                 List<Tablet> tablets = materializedIndex.getTablets();
@@ -278,6 +296,14 @@ public class PartitionInfoView {
 
         public void setEndKeys(List<Object> endKeys) {
             this.endKeys = endKeys;
+        }
+
+        public List<List<Object>> getInKeys() {
+            return inKeys;
+        }
+
+        public void setInKeys(List<List<Object>> inKeys) {
+            this.inKeys = inKeys;
         }
 
         public String getStoragePath() {

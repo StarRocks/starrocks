@@ -141,7 +141,8 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun, new ExecuteOption(false));
+        taskRunManager.submitTaskRun(taskRun, new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+                false, Maps.newHashMap()));
         List<TaskRunStatus> taskRuns = null;
         Constants.TaskRunState state = null;
 
@@ -547,7 +548,8 @@ public class TaskManagerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
-        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+                isMergeRedundant, Maps.newHashMap());
         executeOption.setSync(isSync);
         return executeOption;
     }
@@ -798,5 +800,22 @@ public class TaskManagerTest {
         Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
         taskRunManager.killTaskRun(1L, true);
         Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
+    }
+
+    @Test
+    public void testTaskRunDefinition() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 1;
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun.setTaskId(taskId);
+        taskRun.initStatus("1", now + 10);
+        taskRun.getStatus().setPriority(0);
+        TaskRunStatus taskRunStatus = taskRun.getStatus();
+        Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
     }
 }

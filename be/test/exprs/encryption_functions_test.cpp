@@ -44,13 +44,13 @@ TEST_F(EncryptionFunctionsTest, aes_encryptGeneralTest) {
         text->append(texts[j]);
     }
 
-    columns.emplace_back(plain);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(plain));
+    columns.emplace_back(std::move(text));
 
     ColumnPtr result = EncryptionFunctions::aes_encrypt(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
+    columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -84,14 +84,14 @@ TEST_F(EncryptionFunctionsTest, aes_encryptSingularCasesTest) {
         }
     }
 
-    auto nullable_text = NullableColumn::create(text, null_column);
-    columns.emplace_back(plain);
-    columns.emplace_back(nullable_text);
+    auto nullable_text = NullableColumn::create(std::move(text), std::move(null_column));
+    columns.emplace_back(std::move(plain));
+    columns.emplace_back(std::move(nullable_text));
 
     ColumnPtr result = EncryptionFunctions::aes_encrypt(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
+    columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
     ASSERT_TRUE(result->is_nullable());
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
@@ -122,13 +122,13 @@ TEST_F(EncryptionFunctionsTest, aes_encryptBigDataTest) {
         text->append(texts[j]);
     }
 
-    columns.emplace_back(plain);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(plain));
+    columns.emplace_back(std::move(text));
 
     ColumnPtr result = EncryptionFunctions::aes_encrypt(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
+    columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -160,13 +160,13 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullPlainTest) {
 
     text->append_default();
 
-    columns.emplace_back(NullableColumn::create(plain, plain_null));
-    columns.emplace_back(text);
+    columns.emplace_back(NullableColumn::create(std::move(plain), std::move(plain_null)));
+    columns.emplace_back(std::move(text));
 
     auto result = EncryptionFunctions::aes_encrypt(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
+    columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
 
     auto result2 = ColumnHelper::as_column<NullableColumn>(result);
@@ -200,13 +200,13 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullTextTest) {
     text->append_default();
     text_null->append(1);
 
-    columns.emplace_back(plain);
-    columns.emplace_back(NullableColumn::create(text, text_null));
+    columns.emplace_back(std::move(plain));
+    columns.emplace_back(NullableColumn::create(std::move(text), std::move(text_null)));
 
     auto result = EncryptionFunctions::aes_encrypt(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
+    columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
 
     auto result2 = ColumnHelper::as_column<NullableColumn>(result);
@@ -233,13 +233,13 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstTextTest) {
         plain->append(j);
     }
 
-    columns.emplace_back(plain);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(plain));
+    columns.emplace_back(std::move(text));
 
     ColumnPtr result = EncryptionFunctions::aes_encrypt(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
+    columns.emplace_back(std::move(result));
 
     result = StringFunctions::hex_string(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -257,13 +257,13 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstAllTest) {
 
     std::string results[] = {"71AB242103F038D433D392A7DE0909AB"};
 
-    columns.emplace_back(plain);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(plain));
+    columns.emplace_back(std::move(text));
 
     ColumnPtr result = EncryptionFunctions::aes_encrypt(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
+    columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
 
     auto v = ColumnHelper::as_column<ConstColumn>(result);
@@ -290,13 +290,13 @@ TEST_F(EncryptionFunctionsTest, aes_decryptGeneralTest) {
         text->append(texts[j]);
     }
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = StringFunctions::unhex(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(result));
+    columns.emplace_back(std::move(text));
     result = EncryptionFunctions::aes_decrypt(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -323,13 +323,13 @@ TEST_F(EncryptionFunctionsTest, aes_decryptBigDataTest) {
         text->append(texts[j]);
     }
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = StringFunctions::unhex(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(result));
+    columns.emplace_back(std::move(text));
     result = EncryptionFunctions::aes_decrypt(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -360,13 +360,13 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullPlainTest) {
     plain_null->append(1);
     text->append_default();
 
-    columns.emplace_back(NullableColumn::create(plain, plain_null));
+    columns.emplace_back(NullableColumn::create(std::move(plain), std::move(plain_null)));
 
     ColumnPtr result = StringFunctions::unhex(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(result));
+    columns.emplace_back(std::move(text));
     result = EncryptionFunctions::aes_decrypt(ctx.get(), columns).value();
 
     auto result2 = ColumnHelper::as_column<NullableColumn>(result);
@@ -400,13 +400,13 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullTextTest) {
     text->append_default();
     text_null->append(1);
 
-    columns.emplace_back(NullableColumn::create(plain, text_null));
+    columns.emplace_back(NullableColumn::create(std::move(plain), std::move(text_null)));
 
     ColumnPtr result = StringFunctions::unhex(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(result));
+    columns.emplace_back(std::move(text));
     result = EncryptionFunctions::aes_decrypt(ctx.get(), columns).value();
 
     auto result2 = ColumnHelper::as_column<NullableColumn>(result);
@@ -433,13 +433,13 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstTextTest) {
         plain->append(result);
     }
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = StringFunctions::unhex(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(result));
+    columns.emplace_back(std::move(text));
 
     result = EncryptionFunctions::aes_decrypt(ctx.get(), columns).value();
 
@@ -458,13 +458,13 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstAllTest) {
 
     std::string results[] = {"sdkfljljl"};
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = StringFunctions::unhex(ctx.get(), columns).value();
 
     columns.clear();
-    columns.emplace_back(result);
-    columns.emplace_back(text);
+    columns.emplace_back(std::move(result));
+    columns.emplace_back(std::move(text));
 
     result = EncryptionFunctions::aes_decrypt(ctx.get(), columns).value();
 
@@ -489,7 +489,7 @@ TEST_F(EncryptionFunctionsTest, from_base64GeneralTest) {
         plain->append(j);
     }
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = EncryptionFunctions::from_base64(ctx.get(), columns).value();
 
@@ -516,7 +516,7 @@ TEST_F(EncryptionFunctionsTest, from_base64NullTest) {
     plain->append_default();
     plain_null->append(1);
 
-    columns.emplace_back(NullableColumn::create(plain, plain_null));
+    columns.emplace_back(NullableColumn::create(std::move(plain), std::move(plain_null)));
 
     ColumnPtr result = EncryptionFunctions::from_base64(ctx.get(), columns).value();
 
@@ -537,7 +537,7 @@ TEST_F(EncryptionFunctionsTest, from_base64ConstTest) {
 
     std::string results[] = {"349uionfklwnefk"};
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = EncryptionFunctions::from_base64(ctx.get(), columns).value();
 
@@ -561,7 +561,7 @@ TEST_F(EncryptionFunctionsTest, to_base64Test) {
         plain->append(j);
     }
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = EncryptionFunctions::to_base64(ctx.get(), columns).value();
 
@@ -588,7 +588,7 @@ TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
     plain->append_default();
     plain_null->append(1);
 
-    columns.emplace_back(NullableColumn::create(plain, plain_null));
+    columns.emplace_back(NullableColumn::create(std::move(plain), std::move(plain_null)));
 
     ColumnPtr result = EncryptionFunctions::to_base64(ctx.get(), columns).value();
 
@@ -609,7 +609,7 @@ TEST_F(EncryptionFunctionsTest, to_base64ConstTest) {
 
     std::string results[] = {"MzQ5dWlvbmZrbHduZWZr"};
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = EncryptionFunctions::to_base64(ctx.get(), columns).value();
 
@@ -633,7 +633,7 @@ TEST_F(EncryptionFunctionsTest, md5GeneralTest) {
         plain->append(j);
     }
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = EncryptionFunctions::md5(ctx.get(), columns).value();
 
@@ -660,7 +660,7 @@ TEST_F(EncryptionFunctionsTest, md5NullTest) {
     plain->append_default();
     plain_null->append(1);
 
-    columns.emplace_back(NullableColumn::create(plain, plain_null));
+    columns.emplace_back(NullableColumn::create(std::move(plain), std::move(plain_null)));
 
     ColumnPtr result = EncryptionFunctions::md5(ctx.get(), columns).value();
 
@@ -681,15 +681,15 @@ TEST_F(EncryptionFunctionsTest, md5ConstTest) {
 
     std::string results[] = {"4402f1c78924499be8a48506c00dc070"};
 
-    columns.emplace_back(plain);
+    columns.emplace_back(std::move(plain));
 
     ColumnPtr result = EncryptionFunctions::md5(ctx.get(), columns).value();
 
-    auto result2 = ColumnHelper::as_column<ConstColumn>(result);
+    ConstColumn::Ptr result2 = ColumnHelper::as_column<ConstColumn>(result);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     for (auto& result : results) {
-        ASSERT_EQ(result, ColumnHelper::get_const_value<TYPE_VARCHAR>(result2));
+        ASSERT_EQ(result, ColumnHelper::get_const_value<TYPE_VARCHAR>((ColumnPtr)result2));
     }
 }
 
@@ -703,7 +703,7 @@ TEST_F(EncryptionFunctionsTest, md5sumTest) {
     for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
-        columns.emplace_back(plain);
+        columns.emplace_back(std::move(plain));
     }
 
     ColumnPtr result = EncryptionFunctions::md5sum(ctx.get(), columns).value();
@@ -725,7 +725,7 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
     for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
-        columns.emplace_back(plain);
+        columns.emplace_back(std::move(plain));
     }
 
     for (auto& j : plains) {
@@ -733,7 +733,7 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
         plain->append(j);
         auto plain_null = NullColumn::create();
         plain_null->append(1);
-        columns.emplace_back(NullableColumn::create(plain, plain_null));
+        columns.emplace_back(NullableColumn::create(std::move(plain), std::move(plain_null)));
     }
 
     ColumnPtr result = EncryptionFunctions::md5sum(ctx.get(), columns).value();
@@ -761,7 +761,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
     for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
-        columns.emplace_back(plain);
+        columns.emplace_back(std::move(plain));
     }
 
     ColumnPtr result = EncryptionFunctions::md5sum_numeric(ctx.get(), columns).value();
@@ -783,7 +783,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
     for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
-        columns.emplace_back(plain);
+        columns.emplace_back(std::move(plain));
     }
 
     for (auto& j : plains) {
@@ -791,7 +791,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
         plain->append(j);
         auto plain_null = NullColumn::create();
         plain_null->append(1);
-        columns.emplace_back(NullableColumn::create(plain, plain_null));
+        columns.emplace_back(NullableColumn::create(std::move(plain), std::move(plain_null)));
     }
 
     ColumnPtr result = EncryptionFunctions::md5sum_numeric(ctx.get(), columns).value();
@@ -820,9 +820,9 @@ TEST_P(ShaTestFixture, test_sha2) {
     if (str == "NULL") {
         columns.emplace_back(ColumnHelper::create_const_null_column(1));
     } else {
-        columns.emplace_back(plain);
+        columns.emplace_back(std::move(plain));
     }
-    columns.emplace_back(hash_length);
+    columns.emplace_back(std::move(hash_length));
 
     ctx->set_constant_columns(columns);
     ASSERT_TRUE(EncryptionFunctions::sha2_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());

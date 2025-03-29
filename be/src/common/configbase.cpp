@@ -189,7 +189,21 @@ bool Field::set_value(std::string value) {
         return false;
     }
     StripWhiteSpace(&value);
-    return parse_value(value);
+    bool success = parse_value(value);
+    if (success) {
+        _last_set_val.swap(_current_set_val);
+        _current_set_val = value;
+    }
+    return success;
+}
+
+bool Field::rollback() {
+    bool success = parse_value(_last_set_val);
+    if (success) {
+        _current_set_val.swap(_last_set_val);
+        _last_set_val.clear();
+    }
+    return success;
 }
 
 // Init conf fields.
@@ -233,6 +247,18 @@ Status set_config(const std::string& field, const std::string& value) {
     }
     if (!it->second->set_value(value)) {
         return Status::InvalidArgument(fmt::format("Invalid value of config '{}': '{}'", field, value));
+    }
+    return Status::OK();
+}
+
+Status rollback_config(const std::string& field) {
+    auto it = Field::fields().find(field);
+    if (it == Field::fields().end()) {
+        return Status::NotFound(fmt::format("'{}' is not found in rollback", field));
+    }
+
+    if (!it->second->rollback()) {
+        return Status::InvalidArgument(fmt::format("Invalid value of config '{}' in rollback", field));
     }
     return Status::OK();
 }

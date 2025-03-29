@@ -99,7 +99,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         std::string err_msg = fmt::format("create column for primary key encoder failed, tablet_id: {}", _tablet_id);
         DCHECK(false) << err_msg;
@@ -217,7 +217,7 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
     }
     int64_t t_end = MonotonicMillis();
 
-    LOG(INFO) << strings::Substitute(
+    VLOG(1) << strings::Substitute(
             "prepare ColumnPartialUpdateState tablet:$0 segment:[$1, $2) "
             "time:$3ms(src_rss:$4)",
             _tablet_id, start_idx, end_idx, t_end - t_start, t_read_rss - t_start);
@@ -524,7 +524,7 @@ static std::pair<std::vector<uint32_t>, std::vector<uint32_t>> get_read_update_c
 
 Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& tablet_schema,
                                                       const std::vector<uint32_t>& column_ids, const int64_t row_cnt,
-                                                      vector<std::shared_ptr<Column>>* columns) {
+                                                      vector<ColumnPtr>* columns) {
     for (auto i = 0; i < column_ids.size(); ++i) {
         const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
 
@@ -569,7 +569,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
     RETURN_IF_ERROR(index.prepare(edit_version, insert_row_cnt));
     for (const auto& each_chunk : segid_to_chunk) {
         new_deletes[rowset_id + each_chunk.first] = {};
-        std::unique_ptr<Column> pk_column;
+        MutableColumnPtr pk_column;
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
         PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get());
         RETURN_IF_ERROR(index.upsert(rowset_id + each_chunk.first, 0, *pk_column, &new_deletes));
@@ -829,8 +829,13 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             rss_upt_id_to_rowid_pairs.size(), _partial_update_states.size(), update_column_ids.size(), update_rows,
             handle_cnt, insert_rows);
 
-    LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
-              << ", finalize cost:" << cost_str.str();
+    if (total_do_update_time > config::apply_version_slow_log_sec * 1000) {
+        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                  << ", finalize cost:" << cost_str.str();
+    } else {
+        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                  << ", cost_time: " << total_do_update_time;
+    }
     _finalize_finished = true;
     return Status::OK();
 }

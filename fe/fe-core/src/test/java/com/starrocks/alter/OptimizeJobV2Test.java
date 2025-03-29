@@ -154,7 +154,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
-        Assert.assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
+        Assert.assertEquals(OlapTableState.OPTIMIZE, olapTable.getState());
     }
 
     // start a schema change, then finished
@@ -259,7 +259,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assert.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
-        MaterializedIndex baseIndex = testPartition.getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
         List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);
@@ -420,7 +420,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
         optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
 
         for (Partition p : olapTable.getPartitions()) {
-            p.setVisibleVersion(p.getVisibleVersion() + 1, 0);
+            p.getDefaultPhysicalPartition().setVisibleVersion(
+                    p.getDefaultPhysicalPartition().getVisibleVersion() + 1, 0);
         }
 
         try {

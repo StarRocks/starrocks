@@ -5,14 +5,12 @@ keywords: ['beifen']
 
 # CANCEL BACKUP
 
-## 功能
-
-取消指定数据库中一个正在进行的备份任务。更多信息，请见 备份和恢复。
+取消指定数据库中一个正在进行的备份任务。
 
 ## 语法
 
 ```SQL
-CANCEL BACKUP FROM <db_name>
+CANCEL BACKUP { FROM <db_name> | FOR EXTERNAL CATALOG }
 ```
 
 ## 参数说明
@@ -20,6 +18,7 @@ CANCEL BACKUP FROM <db_name>
 | **参数** | **说明**               |
 | -------- | ---------------------- |
 | db_name  | 备份任务所属数据库名。 |
+| FOR EXTERNAL CATALOG | 取消正在进行的 External Catalog 元数据备份任务。 |
 
 ## 示例
 

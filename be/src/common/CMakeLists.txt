@@ -23,6 +23,7 @@ add_library(Common STATIC
   configbase.cpp
   s3_uri.cpp
   tracer.cpp
+  process_exit.cpp
   prof/heap_prof.cpp
 )
 

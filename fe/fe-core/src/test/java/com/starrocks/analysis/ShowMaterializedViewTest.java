@@ -38,9 +38,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -67,18 +76,18 @@ public class ShowMaterializedViewTest {
     public void testNormal() throws Exception {
         ctx.setDatabase("testDb");
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt(null, "");
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("testDb", stmt.getDb());
         checkShowMaterializedViewsStmt(stmt);
 
-        stmt = new ShowMaterializedViewsStmt("abc", (String) null);
+        stmt = new ShowMaterializedViewsStmt(null, "abc", (String) null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("abc", stmt.getDb());
         checkShowMaterializedViewsStmt(stmt);
 
-        stmt = new ShowMaterializedViewsStmt("abc", "bcd");
+        stmt = new ShowMaterializedViewsStmt(null, "abc", "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
         Assert.assertEquals("abc", stmt.getDb());
@@ -149,7 +158,30 @@ public class ShowMaterializedViewTest {
     @Test(expected = SemanticException.class)
     public void testNoDb() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt(null, "");
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.fail("No exception throws");
+    }
+
+    @Test
+    public void testCatalogName() throws Exception {
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb");
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("testDb", stmt.getDb());
+        Assert.assertEquals("default_catalog", stmt.getCatalogName());
+        checkShowMaterializedViewsStmt(stmt);
+        stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW MATERIALIZED VIEWS FROM default_catalog.testDb;", ctx);
+
+        Assert.assertEquals("testDb", stmt.getDb());
+        Assert.assertEquals("default_catalog", stmt.getCatalogName());
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testUnknownCatalog() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("unknown_catalog", "testDb");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws");
     }

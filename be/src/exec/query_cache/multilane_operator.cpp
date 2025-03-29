@@ -35,6 +35,7 @@ MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t
 Status MultilaneOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(pipeline::Operator::prepare(state));
     for (auto& lane : _lanes) {
+        lane.processor->set_observer(observer());
         RETURN_IF_ERROR(lane.processor->prepare(state));
     }
     return Status::OK();
@@ -331,6 +332,9 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
     for (auto i = 0; i < _num_lanes; ++i) {
         processors.push_back(
                 _factory->create(degree_of_parallelism * _num_lanes, i * degree_of_parallelism + driver_sequence));
+    }
+    for (auto& operators : processors) {
+        operators->set_runtime_filter_probe_sequence(driver_sequence);
     }
     auto op = std::make_shared<MultilaneOperator>(this, driver_sequence, _num_lanes, std::move(processors),
                                                   _can_passthrough);

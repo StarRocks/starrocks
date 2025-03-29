@@ -55,7 +55,7 @@ class SelectStmtWithCaseWhenTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
@@ -64,6 +64,7 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable(createTblStmtStr);
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -306,7 +307,14 @@ class SelectStmtWithCaseWhenTest {
 
                 {"select * from test.t0 where case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' " +
                         "else 'e' end in ('a', 'b', 'c', 'd')",
-                        "(CAST(5: ship_code AS BIGINT) = CAST(4: ship_mode AS BIGINT) + 1)"
+                        "  1:SELECT\n" +
+                                "  |  predicates: (6: cast = 8: add) OR ((6: cast = 7: cast + 2) AND" +
+                                " ((6: cast != 8: add) OR (6: cast IS NULL)))\n" +
+                                "  |    common sub expr:\n" +
+                                "  |    <slot 6> : CAST(5: ship_code AS BIGINT)\n" +
+                                "  |    <slot 7> : CAST(4: ship_mode AS BIGINT)\n" +
+                                "  |    <slot 8> : 7: cast + 1\n" +
+                                "  |  cardinality: 1\n"
                 },
                 {"select * from test.t0 where (case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' " +
                         "else 'e' end in ('a', 'b', 'c', 'd')) is null",

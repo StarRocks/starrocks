@@ -1746,6 +1746,14 @@ Status TabletMetaManager::remove_tablet_persistent_index_meta(DataDir* store, TT
     return meta->write_batch(&batch);
 }
 
+Status TabletMetaManager::put_pending_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                                  int64_t version, const RowsetMetaPB& rowset) {
+    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    auto k = encode_meta_pending_rowset_key(tablet_id, version);
+    auto v = rowset.SerializeAsString();
+    return to_status(batch->Put(h, k, v));
+}
+
 // methods for operating pending commits
 Status TabletMetaManager::pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                                 const RowsetMetaPB& rowset, const string& rowset_meta_key) {
@@ -1804,6 +1812,20 @@ Status TabletMetaManager::clear_pending_rowset(DataDir* store, WriteBatch* batch
     auto lower = encode_meta_pending_rowset_key(tablet_id, 0);
     auto upper = encode_meta_pending_rowset_key(tablet_id, INT64_MAX);
     return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
+}
+
+Status TabletMetaManager::get_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, uint32_t rowset_seg_id,
+                                                          std::string* meta_value) {
+    std::string rowset_key = encode_meta_rowset_key(tablet_id, rowset_seg_id);
+    RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, rowset_key, meta_value));
+    return Status::OK();
+}
+
+Status TabletMetaManager::get_pending_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, int64_t version,
+                                                                  std::string* meta_value) {
+    std::string rowset_key = encode_meta_pending_rowset_key(tablet_id, version);
+    RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, rowset_key, meta_value));
+    return Status::OK();
 }
 
 } // namespace starrocks

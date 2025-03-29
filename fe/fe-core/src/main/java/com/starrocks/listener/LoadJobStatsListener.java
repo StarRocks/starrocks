@@ -19,9 +19,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,17 +52,39 @@ public class LoadJobStatsListener implements LoadJobListener {
     }
 
     @Override
-    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
-        StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                              DmlType dmlType) {
+        if (dmlType != DmlType.INSERT_OVERWRITE && needTrigger()) {
+            StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
+        }
     }
 
     @Override
-    public void onInsertOverwriteJobCommitFinish(Database db, Table table) {
-        // do nothing
+    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
+        if (needTrigger()) {
+            StatisticUtils.triggerCollectionOnInsertOverwrite(stats, db, table, true, true);
+        }
+    }
+
+    /**
+     * Whether to trigger the statistics collection
+     */
+    private boolean needTrigger() {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return false;
+        }
+        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+        if (stateMgr == null || !stateMgr.isLeader() || !stateMgr.isReady()) {
+            return false;
+        }
+        return true;
     }
 
     private void onTransactionFinish(TransactionState transactionState, boolean sync) {
         if (!Config.enable_statistic_collect_on_first_load) {
+            return;
+        }
+        if (!needTrigger()) {
             return;
         }
 

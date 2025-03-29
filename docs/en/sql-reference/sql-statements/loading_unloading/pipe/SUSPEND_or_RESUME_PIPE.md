@@ -16,7 +16,7 @@ This command is supported from v3.2 onwards.
 ## Syntax
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] <pipe_name> { SUSPEND | RESUME [ IF SUSPENDED ] }
+ALTER PIPE <pipe_name> { SUSPEND | RESUME [ IF SUSPENDED ] }
 ```
 
 ## Parameters

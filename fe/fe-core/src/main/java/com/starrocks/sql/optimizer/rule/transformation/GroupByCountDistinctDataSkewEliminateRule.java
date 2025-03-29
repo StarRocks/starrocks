@@ -170,6 +170,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
                 .setSplit()
                 .setPartitionByColumns(Lists.newArrayList(groupBy))
                 .setProjection(aggOp.getProjection())
+                .setPredicate(aggOp.getPredicate())
                 .build();
         fourthAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 0.5, ++stage));
 

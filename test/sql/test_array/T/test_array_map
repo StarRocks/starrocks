@@ -78,3 +78,31 @@ VALUES
     x -> CAST(x AS STRING), 
     ARRAY_GENERATE(1, 1000)
 ));
+
+-- test array_map with join
+CREATE TABLE table1 (
+    id INT,
+    arr_largeint ARRAY<INT> NOT NULL
+)PROPERTIES ("replication_num" = "1");
+
+
+INSERT INTO table1 (id, arr_largeint) VALUES
+(1, [1, 2]),
+(2, [3, 4, 5]),
+(3, [6]);
+
+CREATE TABLE table2 (
+    id INT,
+    arr_str ARRAY<INT> NOT NULL
+) PROPERTIES ("replication_num" = "1");
+
+INSERT INTO table2 (id, arr_str) VALUES
+(1, [1, 2, 3]),
+(2, [4, 5]),
+(3, [6, 7, 8, 9]);
+
+SELECT t1.id AS t1_id, t2.id AS t2_id, t1.arr_largeint
+FROM table1 t1
+LEFT JOIN[broadcast] table2 t2
+ON t1.id = t2.id
+AND array_length(array_map(x -> x + array_length(t2.arr_str), t1.arr_largeint)) >= 2;

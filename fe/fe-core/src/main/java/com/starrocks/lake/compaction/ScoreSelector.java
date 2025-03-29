@@ -24,10 +24,9 @@ import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class ScoreSelector implements Selector {
-
     @Override
     @NotNull
-    public List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics,
+    public List<PartitionStatisticsSnapshot> select(@NotNull Collection<PartitionStatistics> statistics,
             @NotNull Set<Long> excludeTables) {
         double minScore = Config.lake_compaction_score_selector_min_score;
         long now = System.currentTimeMillis();
@@ -37,6 +36,8 @@ public class ScoreSelector implements Selector {
                 // When manual compaction is triggered, we just skip min score and time check
                 .filter(p -> (p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
                         || (p.getNextCompactionTime() <= now && p.getCompactionScore().getMax() >= minScore)))
+                .map(p -> {
+                    return p.getSnapshot(); })
                 .collect(Collectors.toList());
     }
 }

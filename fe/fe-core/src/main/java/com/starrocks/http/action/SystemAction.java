@@ -54,6 +54,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.validator.routines.UrlValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -77,7 +78,9 @@ public class SystemAction extends WebBaseAction {
         if (Strings.isNullOrEmpty(currentPath)) {
             currentPath = "/";
         }
-        appendSystemInfo(response.getContent(), currentPath, currentPath);
+        // HTML encode the path to prevent XSS
+        String encodePath = Encode.forHtml(currentPath);
+        appendSystemInfo(response.getContent(), encodePath, encodePath);
 
         getPageFooter(response.getContent());
         writeResponse(request, response);

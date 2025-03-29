@@ -17,8 +17,13 @@
 #include <Poco/Exception.h>
 #include <fmt/format.h>
 
+#include <cstdint>
 #include <memory>
+#include <mutex>
 #include <sstream>
+#include <unordered_map>
+
+#include "runtime/current_thread.h"
 
 namespace starrocks::poco {
 
@@ -31,34 +36,9 @@ bool isHTTPS(const Poco::URI& uri) {
         throw std::runtime_error(fmt::format("Unsupported scheme in URI '{}'", uri.toString()));
 }
 
-HTTPSessionPtr makeHTTPSessionImpl(const std::string& host, Poco::UInt16 port, bool https, bool keep_alive,
-                                   bool resolve_host) {
-    HTTPSessionPtr session;
-
-    if (https) {
-        session = std::make_shared<Poco::Net::HTTPSClientSession>(host, port);
-    } else {
-        session = std::make_shared<Poco::Net::HTTPClientSession>(host, port);
-    }
-
-    // doesn't work properly without patch
-    session->setKeepAlive(keep_alive);
-    return session;
-}
-
 void setTimeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts) {
     session.setTimeout(timeouts.connection_timeout, timeouts.send_timeout, timeouts.receive_timeout);
     session.setKeepAliveTimeout(timeouts.http_keep_alive_timeout);
-}
-
-HTTPSessionPtr makeHTTPSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts, bool resolve_host) {
-    const std::string& host = uri.getHost();
-    Poco::UInt16 port = uri.getPort();
-    bool https = isHTTPS(uri);
-
-    auto session = makeHTTPSessionImpl(host, port, https, false, resolve_host);
-    setTimeouts(*session, timeouts);
-    return session;
 }
 
 std::string getCurrentExceptionMessage() {
@@ -95,6 +75,65 @@ bool checkRequestCanReturn2xxAndErrorInBody(Aws::Http::HttpRequest& request) {
     }
 
     return false;
+}
+
+HTTPSessionPtr makeHTTPSessionImpl(const std::string& host, Poco::UInt16 port, bool https, bool keep_alive) {
+    HTTPSessionPtr session;
+
+    if (https) {
+        session = std::make_shared<Poco::Net::HTTPSClientSession>(host, port);
+    } else {
+        session = std::make_shared<Poco::Net::HTTPClientSession>(host, port);
+    }
+
+    // doesn't work properly without patch
+    session->setKeepAlive(keep_alive);
+    return session;
+}
+
+EndpointHTTPSessionPool::Base::ObjectPtr EndpointHTTPSessionPool::allocObject() {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    auto session = makeHTTPSessionImpl(_host, _port, _is_https, true);
+    return session;
+}
+
+HTTPSessionPools& HTTPSessionPools::instance() {
+    static HTTPSessionPools instance;
+    return instance;
+}
+
+PooledHTTPSessionPtr HTTPSessionPools::getSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts,
+                                                  bool resolve_host) {
+    const std::string& host = uri.getHost();
+    uint16_t port = uri.getPort();
+    bool is_https = isHTTPS(uri);
+
+    const Key key = {.host = host, .port = port, .is_https = is_https};
+
+    EndpointPoolPtr pool = nullptr;
+    {
+        std::lock_guard lock(_mutex);
+        auto item = _endpoint_pools.find(key);
+        if (item == _endpoint_pools.end()) {
+            std::tie(item, std::ignore) =
+                    _endpoint_pools.emplace(key, std::make_shared<EndpointHTTPSessionPool>(host, port, is_https));
+        }
+        pool = item->second;
+    }
+
+    auto session = pool->get(timeouts.connection_timeout.totalMicroseconds());
+    session->attachSessionData({});
+
+    return session;
+}
+
+void HTTPSessionPools::shutdown() {
+    std::lock_guard lock(_mutex);
+    _endpoint_pools.clear();
+}
+
+PooledHTTPSessionPtr makeHTTPSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts, bool resolve_host) {
+    return HTTPSessionPools::instance().getSession(uri, timeouts, resolve_host);
 }
 
 } // namespace starrocks::poco

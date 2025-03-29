@@ -19,9 +19,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -42,7 +41,7 @@ public class PushDownScanRuleTest {
 
     @Test
     public void transform(@Mocked OlapTable table) {
-        PushDownPredicateScanRule rule = PushDownPredicateScanRule.OLAP_SCAN;
+        PushDownPredicateScanRule rule = new PushDownPredicateScanRule();
 
         OptExpression optExpression = new OptExpression(new LogicalFilterOperator(
                 new BinaryPredicateOperator(BinaryType.EQ,
@@ -57,7 +56,7 @@ public class PushDownScanRuleTest {
 
         assertNull(((LogicalOlapScanOperator) scan.getOp()).getPredicate());
         List<OptExpression> result =
-                rule.transform(optExpression, new OptimizerContext(new Memo(), new ColumnRefFactory()));
+                rule.transform(optExpression, OptimizerFactory.mockContext(new ColumnRefFactory()));
 
         Operator scanOperator = result.get(0).inputAt(0).getOp();
 

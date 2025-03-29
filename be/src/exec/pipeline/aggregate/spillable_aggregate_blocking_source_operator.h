@@ -68,6 +68,8 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
+    bool support_event_scheduler() const override { return false; }
+
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;
     // _stream_aggregatory_factory is only used when spilling happens

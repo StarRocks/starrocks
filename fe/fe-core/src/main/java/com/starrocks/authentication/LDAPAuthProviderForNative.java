@@ -17,6 +17,7 @@ import com.google.common.base.Strings;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.security.LdapSecurity;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -24,23 +25,21 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public class LDAPAuthProviderForNative implements AuthenticationProvider {
-    public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name();
-
     @Override
     public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
             throws AuthenticationException {
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.toString());
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
+        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
         return info;
     }
 
     @Override
-    public void authenticate(String user, String host, byte[] remotePassword, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] remotePassword, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
-        String userForAuthPlugin = authenticationInfo.getTextForAuthPlugin();
+        String userForAuthPlugin = authenticationInfo.getAuthString();
         //clear password terminate string
         byte[] clearPassword = remotePassword;
         if (remotePassword[remotePassword.length - 1] == 0) {

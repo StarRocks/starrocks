@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef WITH_TENANN
 #include "storage/index/vector/vector_index_reader_factory.h"
 
 #include "storage/index/vector/empty_index_reader.h"
@@ -42,3 +43,4 @@ Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
 }
 
 } // namespace starrocks
+#endif

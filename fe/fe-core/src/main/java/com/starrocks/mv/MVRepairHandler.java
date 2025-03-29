@@ -101,7 +101,7 @@ public interface MVRepairHandler {
             locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             try {
                 for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
-                    long partitionId = partitionCommitInfo.getPartitionId();
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                     Partition partition = olapTable.getPartition(partitionId);
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;

@@ -33,6 +33,9 @@ select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uui
 -- result:
 0
 -- !result
+set enable_connector_incremental_scan_ranges=false;
+-- result:
+-- !result
 set enable_profile=true;
 -- result:
 -- !result

@@ -35,6 +35,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -56,9 +57,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -135,6 +133,9 @@ public class QueryAnalyzer {
         }
 
         public Void process(ParseNode node, Scope scope) {
+            if (session.getSessionVariable().isDisableGeneratedColumnRewrite()) {
+                return null;
+            }
             return node.accept(this, scope);
         }
 
@@ -196,19 +197,23 @@ public class QueryAnalyzer {
             }
 
             // 3. analyze generated column expression based on current scope
+            Map<Expr, SlotRef> analyzedGeneratedExprToColumnRef = new HashMap<>();
             for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
                 entry.getKey().reset();
                 entry.getValue().reset();
-                
+
                 try {
                     ExpressionAnalyzer.analyzeExpression(entry.getKey(), new AnalyzeState(), scope, session);
                     ExpressionAnalyzer.analyzeExpression(entry.getValue(), new AnalyzeState(), scope, session);
                 } catch (Exception ignore) {
-                    // ignore generated column rewrite if hit any exception
-                    generatedExprToColumnRef.clear();
+                    // skip this generated column rewrite if hit any exception
+                    // some exception is reasonable because some of illegal generated column
+                    // rewrite will be rejected by ananlyzer exception.
+                    continue;
                 }
+                analyzedGeneratedExprToColumnRef.put(entry.getKey(), entry.getValue());
             }
-            resultGeneratedExprToColumnRef.putAll(generatedExprToColumnRef);
+            resultGeneratedExprToColumnRef.putAll(analyzedGeneratedExprToColumnRef);
         }
 
         @Override
@@ -235,7 +240,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation subquery, Scope scope) {
+        public Void visitSubqueryRelation(SubqueryRelation subquery, Scope scope) {
             QueryRelation queryRelation = subquery.getQueryStatement().getQueryRelation();
             if (queryRelation instanceof SelectRelation) {
                 SelectRelation childSelectRelation = (SelectRelation) queryRelation;
@@ -623,9 +628,9 @@ public class QueryAnalyzer {
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
                     if (needPruneScanColumns && !column.isKey() &&
-                            !bucketColumns.contains(column.getName()) &&
-                            !partitionColumns.contains(column.getName()) &&
-                            !pruneScanColumns.contains(column.getName().toLowerCase())) {
+                            bucketColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            partitionColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            pruneScanColumns.stream().noneMatch(column.getName()::equalsIgnoreCase)) {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }
@@ -655,10 +660,10 @@ public class QueryAnalyzer {
 
                 if (table.isHiveTable()) {
                     HiveTable hiveTable = (HiveTable) table;
-                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                            hiveTable.getTableName());
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getCatalogDBName(),
+                            hiveTable.getCatalogTableName());
                     HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                            hiveTable.getResourceName(), hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName());
                     hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
                     hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
                     Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
@@ -922,7 +927,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
+        public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope context) {
             if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }
@@ -1389,32 +1394,26 @@ public class QueryAnalyzer {
 
             Database db;
             try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
-                db = metadataMgr.getDb(catalogName, dbName);
+                db = metadataMgr.getDb(session, catalogName, dbName);
             }
 
             MetaUtils.checkDbNullAndReport(db, dbName);
-            Locker locker = new Locker();
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
                 try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
                     Pair<Table, MaterializedIndexMeta> materializedIndex =
-                            metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndex(dbName, tbName);
                     if (materializedIndex != null) {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
-                        try {
-                            // Add read lock to avoid concurrent problems.
-                            locker.lockDatabase(db.getId(), LockType.READ);
-                            OlapTable mvOlapTable = new OlapTable();
-                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
-                            // Copy the necessary olap table meta to avoid changing original meta;
-                            mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
-                            table = mvOlapTable;
-                        } finally {
-                            locker.unLockDatabase(db.getId(), LockType.READ);
-                        }
+                        // Add read lock to avoid concurrent problems.
+                        OlapTable mvOlapTable = new OlapTable(mvTable.getType());
+                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        // Copy the necessary olap table meta to avoid changing original meta;
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                        table = mvOlapTable;
                     }
                 }
             } else {
@@ -1424,7 +1423,7 @@ public class QueryAnalyzer {
                 }
                 if (table == null) {
                     try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                        table = metadataMgr.getTable(catalogName, dbName, tbName);
+                        table = metadataMgr.getTable(session, catalogName, dbName, tbName);
                     }
                 }
             }
@@ -1456,6 +1455,10 @@ public class QueryAnalyzer {
                         }
                     }
                 }
+            }
+
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).maySetDatabaseName(db.getFullName());
             }
 
             return table;

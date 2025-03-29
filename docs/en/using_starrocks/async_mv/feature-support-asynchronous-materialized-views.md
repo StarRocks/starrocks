@@ -46,22 +46,23 @@ This document outlines the boundaries of competence for asynchronous materialize
 
 ## Properties
 
-| Property                       | Description                                              | Supported Version(s) |
-| :--------------------------------- | :----------------------------------------------------------- | :----------------------- |
-| `session.<property_name>`          | Prefix of session variables used for materialized view construction, for example, `session.query_timeout` and `session.query_mem_limit`. | v3.0+                    |
-| auto_refresh_partitions_limit      | Maximum number of materialized view partitions to be refreshed each time an automatic refresh is triggered. | v2.5+                    |
-| excluded_trigger_tables            | Base tables whose updates will not trigger the materialized view automatic refresh. | v2.5+                    |
-| partition_refresh_number           | Number of partitions to be refreshed in each batch when the refresh task is executed in batches. | v2.5+                    |
-| partition_ttl_number               | The number of most recent materialized view partitions to retain. | v2.5+                    |
-| partition_ttl                      | The time-to-live (TTL) for materialized view partitions. This property is recommended over `partition_ttl_number`. | v3.1.4+<br />v3.2+       |
-| force_external_table_query_rewrite | Whether to enable query rewrite for external catalog-based materialized views. | v2.5+                    |
-| query_rewrite_consistency          | The query rewrite rule for materialized views built on internal tables. | v3.0.5+<br />v3.1+       |
-| resource_group                     | The resource group to which the refresh tasks of the materialized view belong. | v3.1+                    |
-| colocate_with                      | The colocation group of the materialized view.               | v3.1+                    |
-| foreign_key_constraints            | The Foreign Key constraints when you create a materialized view for query rewrite in the View Delta Join scenario. | v2.5.4+<br />v3.0+       |
-| unique_constraints                 | The Unique Key constraints when you create a materialized view for query rewrite in the View Delta Join scenario. | v2.5.4+<br />v3.0+       |
-| mv_rewrite_staleness_second        | Staleness tolerance for materialized view data during query rewrite. | v3.1+                    |
-| enable_query_rewrite               | Whether the materialized view can be used for query rewrite. | v3.3+                    |
+| Property                           | Description                                                                                                                              | Supported Version(s) |
+|:-----------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------|:---------------------|
+| `session.<property_name>`          | Prefix of session variables used for materialized view construction, for example, `session.query_timeout` and `session.query_mem_limit`. | v3.0+                |
+| auto_refresh_partitions_limit      | Maximum number of materialized view partitions to be refreshed each time an automatic refresh is triggered.                              | v2.5+                |
+| excluded_trigger_tables            | Base tables whose updates will not trigger the materialized view automatic refresh.                                                      | v2.5+                |
+| partition_refresh_number           | Number of partitions to be refreshed in each batch when the refresh task is executed in batches.                                         | v2.5+                |
+| partition_ttl_number               | The number of most recent materialized view partitions to retain.                                                                        | v2.5+                |
+| partition_ttl                      | The time-to-live (TTL) for materialized view partitions. This property is recommended over `partition_ttl_number`.                       | v3.1.4+<br />v3.2+   |
+| force_external_table_query_rewrite | Whether to enable query rewrite for external catalog-based materialized views.                                                           | v2.5+                |
+| query_rewrite_consistency          | The query rewrite rule for materialized views built on internal tables.                                                                  | v3.0.5+<br />v3.1+   |
+| resource_group                     | The resource group to which the refresh tasks of the materialized view belong.                                                           | v3.1+                |
+| colocate_with                      | The colocation group of the materialized view.                                                                                           | v3.1+                |
+| foreign_key_constraints            | The Foreign Key constraints when you create a materialized view for query rewrite in the View Delta Join scenario.                       | v2.5.4+<br />v3.0+   |
+| unique_constraints                 | The Unique Key constraints when you create a materialized view for query rewrite in the View Delta Join scenario.                        | v2.5.4+<br />v3.0+   |
+| mv_rewrite_staleness_second        | Staleness tolerance for materialized view data during query rewrite.                                                                     | v3.1+                |
+| enable_query_rewrite               | Whether the materialized view can be used for query rewrite.                                                                             | v3.3+                |
+| excluded_refresh_tables            | Base tables that do not trigger data synchronization during materialized view refresh.                                                   | v3.3+                |
 
 ## Partitioning
 

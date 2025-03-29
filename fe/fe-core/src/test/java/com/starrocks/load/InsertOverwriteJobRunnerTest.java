@@ -29,6 +29,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -65,6 +66,11 @@ public class InsertOverwriteJobRunnerTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
+
         starRocksAssert.withDatabase("insert_overwrite_test").useDatabase("insert_overwrite_test")
                 .withTable(
                         "CREATE TABLE insert_overwrite_test.t1(k1 int, k2 int, k3 int)" +
@@ -90,13 +96,13 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
         runner.cancel();
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
 
         InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
                 Lists.newArrayList(2000L), null, Lists.newArrayList(2001L));
@@ -130,7 +136,7 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assert.assertFalse(runner.isFinished());
     }
@@ -149,7 +155,7 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
 
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);

@@ -31,6 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -42,7 +43,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -55,10 +58,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -67,10 +70,12 @@ import org.roaringbitmap.RoaringBitmap;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -421,6 +426,8 @@ public class Utils {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
             } else if (operator instanceof LogicalDeltaLakeScanOperator)  {
                 return ((LogicalDeltaLakeScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalPaimonScanOperator) {
+                return ((LogicalPaimonScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -610,6 +617,10 @@ public class Utils {
 
     public static int log2(int n) {
         return 31 - Integer.numberOfLeadingZeros(n);
+    }
+
+    public static long log2(long n) {
+        return 63 - Long.numberOfLeadingZeros(n);
     }
 
     /**
@@ -848,75 +859,28 @@ public class Utils {
     }
 
     /**
-     * Check if the operator has applied the rule
-     * @param op input operator to be checked
-     * @param ruleMask specific rule mask
-     * @return true if the operator has applied the rule, false otherwise
-     */
-    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return false;
-        }
-        // TODO: support cte inline
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & ruleMask) != 0;
-    }
-
-    /**
-     * Set the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void setOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.setOpRuleMask(op.getOpRuleMask() | ruleMask);
-    }
-
-    /**
-     * Reset the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void resetOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.resetOpRuleMask(ruleMask);
-    }
-
-    /**
      * Check if the optExpression has applied the rule in recursively
      * @param optExpression input optExpression to be checked
      * @param ruleMask specific rule mask
      * @return true if the optExpression or its children have applied the rule, false otherwise
      */
     public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        return isOptHasAppliedRule(optExpression, op -> op.isOpRuleBitSet(ruleMask));
+    }
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, Predicate<Operator> pred) {
         if (optExpression == null) {
             return false;
         }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+        if (pred.test(optExpression.getOp())) {
             return true;
         }
         for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
+            if (isOptHasAppliedRule(child, pred)) {
                 return true;
             }
         }
         return false;
-    }
-
-
-    public static void setOptScanOpsBit(OptExpression input,
-                                        int bit) {
-        List<LogicalScanOperator> scanOps = MvUtils.getScanOperator(input);
-        scanOps.stream().forEach(op -> op.setOpRuleMask(op.getOpRuleMask() | bit));
-    }
-
-    public static void setOpBit(OptExpression input,
-                                int bit) {
-        input.getOp().setOpRuleMask(input.getOp().getOpRuleMask() | bit);
     }
 
     @SuppressWarnings("unchecked")
@@ -953,5 +917,92 @@ public class Utils {
         }
 
         return value;
+    }
+
+    /**
+     * Recursively resolve the column ref for complicated expressions
+     * Throw exception if that ref cannot be found in the operator expression
+     *
+     * @param ref     column ref
+     * @param factory column factory
+     * @param expr    operator expression
+     * @return all resolved columns
+     */
+    public static List<Pair<Table, Column>> resolveColumnRefRecursive(ColumnRefOperator ref, ColumnRefFactory factory,
+                                                                      OptExpression expr) {
+        // consult the factory
+        Pair<Table, Column> tableAndColumn = factory.getTableAndColumn(ref);
+        if (tableAndColumn != null) {
+            return List.of(tableAndColumn);
+        }
+
+        // When deriving stats, the OptExpression is not exist but only a GroupExpression. We cannot resolve the
+        // ColumnRef from it
+        if (expr == null) {
+            return null;
+        }
+
+        // Consult the projection
+        if (expr.getOp().getProjection() != null) {
+            ScalarOperator impl = expr.getOp().getProjection().resolveColumnRef(ref);
+            if (impl != null) {
+                List<ColumnRefOperator> subRefs = Utils.extractColumnRef(impl);
+                if (impl instanceof ColumnRefOperator) {
+                    subRefs.remove(impl);
+                }
+                List<Pair<Table, Column>> subColumns = Lists.newArrayList();
+                for (ColumnRefOperator subRef : subRefs) {
+                    subColumns.addAll(ListUtils.emptyIfNull(resolveColumnRefRecursive(subRef, factory, expr)));
+                }
+                return subColumns;
+            }
+        }
+
+        // Consult the corresponding children
+        if (expr.getOp() instanceof LogicalSetOperator setOp) {
+            List<ColumnRefOperator> childrenRefs = setOp.resolveColumnRef(ref);
+            if (CollectionUtils.isNotEmpty(childrenRefs)) {
+                List<Pair<Table, Column>> result = Lists.newArrayList();
+                for (int i = 0; i < expr.getInputs().size(); i++) {
+                    List<Pair<Table, Column>> pairs =
+                            resolveColumnRefRecursive(childrenRefs.get(i), factory, expr.getInputs().get(i));
+                    if (CollectionUtils.isNotEmpty(pairs)) {
+                        result.addAll(pairs);
+                    }
+                }
+                return result;
+            }
+
+        }
+
+        // consult children operators
+        for (OptExpression child : expr.getInputs()) {
+            List<Pair<Table, Column>> children = resolveColumnRefRecursive(ref, factory, child);
+            if (CollectionUtils.isNotEmpty(children)) {
+                return children;
+            }
+        }
+
+        return null;
+    }
+
+    public static Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> separateEqualityPredicates(
+            ScalarOperator predicate) {
+        List<ScalarOperator> conjunctivePredicates = extractConjuncts(predicate);
+        Map<ColumnRefOperator, ConstantOperator> columnConstMap = new HashMap<>();
+        List<ScalarOperator> otherPredicates = new ArrayList<>();
+
+        for (ScalarOperator op : conjunctivePredicates) {
+            if (ScalarOperator.isColumnEqualConstant(op)) {
+                BinaryPredicateOperator binaryOp = (BinaryPredicateOperator) op;
+                ColumnRefOperator column = (ColumnRefOperator) binaryOp.getChild(0);
+                ConstantOperator constant = (ConstantOperator) binaryOp.getChild(1);
+                columnConstMap.put(column, constant);
+            } else {
+                otherPredicates.add(op);
+            }
+        }
+
+        return new Pair<>(columnConstMap, otherPredicates);
     }
 }

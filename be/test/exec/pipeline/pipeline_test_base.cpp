@@ -78,7 +78,7 @@ void PipelineTestBase::_prepare() {
     const auto& query_id = params.query_id;
     const auto& fragment_id = params.fragment_instance_id;
 
-    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(60);
     _query_ctx->set_query_expire_seconds(60);
@@ -302,8 +302,11 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     CHECK(deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl).ok());
 
     std::vector<SlotDescriptor> slots;
+    phmap::flat_hash_set<SlotId> seen_slots;
     for (auto& t_slot : tbl.slotDescriptors) {
-        slots.emplace_back(t_slot);
+        if (auto [_, is_new] = seen_slots.insert(t_slot.id); is_new) {
+            slots.emplace_back(t_slot);
+        }
     }
 
     std::vector<SlotDescriptor*> p_slots;

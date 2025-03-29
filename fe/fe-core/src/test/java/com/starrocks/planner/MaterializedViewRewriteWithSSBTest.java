@@ -35,6 +35,7 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         createTables("sql/ssb/", Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder"));
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test

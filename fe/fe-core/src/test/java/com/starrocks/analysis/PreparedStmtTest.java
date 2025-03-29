@@ -18,6 +18,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -29,6 +30,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.HashSet;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -49,7 +52,7 @@ public class PreparedStmtTest{
             "\"replication_num\" = \"1\",\n" +
             "\"in_memory\" = \"false\",\n" +
             "\"storage_format\" = \"DEFAULT\",\n" +
-            "\"enable_persistent_index\" = \"false\",\n" +
+            "\"enable_persistent_index\" = \"true\",\n" +
             "\"replicated_storage\" = \"true\",\n" +
             "\"compression\" = \"LZ4\"\n" +
             "); ";
@@ -82,6 +85,21 @@ public class PreparedStmtTest{
     }
 
     @Test
+    public void testIsQuery() throws Exception {
+        String selectSql = "select * from demo.prepare_stmt";
+        QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSql, ctx);
+        Assert.assertEquals(true, ctx.isQueryStmt(queryStatement));
+
+        String prepareSql = "PREPARE stmt FROM select * from demo.prepare_stmt";
+        PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(prepareSql, ctx);
+        Assert.assertEquals(false, ctx.isQueryStmt(prepareStmt));
+
+        ctx.putPreparedStmt("stmt", new PrepareStmtContext(prepareStmt, ctx, null));
+        Assert.assertEquals(true, ctx.isQueryStmt(new ExecuteStmt("stmt", null)));
+        Assert.assertEquals(false, ctx.isQueryStmt(new ExecuteStmt("stmt1", null)));
+    }
+
+    @Test
     public void testPrepareEnable() {
         ctx.getSessionVariable().setEnablePrepareStmt(false);
         String prepareSql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
@@ -95,6 +113,22 @@ public class PreparedStmtTest{
         StatementBase statement = SqlParser.parse(prepareSql, ctx.getSessionVariable()).get(0);
         StmtExecutor executor = new StmtExecutor(ctx, statement);
         Assert.assertFalse(executor.isForwardToLeader());
+    }
+
+    @Test
+    public void testPrepareWithSelectConst() throws Exception {
+        String sql = "PREPARE stmt1 FROM select ?, ?, ?;";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals(3, stmt.getParameters().size());
+
+        HashSet<Integer> idSet = new HashSet<Integer>();
+        for (Expr expr : stmt.getParameters()) {
+            Assert.assertEquals(true, idSet.add(expr.hashCode()));
+        }
+
+        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(1)));
+        Assert.assertEquals(false, stmt.getParameters().get(1).equals(stmt.getParameters().get(2)));
+        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(2)));
     }
 
     @Test

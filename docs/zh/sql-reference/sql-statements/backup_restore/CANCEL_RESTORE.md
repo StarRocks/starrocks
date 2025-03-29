@@ -5,9 +5,7 @@ keywords: ['beifen']
 
 # CANCEL RESTORE
 
-## 功能
-
-取消指定数据库中一个正在进行的恢复任务。更多信息，请见 备份和恢复。
+取消指定数据库中一个正在进行的恢复任务。
 
 > **注意**
 >
@@ -16,7 +14,7 @@ keywords: ['beifen']
 ## 语法
 
 ```SQL
-CANCEL RESTORE FROM <db_name>
+CANCEL RESTORE { FROM <db_name> | FOR EXTERNAL CATALOG }
 ```
 
 ## 参数说明
@@ -24,6 +22,7 @@ CANCEL RESTORE FROM <db_name>
 | **参数** | **说明**               |
 | -------- | ---------------------- |
 | db_name  | 恢复任务所属数据库名。 |
+| FOR EXTERNAL CATALOG | 取消正在进行的 External Catalog 元数据恢复任务。 |
 
 ## 示例
 

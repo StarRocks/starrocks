@@ -18,6 +18,8 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 如果您希望在替换前验证数据，可以根据以上步骤自行实现覆盖写入数据。
 
+从 v3.4.0 开始，StarRocks 支持分区表的 INSERT OVERWRITE 操作的新语义 — Dynamic Overwrite。更多信息，参考 [Dynamic Overwrite](#dynamic-overwrite)。
+
 ## 注意事项
 
 - 您只能在 MySQL 客户端通过 `Ctrl` + `C` 按键强制取消同步 INSERT 导入任务。
@@ -338,6 +340,38 @@ WITH LABEL insert_load_wikipedia_ow_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+### Dynamic Overwrite
+
+从 v3.4.0 开始，StarRocks 支持分区表的 INSERT OVERWRITE 操作的新语义 — Dynamic Overwrite。
+
+当前 INSERT OVERWRITE 默认行为如下：
+
+- 当覆盖整个分区表（即未指定 PARTITION 子句）时，新数据会替换对应分区中的数据。如果存在表中已有分区未涉及覆盖操作，系统会清空该分区数据。
+- 当覆盖空的分区表（即其中没有任何分区）但指定了 PARTITION 子句时，系统会报错 `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`。
+- 当覆盖分区表时指定了不存在的分区，系统会报错 `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`。
+- 当覆盖分区表的数据与指定的分区不匹配时，如果开启严格模式，系统会报错 `ERROR 1064 (HY000): Insert has filtered data in strict mode`；如果未开启严格模式，系统会过滤不合格的数据。
+
+新的 Dynamic Overwrite 语义的行为与上述默认行为有很大不同：
+
+当覆盖整个分区表时，新数据会替换对应分区中的数据。但未涉及的分区会保留，而不会被清空或删除。如果新数据对应不存在的分区，系统会自动创建该分区。
+
+Dynamic Overwrite 语义默认禁用。如需启用，需要将系统变量 `dynamic_overwrite` 设置为 `true`。
+
+在当前 Session 中启用 Dynamic Overwrite:
+
+```SQL
+SET dynamic_overwrite = true;
+```
+
+您也可以在 INSERT OVERWRITE 语句中通过 Hint 启用 Dynamic Overwrite，仅对该语句生效：
+
+示例：
+
+```SQL
+INSERT OVERWRITE /*+set_var(set dynamic_overwrite = false)*/ insert_wiki_edit
+SELECT * FROM source_wiki_edit;
+```
+
 ## 通过 INSERT 语句导入数据至生成列
 
 生成列（Generated Columns）是一种特殊的列，它的值会根据列定义中的表达式自动计算得出。并且，你不能直接写入或更新生成列的值。当您的查询请求涉及对表达式的计算时，例如查询 JSON 类型的某个字段，或者针对 ARRAY 数据计算，生成列尤其有用。在数据导入时，StarRocks 将计算表达式，然后将结果存储在生成列中，从而避免了在查询过程中计算表达式，进而提高了查询性能。
@@ -378,6 +412,108 @@ mysql> SELECT * FROM insert_generated_columns;
 +------+------------+------------------+-----------+------------+
 1 row in set (0.02 sec)
 ```
+
+## 插入数据时配置 PROPERTIES
+
+从 v3.4.0 版本开始，INSERT 语句支持配置 PROPERTIES，可用于多种功能。当同时指定 PROPERTIES 和其对应的系统变量时，PROPERTIES 优先生效。
+
+### 启用严格模式
+
+从 v3.4.0 起，您可以为 INSERT from FILES() 启用严格模式并设置 `max_filter_ratio`。INSERT from FILES() 的严格模式与其他导入方法的行为相同。
+
+如果要导入包含某些不合格行的数据集，您可以选择过滤这些不合格行，或导入该数据行并为其中不合格的列赋 NULL 值。您可以使用 `strict_mode` 和 `max_filter_ratio` 属性实现这两种方式。
+
+- 如需过滤不合格行，需将 `strict_mode` 设置为 `true`，并将 `max_filter_ratio` 设置为所需值。
+- 如需导入不合格行并赋予 NULL 值，需将 `strict_mode` 设置为 `false`。
+
+以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中，启用严格模式以过滤不合格的数据行，并且设置最大容错比为 10%：
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0.1"
+)
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
+:::note
+
+`strict_mode` 和 `max_filter_ratio` 仅支持 INSERT from FILES() 导入方式。INSERT from Table 导入方式不支持以上属性。
+
+:::
+
+### 设置超时时间
+
+从 v3.4.0 开始，您可以设置 INSERT 语句的超时时间。在 v3.4.0 之前的版本中，INSERT 语句的超时时间由系统变量 `query_timeout` 控制。
+
+以下示例将源表 `source_wiki_edit` 中的数据插入到目标表 `insert_wiki_edit`，并将超时时间设置为 `2` 秒：
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "timeout" = "2"
+)
+SELECT * FROM source_wiki_edit;
+```
+
+:::note
+
+从 v3.4.0 版本开始，系统变量 `insert_timeout` 作用于所有涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计信息收集和 PIPE），替代原本的 `query_timeout`。
+
+:::
+
+### INSERT 按名称匹配列
+
+默认情况下，INSERT 根据源表和目标表中列的位置（即语句中列的映射关系）来匹配列。
+
+以下示例通过指定位置的方式显式匹配源表和目标表中的列：
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, channel, user FROM source_wiki_edit;
+```
+
+如果您在 Column List 或 SELECT 语句中改变了 `channel` 和 `user` 的顺序，列的映射关系将发生变化。
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+此处，由于目标表 `insert_wiki_edit` 中的 `channel` 列被源表 `source_wiki_edit` 中的 `user` 的数据所填满，导入的数据可能并不是所需的结果。
+
+通过在 INSERT 语句中添加 `BY NAME` 子句，系统将根据检查源表和目标表中的列名，匹配同名的列。
+
+:::note
+
+- 如果指定了 `BY NAME`，则不能指定 Column List。
+- 如果未指定 `BY NAME`，系统将根据 Column List 和 SELECT 语句中列的位置来匹配列。
+
+:::
+
+以下示例通过列名匹配源表和目标表中的列：
+
+```SQL
+INSERT INTO insert_wiki_edit BY NAME
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+在这种情况下，改变 `channel` 和 `user` 的顺序不会改变列的映射关系。
 
 ## 通过 INSERT 语句异步导入数据
 

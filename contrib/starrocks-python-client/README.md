@@ -27,17 +27,21 @@ starrocks://<User>:<Password>@<Host>:<Port>/<Catalog>.<Database>
 ```
 
 ## Example
-It is recommended to use python 3.x to connect to the StarRocks database, eg:
+Python connector supports only Python 3 and SQLAlchemy 1.4 and 2:
 ```
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, Integer, insert
 from sqlalchemy.schema import Table, MetaData, Column
 from sqlalchemy.sql.expression import select, text
 
 engine = create_engine('starrocks://root:xxx@localhost:9030/hive_catalog.hive_db')
-connection = engine.connect()
 
-rows = connection.execute(text("SELECT * FROM hive_table")).fetchall()
+### Querying data
+with engine.connect() as connection:
+    rows = connection.execute(text("SELECT * FROM hive_table")).fetchall()
+    print(rows)
 
+
+### DDL Operation
 meta = MetaData()
 tbl = Table(
     'table1',
@@ -47,11 +51,17 @@ tbl = Table(
     starrocks_comment='table comment',
     starrocks_properties=(
         ("storage_medium", "SSD"),
-        ("storage_cooldown_time", "2015-06-04 00:00:00"),
+        ("storage_cooldown_time", "2025-06-04 00:00:00"),
+        ("replication_num", "1")
     ))
 
-meta.createall()
-with connection.begin() as con:
-    tbl.insert().values(id=1)
-rows = connection.execute(tbl.select()).fetchall()
+meta.create_all(engine)
+
+### Insert data
+stmt = insert(tbl).values(id=1)
+stmt.compile()
+with engine.connect() as connection:
+    connection.execute(stmt)
+    rows = connection.execute(tbl.select()).fetchall()
+    print(rows)
 ```

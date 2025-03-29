@@ -51,8 +51,8 @@ public class HudiTableFactory extends ExternalTableFactory {
     public static void copyFromCatalogTable(HudiTable.Builder builder, HudiTable catalogTable, Map<String, String> properties) {
         builder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
-                .setHiveDbName(catalogTable.getDbName())
-                .setHiveTableName(catalogTable.getTableName())
+                .setHiveDbName(catalogTable.getCatalogDBName())
+                .setHiveTableName(catalogTable.getCatalogTableName())
                 .setPartitionColNames(catalogTable.getPartitionColumnNames())
                 .setDataColNames(catalogTable.getDataColumnNames())
                 .setHudiProperties(catalogTable.getProperties())

@@ -53,7 +53,7 @@ template <typename ColumnType, typename StateType>
 class ReplaceAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
+        const auto* data = down_cast<const ColumnType*>(src.get())->get_data().data();
         this->data() = data[row];
     }
 
@@ -68,7 +68,7 @@ template <>
 class ReplaceAggregator<BitmapColumn, BitmapValue> final : public ValueColumnAggregator<BitmapColumn, BitmapValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<BitmapColumn*>(src.get());
+        const auto* data = down_cast<const BitmapColumn*>(src.get());
         this->data() = *(data->get_object(row));
     }
 
@@ -88,7 +88,7 @@ class ReplaceAggregator<HyperLogLogColumn, HyperLogLog> final
         : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<HyperLogLogColumn*>(src.get());
+        auto* data = down_cast<const HyperLogLogColumn*>(src.get());
         this->data() = *(data->get_object(row));
     }
 
@@ -108,7 +108,7 @@ class ReplaceAggregator<PercentileColumn, PercentileValue> final
         : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<PercentileColumn*>(src.get());
+        const auto* data = down_cast<const PercentileColumn*>(src.get());
         this->data() = *(data->get_object(row));
     }
 
@@ -129,13 +129,13 @@ public:
     void reset() override { this->data().reset(); }
 
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
+        const auto* col = down_cast<const BinaryColumn*>(src.get());
         Slice data = col->get_slice(row);
         this->data().update(data);
     }
 
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
+        auto* col = down_cast<const BinaryColumn*>(src.get());
         Slice data = col->get_slice(end - 1);
         this->data().update(data);
     }
@@ -193,7 +193,7 @@ public:
     void update_source(const ColumnPtr& src) override {
         _source_column = src;
 
-        auto* nullable = down_cast<NullableColumn*>(src.get());
+        const auto* nullable = down_cast<const NullableColumn*>(src.get());
         _child->update_source(nullable->data_column());
         _null_child->update_source(nullable->null_column());
     }

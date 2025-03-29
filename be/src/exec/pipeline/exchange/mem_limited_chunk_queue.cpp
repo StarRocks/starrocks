@@ -467,8 +467,8 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
         auto defer = DeferOp([&]() {
-            _has_flush_io_task.store(false);
             TEST_SYNC_POINT("MemLimitedChunkQueue::after_execute_flush_task");
+            _has_flush_io_task.store(false);
         });
 
         auto status = _flush();

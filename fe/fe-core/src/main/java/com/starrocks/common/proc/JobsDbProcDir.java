@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -91,7 +92,7 @@ public class JobsDbProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<String> names = globalStateMgr.getLocalMetastore().listDbNames();
+        List<String> names = globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext());
         if (names == null || names.isEmpty()) {
             // empty
             return result;

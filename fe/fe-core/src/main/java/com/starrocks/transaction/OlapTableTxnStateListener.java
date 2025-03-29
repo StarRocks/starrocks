@@ -54,7 +54,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     private Set<Long> totalInvolvedBackends;
     private Set<Long> errorReplicaIds;
-    private Set<Long> dirtyPartitionSet;
+    private Set<Long> dirtyPhysicalPartitionSet;
     private Set<ColumnId> invalidDictCacheColumns;
     private Map<ColumnId, Long> validDictCacheColumns;
 
@@ -78,7 +78,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
         totalInvolvedBackends = Sets.newHashSet();
         errorReplicaIds = Sets.newHashSet();
-        dirtyPartitionSet = Sets.newHashSet();
+        dirtyPhysicalPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
 
@@ -110,14 +110,14 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (tableId != table.getId()) {
                 continue;
             }
-            long partitionId = tabletMeta.getPartitionId();
-            if (table.getPhysicalPartition(partitionId) == null) {
+            long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+            if (table.getPhysicalPartition(physicalPartitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
                 // or partition really not exist.
-                LOG.warn("partition {} not exist, ignore tablet {}", partitionId, tabletId);
+                LOG.warn("partition {} not exist, ignore tablet {}", physicalPartitionId, tabletId);
                 continue;
             }
-            dirtyPartitionSet.add(partitionId);
+            dirtyPhysicalPartitionSet.add(physicalPartitionId);
             tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
                     .add(tabletCommitInfos.get(i).getBackendId());
             allCommittedBackends.add(tabletCommitInfos.get(i).getBackendId());
@@ -173,7 +173,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
 
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            if (!dirtyPartitionSet.contains(partition.getId())) {
+            if (!dirtyPhysicalPartitionSet.contains(partition.getId())) {
                 continue;
             }
 
@@ -196,8 +196,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                         if (replica == null) {
                             Backend backend =
                                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(tabletBackend);
-                            throw new TransactionCommitFailedException("Not found replicas of tablet. "
-                                    + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
+                            LOG.warn("Not found replica of tablet. tablet_id: {}, backend: {}, txn_id: {}", tabletId,
+                                    backend.getHost(), txnState.getTransactionId());
+                            continue;
                         }
                         // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                         // if the commit backends is null, set all replicas as error replicas
@@ -253,7 +254,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         txnState.getErrorReplicas().addAll(errorReplicaIds);
-        for (long partitionId : dirtyPartitionSet) {
+        for (long physicalPartitionId : dirtyPhysicalPartitionSet) {
             PartitionCommitInfo partitionCommitInfo;
             if (isFirstPartition) {
 
@@ -264,14 +265,14 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
                 });
-                partitionCommitInfo = new PartitionCommitInfo(partitionId,
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
                         -1,
                         System.currentTimeMillis(),
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
             } else {
-                partitionCommitInfo = new PartitionCommitInfo(partitionId,
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
                         -1,
                         System.currentTimeMillis() /* use as partition visible time */);
             }

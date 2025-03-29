@@ -25,7 +25,7 @@ const ChineseFeatureList = [
   },
   {
     title: '导入数据',
-    url: '../../loading/loading_introduction/Loading_intro/',
+    url: '../../loading/Loading_intro/',
     description: (
       <>
         数据清洗、转换、导入
@@ -127,7 +127,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Data Loading',
-    url: '../../loading/loading_introduction/Loading_intro/',
+    url: '../../loading/Loading_intro/',
     description: (
       <>
         Clean, transform, and load

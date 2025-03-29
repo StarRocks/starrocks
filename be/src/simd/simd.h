@@ -53,6 +53,16 @@ count_zero(const T* data, size_t size) {
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
                                        << 48u));
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__) && defined(__POPCNT__)
+    const T* end16 = data + (size / 16 * 16);
+    for (; data < end16; data += 16) {
+        uint8x16_t vdata = vld1q_u8(data);
+        // result[i] = vdata[i] == 0 ? 0xFF : 0x00
+        uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
+        // result[i] = result[i] & 0x1
+        result = vandq_u8(result, vdupq_n_u8(1));
+        count += vaddvq_u8(result);
+    }
 #endif
 
     for (; data < end; ++data) {
@@ -85,6 +95,16 @@ count_zero(const T* data, size_t size) {
                                       (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 12)), zero16))))
                                        << 12u));
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__) && defined(__POPCNT__)
+    const T* end4 = data + (size / 4 * 4);
+    for (; data < end4; data += 4) {
+        uint32x4_t vdata = vld1q_u32(data);
+        // result[i] = vdata[i] == 0 ? 0xFF : 0x00
+        uint32x4_t result = vceqq_u32(vdata, vdupq_n_u32(0));
+        // result[i] = result[i] & 0x1
+        result = vandq_u32(result, vdupq_n_u32(1));
+        count += vaddvq_u32(result);
     }
 #endif
 

@@ -17,8 +17,8 @@
 #include <memory>
 #include <string>
 
-#include "block_cache/block_cache.h"
-#include "block_cache/io_buffer.h"
+#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/io_buffer.h"
 #include "io/shared_buffered_input_stream.h"
 
 namespace starrocks::io {
@@ -75,6 +75,8 @@ public:
 
     void set_priority(const int8_t priority) { _priority = priority; }
 
+    void set_frequency(const int8_t frequency) { _frequency = frequency; }
+
     void set_ttl_seconds(const uint64_t ttl_seconds) { _ttl_seconds = ttl_seconds; }
 
     int64_t get_align_size() const;
@@ -97,8 +99,7 @@ protected:
     virtual Status _read_block_from_local(const int64_t offset, const int64_t size, char* out);
     // Read multiple blocks from remote
     virtual Status _read_blocks_from_remote(const int64_t offset, const int64_t size, char* out);
-    Status _populate_to_cache(const int64_t offset, const int64_t size, char* src, const SharedBufferPtr& sb);
-    void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count, const SharedBufferPtr& sb);
+    void _populate_to_cache(const char* src, int64_t offset, int64_t count, const SharedBufferPtr& sb);
     void _deduplicate_shared_buffer(const SharedBufferPtr& sb);
     bool _can_ignore_populate_error(const Status& status) const;
 
@@ -120,6 +121,12 @@ protected:
     std::unordered_map<int64_t, BlockBuffer> _block_map;
     int8_t _priority = 0;
     uint64_t _ttl_seconds = 0;
+    int8_t _frequency = 0;
+
+private:
+    inline int64_t _calculate_remote_latency_per_block(int64_t io_bytes, int64_t read_time_ns);
+    // Record already populated blocks, avoid duplicate populate
+    std::unordered_set<int64_t> _already_populated_blocks{};
 };
 
 } // namespace starrocks::io

@@ -3,4 +3,5 @@ label: '日期类型'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: date-types

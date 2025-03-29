@@ -15,12 +15,10 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -34,12 +32,11 @@ public class MvTaskRunContext extends TaskRunContext {
     // all the materialized view's partition name to its intersected RefBaseTable's partition names.
     //mvPartition -> baseTable -> basePartitions
     private Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions;
-    // all the RefBaseTable's partition name to its partition key range.
-    private Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap;
-    private Map<String, Range<PartitionKey>> mvRangePartitionMap;
+    // all the RefBaseTable's partition name to its partition range/list cell.
+    private Map<Table, Map<String, PCell>> refBaseTableToCellMap;
+    // mv to its partition range/list cell.
+    private Map<String, PCell> mvToCellMap;
 
-    // all the RefBaseTable's partition name to its list partition keys.
-    private Map<Table, Map<String, PListCell>> refBaseTableListPartitionMap;
     // the external ref base table's mv partition name to original partition names map because external
     // table supports multi partition columns, one converted partition name(mv partition name) may have
     // multi original partition names.
@@ -103,21 +100,12 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionValues = nextPartitionValues;
     }
 
-    public Map<Table, Map<String, Range<PartitionKey>>> getRefBaseTableRangePartitionMap() {
-        return refBaseTableRangePartitionMap;
+    public Map<Table, Map<String, PCell>> getRefBaseTableToCellMap() {
+        return refBaseTableToCellMap;
     }
 
-    public void setRefBaseTableRangePartitionMap(
-            Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap) {
-        this.refBaseTableRangePartitionMap = refBaseTableRangePartitionMap;
-    }
-
-    public Map<Table, Map<String, PListCell>> getRefBaseTableListPartitionMap() {
-        return refBaseTableListPartitionMap;
-    }
-
-    public void setRefBaseTableListPartitionMap(Map<Table, Map<String, PListCell>> refBaseTableListPartitionMap) {
-        this.refBaseTableListPartitionMap = refBaseTableListPartitionMap;
+    public void setRefBaseTableToCellMap(Map<Table, Map<String, PCell>> refBaseTableToCellMap) {
+        this.refBaseTableToCellMap = refBaseTableToCellMap;
     }
 
     public Map<Table, Map<String, Set<String>>> getExternalRefBaseTableMVPartitionMap() {
@@ -129,12 +117,12 @@ public class MvTaskRunContext extends TaskRunContext {
         this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
     }
 
-    public Map<String, Range<PartitionKey>> getMvRangePartitionMap() {
-        return mvRangePartitionMap;
+    public Map<String, PCell> getMVToCellMap() {
+        return mvToCellMap;
     }
 
-    public void setMvRangePartitionMap(Map<String, Range<PartitionKey>> mvRangePartitionMap) {
-        this.mvRangePartitionMap = mvRangePartitionMap;
+    public void setMVToCellMap(Map<String, PCell> mvToCellMap) {
+        this.mvToCellMap = mvToCellMap;
     }
 
     public ExecPlan getExecPlan() {

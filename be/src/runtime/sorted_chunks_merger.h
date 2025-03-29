@@ -127,7 +127,6 @@ public:
 private:
     const std::vector<ExprContext*>* _sort_exprs;
     SortDescs _sort_desc;
-    std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
 
     std::unique_ptr<MergeCursorsCascade> _merger;
     ChunkSlice _current_chunk;

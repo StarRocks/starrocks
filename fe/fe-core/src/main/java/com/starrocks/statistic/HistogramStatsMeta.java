@@ -19,9 +19,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -57,12 +57,6 @@ public class HistogramStatsMeta implements Writable {
         this.properties = properties;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
-
     public static HistogramStatsMeta read(DataInput in) throws IOException {
         String s = Text.readString(in);
         HistogramStatsMeta histogramStatsMeta = GsonUtils.GSON.fromJson(s, HistogramStatsMeta.class);
@@ -91,5 +85,9 @@ public class HistogramStatsMeta implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public boolean isInitJobMeta() {
+        return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
     }
 }

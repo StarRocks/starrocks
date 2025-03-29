@@ -25,6 +25,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_s3.h"
 #include "io/s3_input_stream.h"
 #include "testutil/assert.h"
 
@@ -66,7 +67,7 @@ void S3OutputStreamTest::TearDownTestCase() {
 }
 
 void init_s3client() {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint;
     const char* ak = config::object_storage_access_key_id.c_str();
     const char* sk = config::object_storage_secret_access_key.c_str();

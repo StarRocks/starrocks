@@ -56,6 +56,10 @@ public class LogicalWindowOperator extends LogicalOperator {
     private boolean useHashBasedPartition;
     private boolean isSkewed;
 
+    // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private boolean inputIsBinary;
+
     private LogicalWindowOperator() {
         super(OperatorType.LOGICAL_WINDOW);
         this.partitionExpressions = ImmutableList.of();
@@ -91,6 +95,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public boolean isSkewed() {
         return isSkewed;
+    }
+
+    public boolean isInputIsBinary() {
+        return inputIsBinary;
     }
 
     @Override
@@ -151,13 +159,14 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(orderByElements, that.orderByElements)
                 && Objects.equals(analyticWindow, that.analyticWindow)
                 && Objects.equals(useHashBasedPartition, that.useHashBasedPartition)
-                && Objects.equals(isSkewed, that.isSkewed);
+                && Objects.equals(isSkewed, that.isSkewed)
+                && Objects.equals(inputIsBinary, that.inputIsBinary);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition, isSkewed);
+                useHashBasedPartition, isSkewed, inputIsBinary);
     }
 
     public static Builder builder() {
@@ -216,6 +225,11 @@ public class LogicalWindowOperator extends LogicalOperator {
 
         public Builder setIsSkewed(boolean isSkewed) {
             builder.isSkewed = isSkewed;
+            return this;
+        }
+
+        public  Builder setInputIsBinary(boolean isBinary) {
+            builder.inputIsBinary = isBinary;
             return this;
         }
     }

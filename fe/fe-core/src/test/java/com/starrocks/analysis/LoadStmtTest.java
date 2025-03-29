@@ -34,9 +34,9 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.UserException;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import org.junit.Assert;
@@ -54,7 +54,7 @@ public class LoadStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         LoadStmt stmt = (LoadStmt) analyzeSuccess(
                 "LOAD LABEL test.testLabel " +
                         "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`)");

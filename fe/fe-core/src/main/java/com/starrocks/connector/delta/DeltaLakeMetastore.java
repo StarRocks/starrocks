@@ -22,16 +22,22 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
+import io.delta.kernel.Table;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
+import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.InternalScanFileUtils;
+import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +52,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
@@ -97,6 +104,11 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     }
 
     @Override
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    @Override
     public List<String> getAllDatabaseNames() {
         return delegate.getAllDatabaseNames();
     }
@@ -112,7 +124,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     }
 
     @Override
-    public DeltaLakeTable getTable(String dbName, String tableName) {
+    public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
         MetastoreTable metastoreTable = getMetastoreTable(dbName, tableName);
         if (metastoreTable == null) {
             LOG.error("get metastore table failed. dbName: {}, tableName: {}", dbName, tableName);
@@ -121,9 +133,26 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         String path = metastoreTable.getTableLocation();
         long createTime = metastoreTable.getCreateTime();
+        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
+        SnapshotImpl snapshot;
 
-        Engine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
-        return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tableName, path, deltaLakeEngine, createTime);
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
+            Table deltaTable = Table.forPath(deltaLakeEngine, path);
+            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaLakeEngine);
+        } catch (TableNotFoundException e) {
+            LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalogName, dbName, tableName, e.getMessage());
+            throw new SemanticException("Failed to find Delta table for " + catalogName + "." + dbName + "." + tableName);
+        } catch (Exception e) {
+            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}", catalogName, dbName, tableName, e.getMessage());
+            throw new SemanticException("Failed to get latest snapshot for " + catalogName + "." + dbName + "." + tableName);
+        }
+        return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, createTime, path);
+    }
+
+    @Override
+    public DeltaLakeTable getTable(String dbName, String tableName) {
+        DeltaLakeSnapshot snapshot = getLatestSnapshot(dbName, tableName);
+        return DeltaUtils.convertDeltaSnapshotToSRTable(catalogName, snapshot);
     }
 
     @Override

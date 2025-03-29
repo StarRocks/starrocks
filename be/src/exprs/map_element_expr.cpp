@@ -66,9 +66,9 @@ public:
         auto [map_column, map_nulls] = ColumnHelper::unpack_nullable_column(map_col);
         auto [key_column, key_nulls] = ColumnHelper::unpack_nullable_column(key_col);
 
-        auto& map_keys = down_cast<MapColumn*>(map_column)->keys_column();
-        auto& map_values = down_cast<MapColumn*>(map_column)->values_column();
-        const auto& offsets = down_cast<MapColumn*>(map_column)->offsets().get_data();
+        const auto& map_keys = down_cast<const MapColumn*>(map_column)->keys_column();
+        const auto& map_values = down_cast<const MapColumn*>(map_column)->values_column();
+        const auto& offsets = down_cast<const MapColumn*>(map_column)->offsets().get_data();
 
         size_t actual_rows = map_is_const && key_is_const ? 1 : num_rows;
         auto res = map_values->clone_empty(); // must be nullable

@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class PaimonTableTest {
 
@@ -63,6 +64,8 @@ public class PaimonTableTest {
         };
         PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema,
                 paimonNativeTable, 100L);
+        Map<String, String> properties = paimonTable.getProperties();
+        Assert.assertEquals(0, properties.size());
         List<Column> partitionColumns = paimonTable.getPartitionColumns();
         Assertions.assertThat(partitionColumns).hasSameElementsAs(partitionSchema);
     }

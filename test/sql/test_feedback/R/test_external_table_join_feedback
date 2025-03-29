@@ -1,0 +1,70 @@
+-- name: test_external_table_join_feedback
+create external catalog iceberg_catalog_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+-- result:
+-- !result
+create database iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew (
+  `c0` int(11) NULL COMMENT "",
+  `c1` char(50) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+);
+-- result:
+-- !result
+insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'b', generate_series, generate_series from TABLE(generate_series(3, 4));
+-- result:
+-- !result
+insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'c', generate_series, generate_series from TABLE(generate_series(5, 6));
+-- result:
+-- !result
+insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'd', generate_series, generate_series from TABLE(generate_series(7, 8));
+-- result:
+-- !result
+insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'e', generate_series, generate_series from TABLE(generate_series(9, 10));
+-- result:
+-- !result
+insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate_series, 'f', generate_series, generate_series from TABLE(generate_series(11, 5050000));
+-- result:
+-- !result
+set enable_plan_advisor=true;
+-- result:
+-- !result
+set enable_plan_analyzer=true;
+-- result:
+-- !result
+use iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set low_cardinality_optimize_on_lake = false;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+function: assert_explain_not_contains("select count(*) from (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew t1 join (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+alter plan advisor add select count(*) from (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew t1 join (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2 where t1.c1 = 'a') t;
+-- result:
+[REGEX]Add query into plan advisor in FE*
+-- !result
+function: assert_explain_contains("select count(*) from (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew t1 join (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2 where t1.c1 = 'a') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+truncate plan advisor;
+-- result:
+[REGEX]Clear all plan advisor in FE*
+-- !result
+drop table iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew;
+-- result:
+-- !result
+drop database iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_catalog_${uuid0};
+-- result:
+-- !result

@@ -9,7 +9,7 @@ import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.md'
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/loading_introduction/Loading_intro.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/Loading_intro.md).
 
 <InsertPrivNote />
 
@@ -177,7 +177,7 @@ INTO TABLE <table_name>
   >
   > If the columns of the data file are mapped in sequence onto the columns of the StarRocks table, you do not need to specify `column_list`.
 
-  If you want to skip a specific column of the data file, you only need to temporarily name that column as different from any of the StarRocks table columns. For more information, see [loading overview](../../../loading/loading_introduction/Loading_intro.md).
+  If you want to skip a specific column of the data file, you only need to temporarily name that column as different from any of the StarRocks table columns. For more information, see [loading overview](../../../loading/Loading_intro.md).
 
 - `COLUMNS FROM PATH AS`
 
@@ -256,7 +256,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
   
     - To perform broker-based loading, make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
   
-    - To perform broker-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE or CN node.
+    - To perform broker-free loading, you only need to set `hadoop.security.authentication = kerberos` in `conf/core-site.xml` under the deployment directories of all FE, BE, and CN nodes in your cluster, and use the `kinit` command to configure the Kerberos account.
   
   - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
 

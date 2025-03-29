@@ -1,0 +1,72 @@
+-- name: test_orc_files_merge
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type_k2k5k7.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type_k2k5k7.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type_k2k5k7.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "null",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select k2, k5, k7 from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "null",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select k1, k3, k8 from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "null",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+-- column mismatch
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "none",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null

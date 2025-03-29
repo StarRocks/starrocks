@@ -1,0 +1,123 @@
+-- name: test_drop_partition_list_table_with_where
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    dt varchar(20),
+    province string,
+    num int
+)
+PARTITION BY dt, province;
+-- result:
+-- !result
+INSERT INTO t1 VALUES 
+    ("2020-07-01", "beijing",  1), ("2020-07-01", "chengdu",  2),
+    ("2020-07-02", "beijing",  3), ("2020-07-02", "hangzhou", 4),
+    ("2020-07-03", "chengdu",  1), ("2020-07-04", "hangzhou", 1),
+    (NULL, NULL, 10);
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+7
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE province like '%chengdu%';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+5
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE str2date(dt, '%Y-%m-%d') = '2020-07-01' AND province = 'beijing';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+4
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE dt >= '2020-07-03';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+3
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE dt is null;
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+2
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE dt >= '2020-07-01';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+0
+-- !result
+drop table t1;
+-- result:
+-- !result
+create table t1(
+    k1 datetime, 
+    k2 datetime, 
+    v int
+) partition by date_trunc('day', k1), date_trunc('month', k2);
+-- result:
+-- !result
+insert into t1 values 
+  ('2020-01-01','2020-02-02', 1), ('2020-01-02','2020-02-02', 2), 
+  ('2020-01-03','2020-02-03', 3), ('2020-01-04','2020-02-02', 4), 
+  ('2020-01-05','2020-02-03', 5), ('2020-01-06','2020-02-03', 6),
+  (NULL, NULL, 10);
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+7
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE date_trunc('day', k1) = '2020-01-01';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+6
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE date_trunc('month', k2) = '2020-01-01';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+6
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE date_trunc('month', k2) = '2020-01-01' or date_trunc('day', k1) = '2020-01-02';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+5
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE date_trunc('month', k2) = '2020-02-01';
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+1
+-- !result
+ALTER TABLE t1 DROP PARTITIONS WHERE date_trunc('day', k1) is null;
+-- result:
+-- !result
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
+-- result:
+0
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

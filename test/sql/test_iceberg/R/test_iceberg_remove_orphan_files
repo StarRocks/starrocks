@@ -1,0 +1,55 @@
+-- name: test_iceberg_remove_orphan_files
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}(k1 int) properties('location' = 'oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}');
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1;
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 2;
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 3;
+-- result:
+-- !result
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/data","list_files_only" = "true");
+-- result:
+3
+-- !result
+insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} SELECT 4;
+-- result:
+-- !result
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/data","list_files_only" = "true");
+-- result:
+4
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute expire_snapshots(now());
+-- result:
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute remove_orphan_files(now());
+-- result:
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute expire_snapshots(now());
+-- result:
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute remove_orphan_files(now());
+-- result:
+-- !result
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/data","list_files_only" = "true");
+-- result:
+1
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

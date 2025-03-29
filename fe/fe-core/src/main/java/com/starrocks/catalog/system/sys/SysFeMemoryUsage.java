@@ -14,14 +14,15 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.memory.MemoryUsageTracker;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
@@ -33,8 +34,6 @@ import org.apache.thrift.TException;
 
 
 public class SysFeMemoryUsage {
-
-
     public static final String NAME = "fe_memory_usage";
 
     public static SystemTable create() {
@@ -60,7 +59,10 @@ public class SysFeMemoryUsage {
         }
 
         try {
-            Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             throw new TException(e.getMessage(), e);
         }

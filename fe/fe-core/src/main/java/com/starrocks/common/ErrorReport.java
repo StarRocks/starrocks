@@ -95,18 +95,28 @@ public class ErrorReport {
     }
 
     public static void reportUserException(ErrorCode errorCode, Object... objs)
-            throws UserException {
-        throw new UserException(reportCommon(null, errorCode, objs));
+            throws StarRocksException {
+        throw new StarRocksException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportTimeoutException(ErrorCode errorCode, Object... objs)
+            throws TimeoutException {
+        throw new TimeoutException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportNoAliveBackendException(ErrorCode errorCode, Object... objs)
+            throws NoAliveBackendException {
+        throw new NoAliveBackendException(reportCommon(null, errorCode, objs));
     }
 
     public interface DdlExecutor {
-        void apply() throws UserException;
+        void apply() throws StarRocksException;
     }
 
     public static void wrapWithRuntimeException(DdlExecutor fun) {
         try {
             fun.apply();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new RuntimeException(e);
         }
     }

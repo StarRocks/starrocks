@@ -28,22 +28,19 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -52,14 +49,13 @@ import java.util.Set;
 
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase {
+public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         Config.enable_mv_refresh_query_rewrite = false;
         starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
@@ -122,21 +118,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
     }
 
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
-    }
-
     @Test
     public void testAutoRefreshPartitionLimitWithHiveTable() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_parttbl_mv1`\n" +
@@ -161,11 +142,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(1, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         MockedHiveMetadata mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
@@ -173,22 +159,32 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
         initAndExecuteTaskRun(taskRun);
-        Assert.assertEquals(1, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         task.setType(Constants.TaskType.MANUAL);
         taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
 
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -403,7 +399,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv1").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv1").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_tbl_mv1");
     }
@@ -451,11 +448,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -499,7 +501,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv2").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv2").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_tbl_mv2");
     }
@@ -545,7 +548,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("hive_join_internal_mv").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("hive_join_internal_mv").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_join_internal_mv");
     }
@@ -593,11 +597,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -644,11 +653,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -694,9 +708,12 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(3, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("p0").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p1").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p2").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p0").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p1").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p2").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -716,8 +733,10 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         Collection<Partition> partitions = materializedView.getPartitions();
 
         Assert.assertEquals(2, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
@@ -874,8 +893,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertTrue(execPlan != null);
+            Assert.assertNull(execPlan);
         }
 
         // run 5
@@ -891,15 +909,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            PlanTestBase.assertContains(plan, "TABLE: part_tbl1\n" +
-                    "     PARTITION PREDICATES: 4: par_date IS NOT NULL, 4: par_date >= '2020-01-01', 4: par_date < " +
-                    "'2020-01-05'\n" +
-                    "     partitions=4/4");
-            PlanTestBase.assertContains(plan, "TABLE: part_tbl2\n" +
-                    "     PARTITION PREDICATES: 8: par_date IS NOT NULL, 8: par_date >= '2020-01-01', 8: par_date < " +
-                    "'2020-01-05'\n" +
-                    "     partitions=4/4");
+            Assert.assertNull(execPlan);
         }
 
         starRocksAssert.dropMaterializedView("hive_partition_prune_non_ref_tables2");
@@ -1239,5 +1249,151 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
                         Lists.newArrayList("l_shipdate=1998-01-03")
                 ),
                 calls);
+    }
+
+    @Test
+    public void testCreateMVWithMultiPartitionColumns1() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withMaterializedView(
+                "CREATE MATERIALIZED VIEW test_mv1\n" +
+                        "PARTITION BY (par_date, par_col)\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "   \"replication_num\" = \"1\"\n" +
+                        ")\n" +
+                        "AS SELECT * FROM hive0.partitioned_db.t1_par;");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "test_mv1"));
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+        // run 1
+        {
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: t1_par\n");
+            PlanTestBase.assertContains(plan, "     partitions=6/6");
+        }
+
+        // run 2
+        {
+            MockedHiveMetadata mockedHiveMetadata =
+                    (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                            getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.addPartition("partitioned_db", "t1_par",
+                    "par_col=4/par_date=2020-01-05");
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: t1_par\n" +
+                    "     PARTITION PREDICATES: 5: par_date = '2020-01-05', 4: par_col = 4\n" +
+                    "     partitions=1/7");
+        }
+
+        // run 3
+        {
+            MockedHiveMetadata mockedHiveMetadata =
+                    (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                            getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.dropPartition("partitioned_db", "t1_par",
+                    "par_col=4/par_date=2020-01-05");
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertTrue(execPlan == null);
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testCreateMVWithMultiPartitionColumns2() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withMaterializedView(
+                "CREATE MATERIALIZED VIEW test_mv1\n" +
+                        "PARTITION BY (par_col, par_date)\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "   \"replication_num\" = \"1\"\n" +
+                        ")\n" +
+                        "AS SELECT * FROM hive0.partitioned_db.t1_par;");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_mv1"));
+
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+        MockedHiveMetadata mockedHiveMetadata =
+                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        // run 1
+        {
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: t1_par\n");
+            PlanTestBase.assertContains(plan, "     partitions=6/6");
+        }
+
+        // run 2
+        {
+            mockedHiveMetadata.addPartition("partitioned_db", "t1_par",
+                    "par_col=4/par_date=2020-01-05");
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: t1_par\n" +
+                    "     PARTITION PREDICATES: 4: par_col = 4, 5: par_date = '2020-01-05'\n" +
+                    "     partitions=1/7");
+        }
+
+        // run 3
+        {
+
+            mockedHiveMetadata.dropPartition("partitioned_db", "t1_par",
+                    "par_col=4/par_date=2020-01-05");
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertTrue(execPlan == null);
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testCreateMVWithMultiPartitionColumns3() {
+        try {
+            starRocksAssert.withMaterializedView(
+                    "CREATE MATERIALIZED VIEW test_mv1\n" +
+                            "PARTITION BY (par_date, par_col)\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "   \"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT a.c1, a.c2, b.par_col, b.par_date \n" +
+                            "FROM hive0.partitioned_db.t2_par a join \n" +
+                            "hive0.partitioned_db.t1_par b using (par_col)");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("The current partition expr maps size 2 should be equal " +
+                    "to the size of the first partition expr maps: 1."));
+        }
     }
 }

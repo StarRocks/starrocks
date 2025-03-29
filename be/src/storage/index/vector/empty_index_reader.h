@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef WITH_TENANN
 #pragma once
 
 #include "storage/index/vector/vector_index_reader.h"
@@ -39,3 +40,4 @@ public:
 };
 
 } // namespace starrocks
+#endif

@@ -1,0 +1,27 @@
+-- name: testDistinctFrom
+set sql_dialect='trino';
+-- result:
+-- !result
+select 1 is distinct from 1;
+-- result:
+0
+-- !result
+select 1 is distinct from null;
+-- result:
+1
+-- !result
+select null is distinct from null;
+-- result:
+0
+-- !result
+select 1 is not distinct from 1;
+-- result:
+1
+-- !result
+select 1 is not distinct from null;
+-- result:
+0
+-- !result
+select null is not distinct from null;
+-- result:
+1

@@ -14,7 +14,10 @@
 
 #pragma once
 
+#include <bthread/mutex.h>
+
 #include <atomic>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -44,6 +47,7 @@ class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
+class TableMetrics;
 
 class TabletsChannel {
 public:
@@ -57,7 +61,7 @@ public:
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                           PTabletWriterAddBatchResult* response) = 0;
+                           PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
 
     virtual void cancel() = 0;
 
@@ -68,7 +72,24 @@ public:
     // timeout: in microseconds
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
 
+    virtual void update_profile() = 0;
+
 protected:
+    bool _is_immutable_partition_empty() const {
+        std::lock_guard l(_immutable_partition_ids_lock);
+        return _immutable_partition_ids.empty();
+    }
+
+    bool _has_immutable_partition(int64_t partition_id) const {
+        std::lock_guard l(_immutable_partition_ids_lock);
+        return _immutable_partition_ids.count(partition_id) > 0;
+    }
+
+    void _insert_immutable_partition(int64_t partition_id) {
+        std::lock_guard l(_immutable_partition_ids_lock);
+        _immutable_partition_ids.insert(partition_id);
+    }
+
     // counter of remaining senders
     std::atomic<int> _num_remaining_senders = 0;
 
@@ -76,6 +97,10 @@ protected:
     std::atomic<int> _num_initial_senders = 0;
 
     std::unordered_map<int64_t, std::atomic<int>> _tablet_id_to_num_remaining_senders;
+
+    mutable bthread::Mutex _immutable_partition_ids_lock;
+    std::set<int64_t> _immutable_partition_ids;
+    std::shared_ptr<TableMetrics> _table_metrics;
 };
 
 struct TabletsChannelKey {

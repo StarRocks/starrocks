@@ -1,0 +1,7 @@
+-- name: testIcebergSchemaEvolution
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.schema_evo_table order by new_trip_id;
+
+drop catalog iceberg_sql_test_${uuid0};

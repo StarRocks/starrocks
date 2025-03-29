@@ -20,14 +20,13 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/anyval_util.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
-#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 #include "util/failpoint/fail_point.h"
 #include "util/slice.h"
 #include "util/utf8.h"
@@ -81,7 +80,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
     // parpare result type and arg types
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
+    FunctionContext::TypeDesc return_type = _type;
     if (!_fn.__isset.fid && !_fn.__isset.agg_state_desc) {
         return Status::InternalError("Vectorized engine doesn't implement agg state function " +
                                      _fn.name.function_name);
@@ -89,7 +88,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     std::vector<FunctionContext::TypeDesc> args_types;
     std::vector<bool> arg_nullblaes;
     for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
+        args_types.push_back(child->type());
         arg_nullblaes.emplace_back(child->is_nullable());
     }
 
@@ -126,7 +125,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        std::vector<ColumnPtr> const_columns;
+        Columns const_columns;
         const_columns.reserve(_children.size());
         for (const auto& child : _children) {
             ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
@@ -150,9 +149,8 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     if (_fn.name.function_name == "round" && _type.type == TYPE_DOUBLE) {
         if (_children[1]->is_constant()) {
             ASSIGN_OR_RETURN(ColumnPtr ptr, _children[1]->evaluate_checked(context, nullptr));
-            _output_scale =
-                    std::static_pointer_cast<Int32Column>(std::static_pointer_cast<ConstColumn>(ptr)->data_column())
-                            ->get_data()[0];
+            _output_scale = Int32Column::static_pointer_cast(ConstColumn::static_pointer_cast(ptr)->data_column())
+                                    ->get_data()[0];
         }
     }
 

@@ -132,7 +132,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Test
     public void testSelectPredicate() throws Exception {
         String sql = "select c0 from test where (c0+c2.a)>5";
-        assertVerbosePlanContains(sql, "[/c2/a]");
+        assertVerbosePlanContains(sql, "[struct<a int(11), b int(11)>]");
     }
 
     @Test

@@ -34,11 +34,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -48,8 +48,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Test;
 
+import java.sql.Connection;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -62,11 +65,11 @@ public class PartitionPruneRuleTest {
     @Test
     public void transform1(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
-        Partition part1 = new Partition(1, "p1", null, null);
-        Partition part2 = new Partition(2, "p2", null, null);
-        Partition part3 = new Partition(3, "p3", null, null);
-        Partition part4 = new Partition(4, "p4", null, null);
-        Partition part5 = new Partition(5, "p5", null, null);
+        Partition part1 = new Partition(1, 11, "p1", null, null);
+        Partition part2 = new Partition(2, 22, "p2", null, null);
+        Partition part3 = new Partition(3, 33, "p3", null, null);
+        Partition part4 = new Partition(4, 44, "p4", null, null);
+        Partition part5 = new Partition(5, 55, "p5", null, null);
 
         List<Column> columns = Lists.newArrayList(
                 new Column("dealDate", Type.DATE, false)
@@ -157,7 +160,7 @@ public class PartitionPruneRuleTest {
 
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
@@ -165,11 +168,11 @@ public class PartitionPruneRuleTest {
     @Test
     public void transform2(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
-        Partition part1 = new Partition(1, "p1", null, null);
-        Partition part2 = new Partition(2, "p2", null, null);
-        Partition part3 = new Partition(3, "p3", null, null);
-        Partition part4 = new Partition(4, "p4", null, null);
-        Partition part5 = new Partition(5, "p5", null, null);
+        Partition part1 = new Partition(1, 11, "p1", null, null);
+        Partition part2 = new Partition(2, 22, "p2", null, null);
+        Partition part3 = new Partition(3, 33, "p3", null, null);
+        Partition part4 = new Partition(4, 44, "p4", null, null);
+        Partition part5 = new Partition(5, 55, "p5", null, null);
 
         List<Column> columns = Lists.newArrayList(
                 new Column("dealDate", Type.DATE, false),
@@ -278,7 +281,7 @@ public class PartitionPruneRuleTest {
 
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
@@ -304,8 +307,8 @@ public class PartitionPruneRuleTest {
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
 
-        Partition part1 = new Partition(10001L, "p1", null, null);
-        Partition part2 = new Partition(10002L, "p2", null, null);
+        Partition part1 = new Partition(10001L, 10003L, "p1", null, null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", null, null);
 
         List<LiteralExpr> p1 = Lists.newArrayList(
                 new PartitionValue("guangdong").getValue(Type.STRING),
@@ -325,6 +328,9 @@ public class PartitionPruneRuleTest {
             {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
+                
+                partitionInfo.isListPartition();
+                result = true;
 
                 partitionInfo.getType();
                 result = PartitionType.LIST;
@@ -356,7 +362,7 @@ public class PartitionPruneRuleTest {
         PartitionPruneRule rule = new PartitionPruneRule();
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
         assertEquals(1, selectPartitionIds.size());
@@ -383,8 +389,8 @@ public class PartitionPruneRuleTest {
                         null, -1, null, olapTable.getBaseIndexId(),
                         null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList(), null, false);
 
-        Partition part1 = new Partition(10001L, "p1", null, null);
-        Partition part2 = new Partition(10002L, "p2", null, null);
+        Partition part1 = new Partition(10001L, 10003L, "p1", null, null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", null, null);
 
         List<LiteralExpr> p1 = Lists.newArrayList(
                 new PartitionValue("guangdong").getValue(Type.STRING),
@@ -410,6 +416,9 @@ public class PartitionPruneRuleTest {
 
                 partitionInfo.getLiteralExprValues();
                 result = literalExprValues;
+
+                partitionInfo.isListPartition();
+                result = true;
 
                 olapTable.getPartitions();
                 result = Lists.newArrayList(part1, part2);
@@ -444,12 +453,67 @@ public class PartitionPruneRuleTest {
         PartitionPruneRule rule = new PartitionPruneRule();
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
         assertEquals(1, selectPartitionIds.size());
         long actual = selectPartitionIds.get(0);
         assertEquals(10001L, actual);
+    }
+
+    @Test
+    public void testOlapPartitionScanLimit() throws Exception {
+        PseudoCluster.getOrCreateWithRandomPort(true, 1);
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database olap_partition_scan_limit_test_db");
+            stmt.execute("use olap_partition_scan_limit_test_db");
+            stmt.execute("CREATE TABLE olap_partition_scan_limit_test_table " +
+                    "(`a` varchar(65533),`b` varchar(65533),`ds` date) ENGINE=OLAP " +
+                    "DUPLICATE KEY(`a`) PARTITION BY RANGE(`ds`)" +
+                    "(START (\"2024-09-20\") END (\"2024-09-27\") EVERY (INTERVAL 1 DAY))" +
+                    "DISTRIBUTED BY HASH(`a`)" +
+                    "PROPERTIES (\"replication_num\" = \"1\")");
+            stmt.execute("insert into olap_partition_scan_limit_test_table(a,b,ds) " +
+                    "values('1','a','2024-09-20'),('2','a','2024-09-21')," +
+                    "('3','a','2024-09-22'),('4','a','2024-09-23'),('5','a','2024-09-24')," +
+                    "('6','a','2024-09-25'),('7','a','2024-09-26')");
+            //check default value 0
+            stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
+            if (stmt.getResultSet().next()) {
+                int count = stmt.getResultSet().getInt(1);
+                Assert.assertEquals(count, 5);
+            }
+            //check set value -1
+            stmt.execute("set scan_olap_partition_num_limit=-1;");
+            stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
+            if (stmt.getResultSet().next()) {
+                int count = stmt.getResultSet().getInt(1);
+                Assert.assertEquals(count, 5);
+            }
+            //check set value 3
+            stmt.execute("set scan_olap_partition_num_limit=3;");
+            try {
+                stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
+            } catch (Exception e) {
+                String exp = "Exceeded the limit of number of olap table partitions to be scanned. Number of partitions " +
+                        "allowed: 3, number of partitions to be scanned: 5. Please adjust the SQL or " +
+                        "change the limit by set variable scan_olap_partition_num_limit.";
+                Assert.assertTrue(e.getMessage().contains(exp));
+            }
+            //check set invalid value abc
+            try {
+                stmt.execute("set scan_olap_partition_num_limit=abc;");
+            } catch (Exception e) {
+                String exp = "Incorrect argument type to variable 'scan_olap_partition_num_limit'";
+                Assert.assertTrue(e.getMessage().contains(exp));
+            }
+        } finally {
+            stmt.close();
+            connection.close();
+            PseudoCluster.getInstance().shutdown(true);
+        }
     }
 
 }

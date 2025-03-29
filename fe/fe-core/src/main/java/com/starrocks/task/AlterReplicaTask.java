@@ -140,10 +140,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
-                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
+                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId,
+                                                   TAlterTabletMaterializedColumnReq generatedColumnReq) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                TTabletType.TABLET_TYPE_LAKE, txnId, null, Collections.emptyList(), null);
+                TTabletType.TABLET_TYPE_LAKE, txnId, generatedColumnReq, Collections.emptyList(), null);
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
@@ -154,6 +155,16 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
+                baseSchemaColumns, rollupJobV2Params);
+    }
+
+    public static AlterReplicaTask rollupLakeTablet(long backendId, long dbId, long tableId, long partitionId,
+                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
+                                                     long version, long jobId, RollupJobV2Params rollupJobV2Params,
+                                                    List<TColumn> baseSchemaColumns, long txnId) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.ROLLUP,
+                TTabletType.TABLET_TYPE_LAKE, txnId, null,
                 baseSchemaColumns, rollupJobV2Params);
     }
 

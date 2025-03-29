@@ -33,16 +33,33 @@ namespace starrocks {
 class SegmentReplicateTask final : public Runnable {
 public:
     SegmentReplicateTask(ReplicateToken* replicate_token, std::unique_ptr<SegmentPB> segment, bool eos)
-            : _replicate_token(replicate_token), _segment(std::move(segment)), _eos(eos) {}
+            : _replicate_token(replicate_token),
+              _segment(std::move(segment)),
+              _eos(eos),
+              _create_time_ns(MonotonicNanos()) {}
 
     ~SegmentReplicateTask() override = default;
 
-    void run() override { _replicate_token->_sync_segment(std::move(_segment), _eos); }
+    void run() override {
+        auto& stat = _replicate_token->_stat;
+        stat.num_pending_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.pending_time_ns.fetch_add(MonotonicNanos() - _create_time_ns, std::memory_order_relaxed);
+        stat.num_running_tasks.fetch_add(1, std::memory_order_relaxed);
+        int64_t duration_ns = 0;
+        {
+            SCOPED_RAW_TIMER(&duration_ns);
+            _replicate_token->_sync_segment(std::move(_segment), _eos);
+        }
+        stat.num_running_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.num_finished_tasks.fetch_add(1, std::memory_order_relaxed);
+        stat.execute_time_ns.fetch_add(duration_ns, std::memory_order_relaxed);
+    }
 
 private:
     ReplicateToken* _replicate_token;
     std::unique_ptr<SegmentPB> _segment;
     bool _eos;
+    int64_t _create_time_ns;
 };
 
 ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id)
@@ -93,7 +110,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     RETURN_IF_ERROR(_st);
 
-    VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
+    VLOG(2) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
             << " eos " << eos << " to [" << _host << ":" << _port;
 
     // 1. init sync channel
@@ -111,7 +128,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
-    VLOG(1) << "Asynced tablet " << _opt->tablet_id << " segment id "
+    VLOG(2) << "Asynced tablet " << _opt->tablet_id << " segment id "
             << (segment == nullptr ? -1 : segment->segment_id()) << " eos " << eos << " to [" << _host << ":" << _port
             << "] res " << _closure->result.DebugString();
 
@@ -127,7 +144,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     request.set_index_id(_opt->index_id);
     request.set_sink_id(_opt->sink_id);
 
-    VLOG(1) << "Send segment to " << debug_string()
+    VLOG(2) << "Send segment to " << debug_string()
             << " segment_id=" << (segment == nullptr ? -1 : segment->segment_id()) << " eos=" << eos
             << " txn_id=" << _opt->txn_id << " index_id=" << _opt->index_id << " sink_id=" << _opt->sink_id;
 
@@ -215,7 +232,11 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
         return Status::InternalError(fmt::format("{} segment=null eos=false", debug_string()));
     }
     auto task = std::make_shared<SegmentReplicateTask>(this, std::move(segment), eos);
-    return _replicate_token->submit(std::move(task));
+    Status st = _replicate_token->submit(std::move(task));
+    if (st.ok()) {
+        _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);
+    }
+    return st;
 }
 
 void ReplicateToken::cancel(const Status& st) {

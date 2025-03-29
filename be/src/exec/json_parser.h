@@ -45,13 +45,32 @@ protected:
 // input: {"key":1} {"key":2}
 class JsonDocumentStreamParser : public JsonParser {
 public:
-    JsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
+    JsonDocumentStreamParser(simdjson::ondemand::parser* parser);
     Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
 
 private:
+    Status _get_current_impl(simdjson::ondemand::object* row);
+    /*
+     * This function is only used for dynamic batch_size for simdjson::ondemand::parser
+     *
+     * For simdjson, caller should pass a size param, which is larger than max json doc size
+     * in the raw buffer, to `iterate_many` for allocating a memory chunk to parse the json doc stream.
+     * If batch_size is too small, parsing will fail.
+     * 
+     * But the problem is that, simdjson does not guarantee the behavior if the parsing failed because of
+     * the small size of batch_size. Any kind of error/expcetion and even iterator failure (error == EMPTY)
+     * can happen in this case. To use to dynamic batch_size, we should handle all possible error
+     * and retry using larger batch_size until the batch_size hit the limit(_len - _last_begin_offset)
+     * 
+     * This function is mainly used in two place for now:
+     * 1. `catch` block for any exception throw by simdjson in `_get_current_impl`.
+     * 2. iterator reach the end.
+    */
+    bool _check_and_new_doc_stream_iterator();
+
     // data is parsed as a document stream.
 
     // iterator context for document stream.
@@ -67,6 +86,12 @@ private:
     simdjson::ondemand::object _curr;
     // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
+    // _last_begin_offset represent begin offet of last success object in _doc_stream
+    size_t _last_begin_offset = 0;
+    // _batch_size using in batch mode parsing
+    size_t _batch_size = simdjson::dom::DEFAULT_BATCH_SIZE;
+    // _first_object_parsed is true if there is at least one object is parsed successfully
+    bool _first_object_parsed = false;
 };
 
 // JsonArrayParser parse json in json array
@@ -218,5 +243,7 @@ private:
     // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
+
+std::string format_json_parse_error_msg(const std::string& raw_error_msg);
 
 } // namespace starrocks

@@ -31,6 +31,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
+#include "util/hash.h"
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
 #include "util/time.h"
@@ -46,7 +47,7 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
-class ConnectorScanOperatorMemShareArbitrator;
+struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -79,7 +80,7 @@ public:
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline || _is_cancelled;
+        return now > _delivery_deadline || _cancelled_by_fe;
     }
     bool is_query_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -88,7 +89,14 @@ public:
 
     bool is_cancelled() const { return _is_cancelled; }
 
-    bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
+    Status get_cancelled_status() const {
+        auto* status = _cancelled_status.load();
+        return status == nullptr ? Status::Cancelled("Query has been cancelled") : *status;
+    }
+
+    bool is_dead() const {
+        return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _cancelled_by_fe);
+    }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -145,7 +153,7 @@ public:
 
     FragmentContextManager* fragment_mgr();
 
-    void cancel(const Status& status);
+    void cancel(const Status& status, bool cancelled_by_fe);
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
@@ -163,11 +171,9 @@ public:
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
-                          RuntimeState* state = nullptr, int scan_node_number = 1);
+                          RuntimeState* state = nullptr, int connector_scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
-
-    MemTracker* operator_mem_tracker(int32_t plan_node_id);
 
     Status init_spill_manager(const TQueryOptions& query_options);
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
@@ -306,16 +312,15 @@ private:
     int64_t _big_query_profile_threshold_ns = 0;
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
-    std::shared_ptr<MemTracker> _mem_tracker;
-    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
-    std::mutex _operator_mem_trackers_lock;
-    std::unordered_map<int32_t, std::shared_ptr<MemTracker>> _operator_mem_trackers;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
+    std::atomic_bool _cancelled_by_fe = false;
+    std::atomic<Status*> _cancelled_status = nullptr;
+    Status _s_status;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -349,7 +354,7 @@ private:
     // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
     SpinLock _scan_stats_lock;
     // table level scan stats
-    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
 
     std::unordered_map<int32_t, std::shared_ptr<NodeExecStats>> _node_exec_stats;
 
@@ -357,8 +362,14 @@ private:
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;
+    // _wg_mem_tracker is used to grab mem_tracker in workgroup to prevent it from
+    // being released prematurely in FragmentContext::cancel, otherwise accessing
+    // workgroup's mem_tracker in QueryContext's dtor shall cause segmentation fault.
+    std::shared_ptr<MemTracker> _wg_mem_tracker = nullptr;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
     std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
 
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
@@ -375,7 +386,7 @@ public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
     Status init();
-    QueryContext* get_or_register(const TUniqueId& query_id);
+    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
     bool remove(const TUniqueId& query_id);
@@ -392,6 +403,7 @@ public:
 
     void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
                                   PCollectQueryStatisticsResult* response);
+    void for_each_active_ctx(const std::function<void(QueryContextPtr)>& func);
 
 private:
     static void _clean_func(QueryContextManager* manager);

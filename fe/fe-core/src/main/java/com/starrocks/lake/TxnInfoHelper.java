@@ -33,6 +33,7 @@ public class TxnInfoHelper {
         } else {
             infoPB.forcePublish = false;
         }
+        infoPB.setGtid(state.getGlobalTransactionId());
         return infoPB;
     }
 }

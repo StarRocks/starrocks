@@ -50,6 +50,18 @@ public class UpdatePlanTest extends PlanTestBase {
         testExplain("explain costs update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
     }
 
+    @Test
+    public void testColumnPartialUpdate() throws Exception {
+        String oldVal = connectContext.getSessionVariable().getPartialUpdateMode();
+        connectContext.getSessionVariable().setPartialUpdateMode("column");
+        testExplain("explain update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+        testExplain("explain update tprimary set v2 = DEFAULT where v1 = 'aaa'");
+        testExplain("explain update tprimary_auto_increment set v2 = DEFAULT where v1 = '123'");
+        testExplain("explain verbose update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+        testExplain("explain costs update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+        connectContext.getSessionVariable().setPartialUpdateMode(oldVal);
+    }
+
     private void testExplain(String explainStmt) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));

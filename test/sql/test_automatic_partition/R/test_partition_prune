@@ -1,0 +1,219 @@
+-- name: test_create_table_exp
+CREATE TABLE orders_new (     ts INT NOT NULL,     id BIGINT NOT NULL,     city STRING NOT NULL ) PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+-- result:
+-- !result
+insert into orders_new values('20200201',1,'cd');
+-- result:
+-- !result
+insert into orders_new values('20200101',1,'cd');
+-- result:
+-- !result
+explain select * from orders_new where ts=20200101;
+-- result:
+[REGEX].*partitions=1/2.*
+-- !result
+
+
+
+
+-- name: test_range_prune
+CREATE TABLE ts (
+	ts INT NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+-- result:
+-- !result
+insert into ts values('20200201',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200101',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200301',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200401',1,'cd');
+-- result:
+-- !result
+explain select * from ts where ts>20200201;
+-- result:
+[REGEX].*partitions=3/4.*
+-- !result
+CREATE TABLE o (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+-- result:
+-- !result
+insert into o values(1727224687,1,'cd');
+-- result:
+-- !result
+insert into o values(1737234687,1,'cd');
+-- result:
+-- !result
+insert into o values(1747244687,1,'cd');
+-- result:
+-- !result
+insert into o values(1757254687,1,'cd');
+-- result:
+-- !result
+explain select * from o where ts>1737234687;
+-- result:
+[REGEX].*partitions=3/4.*
+-- !result
+CREATE TABLE t (
+	ts INT NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY id, date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+-- result:
+-- !result
+insert into t values('20200201',1,'cd');
+-- result:
+-- !result
+insert into t values('20200101',1,'cd');
+-- result:
+-- !result
+insert into t values('20200301',1,'cd');
+-- result:
+-- !result
+insert into t values('20200401',1,'cd');
+-- result:
+-- !result
+insert into t values('20200201',2,'cd');
+-- result:
+-- !result
+insert into t values('20200101',2,'cd');
+-- result:
+-- !result
+insert into t values('20200301',3,'cd');
+-- result:
+-- !result
+insert into t values('20200401',3,'cd');
+-- result:
+-- !result
+explain select * from t where ts>20200201;
+-- result:
+[REGEX].*partitions=6/8.*
+-- !result
+explain select * from t where id>1;
+-- result:
+[REGEX].*partitions=4/8.*
+-- !result
+explain select * from t where id>1 and ts>20200201;
+-- result:
+[REGEX].*partitions=3/8.*
+-- !result
+
+
+
+
+-- name: test_prune_value_function
+CREATE TABLE o (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+-- result:
+-- !result
+insert into o values(unix_timestamp(),1,'cd');
+-- result:
+-- !result
+insert into o values(unix_timestamp()+1000000,1,'cd');
+-- result:
+-- !result
+insert into o values(unix_timestamp()-1000000,1,'cd');
+-- result:
+-- !result
+explain select * from o where ts>unix_timestamp();
+-- result:
+[REGEX].*partitions=2/3.*
+-- !result
+
+
+
+
+-- name: test_prune_cast
+CREATE TABLE o (
+    ts STRING NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(cast(ts as INT) - 3600);
+-- result:
+-- !result
+insert into o values(1741592007,1,'cd');
+-- result:
+-- !result
+insert into o values(1742592007,1,'cd');
+-- result:
+-- !result
+insert into o values(1740592007,1,'cd');
+-- result:
+-- !result
+[UC]show partitions from o;
+-- result:
+27071	p20250310143327	2	2025-03-10 16:02:26	0	NORMAL	__generated_partition_column_0	[["2025-03-10 14:33:27"]]	ALL KEY	3	3	HDD	9999-12-31 23:59:59	None	0B	false	0	2	343423207736344576	TXN_NORMAL
+27088	p20250322042007	2	2025-03-10 16:02:26	0	NORMAL	__generated_partition_column_0	[["2025-03-22 04:20:07"]]	ALL KEY	3	3	HDD	9999-12-31 23:59:59	None	0B	false	0	2	343423208180940800	TXN_NORMAL
+27105	p20250227004647	2	2025-03-10 16:02:26	0	NORMAL	__generated_partition_column_0	[["2025-02-27 00:46:47"]]	ALL KEY	3	3	HDD	9999-12-31 23:59:59	None	0B	false	0	2	343423208623439872	TXN_NORMAL
+-- !result
+explain select * from o where ts>cast(1741892007 as STRING);
+-- result:
+[REGEX].*partitions=1/3.*
+-- !result
+-- name: test_prune_convert_tz
+CREATE TABLE ts (
+	ts DATETIME NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('hour', convert_tz(ts, 'Asia/Shanghai', 'America/Los_Angeles'));
+-- result:
+-- !result
+insert into ts values('2020-01-01 00:00:00',1,'cd');
+-- result:
+-- !result
+insert into ts values('2020-02-01 00:00:00',1,'cd');
+-- result:
+-- !result
+insert into ts values('2020-03-01 00:00:00',1,'cd');
+-- result:
+-- !result
+insert into ts values('2020-04-01 00:00:00',1,'cd');
+-- result:
+-- !result
+explain select * from ts where ts > '2020-03-01 00:00:00';
+-- result:
+[REGEX].*partitions=4/4.*
+-- !result
+
+
+
+
+-- name: test_prune_if
+CREATE TABLE ts (
+        dt STRING NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('month', if(length(dt) = 6, str2date(dt, '%y%m%d'), str2date(dt, '%Y%m%d')));
+-- result:
+-- !result
+insert into ts values('20200201',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200101',1,'cd');
+-- result:
+-- !result
+insert into ts values('200301',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200401',1,'cd');
+-- result:
+-- !result
+explain select * from ts where dt>20200201;
+-- result:
+[REGEX].*partitions=4/4.*
+-- !result

@@ -3283,11 +3283,23 @@ public class JoinTest extends PlanTestBase {
                 "    );";
         String plan = getFragmentPlan(query);
         //outer join can not use const expr replacement optimization because it may generate null values
-        assertContains(plan, "12:Project\n" +
+        assertContains(plan, "11:Project\n" +
                 "  |  <slot 29> : 29: expr\n" +
                 "  |  \n" +
-                "  11:NESTLOOP JOIN\n" +
+                "  10:NESTLOOP JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN\n" +
-                "  |  colocate: false, reason:");
+                "  |  colocate: false, reason: ");
+    }
+
+    @Test
+    public void testJoinOnConstValue() throws Exception {
+        String query = "select coalesce(b.v1, a.v1) as v1, a.v2 \n" +
+                "from t0 a left join (select 'cccc' as v1, 'dddd' as v2) b on a.v1 = b.v1 \n" +
+                "where coalesce(b.v1, a.v1) = '1';";
+        String plan = getFragmentPlan(query);
+        assertContainsIgnoreColRefs(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: coalesce('cccc', CAST(1: v1 AS VARCHAR)) = '1'");
     }
 }

@@ -18,6 +18,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 set(EXPR_FILES 
+  agg/data_sketch/ds_theta.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
@@ -29,7 +30,6 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
-  anyval_util.cpp
   base64.cpp
   binary_functions.cpp
   expr_context.cpp
@@ -49,6 +49,7 @@ set(EXPR_FILES
   cast_expr.cpp
   cast_expr_array.cpp
   cast_expr_json.cpp
+  cast_expr_struct.cpp
   cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
@@ -65,6 +66,7 @@ set(EXPR_FILES
   hyperloglog_functions.cpp
   in_const_predicate.cpp
   info_func.cpp
+  inet_aton.cpp
   in_predicate.cpp
   is_null_predicate.cpp
   json_functions.cpp

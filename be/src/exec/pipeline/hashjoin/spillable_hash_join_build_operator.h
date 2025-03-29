@@ -87,6 +87,8 @@ public:
 
     const std::vector<ExprContext*>& build_side_partition() { return _build_side_partition; }
 
+    bool support_event_scheduler() const override { return false; }
+
 private:
     ObjectPool _pool;
 

@@ -14,12 +14,8 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.alter.AlterJobV2;
-import com.starrocks.alter.OnlineOptimizeJobV2;
-import com.starrocks.alter.OptimizeJobV2;
-import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -31,7 +27,7 @@ import java.util.ArrayList;
 
 public class OptimizeJobV2BuilderTest {
     @Test
-    public void testBuildWithOptimizeClause() throws UserException {
+    public void testBuildWithOptimizeClause() throws StarRocksException {
         // Create a mock OlapTable
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getId()).thenReturn(123L);
@@ -40,7 +36,7 @@ public class OptimizeJobV2BuilderTest {
         // Create a mock OptimizeClause
         OptimizeClause optimizeClause = Mockito.mock(OptimizeClause.class);
         Mockito.when(optimizeClause.getKeysDesc()).thenReturn(new KeysDesc());
-        Mockito.when(optimizeClause.getPartitionDesc()).thenReturn(new PartitionDesc());
+        Mockito.when(optimizeClause.getPartitionDesc()).thenReturn(null);
         Mockito.when(optimizeClause.getSortKeys()).thenReturn(new ArrayList<String>());
 
         // Create an instance of OptimizeJobV2Builder
@@ -60,7 +56,36 @@ public class OptimizeJobV2BuilderTest {
     }
 
     @Test
-    public void testBuildWithoutOptimizeClause() throws UserException {
+    public void testBuildMergePartitionsJob() throws StarRocksException {
+        // Create a mock OlapTable
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getId()).thenReturn(123L);
+        Mockito.when(table.getName()).thenReturn("myTable");
+
+        // Create a mock OptimizeClause
+        OptimizeClause optimizeClause = Mockito.mock(OptimizeClause.class);
+        Mockito.when(optimizeClause.getKeysDesc()).thenReturn(new KeysDesc());
+        Mockito.when(optimizeClause.getPartitionDesc()).thenReturn(new PartitionDesc());
+        Mockito.when(optimizeClause.getSortKeys()).thenReturn(new ArrayList<String>());
+
+        // Create an instance of OptimizeJobV2Builder
+        OptimizeJobV2Builder builder = new OptimizeJobV2Builder(table)
+                .withOptimizeClause(optimizeClause);
+
+        // Call the build() method
+        AlterJobV2 job = builder.build();
+
+        // Assert that the returned job is an instance of MergePartitionJob
+        Assert.assertTrue(job instanceof MergePartitionJob);
+
+        // Assert that the job has the correct properties
+        MergePartitionJob optimizeJob = (MergePartitionJob) job;
+        Assert.assertEquals(123L, optimizeJob.getTableId());
+        Assert.assertEquals("myTable", optimizeJob.getTableName());
+    }
+
+    @Test
+    public void testBuildWithoutOptimizeClause() throws StarRocksException {
         // Create a mock OlapTable
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getId()).thenReturn(123L);
@@ -70,7 +95,7 @@ public class OptimizeJobV2BuilderTest {
 
         // Create an instance of OptimizeJobV2Builder without an optimize clause
         OptimizeJobV2Builder builder = new OptimizeJobV2Builder(table);
-        builder.withOptimizeClause(new OptimizeClause(null, null, null, null, null));
+        builder.withOptimizeClause(new OptimizeClause(null, null, null, null, null, null));
 
         // Call the build() method
         AlterJobV2 job = builder.build();

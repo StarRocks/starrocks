@@ -59,6 +59,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/dictionary_cache_manager.h"
+#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
@@ -238,6 +239,10 @@ Status StorageEngine::_open(const EngineOptions& options) {
     REGISTER_THREAD_POOL_METRICS(
             async_delta_writer,
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
+
+    _load_spill_block_merge_executor = std::make_unique<lake::LoadSpillBlockMergeExecutor>();
+    RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
+    REGISTER_THREAD_POOL_METRICS(load_spill_block_merge, _load_spill_block_merge_executor->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
@@ -891,7 +896,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
     std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
+            std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
     CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -932,7 +937,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
     std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
+            std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
     BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
@@ -997,12 +1002,12 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         SCOPED_RAW_TIMER(&duration_ns);
 
         std::unique_ptr<MemTracker> mem_tracker =
-                std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
+                std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
     StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1);
-    if (!res.ok()) {
+    if (!res.ok() && !res.is_already_exist()) {
         StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
                      << ", tablet=" << best_tablet->full_name();
@@ -1601,7 +1606,6 @@ void StorageEngine::decommission_disks(const std::vector<string>& decommission_d
 }
 
 void StorageEngine::add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point) {
-    LOG(INFO) << "add tablet:" << tablet_id << ", next apply time:";
     {
         std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
         _schedule_apply_tasks.emplace(time_point, tablet_id);

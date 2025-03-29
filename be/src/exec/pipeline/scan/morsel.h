@@ -183,6 +183,7 @@ public:
 
     static void build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
                                    bool accept_empty_scan_ranges, pipeline::Morsels* morsels, bool* has_more_morsel);
+    static bool has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges);
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
@@ -248,7 +249,8 @@ public:
     virtual bool is_shared() const = 0;
     virtual bool could_local_shuffle() const = 0;
 
-    virtual Status append_morsels(Morsels&& morsels, bool has_more);
+    virtual Status append_morsels(int driver_seq, Morsels&& morsels);
+    virtual void set_has_more(bool v) {}
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -263,7 +265,8 @@ public:
     bool is_shared() const override { return true; }
     bool could_local_shuffle() const override { return true; }
 
-    Status append_morsels(Morsels&& morsels, bool has_more) override;
+    Status append_morsels(int driver_seq, Morsels&& morsels) override;
+    void set_has_more(bool v) override;
 
 private:
     MorselQueuePtr _queue;
@@ -287,6 +290,9 @@ public:
     bool is_shared() const override { return false; }
     bool could_local_shuffle() const override { return _could_local_shuffle; }
 
+    Status append_morsels(int driver_seq, Morsels&& morsels) override;
+    void set_has_more(bool v) override;
+
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
     const bool _could_local_shuffle;
@@ -309,6 +315,9 @@ public:
     bool is_shared() const override { return false; }
 
     bool could_local_shuffle() const override { return _could_local_shuffle; }
+
+    Status append_morsels(int driver_seq, Morsels&& morsels) override;
+    void set_has_more(bool v) override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
@@ -351,6 +360,10 @@ public:
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual Status append_morsels(Morsels&& morsels);
     virtual Type type() const = 0;
+    void set_tablet_schema(TabletSchemaCSPtr tablet_schema) {
+        DCHECK(tablet_schema != nullptr);
+        _tablet_schema = tablet_schema;
+    }
     bool has_more() const { return _has_more; }
     void set_has_more(bool v) { _has_more = v; }
 
@@ -361,6 +374,7 @@ protected:
     MorselPtr _unget_morsel = nullptr;
     std::vector<BaseTabletSharedPtr> _tablets;
     std::vector<std::vector<BaseRowsetSharedPtr>> _tablet_rowsets;
+    TabletSchemaCSPtr _tablet_schema = nullptr;
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.

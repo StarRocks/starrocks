@@ -14,22 +14,20 @@
 
 #include "exec/workgroup/scan_executor.h"
 
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::workgroup {
 
 ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
-                           bool add_metrics)
-        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {
-    if (add_metrics) {
-        REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
-    }
-}
+                           pipeline::ScanExecutorMetrics* metrics)
+        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)), _metrics(metrics) {}
 
 void ScanExecutor::close() {
     _task_queue->close();
     _thread_pool->shutdown();
+    _metrics = nullptr;
 }
 
 void ScanExecutor::initialize(int num_threads) {
@@ -62,6 +60,7 @@ void ScanExecutor::worker_thread() {
             current_thread->set_idle(true);
         }
         auto maybe_task = _task_queue->take();
+        _metrics->pending_tasks.increment(-1);
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
         }
@@ -70,6 +69,7 @@ void ScanExecutor::worker_thread() {
         }
         auto& task = maybe_task.value();
 
+        _metrics->running_tasks.increment(1);
         int64_t time_spent_ns = 0;
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
@@ -79,6 +79,9 @@ void ScanExecutor::worker_thread() {
             current_thread->inc_finished_tasks();
         }
         _task_queue->update_statistics(task, time_spent_ns);
+        _metrics->running_tasks.increment(-1);
+        _metrics->finished_tasks.increment(1);
+        _metrics->execution_time.increment(time_spent_ns);
 
         // task
         if (!task.is_finished()) {
@@ -88,15 +91,22 @@ void ScanExecutor::worker_thread() {
 }
 
 bool ScanExecutor::submit(ScanTask task) {
-    return _task_queue->try_offer(std::move(task));
+    bool ret = _task_queue->try_offer(std::move(task));
+    _metrics->pending_tasks.increment(ret);
+    return ret;
 }
 
 void ScanExecutor::force_submit(ScanTask task) {
     _task_queue->force_put(std::move(task));
+    _metrics->pending_tasks.increment(1);
 }
 
 void ScanExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
     _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
+}
+
+int64_t ScanExecutor::num_tasks() const {
+    return _task_queue->size();
 }
 
 } // namespace starrocks::workgroup

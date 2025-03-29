@@ -53,6 +53,9 @@ public class TableRelation extends Relation {
     // used for time travel
     private QueryPeriod queryPeriod;
 
+    // TABLE SAMPLE
+    private TableSampleClause sampleClause;
+
     private Expr partitionPredicate;
 
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
@@ -217,6 +220,14 @@ public class TableRelation extends Relation {
 
     public void setQueryPeriod(QueryPeriod queryPeriod) {
         this.queryPeriod = queryPeriod;
+    }
+
+    public TableSampleClause getSampleClause() {
+        return sampleClause;
+    }
+
+    public void setSampleClause(TableSampleClause sampleClause) {
+        this.sampleClause = sampleClause;
     }
 
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {

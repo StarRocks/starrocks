@@ -311,7 +311,7 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
 
     _page_zone_maps.resize(reader.num_values());
 
-    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    ColumnPtr column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));

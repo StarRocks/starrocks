@@ -61,6 +61,12 @@ public:
     DEFINE_VECTORIZED_FN(host_name);
 
     DEFINE_VECTORIZED_FN(get_query_profile);
+
+    // Draw a bar graph
+    DEFINE_VECTORIZED_FN(bar);
+
+    // Build a equi-width histogram
+    DEFINE_VECTORIZED_FN(equiwidth_bucket);
 };
 
 } // namespace starrocks

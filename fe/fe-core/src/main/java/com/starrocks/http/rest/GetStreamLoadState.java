@@ -42,6 +42,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import io.netty.handler.codec.http.HttpMethod;
 
 public class GetStreamLoadState extends RestBaseAction {
@@ -81,16 +82,19 @@ public class GetStreamLoadState extends RestBaseAction {
             throw new DdlException("unknown database, database=" + dbName);
         }
 
-        String status = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(db.getId(), label).toString();
-
-        sendResult(request, response, new Result(status));
+        TransactionStateSnapshot transactionStateSnapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(db.getId(), label);
+        sendResult(request, response,
+                new Result(transactionStateSnapshot.getStatus().name(), transactionStateSnapshot.getReason()));
     }
 
     private static class Result extends RestBaseResult {
         private String state;
+        private String reason;
 
-        public Result(String state) {
+        public Result(String state, String reason) {
             this.state = state;
+            this.reason = reason;
         }
     }
 }

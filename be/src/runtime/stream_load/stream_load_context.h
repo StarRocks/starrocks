@@ -161,6 +161,7 @@ public:
     }
 
     std::string to_json() const;
+    std::string to_merge_commit_json() const;
 
     std::string to_resp_json(const std::string& txn_op, const Status& st) const;
 
@@ -172,7 +173,18 @@ public:
     // If unref() returns true, this object should be delete
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
+    int num_refs() { return _refs.load(); }
+
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
+
+    static void release(StreamLoadContext* context);
+
+    // ========================== transaction stream load ==========================
+    // try to get the lock when receiving http requests.
+    // Return Status::OK if success, otherwise return the fail reason
+    Status try_lock();
+    bool tsl_reach_timeout();
+    bool tsl_reach_idle_timeout(int32_t check_interval);
 
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
@@ -198,6 +210,9 @@ public:
 
     std::string db;
     std::string table;
+    // if enable_batch_write is false, the label represents the txn
+    // otherwise, it just represents the request id of the load, and
+    // the batch_write_label represents the txn
     std::string label;
     // optional
     double max_filter_ratio = 0.0;
@@ -238,8 +253,8 @@ public:
     int64_t total_received_data_cost_nanos = 0;
     int64_t received_data_cost_nanos = 0;
     int64_t write_data_cost_nanos = 0;
-    int64_t begin_txn_ts = 0;
-    int64_t last_active_ts = 0;
+    std::atomic<int64_t> begin_txn_ts = 0;
+    std::atomic<int64_t> last_active_ts = 0;
 
     std::string error_url;
     std::string rejected_record_path;
@@ -254,6 +269,9 @@ public:
     std::vector<TTabletFailInfo> fail_infos;
 
     std::mutex lock;
+    // Whether the transaction stream load is detected as timeout. This flag is used to tell
+    // the new request that the transaction is timeout and will be aborted
+    std::atomic<bool> timeout_detected{false};
 
     std::shared_ptr<MessageBodySink> body_sink;
     bool need_rollback = false;
@@ -277,6 +295,31 @@ public:
 
     int64_t load_deadline_sec = -1;
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
+
+    // =================== merge commit ===================
+
+    bool enable_batch_write = false;
+    std::map<std::string, std::string> load_parameters;
+    // the txn for the data belongs to. put the txn id into `txn_id`,
+    // and put label in this `batch_write_label`
+    std::string batch_write_label;
+
+    // Time consumption statistics for a merge commit request. The overall
+    // time consumption can be divided into several parts:
+    // 1. mc_read_data_cost_nanos: read the data from the http/brpc request
+    // 2. mc_pending_cost_nanos: the request is pending in the execution_queue
+    // 3. Execute the request
+    //    3.1 mc_wait_plan_cost_nanos: wait for a load plan
+    //    3.2 mc_write_data_cost_nanos: write data to the plan
+    //    3.3 mc_wait_finish_cost_nanos: wait for the load to finish (txn publish)
+    //        if using synchronous mode
+    int64_t mc_read_data_cost_nanos = 0;
+    int64_t mc_pending_cost_nanos = 0;
+    int64_t mc_wait_plan_cost_nanos = 0;
+    int64_t mc_write_data_cost_nanos = 0;
+    int64_t mc_wait_finish_cost_nanos = 0;
+    // The left time of the merge window after writing the data to the plan
+    int64_t mc_left_merge_time_nanos = -1;
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }

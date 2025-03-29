@@ -65,8 +65,9 @@ public class SlotRef extends Expr {
     private TableName tblName;
     private String colName;
     private ColumnId columnId;
-    // Used in toSql
+    //label/isBackQuoted used in toSql
     private String label;
+    private boolean isBackQuoted = false;
 
     private QualifiedName qualifiedName;
 
@@ -170,6 +171,14 @@ public class SlotRef extends Expr {
 
     public SlotRef(SlotId slotId) {
         this(new SlotDescriptor(slotId, "", Type.INVALID, false));
+    }
+
+    public void setBackQuoted(boolean isBackQuoted) {
+        this.isBackQuoted = isBackQuoted;
+    }
+
+    public boolean isBackQuoted() {
+        return isBackQuoted;
     }
 
     public QualifiedName getQualifiedName() {
@@ -283,7 +292,12 @@ public class SlotRef extends Expr {
         if (tblName != null && !isFromLambda()) {
             return tblName.toSql() + "." + "`" + colName + "`";
         } else if (label != null) {
-            return label;
+            if (isBackQuoted && !(label.startsWith("`") && label.endsWith("`"))) {
+                sb.append("`").append(label).append("`");
+                return sb.toString();
+            } else {
+                return label;
+            }
         } else if (desc.getSourceExprs() != null) {
             sb.append("<slot ").append(desc.getId().asInt()).append(">");
             for (Expr expr : desc.getSourceExprs()) {
@@ -294,6 +308,10 @@ public class SlotRef extends Expr {
         } else {
             return "<slot " + desc.getId().asInt() + ">";
         }
+    }
+
+    public boolean isColumnRef() {
+        return tblName != null && !isFromLambda();
     }
 
     @Override
@@ -384,11 +402,8 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         SlotRef other = (SlotRef) obj;

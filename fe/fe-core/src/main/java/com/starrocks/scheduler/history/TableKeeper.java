@@ -18,10 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.load.loadv2.LoadsHistorySyncer;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.columns.PredicateColumnsStorage;
+import jdk.jshell.spi.ExecutionControl;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,41 +44,32 @@ public class TableKeeper {
     private final String databaseName;
     private final String tableName;
     private final String createTableSql;
-    private final int tableReplicas;
 
-    private boolean databaseExisted = false;
-    private boolean tableExisted = false;
-    private boolean tableCorrected = false;
-    private Supplier<Integer> ttlSupplier;
+    private final boolean tableCorrected = false;
+    private final Supplier<Integer> ttlSupplier;
 
     public TableKeeper(String database,
                        String table,
                        String createTable,
-                       int expectedReplicas,
                        Supplier<Integer> ttlSupplier) {
         this.databaseName = database;
         this.tableName = table;
         this.createTableSql = createTable;
-        this.tableReplicas = expectedReplicas;
         this.ttlSupplier = ttlSupplier;
     }
 
     public synchronized void run() {
         try {
-            if (!databaseExisted) {
-                databaseExisted = checkDatabaseExists();
-                if (!databaseExisted) {
-                    LOG.warn("database not exists: {}", databaseName);
-                    return;
-                }
+            if (!checkDatabaseExists()) {
+                LOG.warn("database not exists: {}", databaseName);
+                return;
             }
-            if (!tableExisted) {
+            if (!checkTableExists()) {
                 createTable();
                 LOG.info("table created: {}", tableName);
-                tableExisted = true;
             }
-            correctTable();
-            if (tableExisted) {
+            if (checkTableExists()) {
+                correctTable();
                 changeTTL();
             }
         } catch (Exception e) {
@@ -88,38 +81,43 @@ public class TableKeeper {
      * Is the table ready for insert
      */
     public synchronized boolean isReady() {
-        return databaseExisted && tableExisted;
+        return checkDatabaseExists() && checkTableExists();
     }
 
     public boolean checkDatabaseExists() {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
     }
 
-    public void createTable() throws UserException {
-        RepoExecutor.getInstance().executeDDL(createTableSql);
+    public boolean checkTableExists() {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(databaseName, tableName).isPresent();
+    }
+
+    public void createTable() throws ExecutionControl.UserException {
+        SimpleExecutor.getRepoExecutor().executeDDL(createTableSql);
     }
 
     public void correctTable() {
-        int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
         int replica = GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().mayGetTable(databaseName, tableName)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
-        if (numBackends < tableReplicas) {
-            LOG.info("not enough backends in the cluster, expected {} but got {}",
-                    tableReplicas, numBackends);
-            return;
-        }
-        if (replica < tableReplicas) {
-            String sql = alterTableReplicas();
+
+        if (replica != expectedReplicationNum) {
+            String sql = alterTableReplicas(expectedReplicationNum);
             if (StringUtils.isNotEmpty(sql)) {
-                RepoExecutor.getInstance().executeDDL(sql);
+                SimpleExecutor.getRepoExecutor().executeDDL(sql);
             }
-            LOG.info("changed replication_number of table {} to {}", tableName, replica);
+            LOG.info("changed replication_number of table {} from {} to {}",
+                    tableName, replica, expectedReplicationNum);
         }
     }
 
     public void changeTTL() {
+        if (ttlSupplier == null) {
+            return;
+        }
         Optional<OlapTable> table = mayGetTable();
         if (table.isEmpty()) {
             return;
@@ -132,7 +130,7 @@ public class TableKeeper {
         }
         String sql = alterTableTTL(expectedTTLDays);
         try {
-            RepoExecutor.getInstance().executeDDL(sql);
+            SimpleExecutor.getRepoExecutor().executeDDL(sql);
             LOG.info("change table {}.{} TTL from {} to {}",
                     databaseName, tableName, currentTTLNumber, expectedTTLDays);
         } catch (Throwable e) {
@@ -146,7 +144,7 @@ public class TableKeeper {
                 .flatMap(x -> Optional.of((OlapTable) x));
     }
 
-    private String alterTableReplicas() {
+    private String alterTableReplicas(int replicationNum) {
         Optional<OlapTable> table = mayGetTable();
         if (table.isEmpty()) {
             return "";
@@ -154,13 +152,13 @@ public class TableKeeper {
         PartitionInfo partitionInfo = table.get().getPartitionInfo();
         if (partitionInfo.isRangePartition()) {
             String sql1 = String.format("ALTER TABLE %s.%s MODIFY PARTITION(*) SET ('replication_num'='%d');",
-                    databaseName, tableName, tableReplicas);
+                    databaseName, tableName, replicationNum);
             String sql2 = String.format("ALTER TABLE %s.%s SET ('default.replication_num'='%d');",
-                    databaseName, tableName, tableReplicas);
+                    databaseName, tableName, replicationNum);
             return sql1 + sql2;
         } else {
             return String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
-                    databaseName, tableName, tableReplicas);
+                    databaseName, tableName, replicationNum);
         }
     }
 
@@ -180,32 +178,8 @@ public class TableKeeper {
         return createTableSql;
     }
 
-    public int getTableReplicas() {
-        return tableReplicas;
-    }
-
-    public boolean isDatabaseExisted() {
-        return databaseExisted;
-    }
-
-    public boolean isTableExisted() {
-        return tableExisted;
-    }
-
     public boolean isTableCorrected() {
         return tableCorrected;
-    }
-
-    public void setDatabaseExisted(boolean databaseExisted) {
-        this.databaseExisted = databaseExisted;
-    }
-
-    public void setTableExisted(boolean tableExisted) {
-        this.tableExisted = tableExisted;
-    }
-
-    public void setTableCorrected(boolean tableCorrected) {
-        this.tableCorrected = tableCorrected;
     }
 
     public static TableKeeperDaemon startDaemon() {
@@ -226,6 +200,8 @@ public class TableKeeper {
             super("TableKeeper", Config.table_keeper_interval_second * 1000L);
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
+            keeperList.add(LoadsHistorySyncer.createKeeper());
+            keeperList.add(PredicateColumnsStorage.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }

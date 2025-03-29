@@ -15,7 +15,6 @@
 
 #include <cstdlib>
 
-#include "common/compiler_util.h"
 #include "malloc.h"
 #include "runtime/memory/allocator.h"
 

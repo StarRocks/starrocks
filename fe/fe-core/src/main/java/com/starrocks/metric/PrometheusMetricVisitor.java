@@ -37,6 +37,7 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Snapshot;
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.jvm.JvmStats.BufferPool;
 import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
@@ -189,10 +190,54 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     }
 
     @Override
+    public void visitHistogram(HistogramMetric histogram) {
+        final String fullName = prefix + "_" + histogram.getName();
+
+        if (!metricNames.contains(fullName)) {
+            sb.append(HELP).append(fullName).append(" ").append("\n");
+            sb.append(TYPE).append(fullName).append(" ").append("summary\n");
+            metricNames.add(fullName);
+        }
+
+        Snapshot snapshot = histogram.getSnapshot();
+        String tagName = histogram.getTagName();
+        boolean isTagNameEmpty = Strings.isNullOrEmpty(tagName);
+        String delimiter = isTagNameEmpty ? "" : ", ";
+        sb.append(fullName).append("{quantile=\"0.75\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get75thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.95\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get95thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.98\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get98thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.99\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get99thPercentile()).append("\n");
+        sb.append(fullName).append("{quantile=\"0.999\"").append(delimiter).append(tagName).append("} ")
+                .append(snapshot.get999thPercentile()).append("\n");
+        if (isTagNameEmpty) {
+            sb.append(fullName).append("_sum ").append(histogram.getCount() * snapshot.getMean()).append("\n");
+            sb.append(fullName).append("_count ").append(histogram.getCount()).append("\n");
+        } else {
+            sb.append(fullName).append("_sum").append("{").append(tagName).append("} ")
+                    .append(histogram.getCount() * snapshot.getMean()).append("\n");
+            sb.append(fullName).append("_count").append("{").append(tagName).append("} ")
+                    .append(histogram.getCount()).append("\n");
+        }
+    }
+
+    @Override
     public void visitHistogram(String name, Histogram histogram) {
+        // use histogram metric directly if metrics is instance of HistogramMetric
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
         final String fullName = prefix + "_" + name.replaceAll("\\.", "_");
-        sb.append(HELP).append(fullName).append(" ").append("\n");
-        sb.append(TYPE).append(fullName).append(" ").append("summary\n");
+
+        if (!metricNames.contains(fullName)) {
+            sb.append(HELP).append(fullName).append(" ").append("\n");
+            sb.append(TYPE).append(fullName).append(" ").append("summary\n");
+            metricNames.add(fullName);
+        }
 
         Snapshot snapshot = histogram.getSnapshot();
         sb.append(fullName).append("{quantile=\"0.75\"} ").append(snapshot.get75thPercentile()).append("\n");

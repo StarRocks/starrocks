@@ -46,7 +46,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -115,7 +115,7 @@ public class RoutineLoadManagerTest {
     @Test
     public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
                                  @Mocked ConnectContext connectContext,
-                                 @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+                                 @Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -203,7 +203,7 @@ public class RoutineLoadManagerTest {
             Assert.fail();
         } catch (AnalysisException e) {
             LOG.info("Access deny");
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             e.printStackTrace();
         }
     }
@@ -695,7 +695,7 @@ public class RoutineLoadManagerTest {
     public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
-                                        @Mocked ConnectContext connectContext) throws UserException {
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -750,7 +750,7 @@ public class RoutineLoadManagerTest {
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
                                          @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database,
-                                         @Mocked ConnectContext connectContext) throws UserException {
+                                         @Mocked ConnectContext connectContext) throws StarRocksException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -787,7 +787,7 @@ public class RoutineLoadManagerTest {
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked Database database,
-                                       @Mocked ConnectContext connectContext) throws UserException {
+                                       @Mocked ConnectContext connectContext) throws StarRocksException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -927,7 +927,7 @@ public class RoutineLoadManagerTest {
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
-                                        @Mocked ConnectContext connectContext) throws UserException {
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -1048,5 +1048,55 @@ public class RoutineLoadManagerTest {
 
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(1L));
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(2L));
+    }
+
+
+    @Test
+    public void testCheckTaskInJob() throws Exception {
+
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
+        partitionIdToOffset.put(1, 100L);
+        partitionIdToOffset.put(2, 200L);
+        KafkaTaskInfo routineLoadTaskInfo = new KafkaTaskInfo(new UUID(1, 1), kafkaRoutineLoadJob, 20000,
+                System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
+        kafkaRoutineLoadJob.routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
+        boolean taskExist = routineLoadMgr.checkTaskInJob(kafkaRoutineLoadJob.getId(), routineLoadTaskInfo.getId());
+        Assert.assertTrue(taskExist);
+        boolean taskNotExist = routineLoadMgr.checkTaskInJob(-1L, routineLoadTaskInfo.getId());
+        Assert.assertFalse(taskNotExist);
+    }
+
+    @Test
+    public void testGetRunningRoutingLoadCount() throws Exception {
+        KafkaRoutineLoadJob job1 = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        job1.warehouseId = 1;
+        job1.state = RoutineLoadJob.JobState.NEED_SCHEDULE;
+
+        KafkaRoutineLoadJob job2 = new KafkaRoutineLoadJob(2L, "job2", 1L, 1L, null, "topic1");
+        job2.warehouseId = 1;
+        job2.state = RoutineLoadJob.JobState.CANCELLED;
+
+
+        KafkaRoutineLoadJob job3 = new KafkaRoutineLoadJob(3L, "job3", 1L, 1L, null, "topic1");
+        job3.warehouseId = 2;
+        job3.state = RoutineLoadJob.JobState.NEED_SCHEDULE;
+
+        KafkaRoutineLoadJob job4 = new KafkaRoutineLoadJob(4L, "job4", 1L, 1L, null, "topic1");
+        job4.warehouseId = 2;
+        job4.state = RoutineLoadJob.JobState.CANCELLED;
+
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.addRoutineLoadJob(job1, "db");
+        routineLoadMgr.addRoutineLoadJob(job2, "db");
+        routineLoadMgr.addRoutineLoadJob(job3, "db");
+        routineLoadMgr.addRoutineLoadJob(job4, "db");
+
+        Map<Long, Long> result = routineLoadMgr.getRunningRoutingLoadCount();
+        Assert.assertEquals(2, result.size());
+        Assert.assertEquals(Long.valueOf(1), result.get(1L));
+        Assert.assertEquals(Long.valueOf(1), result.get(2L));
     }
 }

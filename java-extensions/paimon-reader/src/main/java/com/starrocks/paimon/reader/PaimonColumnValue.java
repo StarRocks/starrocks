@@ -19,8 +19,8 @@ import com.starrocks.jni.connector.ColumnValue;
 import org.apache.paimon.data.Decimal;
 import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
+import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
-import org.apache.paimon.data.columnar.ColumnarRow;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -110,7 +110,7 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
-        ColumnarRow array = (ColumnarRow) fieldData;
+        InternalRow array = (InternalRow) fieldData;
         List<DataField> fields = ((RowType) dataType).getFields();
         for (int i = 0; i < structFieldIndex.size(); i++) {
             Integer idx = structFieldIndex.get(i);

@@ -85,12 +85,11 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         size_t chunk_size = chunk->num_rows();
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
+            TRY_CATCH_ALLOC_SCOPE_START()
             if (!_aggregator->is_none_group_by_exprs()) {
-                TRY_CATCH_ALLOC_SCOPE_START()
                 _aggregator->build_hash_map(chunk_size, agg_group_by_with_limit);
 
                 _aggregator->try_convert_to_two_level_map();
-                TRY_CATCH_ALLOC_SCOPE_END()
             }
             if (_aggregator->is_none_group_by_exprs()) {
                 RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
@@ -108,6 +107,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                     RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
                 }
             }
+            TRY_CATCH_ALLOC_SCOPE_END()
 
             _aggregator->update_num_input_rows(chunk_size);
         }
@@ -291,10 +291,15 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false);
     } else {
-        if (runtime_state()->enable_spill() && runtime_state()->enable_agg_spill() && has_group_by_keys) {
+        // disable spill when group by with a small limit
+        bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
+        if (limit() != -1 && limit() < runtime_state()->chunk_size()) {
+            enable_agg_spill = false;
+        }
+        if (enable_agg_spill && has_group_by_keys) {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
-                                                     SpillableAggregateBlockingSinkOperatorFactory>(
-                    ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys);
+                                                     SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink,
+                                                                                                    context, false);
         } else {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
                                                      AggregateBlockingSinkOperatorFactory>(
@@ -315,6 +320,8 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
+
+    ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
 
     return ops_with_source;
 }

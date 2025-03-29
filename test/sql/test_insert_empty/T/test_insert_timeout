@@ -1,0 +1,33 @@
+-- name: test_insert_timeout
+
+create database db_${uuid0};
+use db_${uuid0};
+
+set query_timeout = 2;
+select sleep(4);
+set query_timeout = 300;
+
+create table t1(k1 int);
+
+set insert_timeout = 2;
+insert into t1 select sleep(4);
+
+set insert_timeout = 10;
+insert into t1 select sleep(4);
+select * from t1;
+truncate table t1;
+
+set insert_timeout = 2;
+insert into t1 properties("timeout" = "10") select sleep(4);
+select * from t1;
+truncate table t1;
+
+set insert_timeout = 2;
+create table t2 as select sleep(4) as k1;
+
+set insert_timeout = 10;
+create table t2 as select sleep(4) as k1;
+select * from t2;
+truncate table t2;
+
+set insert_timeout = 14400;

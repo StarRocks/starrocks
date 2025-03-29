@@ -32,6 +32,14 @@ public:
     }
 
     void set_bit(size_t pos) { _bits[pos >> 3] |= (1 << (pos & 7)); }
+    // try to set bit in pos, if bit is already set, return false, otherwise return true
+    bool try_set_bit(size_t pos) {
+        if (is_bit_set(pos)) {
+            return false;
+        }
+        set_bit(pos);
+        return true;
+    }
     void clear_bit(size_t pos) { _bits[pos >> 3] &= ~(1 << (pos & 7)); }
 
     bool is_bit_set(size_t pos) { return (_bits[pos >> 3] & (1 << (pos & 7))) != 0; }

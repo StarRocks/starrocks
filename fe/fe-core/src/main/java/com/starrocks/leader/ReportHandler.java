@@ -67,6 +67,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
@@ -79,9 +80,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.metric.GaugeMetric;
-import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
@@ -142,12 +140,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon implements MemoryTrackable {
     @Override
     public List<Pair<List<Object>, Long>> getSamples() {
-        synchronized (pendingTaskMap) {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
             List<Pair<List<Object>, Long>> result = new ArrayList<>();
             for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
                 result.add(Pair.create(taskMap.values()
@@ -162,7 +162,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        synchronized (pendingTaskMap) {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
             long count = 0;
             for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
                 count += taskMap.size();
@@ -193,6 +193,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     private final Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
     /**
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
      * We will delay the drop of tablet based on configuration `tablet_report_drop_tablet_delay_sec`
@@ -208,14 +210,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     public ReportHandler() {
         super("ReportHandler");
-        GaugeMetric<Long> gaugeQueueSize = new GaugeMetric<Long>(
-                "report_queue_size", MetricUnit.NOUNIT, "report queue size") {
-            @Override
-            public Long getValue() {
-                return (long) reportQueue.size();
-            }
-        };
-        MetricRepo.addMetric(gaugeQueueSize);
         pendingTaskMap.put(ReportType.TABLET_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.DISK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
@@ -373,7 +367,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private void putToQueue(ReportTask reportTask) throws Exception {
-        synchronized (pendingTaskMap) {
+        try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
             if (!pendingTaskMap.containsKey(reportTask.type)) {
                 throw new Exception("Unknown report task type" + reportTask.toString());
             }
@@ -425,6 +419,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             this.activeWorkGroups = activeWorkGroups;
             this.resourceUsage = resourceUsage;
             this.dataCacheMetrics = dataCacheMetrics;
+        }
+
+        public ReportTask(long beId, ReportType type, Map<Long, TTablet> tablets, long reportVersion) {
+            this.beId = beId;
+            this.type = type;
+            this.tablets = tablets;
+            this.reportVersion = reportVersion;
         }
 
         @Override
@@ -639,8 +640,18 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             replica.setLastReportVersion(backendTabletInfo.getVersion());
 
                             // check if tablet needs migration
-                            long partitionId = tabletMeta.getPartitionId();
-                            TStorageMedium storageMedium = storageMediumMap.get(partitionId);
+                            long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+                            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(tabletMeta.getDbId(), tabletMeta.getTableId());
+                            if (olapTable == null) {
+                                continue;
+                            }
+                            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                            if (physicalPartition == null) {
+                                continue;
+                            }
+
+                            TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
                             if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
                                 if (storageMedium != backendTabletInfo.getStorage_medium()) {
                                     // If storage medium is less than 1, there is no need to send migration tasks to BE.
@@ -667,7 +678,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
                                     if (transactionState == null ||
                                             transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
-                                        transactionsToClear.put(transactionId, tabletMeta.getPartitionId());
+                                        transactionsToClear.put(transactionId, physicalPartitionId);
                                         LOG.debug("transaction id [{}] is not valid any more, "
                                                 + "clear it from backend [{}]", transactionId, backendId);
                                     } else if (transactionState.getTransactionStatus() ==
@@ -675,7 +686,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                         TableCommitInfo tableCommitInfo =
                                                 transactionState.getTableCommitInfo(tabletMeta.getTableId());
                                         PartitionCommitInfo partitionCommitInfo =
-                                                tableCommitInfo.getPartitionCommitInfo(partitionId);
+                                                tableCommitInfo.getPartitionCommitInfo(physicalPartitionId);
                                         if (partitionCommitInfo == null) {
                                             /*
                                              * This may happen as follows:
@@ -690,11 +701,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             LOG.info(
                                                     "failed to find partition commit info. table: {}, " +
                                                             "partition: {}, tablet: {}, txn_id: {}",
-                                                    tabletMeta.getTableId(), partitionId, tabletId,
+                                                    tabletMeta.getTableId(), physicalPartitionId, tabletId,
                                                     transactionState.getTransactionId());
                                         } else {
                                             TPartitionVersionInfo versionInfo =
-                                                    new TPartitionVersionInfo(tabletMeta.getPartitionId(),
+                                                    new TPartitionVersionInfo(physicalPartitionId,
                                                             partitionCommitInfo.getVersion(), 0);
                                             versionInfo.setGtid(transactionState.getGlobalTransactionId());
                                             Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
@@ -1118,11 +1129,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         continue;
                     }
 
-                    if (globalStateMgr.getLocalMetastore()
-                            .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId()) == null) {
-                        continue;
-                    }
-
                     PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                             .getPhysicalPartitionIncludeRecycleBin(olapTable, partitionId);
                     if (partition == null) {
@@ -1131,7 +1137,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                     short replicationNum =
                             globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
-                                    tabletMeta.getPartitionId());
+                                    partition.getParentId());
                     if (replicationNum == (short) -1) {
                         continue;
                     }
@@ -1210,7 +1216,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
-                                            .setIndexes(olapTable.getCopiedIndexes())
+                                            .setIndexes(indexId == olapTable.getBaseIndexId() ?
+                                                        olapTable.getCopiedIndexes() :
+                                                        OlapTable.getIndexesBySchema(
+                                                        olapTable.getCopiedIndexes(), indexMeta.getSchema()))
                                             .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                                             .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                                             .build().toTabletSchema();
@@ -1430,7 +1439,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         return true;
     }
 
-    public static boolean migratableTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
+    public static boolean migrateTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
         if (tbl.getKeysType() != KeysType.PRIMARY_KEYS) {
             return true;
         }
@@ -1509,7 +1518,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                // 3. There are some limitations for primary table, details in migratableTablet()
+                // 3. There are some limitations for primary table, details in migrateTablet()
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
                 if (db == null) {
                     continue;
@@ -1520,7 +1529,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                if (!migratableTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
+                if (!migrateTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
                     continue;
                 }
 
@@ -1669,7 +1678,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long partitionId =
-                        tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                        tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                 if (db == null) {
@@ -1685,11 +1694,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    Partition partition = olapTable.getPartition(partitionId);
+                    PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
                     if (partition == null) {
                         continue;
                     }
-                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partitionId);
+                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partition.getParentId());
                     if (beIsInMemory != feIsInMemory) {
                         tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
                     }
@@ -2042,7 +2051,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-        long partitionId = tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long physicalPartitionId = tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
@@ -2063,20 +2071,20 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId) == null) {
-                throw new MetaNotFoundException("partition[" + partitionId + "] does not exist");
-            }
-            short replicationNum =
-                    globalStateMgr.getLocalMetastore()
-                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
-            if (replicationNum == (short) -1) {
-                throw new MetaNotFoundException("invalid replication number of partition [" + partitionId + "]");
-            }
-
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
                 throw new MetaNotFoundException("physical partition[" + physicalPartitionId + "] does not exist");
+            }
+
+            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partition.getParentId()) == null) {
+                throw new MetaNotFoundException("partition[" + partition.getParentId() + "] does not exist");
+            }
+            short replicationNum =
+                    globalStateMgr.getLocalMetastore()
+                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
+            if (replicationNum == (short) -1) {
+                throw new MetaNotFoundException("invalid replication number of partition [" + partition.getParentId() + "]");
             }
 
             MaterializedIndex materializedIndex = partition.getIndex(indexId);
@@ -2180,13 +2188,28 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
     }
 
+    public int getPendingTabletReportTaskCnt() {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
+            Map<Long, ReportTask> tasks = pendingTaskMap.get(ReportType.TABLET_REPORT);
+            return tasks == null ? 0 : tasks.size();
+        }
+    }
+
+    public void putTabletReportTask(long beId, long reportVersion, Map<Long, TTablet> tablets) throws Exception {
+        putToQueue(new ReportTask(beId, ReportType.TABLET_REPORT, tablets, reportVersion));
+    }
+
+    public int getReportQueueSize() {
+        return reportQueue.size();
+    }
+
     @Override
     protected void runOneCycle() {
         while (true) {
             try {
                 Pair<Long, ReportType> pair = reportQueue.take();
                 ReportTask task = null;
-                synchronized (pendingTaskMap) {
+                try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
                     // using the lastest task
                     task = pendingTaskMap.get(pair.second).get(pair.first);
                     if (task == null) {

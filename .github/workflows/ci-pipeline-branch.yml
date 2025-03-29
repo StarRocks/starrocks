@@ -138,18 +138,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [ Release, ASAN ]
+        linux: [ centos7, ubuntu ]
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Update Image (${{ matrix.build_type }})
+      - name: Update Image (${{ matrix.linux }})
         id: update-image
         if: needs.be-checker.outputs.output2  == 'true'
         env:
-          linux_distro: ${{ matrix.build_type }}
+          linux_distro: ${{ matrix.linux }}
         run: |
           cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-pr-update-image.sh
@@ -157,7 +157,7 @@ jobs:
       - name: Upload Thirdparty Result
         uses: actions/upload-artifact@v4
         with:
-          name: THIRDPARTY-RESULT-${{ matrix.build_type }}
+          name: THIRDPARTY-RESULT-${{ matrix.linux }}
           path: image_cache.info
           retention-days: 1
           overwrite: true
@@ -211,8 +211,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
-      LINUX_DISTRO: ubuntu
     steps:
       - name: BRANCH INFO
         id: branch
@@ -227,10 +225,10 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${IMAGE_CACHE_ID}
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
 
       - name: clean ECI
         if: always()
@@ -348,6 +346,7 @@ jobs:
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true' && github.repository == 'StarRocks/starrocks'
     name: FE Sonarcloud Check
+    timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
       CODE_PATH: ${{ github.workspace }}
@@ -420,7 +419,11 @@ jobs:
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
-          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+          export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
+          export MAVEN_OPTS="-Xms3072m -Xmx12288m"
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
+            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
+            -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
   fe-ut:
     runs-on: [self-hosted, normal]
@@ -448,7 +451,7 @@ jobs:
         timeout-minutes: 60
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
         if: always()
@@ -506,6 +509,7 @@ jobs:
           name: head_sha
           path: ./head_sha.txt
           retention-days: 3
+          overwrite: true
 
       - name: Clean
         run: |

@@ -942,7 +942,7 @@ Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, Colu
     auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
     auto* col_struct = down_cast<StructColumn*>(col.get());
 
-    Columns& field_columns = col_struct->fields_column();
+    auto& field_columns = col_struct->fields_column();
 
     for (size_t i = 0; i < _type.children.size(); i++) {
         size_t column_id = _child_readers[i]->get_orc_type()->getColumnId();

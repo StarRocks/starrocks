@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SHOW RESTORE
 
-## Description
-
 Views the last RESTORE task in a specified database.
 
 > **NOTE**

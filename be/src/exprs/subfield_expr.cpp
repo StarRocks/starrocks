@@ -42,6 +42,10 @@ public:
 
         // handle nullable column
         const size_t num_rows = col->size();
+        if (col->only_null()) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+
         NullColumnPtr union_null_column = NullColumn::create(num_rows, false);
 
         for (size_t i = 0; i < _used_subfield_names.size(); i++) {
@@ -50,7 +54,8 @@ public:
             // merge null flags for each level
             if (col->is_nullable()) {
                 auto* nullable = down_cast<NullableColumn*>(col.get());
-                union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
+                union_null_column =
+                        FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
             }
 
             Column* tmp_col = ColumnHelper::get_data_column(col.get());
@@ -64,7 +69,8 @@ public:
 
         if (col->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(col.get());
-            union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
+            union_null_column =
+                    FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
             col = nullable->data_column();
         }
 
@@ -72,9 +78,9 @@ public:
 
         // We need to clone a new subfield column
         if (_copy_flag) {
-            return NullableColumn::create(col->clone_shared(), union_null_column);
+            return NullableColumn::create(Column::mutate(std::move(col)), std::move(union_null_column));
         } else {
-            return NullableColumn::create(col, union_null_column);
+            return NullableColumn::create(std::move(col), std::move(union_null_column));
         }
     }
 

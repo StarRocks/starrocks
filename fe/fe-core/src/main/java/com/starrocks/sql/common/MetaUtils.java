@@ -101,7 +101,8 @@ public class MetaUtils {
             if (Strings.isNullOrEmpty(tableName.getCatalog())) {
                 tableName.setCatalog(session.getCurrentCatalog());
             }
-            database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+            database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
             if (database == null) {
                 throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
             }
@@ -113,7 +114,7 @@ public class MetaUtils {
             return table;
         }
         table = session.getGlobalStateMgr().getMetadataMgr().getTable(
-                tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                session, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.getTbl());
         }
@@ -160,6 +161,25 @@ public class MetaUtils {
     }
 
     public static boolean isPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+        Database db = stateMgr.getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return false;
+        }
+        // lake table or lake materialized view
+        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            return table.getPartition(partitionId) != null;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
+
+    public static boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
         Database db = stateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return false;

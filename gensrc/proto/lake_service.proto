@@ -37,6 +37,7 @@ message PublishVersionRequest {
     optional int64 commit_time = 5; // deprecated
     optional int64 timeout_ms = 6;
     repeated TxnInfoPB txn_infos = 7;
+    repeated int64 rebuild_pindex_tablet_ids = 8;
 }
 
 message PublishVersionResponse {
@@ -44,6 +45,8 @@ message PublishVersionResponse {
     // Mapping from tablet id to compaction score.
     map<int64, double> compaction_scores = 2;
     optional StatusPB status = 3;
+    // Mapping from tablet id to row_nums when the partition is first imported
+    map<int64, int64> tablet_row_nums = 4;
 }
 
 message AbortTxnRequest {
@@ -87,6 +90,7 @@ message CompactRequest {
     optional int64 timeout_ms = 4;
     optional bool allow_partial_success = 5;
     optional bytes encryption_meta = 6;
+    optional bool force_base_compaction = 7;
 }
 
 message CompactStat {
@@ -241,9 +245,14 @@ message AbortCompactionResponse {
     optional StatusPB status = 1;
 }
 
+message TabletInfoPB {
+    optional int64 tablet_id = 1;
+    optional int64 min_version = 2;
+}
+
 message VacuumRequest {
-    // All tablets must be in the same partition.
-    repeated int64 tablet_ids = 1;
+    // This field is deprecated, use |tablet_infos| instead.
+    repeated int64 tablet_ids = 1; // deprecated
     // Tablet metadata files with version numbers greater than or equals to min_retain_version
     // will NOT be vacuumed. For tablet metadata files with version numbers less than
     // min_retain_version, decide whether they should be deleted by comparing the create time
@@ -260,6 +269,8 @@ message VacuumRequest {
     optional bool delete_txn_log = 5;
     // ID of the partition the tablet belongs to.
     optional int64 partition_id = 6;
+    // The tablet infos to be vacuumed.
+    repeated TabletInfoPB tablet_infos = 7;
 }
 
 message VacuumResponse {
@@ -268,6 +279,10 @@ message VacuumResponse {
     optional int64 vacuumed_files = 2;
     // The total size of files vacuumed, value undefined if status is not ok.
     optional int64 vacuumed_file_size = 3;
+    // The versions before vacuumed_version are vacuumed
+    optional int64 vacuumed_version = 4;
+    // The tablet infos of vacuumed tablets.
+    repeated TabletInfoPB tablet_infos = 5;
 }
 
 message VacuumFullRequest {

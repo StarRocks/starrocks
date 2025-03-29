@@ -44,6 +44,7 @@ public class PlanAdvisorExecutor {
                     .addColumn(new Column("query_time", Type.STRING))
                     .addColumn(new Column("tuning_guides", Type.STRING))
                     .addColumn(new Column("avg_tuned_query_time", Type.STRING))
+                    .addColumn(new Column("optimized_query_count", Type.STRING))
                     .addColumn(new Column("is_useful", Type.STRING))
                     .addColumn(new Column("fe_node", Type.STRING))
                     .build();
@@ -57,9 +58,12 @@ public class PlanAdvisorExecutor {
 
         @Override
         public ShowResultSet visitAddPlanAdvisorStatement(AddPlanAdvisorStmt stmt, ConnectContext context) {
+            boolean enablePlanAnalyzer = context.getSessionVariable().isEnablePlanAnalyzer();
             try {
-                context.getSessionVariable().setEnablePlanAnalyzer(true);
-                StmtExecutor executor = new StmtExecutor(context, stmt.getQueryStmt());
+                if (!enablePlanAnalyzer) {
+                    context.getSessionVariable().setEnablePlanAnalyzer(true);
+                }
+                StmtExecutor executor = StmtExecutor.newInternalExecutor(context, stmt.getQueryStmt());
                 executor.execute();
                 String result;
                 if (context.getState().isError()) {
@@ -74,7 +78,7 @@ public class PlanAdvisorExecutor {
                 throw new RuntimeException(e);
             } finally {
                 context.getState().reset();
-                context.getSessionVariable().setEnablePlanAnalyzer(false);
+                context.getSessionVariable().setEnablePlanAnalyzer(enablePlanAnalyzer);
             }
         }
 
@@ -85,7 +89,6 @@ public class PlanAdvisorExecutor {
             String result = String.format("Clear all plan advisor in FE(%s) successfully. Advisor size: %d",
                     GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName(), size);
             return new ShowResultSet(COLUMN_META, List.of(List.of(result)));
-
         }
 
         @Override

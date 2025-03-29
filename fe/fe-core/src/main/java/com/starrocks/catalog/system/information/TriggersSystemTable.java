@@ -24,11 +24,13 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TriggersSystemTable {
+    private static final String NAME = "triggers";
+
     public static SystemTable create(String catalogName) {
         return new SystemTable(
                 catalogName,
                 SystemId.TRIGGERS_ID,
-                "triggers",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("TRIGGER_CATALOG", ScalarType.createVarchar(512))

@@ -13,7 +13,11 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.api.client.util.Lists;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptimizerContext;
+
+import java.util.List;
 
 // JoinReorderFactory is used to choose join reorder algorithm in RBO phase,
 // it is used by ReorderJoinRule.rewrite method, at present JoinReorderFactory
@@ -23,15 +27,33 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 // 2. factory for creating JoinReorderCardinalityPreserving, which used by table pruning
 //    feature.
 public interface JoinReorderFactory {
-    JoinOrder create(OptimizerContext context);
+    List<JoinOrder> create(OptimizerContext context, MultiJoinNode multiJoinNode);
 
     // used by AutoMV to eliminate cross join.
     static JoinReorderFactory createJoinReorderDummyStatisticsFactory() {
-        return JoinReorderDummyStatistics::new;
+        return (context, multiJoinNode) -> List.of(new JoinReorderDummyStatistics(context));
     }
 
     // used by table pruning feature.
     static JoinReorderFactory createJoinReorderCardinalityPreserving() {
-        return JoinReorderCardinalityPreserving::new;
+        return (context, multiJoinNode) -> List.of(new JoinReorderCardinalityPreserving(context));
+    }
+
+    static JoinReorderFactory createJoinReorderAdaptive() {
+        return (context, multiJoinNode) -> {
+            List<JoinOrder> algorithms = Lists.newArrayList();
+            algorithms.add(new JoinReorderLeftDeep(context));
+
+            SessionVariable sv = context.getSessionVariable();
+            if (sv.isCboEnableDPJoinReorder() && multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseDP()) {
+                algorithms.add(new JoinReorderDP(context));
+            }
+
+            if (sv.isCboEnableGreedyJoinReorder() && multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseGreedy()) {
+                algorithms.add(new JoinReorderGreedy(context));
+            }
+
+            return algorithms;
+        };
     }
 }

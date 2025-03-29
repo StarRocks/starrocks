@@ -73,6 +73,12 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
     }
 
     @Override
+    public Void visitDataCacheSelectStatement(StarRocksParser.DataCacheSelectStatementContext context) {
+        extractHintToRight(context, context.SELECT().getSymbol().getTokenIndex());
+        return null;
+    }
+
+    @Override
     public Void visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         extractHintToRight(context);
         if (context.createTableAsSelectStatement() != null) {
@@ -176,6 +182,17 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
     public Void visitSetOperation(StarRocksParser.SetOperationContext context) {
         visit(context.left);
         visit(context.right);
+        return null;
+    }
+
+    @Override
+    public Void visitCreateBaselinePlanStatement(StarRocksParser.CreateBaselinePlanStatementContext ctx) {
+        // only collect plan hints
+        if (ctx.queryRelation().size() == 1) {
+            visit(ctx.queryRelation(0));
+        } else {
+            visit(ctx.queryRelation(1));
+        }
         return null;
     }
 

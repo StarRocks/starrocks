@@ -59,7 +59,11 @@
 namespace starrocks {
 
 class Tablet;
+class BaseTablet;
+using BaseTabletSharedPtr = std::shared_ptr<BaseTablet>;
 class DataDir;
+class BaseRowset;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 struct TabletBasicInfo;
 class MetadataCache;
 
@@ -272,6 +276,8 @@ private:
     // caller should acquire _shutdown_tablets_lock
     void _add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info);
     void sweep_shutdown_tablet(const DroppedTabletInfo& info, std::vector<DroppedTabletInfo>& finished_tablets);
+
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard);
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);

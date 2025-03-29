@@ -23,7 +23,9 @@
 #include <fmt/format.h>
 
 #include "common/logging.h"
+#include "io/io_profiler.h"
 #include "util/failpoint/fail_point.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::io {
 
@@ -51,6 +53,9 @@ Status DirectS3OutputStream::write(const void* data, int64_t size) {
         return Status::OK();
     }
 
+    MonotonicStopWatch watch;
+    watch.start();
+
     Aws::S3::Model::UploadPartRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
@@ -66,6 +71,7 @@ Status DirectS3OutputStream::write(const void* data, int64_t size) {
     }
 
     _etags.push_back(outcome.GetResult().GetETag());
+    IOProfiler::add_write(size, watch.elapsed_time());
     return Status::OK();
 }
 
@@ -75,7 +81,10 @@ Status DirectS3OutputStream::close() {
     }
 
     if (!_upload_id.empty() && !_etags.empty()) {
+        MonotonicStopWatch watch;
+        watch.start();
         RETURN_IF_ERROR(complete_multipart_upload());
+        IOProfiler::add_sync(watch.elapsed_time());
     }
 
     _client = nullptr;

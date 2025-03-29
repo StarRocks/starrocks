@@ -119,7 +119,7 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
-            Assert.assertEquals(4, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+            Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
     }
 
@@ -154,7 +154,7 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
-            Assert.assertEquals(1, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+            Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
     }
 }

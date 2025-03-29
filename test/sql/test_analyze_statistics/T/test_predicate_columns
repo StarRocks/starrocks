@@ -1,0 +1,52 @@
+-- name: test_predicate_columns @sequential
+
+
+admin set frontend config ('enable_statistic_collect_on_first_load'='false');
+admin set frontend config ('enable_statistic_collect'='false');
+
+create database analyze_test_${uuid0};
+use analyze_test_${uuid0};
+
+create table t1(c1 int, c2 bigint, c3 string, c4 string) 
+properties('replication_num'='1');
+
+insert into t1 values (1, 1, 's1', 's1');
+insert into t1 values (2, 2, 's2', 's2');
+insert into t1 values (3, 3, 's3', 's3');
+
+-- empty
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+[UC]analyze table t1 predicate columns;
+
+-- predicate
+select count(*) from t1 where c1 = 1;
+select count(*) from t1 where c1 = 2;
+select count(*) from t1 where c1 > 2;
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+[UC]analyze table t1 predicate columns with sync mode;
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+
+-- aggregation
+select c1, count(c1), sum(c2), max(c3), min(c4) from t1 group by c1;
+select c2, count(c1), max(c3), min(c4) from t1 where c1 > 2 group by c2;
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+[UC]analyze table t1 predicate columns;
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+
+-- join
+create table t2(c5 int, c6 bigint, c7 string, c8 string) 
+properties('replication_num'='1');
+insert into t2 select * from t1;
+select * from t1 join t2 on t1.c1 = t2.c5;
+select * from t1 join t2 on t1.c1 = t2.c5 where t1.c1 > 2;
+select * from t1 join t2 on t1.c1 = t2.c5 where t1.c2 > 2 and t1.c3 = 's2';
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't1' order by column_name;
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'analyze_test_${uuid0}' and table_name = 't2' order by column_name;
+[UC]analyze table t1 predicate columns;
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status where `database`='analyze_test_${uuid0}' order by Id;
+
+admin set frontend config ('enable_statistic_collect_on_first_load'='true');
+admin set frontend config ('enable_statistic_collect'='false');

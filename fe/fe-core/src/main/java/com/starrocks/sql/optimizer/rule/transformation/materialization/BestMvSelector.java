@@ -146,14 +146,8 @@ public class BestMvSelector {
     public static class CandidateContextComparator implements Comparator<CandidateContext> {
         @Override
         public int compare(CandidateContext context1, CandidateContext context2) {
-            // compare group by key num
-            int ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
-            if (ret != 0) {
-                return ret;
-            }
-
             // larger is better
-            ret = Integer.compare(context2.sortScore, context1.sortScore);
+            int ret = Integer.compare(context2.sortScore, context1.sortScore);
             if (ret != 0) {
                 return ret;
             }
@@ -161,6 +155,12 @@ public class BestMvSelector {
             // compare by row number
             ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
                     context2.getMvStatistics().getOutputRowCount());
+            if (ret != 0) {
+                return ret;
+            }
+
+            // compare group by key num
+            ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
             if (ret != 0) {
                 return ret;
             }
@@ -226,7 +226,7 @@ public class BestMvSelector {
                         expression.getStatistics(), scanOperator.getTable().getBaseSchema().size(), sortScore);
                 if (isAggregate) {
                     List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
-                            mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                            optimizerContext.getSessionVariable(), mv);
                     for (MvPlanContext planContext : planContexts) {
                         if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
                             LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();

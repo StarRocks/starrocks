@@ -830,3 +830,54 @@ SELECT v3, AVG(v3) OVER(ORDER BY v3 ROWS BETWEEN CURRENT ROW AND 2 FOLLOWING) AS
 23	23.5
 24	24.0
 -- !result
+
+
+
+
+
+
+
+-- name: test_removable_cumulative_process_string_type
+CREATE TABLE IF NOT EXISTS `t2` (
+    `v1` int(11) NULL,
+    `v2` STRING NULL
+)
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t2 VALUES
+(1, '1'),
+(2, NULL),
+(3, '2'),
+(4, '2'),
+(5, '2'),
+(6, '3'),
+(7, '3'),
+(8, '200'),
+(9, '40'),
+(10, '50'),
+(11, '60'),
+(12, '10'),
+(13, '20');
+-- result:
+-- !result
+SELECT v1, v2, MIN(v2) OVER (ORDER BY v1 DESC ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS _min FROM t2 ORDER BY v1 desc;
+-- result:
+13	20	20
+12	10	10
+11	60	10
+10	50	10
+9	40	40
+8	200	200
+7	3	200
+6	3	200
+5	2	2
+4	2	2
+3	2	2
+2	None	2
+1	1	1
+-- !result

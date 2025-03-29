@@ -21,7 +21,13 @@ Note the following points:
 
 - In actual business scenarios, both qualified and unqualified rows may contain `NULL` values. If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the rows that contain `NULL` values.
 
-- The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), or [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) does not support setting the `max_filter_ratio` property.
+- The maximum percentage of unqualified rows that can be filtered out for a load job is controlled by an optional job property `max_filter_ratio`.
+
+:::note
+
+The `max_filter_ratio` property for INSERT is supported from v3.4.0.
+
+:::
 
 For example, you want to load four rows that hold `\N` (`\N` denotes a `NULL` value), `abc`, `2000`, and `1` values respectively in a column from a CSV-formatted data file into a StarRocks table, and the data type of the destination StarRocks table column is TINYINT [-128, 127].
 
@@ -61,9 +67,15 @@ If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` a
 
 ## Set strict mode
 
-If you run a [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), or [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) job to load data, use the `strict_mode` parameter to set strict mode for the load job. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode.
+You can use the `strict_mode` parameter to set strict mode for the load job. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode. Note the `strict_mode` parameter is supported for INSERT from v3.4.0, with the default value `true`. Now, except Stream Load, for all other loading methods, `strict_mode` is set the same way in PROPERTIES clause.
 
-If you execute [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to load data, use the `enable_insert_strict` session variable to set strict mode. Valid values are `true` and `false`. The default value is `true`. The value `true` enables strict mode, and the value `false` disables strict mode.
+You can also use the `enable_insert_strict` session variable to set strict mode. Valid values are `true` and `false`. The default value is `true`. The value `true` enables strict mode, and the value `false` disables strict mode.
+
+:::note
+
+From v3.4.0 onwards, when `enable_insert_strict` is set to `true`, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. Instead, in versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+
+:::
 
 Examples are as follows:
 
@@ -141,8 +153,11 @@ The preceding code snippet uses HDFS as an example. For detailed syntax and para
 ### INSERT
 
 ```SQL
-SET enable_insert_strict = {true | false};
-INSERT INTO <table_name> ...
+INSERT INTO [<database_name>.]<table_name>
+PROPERTIES(
+    "strict_mode" = "{true | false}"
+)
+<query_statement>
 ```
 
 For detailed syntax and parameters about INSERT, see [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md).

@@ -15,38 +15,38 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Sets;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
+public class PartitionBasedMvRefreshTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert
                     .withTable("CREATE TABLE `t1` (\n" +
@@ -105,21 +105,6 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                     "    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),\n" +
                     "    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),\n" +
                     "    ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889)");
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
@@ -344,7 +329,21 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                     "JOIN join_base_t2 t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2;");
 
         MaterializedView mv = starRocksAssert.getMv("test", "join_mv1");
-        Assert.assertEquals(Sets.newHashSet("p1", "p2", "p3"), mv.getPartitionNames());
+        Assert.assertEquals(3, mv.getPartitionNames().size());
+        Set<Range<PartitionKey>> ranges =
+                mv.getRangePartitionMap().values().stream().collect(Collectors.toSet());
+        Assert.assertEquals(3, ranges.size());
+        PartitionKey p0 = new PartitionKey(ImmutableList.of(new DateLiteral(0, 1, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        PartitionKey p1 = new PartitionKey(ImmutableList.of(new DateLiteral(2020, 7, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        PartitionKey p2 = new PartitionKey(ImmutableList.of(new DateLiteral(2020, 8, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        PartitionKey p3 = new PartitionKey(ImmutableList.of(new DateLiteral(2020, 9, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        Assert.assertTrue(ranges.contains(Range.closedOpen(p0, p1)));
+        Assert.assertTrue(ranges.contains(Range.closedOpen(p1, p2)));
+        Assert.assertTrue(ranges.contains(Range.closedOpen(p2, p3)));
         starRocksAssert.dropTable("join_base_t1");
         starRocksAssert.dropTable("join_base_t2");
         starRocksAssert.dropMaterializedView("join_mv1");

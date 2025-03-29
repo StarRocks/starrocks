@@ -45,8 +45,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDate;
 import java.util.Set;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.convertToDateRange;
 
 public class MvUtilsTest {
@@ -158,6 +160,60 @@ public class MvUtilsTest {
     @Test
     public void testConvertToDateRange() throws AnalysisException {
         {
+            LocalDate date1 = LocalDate.of(2025, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> upResult = convertToDateRange(upRange);
+            Assert.assertTrue(upResult.hasUpperBound());
+            Assert.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) upResult.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2025, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2025, 10, 1);
+            PartitionKey lower = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(lower);
+            Range<PartitionKey> lowResult = convertToDateRange(lowRange);
+            Assert.assertTrue(lowResult.hasLowerBound());
+            Assert.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) lowResult.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2025, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(1, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2025, 10, 1);
+            PartitionKey lower = PartitionKey.ofDate(date1);
+            LocalDate date2 = LocalDate.of(2025, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date2);
+            Range<PartitionKey> range = Range.atLeast(lower);
+            range = range.intersection(Range.atMost(upper));
+            Range<PartitionKey> result = convertToDateRange(range);
+            Assert.assertTrue(result.hasLowerBound());
+            Assert.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) result.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2025, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(1, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+
+            Assert.assertTrue(result.hasUpperBound());
+            Assert.assertTrue(result.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral upperDate = (DateLiteral) result.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2025, upperDate.getYear());
+            Assert.assertEquals(10, upperDate.getMonth());
+            Assert.assertEquals(10, upperDate.getDay());
+            Assert.assertEquals(0, upperDate.getHour());
+        }
+        {
             PartitionKey upper = PartitionKey.ofString("20231010");
             Range<PartitionKey> upRange = Range.atMost(upper);
             Range<PartitionKey> upResult = convertToDateRange(upRange);
@@ -212,12 +268,12 @@ public class MvUtilsTest {
     public void testResetOpAppliedRule() {
         LogicalScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         Operator op = builder.build();
-        Assert.assertFalse(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
+        Assert.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
         // set
-        Utils.setOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT);
-        Assert.assertTrue(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
+        op.setOpRuleBit(OP_PARTITION_PRUNED);
+        Assert.assertTrue(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
         // reset
-        Utils.resetOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT);
-        Assert.assertFalse(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
+        op.resetOpRuleBit(OP_PARTITION_PRUNED);
+        Assert.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
     }
 }

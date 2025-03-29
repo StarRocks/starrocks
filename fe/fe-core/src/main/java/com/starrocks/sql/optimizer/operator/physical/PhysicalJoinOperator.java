@@ -33,7 +33,7 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final JoinOperator joinType;
     protected final ScalarOperator onPredicate;
     protected final String joinHint;
-    protected boolean canLocalShuffle;
+    protected boolean outputRequireHashPartition = true;
 
     protected PhysicalJoinOperator(OperatorType operatorType, JoinOperator joinType,
                                    ScalarOperator onPredicate,
@@ -131,11 +131,11 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         }
     }
 
-    public void setCanLocalShuffle(boolean v) {
-        canLocalShuffle = v;
+    public void setOutputRequireHashPartition(boolean v) {
+        outputRequireHashPartition = v;
     }
 
-    public boolean getCanLocalShuffle() {
-        return canLocalShuffle;
+    public boolean getOutputRequireHashPartition() {
+        return outputRequireHashPartition;
     }
 }

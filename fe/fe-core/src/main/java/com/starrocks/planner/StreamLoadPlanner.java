@@ -52,7 +52,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -135,7 +135,7 @@ public class StreamLoadPlanner {
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
-    public TExecPlanFragmentParams plan(TUniqueId loadId) throws UserException {
+    public TExecPlanFragmentParams plan(TUniqueId loadId) throws StarRocksException {
         boolean isPrimaryKey = destTable.getKeysType() == KeysType.PRIMARY_KEYS;
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink
@@ -308,9 +308,9 @@ public class StreamLoadPlanner {
         TNetworkAddress coordAddress = new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
         params.setCoord(coordAddress);
 
-        LOG.info("load job id: {}, txn id: {}, parallel: {}, compress: {}, replicated: {}, quorum: {}",
-                DebugUtil.printId(loadId), streamLoadInfo.getTxnId(), queryOptions.getLoad_dop(),
-                queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(), writeQuorum);
+        LOG.debug("load job id: {}, txn id: {}, parallel: {}, compress: {}, replicated: {}, quorum: {}",
+                 DebugUtil.printId(loadId), streamLoadInfo.getTxnId(), queryOptions.getLoad_dop(),
+                 queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(), writeQuorum);
         this.execPlanFragmentParams = params;
         return params;
     }

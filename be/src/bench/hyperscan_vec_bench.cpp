@@ -42,7 +42,7 @@ public:
 private:
     const TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
     size_t _ratio = 0;
-    std::vector<ColumnPtr> _columns{};
+    Columns _columns{};
     std::shared_ptr<StringFunctionsState> _state;
     std::string _rpl_value = "";
     size_t _num_rows = 4096;
@@ -62,13 +62,13 @@ void HyperScanBench::SetUp() {
         }
     }
     _columns.push_back(std::move(column));
-    ColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
+    MutableColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
     pattern_data->append_datum(Datum(Slice("-")));
-    auto pattern_column = ConstColumn::create(pattern_data, _num_rows);
+    auto pattern_column = ConstColumn::create(std::move(pattern_data), _num_rows);
     _columns.push_back(std::move(pattern_column));
-    ColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
+    MutableColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
     rpl_data->append_datum(Datum(Slice("")));
-    auto rpl_column = ConstColumn::create(rpl_data, _num_rows);
+    auto rpl_column = ConstColumn::create(std::move(rpl_data), _num_rows);
     _columns.push_back(std::move(rpl_column));
     _state = std::make_shared<StringFunctionsState>();
     _state->options = std::make_unique<re2::RE2::Options>();

@@ -15,34 +15,17 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 public class LogicalMetaScanOperator extends LogicalScanOperator {
-    private ImmutableMap<Integer, String> aggColumnIdToNames;
-
-    public LogicalMetaScanOperator(Table table,
-                                   Map<ColumnRefOperator, Column> columnRefMap) {
-        super(OperatorType.LOGICAL_META_SCAN, table, columnRefMap, Maps.newHashMap(),
-                Operator.DEFAULT_LIMIT, null, null);
-        aggColumnIdToNames = ImmutableMap.of();
-    }
-
-    public LogicalMetaScanOperator(Table table,
-                                   Map<ColumnRefOperator, Column> columnRefMap,
-                                   Map<Integer, String> aggColumnIdToNames) {
-        super(OperatorType.LOGICAL_META_SCAN, table, columnRefMap, Maps.newHashMap(),
-                Operator.DEFAULT_LIMIT, null, null);
-        this.aggColumnIdToNames = ImmutableMap.copyOf(aggColumnIdToNames);
-    }
+    private Map<Integer, String> aggColumnIdToNames = ImmutableMap.of();
+    private List<String> selectPartitionNames = Collections.emptyList();
 
     private LogicalMetaScanOperator() {
         super(OperatorType.LOGICAL_META_SCAN);
@@ -50,6 +33,10 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
     public Map<Integer, String> getAggColumnIdToNames() {
         return aggColumnIdToNames;
+    }
+
+    public List<String> getSelectPartitionNames() {
+        return selectPartitionNames;
     }
 
     @Override
@@ -69,12 +56,17 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             return false;
         }
         LogicalMetaScanOperator that = (LogicalMetaScanOperator) o;
-        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames);
+        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
+                Objects.equals(selectPartitionNames, that.selectPartitionNames);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), aggColumnIdToNames);
+    }
+
+    public static LogicalMetaScanOperator.Builder builder() {
+        return new LogicalMetaScanOperator.Builder();
     }
 
     public static class Builder
@@ -89,6 +81,17 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         public LogicalMetaScanOperator.Builder withOperator(LogicalMetaScanOperator operator) {
             super.withOperator(operator);
             builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
+            builder.selectPartitionNames = operator.selectPartitionNames;
+            return this;
+        }
+
+        public LogicalMetaScanOperator.Builder setAggColumnIdToNames(Map<Integer, String> aggColumnIdToNames) {
+            builder.aggColumnIdToNames = aggColumnIdToNames;
+            return this;
+        }
+
+        public LogicalMetaScanOperator.Builder setSelectPartitionNames(List<String> selectPartitionNames) {
+            builder.selectPartitionNames = selectPartitionNames;
             return this;
         }
     }

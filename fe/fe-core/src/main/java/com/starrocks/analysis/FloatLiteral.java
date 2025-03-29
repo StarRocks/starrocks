@@ -76,6 +76,11 @@ public class FloatLiteral extends LiteralExpr {
         this(value, NodePosition.ZERO);
     }
 
+    public FloatLiteral(String value, Type type) throws AnalysisException {
+        this(value, NodePosition.ZERO);
+        this.type = type;
+    }
+
     public FloatLiteral(String value, NodePosition pos) throws AnalysisException {
         super(pos);
         Double floatValue = null;
@@ -230,11 +235,6 @@ public class FloatLiteral extends LiteralExpr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), value);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj);
     }
 
     @Override

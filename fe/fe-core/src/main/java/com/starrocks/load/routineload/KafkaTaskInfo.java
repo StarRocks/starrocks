@@ -40,7 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
@@ -111,7 +111,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public boolean readyToExecute() throws UserException {
+    public boolean readyToExecute() throws StarRocksException {
         if (checkReadyToExecuteFast()) {
             return true;
         }
@@ -162,7 +162,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
         KafkaRoutineLoadJob routineLoadJob = (KafkaRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
@@ -236,7 +236,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return latestPartOffset;
     }
 
-    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);

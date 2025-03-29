@@ -45,7 +45,7 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
 - **软件**
 
   - 机器必须运行 Ubuntu 22.04 或 CentOS 7.9
-  - 机器必须安装 Docker
+  - 机器必须安装 Docker, docker 版本至少为 v20.10.10
 
 ## 第一步：下载镜像
 

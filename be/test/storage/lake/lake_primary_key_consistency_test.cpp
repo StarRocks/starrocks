@@ -342,7 +342,9 @@ public:
         for (uint32_t i = 0; i < chunk_size; i++) {
             indexes[i] = i;
         }
-        return {std::make_shared<Chunk>(Columns{c0, c1, c2, c3}, _slot_cid_map), std::move(indexes)};
+        return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2), std::move(c3)},
+                                        _slot_cid_map),
+                std::move(indexes)};
     }
 
     std::pair<ChunkPtr, std::vector<uint32_t>> gen_partial_update_data() {
@@ -359,7 +361,7 @@ public:
         for (uint32_t i = 0; i < chunk_size; i++) {
             indexes[i] = i;
         }
-        return {std::make_shared<Chunk>(Columns{c0, c1}, _slot_cid_map), std::move(indexes)};
+        return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1)}, _slot_cid_map), std::move(indexes)};
     }
 
     ChunkPtr read(int64_t tablet_id, int64_t version) {
@@ -390,6 +392,7 @@ public:
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -398,6 +401,13 @@ public:
             RETURN_IF_ERROR(
                     delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
             _replayer->upsert(chunk_index.first);
+        }
+        size_t delete_size = _random_generator->random() % MaxUpsert;
+        for (int i = 0; i < delete_size; i++) {
+            auto chunk_index = gen_upsert_data(false);
+            RETURN_IF_ERROR(
+                    delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
+            _replayer->erase(chunk_index.first);
         }
         RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
         delta_writer->close();
@@ -418,6 +428,7 @@ public:
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_partial_slot_pointers)
                                                    .set_partial_update_mode(mode)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -454,6 +465,7 @@ public:
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .set_merge_condition(merge_condition)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -485,6 +497,7 @@ public:
                                                        .set_mem_tracker(_mem_tracker.get())
                                                        .set_schema_id(_tablet_schema->id())
                                                        .set_slot_descriptors(&_slot_pointers)
+                                                       .set_profile(&_dummy_runtime_profile)
                                                        .build());
             RETURN_IF_ERROR(delta_writer->open());
             size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -493,6 +506,13 @@ public:
                 RETURN_IF_ERROR(delta_writer->write(*(chunk_index.first), chunk_index.second.data(),
                                                     chunk_index.second.size()));
                 _replayer->upsert(chunk_index.first);
+            }
+            size_t delete_size = _random_generator->random() % MaxUpsert;
+            for (int i = 0; i < delete_size; i++) {
+                auto chunk_index = gen_upsert_data(false);
+                RETURN_IF_ERROR(delta_writer->write(*(chunk_index.first), chunk_index.second.data(),
+                                                    chunk_index.second.size()));
+                _replayer->erase(chunk_index.first);
             }
             RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
             delta_writer->close();
@@ -515,6 +535,7 @@ public:
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         RETURN_IF_ERROR(
@@ -625,6 +646,7 @@ protected:
     std::vector<SlotDescriptor*> _partial_slot_pointers;
     Chunk::SlotHashMap _slot_cid_map;
     int64_t _version = 0;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
 
     int _seed = 0;
     int _run_second = 0;

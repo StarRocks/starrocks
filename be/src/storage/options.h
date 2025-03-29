@@ -77,10 +77,13 @@ struct LakeIOOptions {
     // Cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool fill_data_cache = false;
+
+    bool skip_disk_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
     bool fill_metadata_cache = false;
     bool use_page_cache = false;
+    bool cache_file_only = false; // only used for CACHE SELECT
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
 };

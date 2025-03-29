@@ -1,0 +1,28 @@
+-- name: test_deltalake_schema_change
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_test_add_column order by `key`;
+-- result:
+1	None	name1	sr
+2	1	name2	sr
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_add_subfield order by col_tinyint;
+-- result:
+1	{"name":"Alice","sex":"female","age":null}
+2	{"name":"Bob","sex":"male","age":30}
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_complex_type order by col_tinyint;
+-- result:
+1	{1:{"name":"Alice","sex":"female","age":null},2:{"name":"Bob","sex":"male","age":null}}	[{"name":"Alice","sex":"female","age":null},{"name":"Bob","sex":"male","age":null}]
+2	{1:{"name":"Alice","sex":"female","age":30},2:{"name":"Bob","sex":"male","age":25}}	[{"name":"Alice","sex":"female","age":30},{"name":"Bob","sex":"male","age":25}]
+-- !result
+drop catalog delta_test_${uuid0}
+-- result:
+-- !result

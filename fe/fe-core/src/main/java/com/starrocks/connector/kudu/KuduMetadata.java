@@ -35,6 +35,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -91,7 +92,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         if (metastore.isPresent()) {
             return metastore.get().getAllDatabaseNames().stream()
                     .filter(schemaName -> !HIVE_SYSTEM_SCHEMA.contains((schemaName)))
@@ -140,7 +141,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         if (metastore.isPresent()) {
             List<String> allTableNames = metastore.get().getAllTableNames(dbName);
             return allTableNames.stream().filter(tableName -> {
@@ -170,7 +171,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         if (metastore.isPresent()) {
             return metastore.get().getDb(dbName);
         }
@@ -198,7 +199,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         if (metastore.isPresent()) {
             return metastore.get().getTable(dbName, tblName);
         }
@@ -253,7 +254,7 @@ public class KuduMetadata implements ConnectorMetadata {
 
     private String getKuduFullTableName(KuduTable table) {
         return table.getKuduTableName().orElse(
-                getKuduFullTableName(table.getDbName(), table.getTableName()));
+                getKuduFullTableName(table.getCatalogDBName(), table.getCatalogTableName()));
     }
 
     @Override
@@ -317,7 +318,7 @@ public class KuduMetadata implements ConnectorMetadata {
         long rowCount;
         if (metastore.isPresent()) {
             HivePartitionStats tableStatistics =
-                    metastore.get().getTableStatistics(kuduTable.getDbName(), kuduTable.getTableName());
+                    metastore.get().getTableStatistics(kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName());
             rowCount = tableStatistics.getCommonStats().getRowNums();
         } else {
             try {

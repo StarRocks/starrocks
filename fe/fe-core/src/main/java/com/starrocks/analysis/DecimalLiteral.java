@@ -525,8 +525,8 @@ public class DecimalLiteral extends LiteralExpr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj) && (type.matchesType(((LiteralExpr) obj).getType()));
+    public boolean equalsWithoutChild(Object obj) {
+        return super.equalsWithoutChild(obj) && (type.matchesType(((LiteralExpr) obj).getType()));
     }
 
     @Override

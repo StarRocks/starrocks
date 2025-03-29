@@ -1,0 +1,22 @@
+-- name: test_iceberg_remove_orphan_files
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}(k1 int) properties('location' = 'oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}');
+
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1;
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 2;
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 3;
+
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/data","list_files_only" = "true");
+insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} SELECT 4;
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/data","list_files_only" = "true");
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute expire_snapshots(now());
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute remove_orphan_files(now());
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute expire_snapshots(now());
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute remove_orphan_files(now());
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/data","list_files_only" = "true");
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

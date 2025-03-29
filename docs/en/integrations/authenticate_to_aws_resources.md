@@ -174,7 +174,7 @@ Creating an external catalog in your StarRocks cluster means building integratio
 StarRocks supports the following types of catalogs:
 
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
-- [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
+- [Iceberg catalog](../data_source/catalog/iceberg/iceberg_catalog.md)
 - [Hudi catalog](../data_source/catalog/hudi_catalog.md)
 - [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 

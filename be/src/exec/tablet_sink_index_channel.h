@@ -24,11 +24,10 @@
 #include <vector>
 
 #include "common/status.h"
-#include "common/tracer.h"
+#include "common/tracer_fwd.h"
 #include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
@@ -97,6 +96,7 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_rpc_timer = nullptr;
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
+    RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
 };
 
 // map index_id to TabletBEMap(map tablet_id to backend id)
@@ -189,6 +189,11 @@ private:
     void _reset_cur_chunk(Chunk* input);
     void _append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
 
+    void _try_diagnose(const std::string& error_text);
+    bool _is_diagnose_done();
+    void _wait_diagnose(RuntimeState* state);
+    bool _process_diagnose_profile(RuntimeState* state, PLoadDiagnoseResult& result);
+
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;
@@ -265,6 +270,7 @@ private:
     ExprContext* _where_clause = nullptr;
 
     bool _has_primary_replica = false;
+    RefCountClosure<PLoadDiagnoseResult>* _diagnose_closure = nullptr;
 };
 
 class IndexChannel {

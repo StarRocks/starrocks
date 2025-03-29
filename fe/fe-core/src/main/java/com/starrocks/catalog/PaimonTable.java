@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.thrift.TIcebergSchema;
+import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -25,20 +26,26 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-
 public class PaimonTable extends Table {
-    private final String catalogName;
-    private final String databaseName;
-    private final String tableName;
-    private final org.apache.paimon.table.Table paimonNativeTable;
-    private final List<String> partColumnNames;
-    private final List<String> paimonFieldNames;
+    private String catalogName;
+    private String databaseName;
+    private String tableName;
+    private org.apache.paimon.table.Table paimonNativeTable;
+    private List<String> partColumnNames;
+    private List<String> paimonFieldNames;
+    private Map<String, String> properties;
+
+    public PaimonTable() {
+        super(TableType.PAIMON);
+    }
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable, long createTime) {
@@ -59,16 +66,23 @@ public class PaimonTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return databaseName;
     }
 
-    public String getTableName() {
+    @Override
+    public String getCatalogTableName() {
         return tableName;
     }
 
     public org.apache.paimon.table.Table getNativeTable() {
         return paimonNativeTable;
+    }
+
+    // For refresh table only
+    public void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
+        this.paimonNativeTable = paimonNativeTable;
     }
 
     @Override
@@ -83,6 +97,14 @@ public class PaimonTable extends Table {
         } else {
             return paimonNativeTable.name().toString();
         }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        if (properties == null) {
+            this.properties = new HashMap<>();
+        }
+        return properties;
     }
 
     @Override
@@ -120,10 +142,28 @@ public class PaimonTable extends Table {
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
         tPaimonTable.setPaimon_native_table(encodedTable);
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
+
+        // reuse TIcebergSchema directly for compatibility.
+        TIcebergSchema tPaimonSchema = new TIcebergSchema();
+        List<DataField> paimonFields = paimonNativeTable.rowType().getFields();
+        List<TIcebergSchemaField> tIcebergFields = new ArrayList<>(paimonFields.size());
+        for (DataField field : paimonFields) {
+            tIcebergFields.add(getTIcebergSchemaField(field));
+        }
+        tPaimonSchema.setFields(tIcebergFields);
+        tPaimonTable.setPaimon_schema(tPaimonSchema);
+
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
+    }
+
+    private TIcebergSchemaField getTIcebergSchemaField(DataField field) {
+        TIcebergSchemaField tPaimonSchemaField = new TIcebergSchemaField();
+        tPaimonSchemaField.setField_id(field.id());
+        tPaimonSchemaField.setName(field.name());
+        return tPaimonSchemaField;
     }
 
     @Override

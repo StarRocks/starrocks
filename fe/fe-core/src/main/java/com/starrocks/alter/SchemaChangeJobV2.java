@@ -126,8 +126,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
-
 /*
  * Version 2 of SchemaChangeJob.
  * This is for replacing the old SchemaChangeJob
@@ -354,7 +352,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
-                            .setIndexes(indexes)
+                            .setIndexes(originIndexId == baseIndexId ?
+                                        indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
                             .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
                             .addColumns(shadowSchema)
@@ -473,14 +472,22 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            List<Integer> sortKeyColumnIndexes = null;
+            List<Integer> sortKeyColumnUniqueIds = null;
+
             long orgIndexId = indexIdMap.get(shadowIdxId);
+            if (orgIndexId == tbl.getBaseIndexId()) {
+                sortKeyColumnIndexes = sortKeyIdxes;
+                sortKeyColumnUniqueIds = sortKeyUniqueIds;
+            }
+
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyIdxes,
-                    sortKeyUniqueIds);
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyColumnIndexes,
+                    sortKeyColumnUniqueIds);
             MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
             Preconditions.checkNotNull(orgIndexMeta);
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
@@ -788,7 +795,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
 
             pruneMeta();
             tbl.onReload();
@@ -856,7 +863,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
-            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
             // drop the origin index from partitions
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
@@ -948,7 +955,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                return cancelImpl(errMsg);
+                return cancelInternal(errMsg);
             }
         } finally {
             isCancelling.set(false);

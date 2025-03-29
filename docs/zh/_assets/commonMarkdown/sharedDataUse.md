@@ -27,8 +27,7 @@ DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "storage_volume" = "def_volume",
     "datacache.enable" = "true",
-    "datacache.partition_duration" = "1 MONTH",
-    "enable_async_write_back" = "false"
+    "datacache.partition_duration" = "1 MONTH"
 );
 ```
 
@@ -59,13 +58,6 @@ PROPERTIES (
 > - 在 v3.0 版本中，该参数名称为 `storage_cache_ttl`。
 > - 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
 
-#### enable_async_write_back
-
-是否允许数据异步写入对象存储。默认值：`false`。
-
-- `true`：导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
-- `false`：只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
-
 ### 查看表信息
 
 您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md)。
@@ -85,7 +77,7 @@ StarRocks 存算分离集群中表的 `Type` 为 `CLOUD_NATIVE`。`StoragePath` 
 
 ### 向 StarRocks 存算分离集群导入数据
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../../loading/loading_introduction/Loading_intro.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../../loading/Loading_intro.md)。
 
 ### 在 StarRocks 存算分离集群查询
 
@@ -93,4 +85,4 @@ StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详�
 
 > **说明**
 >
-> StarRocks 存算分离集群暂不支持[同步物化视图](../../using_starrocks/Materialized_view-single_table.md)。
+> 自 v3.4.0 起，StarRocks 存算分离集群支持[同步物化视图](../../using_starrocks/Materialized_view-single_table.md)。

@@ -162,8 +162,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .getTable(db.getId(), mvId.getId());
-            histRefreshJobDuration = metricRegistry.histogram(MetricRegistry.name("mv_refresh_duration",
-                        db.getFullName(), mv.getName()));
+            HistogramMetric histogram = new HistogramMetric("mv_refresh_duration");
+            histogram.addLabel(new MetricLabel("db_name", db.getFullName()));
+            histogram.addLabel(new MetricLabel("mv_name", mv.getName()));
+            histRefreshJobDuration = metricRegistry.histogram(histogram.getHistogramName(), () -> histogram);
         } catch (Exception e) {
             LOG.warn("Ignore histogram metrics for materialized view: {}", mvId);
         }

@@ -14,7 +14,6 @@
 
 package com.starrocks.transaction;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -42,7 +41,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     @Override
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
@@ -51,9 +50,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
-                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
+                partition.setNextDataVersion(partitionCommitInfo.getDataVersion() + 1);
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
                 if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
@@ -71,7 +69,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         long tableId = table.getId();
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("ignored dropped partition {} when applying visible log", partitionId);
@@ -80,9 +78,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
+
+            // lake rollup will lead to version not continuously,
+            // just ingore check for now
+            // or we can persist a mocked transactionState.
             // The version of a replication transaction may not continuously
-            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                    || version == partition.getVisibleVersion() + 1);
+            //Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+            //        || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
@@ -96,7 +98,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
-                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore);
+                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
+                        txnState.getTransactionId());
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }

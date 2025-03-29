@@ -54,8 +54,12 @@ private:
 // used in global dict optimize
 class GlobalDictCodeColumnIterator final : public ColumnIteratorDecorator {
 public:
-    explicit GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data)
-            : ColumnIteratorDecorator(iter, kDontTakeOwnership), _cid(cid), _local_to_global(code_convert_data) {}
+    explicit GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data,
+                                          int32_t dict_size)
+            : ColumnIteratorDecorator(iter, kDontTakeOwnership),
+              _cid(cid),
+              _local_to_global(code_convert_data),
+              _dict_size(dict_size) {}
 
     ~GlobalDictCodeColumnIterator() override = default;
 
@@ -97,7 +101,7 @@ private:
 
 private:
     // create a new empty local dict column
-    ColumnPtr _new_local_dict_col(Column* src);
+    MutableColumnPtr _new_local_dict_col(Column* src);
     // swap null column between src and dst column
     void _swap_null_columns(Column* src, Column* dst);
 
@@ -105,6 +109,7 @@ private:
 
     // _local_to_global[-1] is accessable
     int16_t* _local_to_global;
+    int32_t _dict_size;
 
     ColumnPtr _local_dict_code_col;
 };

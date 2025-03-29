@@ -38,6 +38,7 @@ import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -135,6 +136,11 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
+    public AlterJobV2Builder rollUp() {
+        return LakeTableHelper.rollUp(this);
+    }
+
+    @Override
     public Map<String, String> getUniqueProperties() {
         Map<String, String> properties = Maps.newHashMap();
 
@@ -163,7 +169,8 @@ public class LakeTable extends OlapTable {
         properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(id));
 
         // persistent index type
-        if (enablePersistentIndex() && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
+        if (keysType == KeysType.PRIMARY_KEYS && enablePersistentIndex()
+                && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
 
@@ -173,16 +180,17 @@ public class LakeTable extends OlapTable {
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId, Database db) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
-        FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
+                                          long physicalPartitionId, Database db) {
+        FilePathInfo fsInfo = getPartitionFilePathInfo(physicalPartitionId);
+        FileCacheInfo cacheInfo = getPartitionFileCacheInfo(physicalPartitionId);
         Map<String, String> properties = new HashMap<>();
-        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
+        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, index.getShardGroupId(),
+                    null, properties,
                     StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         } catch (DdlException e) {
             LOG.error(e.getMessage(), e);
@@ -204,7 +212,10 @@ public class LakeTable extends OlapTable {
     public List<Long> getShardGroupIds() {
         List<Long> shardGroupIds = new ArrayList<>();
         for (Partition p : getAllPartitions()) {
-            shardGroupIds.add(p.getShardGroupId());
+            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                shardGroupIds.add(index.getShardGroupId());
+            }
         }
         return shardGroupIds;
     }
@@ -262,5 +273,12 @@ public class LakeTable extends OlapTable {
     @Override
     public boolean getUseFastSchemaEvolution() {
         return !hasRowStorageType() && Config.enable_fast_schema_evolution_in_share_data_mode;
+    }
+
+    @Override
+    public void checkStableAndNormal() throws DdlException {
+        if (state != OlapTableState.NORMAL) {
+            throw InvalidOlapTableStateException.of(state, getName());
+        }
     }
 }

@@ -12,7 +12,7 @@ Stops a Routine Load job.
 
 <RoutineLoadPrivNote />
 
-::: warning
+:::warning
 
 - A stopped Routine Load job cannot be resumed. Therefore, please proceed with caution when executing this statement.
 - If you only need to pause the Routine Load job, you can execute [PAUSE ROUTINE LOAD](PAUSE_ROUTINE_LOAD.md).

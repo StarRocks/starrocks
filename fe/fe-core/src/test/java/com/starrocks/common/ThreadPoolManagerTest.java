@@ -38,7 +38,7 @@ public class ThreadPoolManagerTest {
 
         List<Metric> metricList = MetricRepo.getMetricsByName("thread_pool");
 
-        Assert.assertEquals(6, metricList.size());
+        Assert.assertEquals(8, metricList.size());
         Assert.assertEquals(ThreadPoolManager.LogDiscardPolicy.class,
                 testCachedPool.getRejectedExecutionHandler().getClass());
         Assert.assertEquals(ThreadPoolManager.BlockedPolicy.class,

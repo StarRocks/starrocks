@@ -70,11 +70,8 @@ public class TableSnapshotInfo {
 
     @Override
     public String toString() {
-        return "TableSnapshotInfo{" +
-                "baseTableInfo=" + baseTableInfo +
-                ", baseTable=" + baseTable.getName() +
-                ", refreshedPartitionInfos=" + refreshedPartitionInfos +
-                '}';
+        return "baseTable=" + baseTable.getName() +
+                ", refreshedPartitionInfos=" + refreshedPartitionInfos;
     }
 
     @Override

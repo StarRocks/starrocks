@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdlib>
+#include <new>
 
 #include "common/compiler_util.h"
 
@@ -36,6 +37,9 @@ public:
     virtual void* valloc(size_t size) = 0;
     virtual void* pvalloc(size_t size) = 0;
     virtual int posix_memalign(void** ptr, size_t align, size_t size) = 0;
+
+    // Follow std::allocator::allocate() style, throw std::bad_alloc if allocate fail
+    virtual void* checked_alloc(size_t size) = 0;
 };
 
 template <class Base, class Derived>
@@ -54,6 +58,14 @@ public:
     void* pvalloc(size_t size) override { return static_cast<Derived*>(this)->pvalloc(size); }
     int posix_memalign(void** ptr, size_t align, size_t size) override {
         return static_cast<Derived*>(this)->posix_memalign(ptr, align, size);
+    }
+
+    void* checked_alloc(size_t size) override {
+        void* result = static_cast<Derived*>(this)->alloc(size);
+        if (UNLIKELY(result == nullptr)) {
+            throw std::bad_alloc();
+        }
+        return result;
     }
 };
 

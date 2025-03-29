@@ -49,6 +49,7 @@
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
@@ -63,6 +64,7 @@
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
@@ -78,6 +80,7 @@
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+#include "util/arrow/row_batch.h"
 #include "util/failpoint/fail_point.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
@@ -85,9 +88,6 @@
 #include "util/uid_util.h"
 
 namespace starrocks {
-
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
@@ -297,7 +297,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -329,6 +329,12 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (process_exit_in_progress()) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec plan fragment because of exit";
+        return;
+    }
+
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
@@ -414,6 +420,11 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
+void PInternalServiceImplBase<T>::load_diagnose(google::protobuf::RpcController* controller,
+                                                const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
+                                                google::protobuf::Closure* done) {}
+
+template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
                                                         const PExecPlanFragmentRequest* request) {
     auto ser_request = cntl->request_attachment().to_string();
@@ -439,9 +450,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
     }
 
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
-    LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
-              << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
-              << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
+    VLOG(1) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
+            << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << ", is_pipeline=" << is_pipeline
+            << ", chunk_size=" << t_request.query_options.batch_size;
     if (is_pipeline) {
         return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
@@ -537,14 +548,14 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
 
         auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
         if (!query_ctx) {
-            LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
-                                             print_id(query_id), print_id(tid));
+            VLOG(1) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
+                                           print_id(query_id), print_id(tid));
             st.to_protobuf(result->mutable_status());
             return;
         }
         if (cancel_query_ctx) {
             // cancel query_id
-            query_ctx->cancel(Status::Cancelled(reason_string));
+            query_ctx->cancel(Status::Cancelled(reason_string), true);
         } else {
             // cancel fragment
             auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
@@ -885,6 +896,27 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller,
+                                                     const PFetchArrowSchemaRequest* request,
+                                                     PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    std::shared_ptr<arrow::Schema> schema =
+            ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(UniqueId(request->finst_id()).to_thrift());
+    if (schema == nullptr) {
+        const auto status = Status::NotFound("arrow schema not found");
+        status.to_protobuf(result->mutable_status());
+        return;
+    }
+
+    std::string schema_as_str;
+    const auto status = serialize_arrow_schema(&schema, &schema_as_str);
+    if (status.ok()) {
+        result->set_schema(std::move(schema_as_str));
+    }
+    status.to_protobuf(result->mutable_status());
 }
 
 template <typename T>
@@ -1235,7 +1267,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     watch.start();
 
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         return;
     }
@@ -1246,7 +1278,24 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
+template <typename T>
+void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* cntl_base,
+                                              const PStreamLoadRequest* request, PStreamLoadResponse* response,
+                                              google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    _exec_env->batch_write_mgr()->receive_stream_load_rpc(_exec_env, cntl, request, response);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::RpcController* cntl_base,
+                                                           const PUpdateTransactionStateRequest* request,
+                                                           PUpdateTransactionStateResponse* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    _exec_env->batch_write_mgr()->update_transaction_state(request, response);
+}
+
 template class PInternalServiceImplBase<PInternalService>;
-template class PInternalServiceImplBase<doris::PBackendService>;
 
 } // namespace starrocks

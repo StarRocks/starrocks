@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }
+ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }
 ```
 
 ## 参数说明
@@ -25,13 +25,13 @@ Pipe 的名称。
 重试导入名为 `user_behavior_replica` 的 Pipe 中所有数据文件：
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY ALL;
+ALTER PIPE user_behavior_replica RETRY ALL;
 ```
 
 重试导入名为 `user_behavior_replica` 的 Pipe 中的数据文件 `s3://starrocks-examples/user_behavior_ten_million_rows.parquet`：
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-examples/user_behavior_ten_million_rows.parquet';
+ALTER PIPE user_behavior_replica RETRY FILE 's3://starrocks-examples/user_behavior_ten_million_rows.parquet';
 ```
 
 ## 相关文档

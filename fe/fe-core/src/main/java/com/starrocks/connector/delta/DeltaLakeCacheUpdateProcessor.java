@@ -41,6 +41,6 @@ public class DeltaLakeCacheUpdateProcessor implements CacheUpdateProcessor {
     @Override
     public void refreshTableBackground(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
-        cachingMetastore.refreshTableBackground(deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+        cachingMetastore.refreshTableBackground(deltaLakeTable.getCatalogDBName(), deltaLakeTable.getCatalogTableName());
     }
 }

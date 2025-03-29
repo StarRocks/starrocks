@@ -1,0 +1,1 @@
+StarRocks テーブルで実行される Routine Load ジョブは、これらの StarRocks テーブルに対して INSERT 権限を持つユーザーとしてのみ管理できます。INSERT 権限を持っていない場合は、[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) に記載されている手順に従って、StarRocks クラスターに接続するために使用するユーザーに INSERT 権限を付与してください。

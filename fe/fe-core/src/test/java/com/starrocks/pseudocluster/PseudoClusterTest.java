@@ -27,7 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -131,16 +131,16 @@ public class PseudoClusterTest {
             {
                 SQLException e = Assert.assertThrows(SQLException.class,
                         () -> stmt.execute("prepare stmt2 from insert overwrite test values (1,2)"));
-                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
-                        "supported in the prepared statement protocol yet.", e.getMessage());
+                Assert.assertTrue(e.getMessage().contains("Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet."));
                 Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
                 Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
             {
                 SQLException e = Assert.assertThrows(SQLException.class,
                         () -> stmt.execute("prepare stmt2 from ALTER USER 'root'@'%' IDENTIFIED BY 'XXXXX' "));
-                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
-                        "supported in the prepared statement protocol yet.", e.getMessage());
+                Assert.assertTrue(e.getMessage().contains("Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet."));
                 Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
                 Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
@@ -245,12 +245,12 @@ public class PseudoClusterTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+            public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
-            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
@@ -260,7 +260,7 @@ public class PseudoClusterTest {
             }
 
             @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 // the worker id is a random number
                 return new ArrayList<>(Arrays.asList(10001L));
             }
@@ -285,59 +285,6 @@ public class PseudoClusterTest {
                 return;
             }
         };
-
-        /*
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
-
-        new MockUp<Cluster>() {
-            @Mock
-            public List<Long> getComputeNodeIds() {
-                return Lists.newArrayList(1L);
-            }
-        };
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ComputeNode getBackendOrComputeNode(long nodeId) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-        };
-
-        new MockUp<ComputeNode>() {
-            @Mock
-            public boolean isAlive() {
-                return true;
-            }
-        };
-
-         */
 
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();

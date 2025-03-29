@@ -30,9 +30,8 @@ namespace starrocks {
 
 HttpResultWriter::HttpResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                    RuntimeProfile* parent_profile, TResultSinkFormatType::type format_type)
-        : _sinker(sinker),
+        : BufferControlResultWriter(sinker, parent_profile),
           _output_expr_ctxs(output_expr_ctxs),
-          _parent_profile(parent_profile),
           _format_type(format_type) {}
 
 Status HttpResultWriter::init(RuntimeState* state) {
@@ -44,23 +43,16 @@ Status HttpResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void HttpResultWriter::_init_profile() {
-    _append_chunk_timer = ADD_TIMER(_parent_profile, "AppendChunkTime");
-    _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
-    _result_send_timer = ADD_CHILD_TIMER(_parent_profile, "ResultRendTime", "AppendChunkTime");
-    _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
-}
-
 // transform one row into json format
 Status HttpResultWriter::_transform_row_to_json(const Columns& result_columns, int idx) {
-    int num_columns = result_columns.size();
+    size_t num_columns = result_columns.size();
 
     _row_str.append("{\"data\":[");
-    for (auto& result_column : result_columns) {
+    for (size_t i = 0; i < num_columns; ++i) {
         std::string row;
-        ASSIGN_OR_RETURN(row, cast_type_to_json_str(result_column, idx));
+        ASSIGN_OR_RETURN(row, cast_type_to_json_str(result_columns[i], idx));
         _row_str.append(row);
-        if (result_column != result_columns[num_columns - 1]) {
+        if (i != num_columns - 1) {
             _row_str.append(",");
         }
     }
@@ -70,11 +62,6 @@ Status HttpResultWriter::_transform_row_to_json(const Columns& result_columns, i
 
 Status HttpResultWriter::append_chunk(Chunk* chunk) {
     return Status::NotSupported("HttpResultWriter doesn't support non-pipeline engine");
-}
-
-Status HttpResultWriter::close() {
-    COUNTER_SET(_sent_rows_counter, _written_rows);
-    return Status::OK();
 }
 
 StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
@@ -144,27 +131,6 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
         TRY_CATCH_ALLOC_SCOPE_END()
     }
     return results;
-}
-
-StatusOr<bool> HttpResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
-    SCOPED_TIMER(_result_send_timer);
-    size_t num_rows = 0;
-    for (auto& result : results) {
-        num_rows += result->result_batch.rows.size();
-    }
-
-    auto status = _sinker->try_add_batch(results);
-    if (status.ok()) {
-        // success in add result to ResultQueue of _sinker
-        if (status.value()) {
-            _written_rows += num_rows;
-            results.clear();
-        }
-    } else {
-        results.clear();
-        LOG(WARNING) << "Append result batch to sink failed: status=" << status.status().to_string();
-    }
-    return status;
 }
 
 } // namespace starrocks

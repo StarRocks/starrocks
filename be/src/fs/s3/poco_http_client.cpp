@@ -30,6 +30,7 @@
 #include "common/logging.h"
 #include "fs/s3/poco_common.h"
 #include "io/s3_zero_copy_iostream.h"
+#include "util/defer_op.h"
 
 namespace starrocks::poco {
 
@@ -62,6 +63,11 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
 
             // URI may changed, because of redirection
             auto session = makeHTTPSession(poco_uri, timeouts, false);
+            DeferOp deal_error([&]() {
+                if (session->networkException() != nullptr) {
+                    session.set_not_in_good_condition();
+                }
+            });
 
             Poco::Net::HTTPRequest poco_request(Poco::Net::HTTPRequest::HTTP_1_1);
 
@@ -182,17 +188,8 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
                     // pass
                     // TODO, throttling
                 }
-                if (status_code >= ResponseCode::SUCCESS_RESPONSE_MIN &&
-                    status_code <= ResponseCode::SUCCESS_RESPONSE_MAX) {
-                    if (!poco_response.isBodyFilled()) {
-                        Poco::StreamCopier::copyStream(response_body_stream, response->GetResponseBody());
-                    }
-                } else {
-                    std::string error_message;
-                    Poco::StreamCopier::copyToString(response_body_stream, error_message);
-
-                    response->SetClientErrorType(Aws::Client::CoreErrors::NETWORK_CONNECTION);
-                    response->SetClientErrorMessage(error_message);
+                if (!poco_response.isBodyFilled()) {
+                    Poco::StreamCopier::copyStream(response_body_stream, response->GetResponseBody());
                 }
             }
 

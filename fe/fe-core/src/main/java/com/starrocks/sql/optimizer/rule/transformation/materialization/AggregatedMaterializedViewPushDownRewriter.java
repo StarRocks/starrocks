@@ -22,11 +22,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -45,7 +43,6 @@ import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -53,7 +50,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PUSH_DOWN_REWRITE;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.isSupportedAggFunctionPushDown;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils.doRewritePushDownAgg;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils.getPushDownRollupFinalAggregateOpt;
@@ -80,56 +77,18 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
     @Override
     public OptExpression doRewrite(MvRewriteContext mvContext) {
         OptExpression input = mvContext.getQueryExpression();
-
-        // try push down
-        OptExpression inputDuplicator = duplicateOptExpression(mvContext, input);
-        AggRewriteInfo rewriteInfo = process(inputDuplicator, AggregatePushDownContext.EMPTY);
+        AggRewriteInfo rewriteInfo = process(input, AggregatePushDownContext.EMPTY);
         if (rewriteInfo.hasRewritten()) {
             Optional<OptExpression> res = rewriteInfo.getOp();
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite success");
             OptExpression result = res.get();
-            Utils.setOptScanOpsBit(result, Operator.OP_PUSH_DOWN_BIT);
+            result.getOp().setOpRuleBit(OP_MV_AGG_PUSH_DOWN_REWRITE);
             return result;
         } else {
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite failed");
-            Utils.setOpBit(input, Operator.OP_PUSH_DOWN_BIT);
+            input.getOp().setOpRuleBit(OP_MV_AGG_PUSH_DOWN_REWRITE);
             return null;
         }
-    }
-
-    /**
-     * Since the aggregate pushdown rewriter may break original opt expression's structure, duplicate it first.
-     */
-    private static OptExpression duplicateOptExpression(MvRewriteContext mvRewriteContext,
-                                                        OptExpression input) {
-        Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
-                MvUtils.getColumnRefMap(input, mvRewriteContext.getMaterializationContext().getQueryRefFactory());
-
-        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvRewriteContext.getMaterializationContext());
-        OptExpression newQueryInput = duplicator.duplicate(input);
-
-        List<ColumnRefOperator> originalOutputColumns =
-                queryColumnRefMap.keySet().stream().collect(Collectors.toList());
-        List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
-        Map<ColumnRefOperator, ScalarOperator> newProjectionMap = Maps.newHashMap();
-        for (int i = 0; i < originalOutputColumns.size(); i++) {
-            newProjectionMap.put(originalOutputColumns.get(i), newQueryOutputColumns.get(i));
-        }
-        Operator newOp = newQueryInput.getOp();
-        if (newOp.getProjection() == null) {
-            newOp.setProjection(new Projection(newProjectionMap));
-        } else {
-            // merge two projections
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
-            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
-                ScalarOperator result = rewriter.rewrite(entry.getValue());
-                resultMap.put(entry.getKey(), result);
-            }
-            newOp.setProjection(new Projection(resultMap));
-        }
-        deriveLogicalProperty(newQueryInput);
-        return newQueryInput;
     }
 
     @VisibleForTesting
@@ -216,7 +175,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             }
 
             context = new AggregatePushDownContext();
-            context.setAggregator(aggOp);
+            context.setAggregator(queryColumnRefFactory, aggOp);
             return context;
         }
 
@@ -304,10 +263,11 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             if (!rewriteInfo.getRemappingUnChecked().isPresent()) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
+            OptExpression childOpt = rewriteInfo.getOp().get();
 
             final Map<ColumnRefOperator, ColumnRefOperator> remapping = rewriteInfo.getRemappingUnChecked().get().getRemapping();
             optExpression = getPushDownRollupFinalAggregateOpt(mvRewriteContext, rewriteInfo.getCtx(),
-                    remapping, optExpression, optExpression.getInputs());
+                    remapping, optExpression, List.of(childOpt));
             if (!checkAggOpt(optExpression)) {
                 logMVRewrite(mvRewriteContext, "Rollup aggregate node is invalid after agg push down");
                 return AggRewriteInfo.NOT_REWRITE;
@@ -324,8 +284,10 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                 return AggRewriteInfo.NOT_REWRITE;
             }
             // split aggregate to left/right child
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
-            Projection projection = joinOperator.getProjection();
+            LogicalJoinOperator newJoinOperator = new LogicalJoinOperator.Builder()
+                    .withOperator((LogicalJoinOperator) optExpression.getOp())
+                    .build();
+            Projection projection = newJoinOperator.getProjection();
             ReplaceColumnRefRewriter replacer = null;
             if (projection != null) {
                 replacer = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
@@ -336,27 +298,30 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             AggRewriteInfo aggRewriteInfo1 = process(optExpression.inputAt(1), rightContext);
 
             AggColumnRefRemapping combinedRemapping = new AggColumnRefRemapping();
+
+            OptExpression newChild0 = optExpression.inputAt(0);
+            OptExpression newChild1 = optExpression.inputAt(1);
             if (aggRewriteInfo0.hasRewritten()) {
-                optExpression.setChild(0, aggRewriteInfo0.getOp().get());
+                newChild0 = aggRewriteInfo0.getOp().get();
                 aggRewriteInfo0.output(combinedRemapping, context);
             }
             if (aggRewriteInfo1.hasRewritten()) {
-                optExpression.setChild(1, aggRewriteInfo1.getOp().get());
+                newChild1 = aggRewriteInfo1.getOp().get();
                 aggRewriteInfo1.output(combinedRemapping, context);
             }
             if (!combinedRemapping.isEmpty()) {
                 Map<ColumnRefOperator, ScalarOperator> newColRefMap = replaceColumnRefMap(context, combinedRemapping,
-                        joinOperator.getProjection().getColumnRefMap());
+                        newJoinOperator.getProjection().getColumnRefMap());
                 Projection newProjection = new Projection(newColRefMap);
-                joinOperator.setProjection(newProjection);
-
+                newJoinOperator.setProjection(newProjection);
             }
-            if (!checkJoinOpt(optExpression)) {
+            OptExpression newOptExpression = OptExpression.create(newJoinOperator, newChild0, newChild1);
+            if (!checkJoinOpt(newOptExpression)) {
                 logMVRewrite(mvRewriteContext, "Join node is invalid after agg push down");
                 return AggRewriteInfo.NOT_REWRITE;
             }
             return !aggRewriteInfo0.hasRewritten() && !aggRewriteInfo1.hasRewritten() ? AggRewriteInfo.NOT_REWRITE :
-                    new AggRewriteInfo(true, combinedRemapping, optExpression, context);
+                    new AggRewriteInfo(true, combinedRemapping, newOptExpression, context);
         }
 
         private Map<ColumnRefOperator, CallOperator> replaceAggregationExprs(
@@ -459,7 +424,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             List<Table> queryTables = MvUtils.getAllTables(optExpression);
 
             final List<Table> mvTables = MvUtils.getAllTables(materializationContext.getMvExpression());
-            MatchMode matchMode = MaterializedViewRewriter.getMatchMode(queryTables, mvTables);
+            MatchMode matchMode = getMatchMode(queryTables, mvTables);
             if (matchMode == MatchMode.NOT_MATCH && mvTables.stream().noneMatch(queryTables::contains)) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
@@ -484,6 +449,8 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
 
                 if (uniqueAggregations.containsKey(aggCall)) {
                     ctx.aggColRefToPushDownAggMap.put(aggColRef, aggCall);
+                    // add into remapping even if it has existed.
+                    remapping.put(aggColRef, uniqueAggregations.get(aggCall));
                     continue;
                 }
                 // NOTE: This new aggregate type is final stage's type not the immediate/partial stage type.
@@ -537,22 +504,28 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
 
         @Override
         public AggRewriteInfo visitLogicalProject(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
-            if (!rewriteInfo.getRemappingUnChecked().isPresent()) {
+            if (rewriteInfo.getRemappingUnChecked().isEmpty()) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
+            if (rewriteInfo.getOp().isEmpty()) {
+                return AggRewriteInfo.NOT_REWRITE;
+            }
+            AggColumnRefRemapping childRemapping = rewriteInfo.getRemappingUnChecked().get();
+            OptExpression childOpt = rewriteInfo.getOp().get();
+
             LogicalProjectOperator project = optExpression.getOp().cast();
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = project.getColumnRefMap();
             ColumnRefSet columnRefSet = new ColumnRefSet();
             columnRefSet.union(columnRefMap.keySet());
             columnRefSet.union(getReferencedColumnRef(columnRefMap.values()));
             Map<ColumnRefOperator, ScalarOperator> newColumnRefMap =
-                    replaceColumnRefMap(rewriteInfo.getCtx(), rewriteInfo.getRemappingUnChecked().get(),
+                    replaceColumnRefMap(rewriteInfo.getCtx(), childRemapping,
                             columnRefMap);
             LogicalProjectOperator newProject = LogicalProjectOperator.builder()
                     .withOperator(project)
                     .setColumnRefMap(newColumnRefMap)
                     .build();
-            OptExpression newOpt = OptExpression.create(newProject, optExpression.getInputs());
+            OptExpression newOpt = OptExpression.create(newProject, childOpt);
             rewriteInfo.setOp(newOpt);
             return rewriteInfo;
         }
@@ -600,21 +573,10 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         if (optExpression.getOp().getOpType() == OperatorType.LOGICAL_JOIN) {
             return new AggRewriteInfo(false, null, null, context);
         }
-
-        List<AggRewriteInfo> childAggRewriteInfoList = optExpression.getInputs().stream()
-                .map(input -> process(input, context))
-                .collect(Collectors.toList());
-        if (childAggRewriteInfoList.stream().noneMatch(AggRewriteInfo::hasRewritten)) {
-            return AggRewriteInfo.NOT_REWRITE;
+        if (optExpression.getInputs().size() > 1) {
+            return new AggRewriteInfo(false, null, null, context);
         }
-
-        // merge ColumnRefMapping generated by each child into a total one
-        Iterator<AggRewriteInfo> nextAggRewriteInfo = childAggRewriteInfoList.iterator();
-        optExpression.getInputs().replaceAll(input -> nextAggRewriteInfo.next().getOp().orElse(input));
-        AggColumnRefRemapping combinedRemapping = new AggColumnRefRemapping();
-        childAggRewriteInfoList.forEach(rewriteInfo -> rewriteInfo.getRemappingUnChecked().ifPresent(
-                combinedRemapping::combine));
-        return new AggRewriteInfo(true, combinedRemapping, optExpression, context);
+        return process(optExpression.inputAt(0), context);
     }
 
     // Check current opt to see whether push distinct agg down or not using PreVisitor

@@ -798,7 +798,7 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitSubquery(Subquery node, Context context) {
+        public ScalarOperator visitSubqueryExpr(Subquery node, Context context) {
             Preconditions.checkNotNull(context);
             QueryStatement queryStatement = node.getQueryStatement();
             QueryRelation queryRelation = queryStatement.getQueryRelation();

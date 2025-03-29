@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #ifdef WITH_TENANN
 
 #include <memory>
@@ -24,35 +26,34 @@
 namespace starrocks {
 
 // A proxy to real Ten ANN index builder
-class TenAnnIndexBuilderProxy : public VectorIndexBuilder {
+class TenAnnIndexBuilderProxy final : public VectorIndexBuilder {
 public:
     TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
-                            bool src_is_nullable)
+                            bool is_element_nullable)
             : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
-              _src_is_nullable(src_is_nullable){};
+              _is_element_nullable(is_element_nullable) {}
 
     // proxy should not clean index builder resource
     ~TenAnnIndexBuilderProxy() override { close(); };
 
     Status init() override;
 
-    Status add(const Column& data) override;
-
-    Status add(const Column& data, const Column& null_map, const size_t offset) override;
-
-    Status write(const Column& data) override;
-
-    Status write(const Column& data, const Column& null_map) override;
+    Status add(const Column& array_column, const size_t offset) override;
 
     Status flush() override;
 
-    void close();
+    void close() const;
 
 private:
-    std::shared_ptr<tenann::IndexBuilder> _index_builder;
-    uint32_t _dim = 0;
     OnceFlag _init_once;
-    bool _src_is_nullable;
+    std::shared_ptr<tenann::IndexBuilder> _index_builder = nullptr;
+    uint32_t _dim = 0;
+    // This will be true when `metric_type` is cosine_similarity and `is_vector_normed` is true.
+    // When it is true, the vector (a row of the array column) is either null or the sum of the squares of all elements
+    // equals 1.
+    bool _is_input_normalized = false;
+
+    const bool _is_element_nullable;
 };
 
 } // namespace starrocks

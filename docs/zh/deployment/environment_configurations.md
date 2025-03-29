@@ -364,7 +364,7 @@ sysctl -p
 
    ```Bash
    rpm -qa | grep ntp
-   systemctl status chrony
+   systemctl status chronyd
    ```
 
 2. 如不存在，运行以下命令安装 NTP 时间服务器。

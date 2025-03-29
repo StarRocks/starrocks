@@ -3560,6 +3560,19 @@ select REVERSE( cast ('[40360,40361]' as array<int>));
 -- result:
 [40361,40360]
 -- !result
+select bitmap_to_string(array_to_bitmap( cast ('[40360,40361]' as array<int>))) from table(generate_series(1,10,1));
+-- result:
+40360,40361
+40360,40361
+40360,40361
+40360,40361
+40360,40361
+40360,40361
+40360,40361
+40360,40361
+40360,40361
+40360,40361
+-- !result
 select array_contains( cast ('null' as array<int>), 40360);
 -- result:
 None

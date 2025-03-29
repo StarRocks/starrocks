@@ -35,6 +35,12 @@ void AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
+Status AggregateDistinctBlockingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->attach_source_observer(state, this->_observer);
+    return Status::OK();
+}
+
 StatusOr<ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 

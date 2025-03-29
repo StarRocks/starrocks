@@ -49,7 +49,6 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
@@ -339,10 +338,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return true;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static MaterializedIndexMeta read(DataInput in) throws IOException {
         String json = Text.readString(in);

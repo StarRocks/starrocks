@@ -1,4 +1,22 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "storage/rowset/binary_plain_page.h"
+
+#ifdef __SSE4_2__
+#include <emmintrin.h>
+#endif
 
 #include <cstring>
 
@@ -132,6 +150,33 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
     } else {
         DCHECK(false) << "unreachable path";
         return false;
+    }
+}
+
+template <LogicalType Type>
+void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32_t* idx, size_t size) const {
+    if (_parsed_datas.has_value()) {
+        const std::vector<Slice>& parsed_data = *_parsed_datas;
+        const Slice* parsed_data_ptr = parsed_data.data();
+        static_assert(sizeof(Slice) == sizeof(__int128));
+#ifdef __SSE4_2__
+#pragma GCC unroll 2
+        for (int i = 0; i < size; ++i) {
+            DCHECK_LT(idx[i], parsed_data.size());
+            __m128i slice = _mm_loadu_si128((__m128i_u*)(parsed_data_ptr + idx[i]));
+            _mm_storeu_si128((__m128i_u*)(dst + i), slice);
+        }
+#else
+        for (int i = 0; i < size; ++i) {
+            DCHECK_LT(idx[i], parsed_data.size());
+            dst[i] = parsed_data[idx[i]];
+        }
+#endif
+
+    } else {
+        for (int i = 0; i < size; ++i) {
+            dst[i] = string_at_index(idx[i]);
+        }
     }
 }
 

@@ -19,13 +19,19 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class DropComputeNodeClause extends ComputeNodeClause {
+    public String warehouse;
 
-    public DropComputeNodeClause(List<String> hostPorts) {
-        this(hostPorts, NodePosition.ZERO);
+    public DropComputeNodeClause(List<String> hostPorts, String warehouse) {
+        this(hostPorts, warehouse, NodePosition.ZERO);
     }
 
-    public DropComputeNodeClause(List<String> hostPorts, NodePosition pos) {
+    public DropComputeNodeClause(List<String> hostPorts, String warehouse, NodePosition pos) {
         super(hostPorts, pos);
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 
     @Override

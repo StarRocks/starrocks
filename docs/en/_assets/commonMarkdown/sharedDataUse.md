@@ -1,3 +1,5 @@
+---
+---
 
 For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
 
@@ -27,8 +29,7 @@ DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "storage_volume" = "def_volume",
     "datacache.enable" = "true",
-    "datacache.partition_duration" = "1 MONTH",
-    "enable_async_write_back" = "false"
+    "datacache.partition_duration" = "1 MONTH"
 );
 ```
 
@@ -61,12 +62,6 @@ The validity duration of the hot data. When the local disk cache is enabled, all
 >
 > This property is available only when `datacache.enable` is set to `true`.
 
-#### enable_async_write_back
-
-Whether to allow data to be written into object storage asynchronously. Default: `false`.
-- `true` When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
-- `false` (Default) When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
-
 ### View table information
 
 You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) for more information.
@@ -86,7 +81,7 @@ The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the
 
 ### Load data into a shared-data StarRocks cluster
 
-Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../../loading/loading_introduction/Loading_intro.md) for more information.
+Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../../loading/Loading_intro.md) for more information.
 
 ### Query in a shared-data StarRocks cluster
 
@@ -94,4 +89,4 @@ Tables in a shared-data StarRocks cluster support all types of queries provided 
 
 > **NOTE**
 >
-> Shared-data StarRocks clusters do not support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md).
+> Shared-data StarRocks clusters support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) from v3.4.0.

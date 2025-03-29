@@ -52,8 +52,8 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
-ColumnPtr ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
-    return ConstColumn::create(this->_data->clone_shared(), offsets.back());
+StatusOr<ColumnPtr> ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
+    return ConstColumn::create(this->_data->clone(), offsets.back());
 }
 
 void ConstColumn::fill_default(const Filter& filter) {

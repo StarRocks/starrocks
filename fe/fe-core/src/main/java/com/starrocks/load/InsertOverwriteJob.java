@@ -45,11 +45,16 @@ public class InsertOverwriteJob {
     @SerializedName(value = "sourcePartitionNames")
     private List<String> sourcePartitionNames;
 
+    @SerializedName(value = "dynamicOverwrite")
+    private boolean dynamicOverwrite = false;
 
     private transient InsertStmt insertStmt;
 
+    public InsertOverwriteJob() {
+    }
+
     public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId,
-                              long targetTableId, long warehouseId) {
+                              long targetTableId, long warehouseId, boolean dynamicOverwrite) {
         this.jobId = jobId;
         this.insertStmt = insertStmt;
         this.sourcePartitionIds = insertStmt.getTargetPartitionIds();
@@ -57,15 +62,18 @@ public class InsertOverwriteJob {
         this.targetDbId = targetDbId;
         this.targetTableId = targetTableId;
         this.warehouseId = warehouseId;
+        this.dynamicOverwrite = dynamicOverwrite;
     }
 
     // used to replay InsertOverwriteJob
-    public InsertOverwriteJob(long jobId, long targetDbId, long targetTableId, List<Long> sourcePartitionIds) {
+    public InsertOverwriteJob(long jobId, long targetDbId, long targetTableId,
+                              List<Long> sourcePartitionIds, boolean dynamicOverwrite) {
         this.jobId = jobId;
         this.targetDbId = targetDbId;
         this.targetTableId = targetTableId;
         this.sourcePartitionIds = sourcePartitionIds;
         this.jobState = InsertOverwriteJobState.OVERWRITE_PENDING;
+        this.dynamicOverwrite = dynamicOverwrite;
     }
 
     public long getJobId() {
@@ -127,5 +135,9 @@ public class InsertOverwriteJob {
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public boolean isDynamicOverwrite() {
+        return dynamicOverwrite;
     }
 }

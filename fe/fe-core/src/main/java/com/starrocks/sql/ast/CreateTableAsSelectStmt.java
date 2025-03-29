@@ -78,4 +78,9 @@ public class CreateTableAsSelectStmt extends StatementBase {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableAsSelectStatement(this, context);
     }
+
+    @Override
+    public int getTimeout() {
+        return insertStmt.getTimeout();
+    }
 }

@@ -25,6 +25,7 @@ public class LowCardinalityRewriteRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         SessionVariable session = taskContext.getOptimizerContext().getSessionVariable();
+        boolean isQuery = taskContext.getOptimizerContext().getConnectContext().getState().isQuery();
         if (!session.isEnableLowCardinalityOptimize() || !session.isUseLowCardinalityOptimizeV2()) {
             return root;
         }
@@ -32,7 +33,7 @@ public class LowCardinalityRewriteRule implements TreeRewriteRule {
         ColumnRefFactory factory = taskContext.getOptimizerContext().getColumnRefFactory();
         DecodeContext context = new DecodeContext(factory);
         {
-            DecodeCollector collector = new DecodeCollector(session);
+            DecodeCollector collector = new DecodeCollector(session, isQuery);
             collector.collect(root, context);
             if (!collector.isValidMatchChildren()) {
                 return root;

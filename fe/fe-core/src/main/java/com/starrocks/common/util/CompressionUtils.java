@@ -36,6 +36,7 @@ public class CompressionUtils {
     private static final ImmutableMap<String, TCompressionType> T_COMPRESSION_BY_NAME =
             (new ImmutableSortedMap.Builder<String, TCompressionType>(String.CASE_INSENSITIVE_ORDER))
                     .put("NO_COMPRESSION", TCompressionType.NO_COMPRESSION)
+                    .put("AUTO", TCompressionType.AUTO)
                     .put("LZ4", TCompressionType.LZ4)
                     .put("LZ4_FRAME", TCompressionType.LZ4_FRAME)
                     .put("SNAPPY", TCompressionType.SNAPPY)

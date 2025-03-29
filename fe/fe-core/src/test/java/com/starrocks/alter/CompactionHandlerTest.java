@@ -17,7 +17,7 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -86,7 +86,7 @@ public class CompactionHandlerTest {
         try {
             compactionHandler.process(alterList, db, olapTable);
             Assert.assertEquals(expectedValue, GlobalStateMgr.getCurrentState().getCompactionMgr().getPartitionStatsCount());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             e.printStackTrace();
             Assert.fail("process should not throw exceptions here");
         }
@@ -114,7 +114,7 @@ public class CompactionHandlerTest {
         List<AlterClause> alterList = Collections.singletonList((nonCompactionClause));
         try {
             compactionHandler.process(alterList, db, olapTable);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Assert.fail("process should not throw user exceptions here");
         }
     }

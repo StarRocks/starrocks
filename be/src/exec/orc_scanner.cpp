@@ -86,6 +86,9 @@ Status ORCScanner::open() {
     RETURN_IF_ERROR(_orc_reader->set_timezone(_state->timezone()));
     _orc_reader->set_runtime_state(_state);
     _orc_reader->set_case_sensitive(_case_sensitive);
+    if (_scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping) {
+        _orc_reader->set_invalid_as_null(true);
+    }
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();
@@ -226,6 +229,9 @@ Status ORCScanner::_open_next_orc_reader() {
         if (st.is_end_of_file()) {
             LOG(WARNING) << "Failed to init orc reader. filename: " << file_name << ", status: " << st.to_string();
             continue;
+        } else if (st.is_not_found() &&
+                   (_file_scan_type == TFileScanType::FILES_INSERT || _file_scan_type == TFileScanType::FILES_QUERY)) {
+            st = st.clone_and_append("Consider setting 'fill_mismatch_column_with' = 'null' property");
         }
         return st;
     }

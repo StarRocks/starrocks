@@ -14,18 +14,26 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
+
+import java.util.Map;
 
 public class EquivalentShuttleContext {
     private final RewriteContext rewriteContext;
     private final boolean isRollup;
     private boolean isUseEquivalent;
     private boolean isRewrittenByEquivalent;
+    private IRewriteEquivalent.RewriteEquivalentType rewriteEquivalentType;
+    private Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap;
 
-    public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent) {
+    public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent,
+                                    IRewriteEquivalent.RewriteEquivalentType type) {
         this.rewriteContext = rewriteContext;
         this.isRollup = isRollup;
         this.isUseEquivalent = isRewrittenByEquivalent;
+        this.rewriteEquivalentType = type;
     }
 
     public boolean isUseEquivalent() {
@@ -44,7 +52,23 @@ public class EquivalentShuttleContext {
         isRewrittenByEquivalent = rewrittenByEquivalent;
     }
 
+    public boolean isRewrittenByRewriter() {
+        return newColumnRefToAggFuncMap != null;
+    }
+
+    public void setNewColumnRefToAggFuncMap(Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap) {
+        this.newColumnRefToAggFuncMap = newColumnRefToAggFuncMap;
+    }
+
+    public Map<ColumnRefOperator, CallOperator> getNewColumnRefToAggFuncMap() {
+        return newColumnRefToAggFuncMap;
+    }
+
     public RewriteContext getRewriteContext() {
         return rewriteContext;
+    }
+
+    public IRewriteEquivalent.RewriteEquivalentType getRewriteEquivalentType() {
+        return rewriteEquivalentType;
     }
 }

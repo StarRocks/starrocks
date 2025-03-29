@@ -20,9 +20,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
@@ -50,7 +50,7 @@ public class AlterTableStatementAnalyzer {
 
         checkAlterOpConflict(alterClauseList);
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), tbl.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
         }
@@ -58,8 +58,9 @@ public class AlterTableStatementAnalyzer {
         if (alterClauseList.stream().map(AlterClause::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
             try {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
-                db.checkQuota();
-            } catch (DdlException e) {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkDataSizeQuota(db);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkReplicaQuota(db);
+            } catch (StarRocksException e) {
                 throw new SemanticException(e.getMessage());
             }
         }

@@ -19,20 +19,21 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "gutil/strings/fastmem.h"
 #include "util/slice.h"
 
 namespace starrocks {
 
 template <typename T>
-class BinaryColumnBase final : public ColumnFactory<Column, BinaryColumnBase<T>> {
-    friend class ColumnFactory<Column, BinaryColumnBase<T>>;
+class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
+    friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
 
 public:
     using ValueType = Slice;
 
     using Offset = T;
     using Offsets = Buffer<T>;
-
+    using Byte = uint8_t;
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     struct BinaryDataProxyContainer {
@@ -172,11 +173,7 @@ public:
     // No complain about the overloaded-virtual for this function
     DIAGNOSTIC_PUSH
     DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
-    void append(const Slice& str) {
-        _bytes.insert(_bytes.end(), str.data, str.data + str.size);
-        _offsets.emplace_back(_bytes.size());
-        _slices_cache = false;
-    }
+    void append(const Slice& str);
     DIAGNOSTIC_POP
 
     void append_datum(const Datum& datum) override {
@@ -220,7 +217,7 @@ public:
         _slices_cache = false;
     }
 
-    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
@@ -228,23 +225,39 @@ public:
 
     uint32_t max_one_element_serialize_size() const override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) const override {
+        // max size of one string is 2^32, so use uint32_t not T
+        auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
+        T offset = _offsets[idx];
 
-    uint32_t serialize_default(uint8_t* pos) override;
+        strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
+        strings::memcpy_inlined(pos + sizeof(uint32_t), &_bytes[offset], binary_size);
+
+        return sizeof(uint32_t) + binary_size;
+    }
+
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
+
+    void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                                         uint32_t max_one_row_size, const uint8_t* null_masks,
+                                         bool has_null) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
+
+    void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size, Buffer<uint8_t>& is_nulls,
+                                               bool& has_null) override;
 
     uint32_t serialize_size(size_t idx) const override {
         // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
         return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
-    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
+    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
 
     ColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
@@ -252,8 +265,12 @@ public:
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
     void fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const override;
+    void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void fnv_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+    void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void crc32_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 

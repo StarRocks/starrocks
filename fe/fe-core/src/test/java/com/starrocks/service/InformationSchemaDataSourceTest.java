@@ -22,7 +22,12 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -30,6 +35,7 @@ import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TKeywordInfo;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -43,9 +49,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class InformationSchemaDataSourceTest {
 
@@ -138,7 +148,7 @@ public class InformationSchemaDataSourceTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
         starRocksAssert.withTable(createTblStmtStr);
@@ -204,7 +214,7 @@ public class InformationSchemaDataSourceTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
         starRocksAssert.withTable(createTblStmtStr);
@@ -296,6 +306,14 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals("1", props.get("replication_num"));
     }
 
+    public static ZoneOffset offset(ZoneId id) {
+        return ZoneOffset.ofTotalSeconds((int) 
+            TimeUnit.MILLISECONDS.toSeconds(
+                TimeZone.getTimeZone(id).getRawOffset()        // Returns offset in milliseconds 
+            )
+        );
+    }
+
     @Test
     public void testTaskRunsEvaluation() throws Exception {
         starRocksAssert.withDatabase("d1").useDatabase("d1");
@@ -306,10 +324,12 @@ public class InformationSchemaDataSourceTest {
         taskRun.setTaskName("t_1024");
         taskRun.setState(Constants.TaskRunState.SUCCESS);
         taskRun.setDbName("d1");
-        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
-        taskRun.setProcessStartTime(
-                DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
-        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setExpireTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
         new MockUp<TaskManager>() {
             @Mock
             public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
@@ -320,7 +340,7 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
                         "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' | 'SUCCESS' | " +
-                                "NULL | 'd1' | 'insert into t1 select * from t1' | '1970-01-01 00:00:00' | 0 | " +
+                                "NULL | 'd1' | 'insert into t1 select * from t1' | '2024-01-02 03:04:05' | 0 | " +
                                 "NULL | '0%' | '' | NULL");
         starRocksAssert.query("select state, error_message" +
                         " from information_schema.task_runs where task_name = 't_1024' ")
@@ -357,5 +377,90 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.query("select state, error_message" +
                         " from information_schema.task_runs where state = 'SUCCESS' ")
                 .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testGetKeywords() throws Exception {
+        starRocksAssert.withEnableMV();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TGetKeywordsRequest req = new TGetKeywordsRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetKeywordsResponse response = impl.getKeywords(req);
+        List<TKeywordInfo> keywordList = response.getKeywords();
+
+        Assert.assertNotNull("Keywords list should not be null", keywordList);
+        Assert.assertFalse("Keywords list should not be empty", keywordList.isEmpty());
+
+        List<String> keywordNames = keywordList.stream()
+                .map(TKeywordInfo::getKeyword)
+                .collect(Collectors.toList());
+
+        Assert.assertTrue("Keywords should contain 'SELECT'", keywordNames.contains("SELECT"));
+        Assert.assertTrue("Keywords should contain 'INSERT'", keywordNames.contains("INSERT"));
+        Assert.assertTrue("Keywords should contain 'UPDATE'", keywordNames.contains("UPDATE"));
+        Assert.assertTrue("Keywords should contain 'DELETE'", keywordNames.contains("DELETE"));
+        Assert.assertTrue("Keywords should contain 'TABLE'", keywordNames.contains("TABLE"));
+        Assert.assertTrue("Keywords should contain 'INDEX'", keywordNames.contains("INDEX"));
+        Assert.assertTrue("Keywords should contain 'VIEW'", keywordNames.contains("VIEW"));
+        Assert.assertTrue("Keywords should contain 'USER'", keywordNames.contains("USER"));
+        Assert.assertTrue("Keywords should contain 'PASSWORD'", keywordNames.contains("PASSWORD"));
+
+        TKeywordInfo selectKeyword = keywordList.stream()
+                .filter(k -> k.getKeyword().equals("SELECT"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("SELECT keyword should be present", selectKeyword);
+        Assert.assertTrue("SELECT keyword should be reserved", selectKeyword.isReserved());
+
+        TKeywordInfo userKeyword = keywordList.stream()
+                .filter(k -> k.getKeyword().equals("USER"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("USER keyword should be present", userKeyword);
+        Assert.assertFalse("USER keyword should not be reserved", userKeyword.isReserved());
+    }
+
+    @Test
+    public void testGetApplicableRoles() throws Exception {
+        starRocksAssert.withEnableMV();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TGetApplicableRolesRequest req = new TGetApplicableRolesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetApplicableRolesResponse response = impl.getApplicableRoles(req);
+        List<TApplicableRolesInfo> rolesList = response.getRoles();
+
+        Assert.assertNotNull("Roles list should not be null", rolesList);
+        Assert.assertFalse("Roles list should not be empty", rolesList.isEmpty());
+
+        List<String> roleNames = rolesList.stream()
+                .map(TApplicableRolesInfo::getRole_name)
+                .collect(Collectors.toList());
+
+        Assert.assertTrue("Roles should contain 'root'", roleNames.contains("root"));
+
+        TApplicableRolesInfo adminRole = rolesList.stream()
+                .filter(r -> r.getRole_name().equals("root"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("root role should be present", adminRole);
+        Assert.assertEquals("User should be root", "root", adminRole.getUser());
+        Assert.assertEquals("Host should be %", "%", adminRole.getHost());
+        Assert.assertEquals("isGrantable should be NO", "NO", "NO");
+        Assert.assertEquals("isDefault should be NO", "NO", "NO");
+        Assert.assertEquals("isMandatory should be NO", "NO", "NO");
     }
 }

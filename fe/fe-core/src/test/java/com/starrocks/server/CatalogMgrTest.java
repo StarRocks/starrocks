@@ -123,7 +123,6 @@ public class CatalogMgrTest {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         catalogMgr.save(image.getImageWriter());
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());

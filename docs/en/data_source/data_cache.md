@@ -43,21 +43,25 @@ If you use disks as the storage media, the cache speed is directly affected by t
 
 ## Cache replacement policies
 
-StarRocks uses the [least recently used](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)) (LRU) policy to cache and discard data.
+StarRocks supports the tiered cache of memory and disk. You can also configure full memory cache only or full disk cache only according to your business requirements.
+
+When both memory cache and disk cache are used:
 
 - StarRocks first reads data from memory. If the data is not found in memory, StarRocks will read the data from disks and try to load the data read from disks into memory.
 - Data discarded from memory will be written to disks. Data discarded from disks will be deleted.
 
+Memory cache and disk cache evict cache items based on their own eviction policies. StarRocks now supports the [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used) (least recently used) and SLRU (Segmented LRU) policies to cache and evict data. The default policy is SLRU.
+
+When the SLRU policy is used, the cache space is divided into an eviction segment and a protection segment, both of which are controlled by the LRU policy. When data is accessed for the first time, it enters the eviction segment. The data in the eviction segment will enter the protection segment only when it is accessed again. If the data in the protection segment is evicted, it will enter the eviction segment again. If the data in the eviction segment is evicted, it will be removed from the cache. Compared to LRU, SLRU can better resist sudden sparse traffic and avoid protection segment data from being directly evicted by data that have only been accessed once.
+
 ## Enable Data Cache
 
-From v3.3.0, Data Cache is enabled by default.
-
-By default, the system caches data in the following ways:
+Now, Data Cache is enabled by default, and the system caches data in the following ways:
 
 - The system variables `enable_scan_datacache` and the BE parameter `datacache_enable` are set to `true` by default.
-- If the cache disk path, memory size, and disk capacity are not configured, the system will automatically select a path and set memory and disk limits by following these rules:
-  - A **datacache** directory is created as the cache directory under `storage_root_path`. (You can modify this with the BE parameter `datacache_disk_path`.)
-  - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 70%, and dynamically adjusts according to subsequent disk usage. (You can modify this behavior with the BE parameters `datacache_disk_high_level`, `datacache_disk_safe_level`, and `datacache_disk_low_level`.)
+- A **datacache** directory is created as the cache directory under `storage_root_path`. From v3.4.0 onwards, directly changing the disk cache path is no longer supported. If you want to set a path, you can create a Symbolic Link.
+- If the memory and disk limits are not configured, the system will automatically set memory and disk limits by following these rules:
+  - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 80%, and dynamically adjusts according to subsequent disk usage. (You can modify this behavior with the BE parameters `datacache_disk_high_level`, `datacache_disk_safe_level`, and `datacache_disk_low_level`.)
   - The default memory limit for Data Cache is `0`. (You can modify this with the BE parameter `datacache_mem_size`.)
 - The system adopts asynchronous cache population by default to minimize its impact on data read operations.
 - The I/O adaptor feature is enabled by default. When the disk I/O load is high, the system will automatically route some requests to remote storage to reduce disk pressure.
@@ -112,6 +116,70 @@ StarRocks supports populating Data Cache in synchronous or asynchronous mode.
   In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
 
 From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md).
+
+### Persistence
+
+The cached data in disks can be persistent by default, and these data can be reused after BE restarts.
+
+## Check whether a query hits data cache
+
+You can check whether a query hits data cache by analyzing the following metrics in the query profile:
+
+- `DataCacheReadBytes`: the size of data that StarRocks reads directly from its memory and disks.
+- `DataCacheWriteBytes`: the size of data loaded from an external storage system to StarRocks' memory and disks.
+- `BytesRead`: the total amount of data that is read, including data that StarRocks reads from an external storage system, and its memory and disks.
+
+Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and only a few data (518.73 MB) from the memory and disks. This means that few data caches were hit.
+
+```Plain
+ - Table: lineorder
+ - DataCacheReadBytes: 518.73 MB
+   - __MAX_OF_DataCacheReadBytes: 4.73 MB
+   - __MIN_OF_DataCacheReadBytes: 16.00 KB
+ - DataCacheReadCounter: 684
+   - __MAX_OF_DataCacheReadCounter: 4
+   - __MIN_OF_DataCacheReadCounter: 0
+ - DataCacheReadTimer: 737.357us
+ - DataCacheWriteBytes: 7.65 GB
+   - __MAX_OF_DataCacheWriteBytes: 64.39 MB
+   - __MIN_OF_DataCacheWriteBytes: 0.00 
+ - DataCacheWriteCounter: 7.887K (7887)
+   - __MAX_OF_DataCacheWriteCounter: 65
+   - __MIN_OF_DataCacheWriteCounter: 0
+ - DataCacheWriteTimer: 23.467ms
+   - __MAX_OF_DataCacheWriteTimer: 62.280ms
+   - __MIN_OF_DataCacheWriteTimer: 0ns
+ - BufferUnplugCount: 15
+   - __MAX_OF_BufferUnplugCount: 2
+   - __MIN_OF_BufferUnplugCount: 0
+ - BytesRead: 7.65 GB
+   - __MAX_OF_BytesRead: 64.39 MB
+   - __MIN_OF_BytesRead: 0.00
+```
+
+Example 2: In this example, StarRocks reads a large amount of data (46.08 GB) from data cache and no data from the external storage system, which means StarRocks reads data only from data cache.
+
+```Plain
+Table: lineitem
+- DataCacheReadBytes: 46.08 GB
+ - __MAX_OF_DataCacheReadBytes: 194.99 MB
+ - __MIN_OF_DataCacheReadBytes: 81.25 MB
+- DataCacheReadCounter: 72.237K (72237)
+ - __MAX_OF_DataCacheReadCounter: 299
+ - __MIN_OF_DataCacheReadCounter: 118
+- DataCacheReadTimer: 856.481ms
+ - __MAX_OF_DataCacheReadTimer: 1s547ms
+ - __MIN_OF_DataCacheReadTimer: 261.824ms
+- DataCacheWriteBytes: 0.00 
+- DataCacheWriteCounter: 0
+- DataCacheWriteTimer: 0ns
+- BufferUnplugCount: 1.231K (1231)
+ - __MAX_OF_BufferUnplugCount: 81
+ - __MIN_OF_BufferUnplugCount: 35
+- BytesRead: 46.08 GB
+ - __MAX_OF_BytesRead: 194.99 MB
+ - __MIN_OF_BytesRead: 81.25 MB
+```
 
 ## Footer Cache
 
@@ -181,66 +249,6 @@ After automatic scaling is enabled:
 - When the disk usage is consistently below the threshold specified by the BE parameter `datacache_disk_low_level` (default value is `60`, that is, 60% of disk space), and the current disk space used by Data Cache is full, the system will automatically expand the cache capacity.
 - When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `datacache_disk_safe_level` (default value is `70`, that is, 70% of disk space).
 
-## Check whether a query hits data cache
-
-You can check whether a query hits data cache by analyzing the following metrics in the query profile:
-
-- `DataCacheReadBytes`: the amount of data that StarRocks reads directly from its memory and disks.
-- `DataCacheWriteBytes`: the amount of data loaded from an external storage system to StarRocks' memory and disks.
-- `BytesRead`: the total amount of data that is read, including data that StarRocks reads from an external storage system, its memory, and disks.
-
-Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and only a few data (518.73 MB) from the memory and disks. This means that few data caches were hit.
-
-```Plain
- - Table: lineorder
- - DataCacheReadBytes: 518.73 MB
-   - __MAX_OF_DataCacheReadBytes: 4.73 MB
-   - __MIN_OF_DataCacheReadBytes: 16.00 KB
- - DataCacheReadCounter: 684
-   - __MAX_OF_DataCacheReadCounter: 4
-   - __MIN_OF_DataCacheReadCounter: 0
- - DataCacheReadTimer: 737.357us
- - DataCacheWriteBytes: 7.65 GB
-   - __MAX_OF_DataCacheWriteBytes: 64.39 MB
-   - __MIN_OF_DataCacheWriteBytes: 0.00 
- - DataCacheWriteCounter: 7.887K (7887)
-   - __MAX_OF_DataCacheWriteCounter: 65
-   - __MIN_OF_DataCacheWriteCounter: 0
- - DataCacheWriteTimer: 23.467ms
-   - __MAX_OF_DataCacheWriteTimer: 62.280ms
-   - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
-```
-
-Example 2: In this example, StarRocks reads a large amount of data (46.08 GB) from data cache and no data from the external storage system, which means StarRocks reads data only from data cache.
-
-```Plain
-Table: lineitem
-- DataCacheReadBytes: 46.08 GB
- - __MAX_OF_DataCacheReadBytes: 194.99 MB
- - __MIN_OF_DataCacheReadBytes: 81.25 MB
-- DataCacheReadCounter: 72.237K (72237)
- - __MAX_OF_DataCacheReadCounter: 299
- - __MIN_OF_DataCacheReadCounter: 118
-- DataCacheReadTimer: 856.481ms
- - __MAX_OF_DataCacheReadTimer: 1s547ms
- - __MIN_OF_DataCacheReadTimer: 261.824ms
-- DataCacheWriteBytes: 0.00 
-- DataCacheWriteCounter: 0
-- DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
-```
-
 ## Configurations and variables
 
 You can configure Data Cache using the following system variables and BE parameters.
@@ -255,8 +263,6 @@ You can configure Data Cache using the following system variables and BE paramet
 ### BE Parameters
 
 - [datacache_enable](../administration/management/BE_configuration.md#datacache_enable)
-- [datacache_disk_path](../administration/management/BE_configuration.md#datacache_disk_path)
-- [datacache_meta_path](../administration/management/BE_configuration.md#datacache_meta_path)
 - [datacache_mem_size](../administration/management/BE_configuration.md#datacache_mem_size)
 - [datacache_disk_size](../administration/management/BE_configuration.md#datacache_disk_size)
 - [datacache_auto_adjust_enable](../administration/management/BE_configuration.md#datacache_auto_adjust_enable)
@@ -266,3 +272,5 @@ You can configure Data Cache using the following system variables and BE paramet
 - [datacache_disk_adjust_interval_seconds](../administration/management/BE_configuration.md#datacache_disk_adjust_interval_seconds)
 - [datacache_disk_idle_seconds_for_expansion](../administration/management/BE_configuration.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../administration/management/BE_configuration.md#datacache_min_disk_quota_for_adjustment)
+- [datacache_eviction_policy](../administration/management/BE_configuration.md#datacache_eviction_policy)
+- [datacache_inline_item_count_limit](../administration/management/BE_configuration.md#datacache_inline_item_count_limit)

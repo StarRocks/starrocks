@@ -10,6 +10,7 @@ create external catalog delta_test_${uuid0} PROPERTIES (
     "aws.s3.endpoint"="${oss_endpoint}"
 );
 
+set enable_connector_incremental_scan_ranges = false;
 set enable_profile=true;
 
 function: assert_trace_times_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp;", "TraceDefaultJsonHandler.ReadJsonFile")

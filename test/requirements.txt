@@ -17,3 +17,6 @@ thrift-sasl
 PyHive
 timeout_decorator
 DBUtils
+adbc-driver-manager==1.2.0
+adbc-driver-flightsql==1.2.0
+pyarrow==17.0.0

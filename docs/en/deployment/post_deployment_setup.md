@@ -30,28 +30,24 @@ StarRocks automatically assigns an empty password to the `root` user when the cl
    SET PASSWORD = PASSWORD('<password>')
    ```
 
-> **NOTE**
->
-> - Keep the password properly after resetting it. If you forgot the password, see [Reset lost root password](../administration/user_privs/User_privilege.md#reset-lost-root-password) for detailed instructions.
-> - After completing the post-deployment setup, you can create new users and roles to manage the privileges within your team. See [Manage user privileges](../administration/user_privs/User_privilege.md) for detailed instructions.
+:::note
+- Keep the password properly after resetting it. If you forgot the password, see [Reset lost root password](../administration/user_privs/User_privilege.md#reset-lost-root-password) for detailed instructions.
+- After completing the post-deployment setup, you can create new users and roles to manage the privileges within your team. See [Manage user privileges](../administration/user_privs/User_privilege.md) for detailed instructions.
+:::
 
 ## Set necessary system variables
 
 To allow your StarRocks cluster to work properly in production, you need to set the following system variables:
 
-| **Variable name**                   | **StarRocks Version** | **Recommended value**                                        | **Description**                                              |
-| ----------------------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| is_report_success                   | v2.4 or earlier       | false                                                        | The boolean switch that controls whether to send the profile of a query for analysis. The default value is `false`, which means no profile is required. Setting this variable to `true` can affect the concurrency of StarRocks. |
-| enable_profile                      | v2.5 or later         | false                                                        | The boolean switch that controls whether to send the profile of a query for analysis. The default value is `false`, which means no profile is required. Setting this variable to `true` can affect the concurrency of StarRocks. |
-| enable_pipeline_engine              | v2.3 or later         | true                                                         | The boolean switch that controls whether to enable the pipeline execution engine. `true` indicates enabled and `false` indicates the opposite. Default value: `true`. |
-| parallel_fragment_exec_instance_num | v2.3 or later         | If you have enabled the pipeline engine, you can set this variable to `1`.If you have not enabled the pipeline engine, you should set it to half the number of CPU cores. | The number of instances used to scan nodes on each BE. The default value is `1`. |
-| pipeline_dop                        | v2.3, v2.4, and v2.5  | 0                                                            | The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: `0`, indicating the system automatically adjusts the parallelism of each pipeline instance.<br />From v3.0 onwards, StarRocks adaptively adjusts this parameter based on query parallelism. |
+###  enable_profile                      
 
-- Set `is_report_success` to `false` globally:
+#### Description
+The boolean switch that controls whether to send the profile of a query for analysis. 
+The default value is `false`, which means no profile is required. 
+Setting this variable to `true` can affect the concurrency of StarRocks. 
 
-  ```SQL
-  SET GLOBAL is_report_success = false;
-  ```
+#### Recommended value
+false
 
 - Set `enable_profile` to `false` globally:
 
@@ -59,22 +55,34 @@ To allow your StarRocks cluster to work properly in production, you need to set 
   SET GLOBAL enable_profile = false;
   ```
 
+###  enable_pipeline_engine              
+
+#### Description
+The boolean switch that controls whether to enable the pipeline execution engine. 
+`true` indicates enabled and `false` indicates the opposite. Default value: `true`. 
+
+#### Recommended value
+true
+
 - Set `enable_pipeline_engine` to `true` globally:
 
   ```SQL
   SET GLOBAL enable_pipeline_engine = true;
   ```
 
+###  parallel_fragment_exec_instance_num 
+
+#### Description
+The number of instances used to scan nodes on each BE. The default value is `1`. 
+
+#### Recommended value
+If you have enabled the pipeline engine, you can set this variable to `1`.
+If you have not enabled the pipeline engine, you should set it to half the number of CPU cores.
+
 - Set `parallel_fragment_exec_instance_num` to `1` globally:
 
   ```SQL
   SET GLOBAL parallel_fragment_exec_instance_num = 1;
-  ```
-
-- Set `pipeline_dop` to `0` globally:
-
-  ```SQL
-  SET GLOBAL pipeline_dop = 0;
   ```
 
 For more information about system variables, see [System variables](../sql-reference/System_variable.md).

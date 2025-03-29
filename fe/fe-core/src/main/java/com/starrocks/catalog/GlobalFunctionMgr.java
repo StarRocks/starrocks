@@ -17,7 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -76,12 +76,12 @@ public class GlobalFunctionMgr {
     }
 
     private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
-            throws UserException {
+            throws StarRocksException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (allowExists && createIfNotExists) {
             // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
-            throw new UserException(
+            throw new StarRocksException(
                     "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
         }
         if (!isReplay) {
@@ -91,7 +91,7 @@ public class GlobalFunctionMgr {
                         LOG.info("create function [{}] which already exists", functionName);
                         return;
                     } else if (!allowExists) {
-                        throw new UserException("function already exists");
+                        throw new StarRocksException("function already exists");
                     }
                 }
             }
@@ -128,7 +128,8 @@ public class GlobalFunctionMgr {
         function.setFunctionId(-functionId);
     }
 
-    public synchronized void userAddFunction(Function f, boolean allowExists, boolean createIfNotExists) throws UserException {
+    public synchronized void userAddFunction(Function f, boolean allowExists, boolean createIfNotExists) throws
+            StarRocksException {
         addFunction(f, false, allowExists, createIfNotExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
@@ -136,12 +137,12 @@ public class GlobalFunctionMgr {
     public synchronized void replayAddFunction(Function f) {
         try {
             addFunction(f, true, false, false);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Preconditions.checkArgument(false);
         }
     }
 
-    private void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+    private void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
@@ -149,7 +150,7 @@ public class GlobalFunctionMgr {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
-            throw new UserException("Unknown function, function=" + function.toString());
+            throw new StarRocksException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
         ImmutableList.Builder<Function> builder = ImmutableList.builder();
@@ -165,7 +166,7 @@ public class GlobalFunctionMgr {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
-            throw new UserException("Unknown function, function=" + function.toString());
+            throw new StarRocksException("Unknown function, function=" + function.toString());
         }
         ImmutableList<Function> newFunctions = builder.build();
         if (newFunctions.isEmpty()) {
@@ -175,7 +176,7 @@ public class GlobalFunctionMgr {
         }
     }
 
-    public synchronized void userDropFunction(FunctionSearchDesc f, boolean dropIfExists) throws UserException {
+    public synchronized void userDropFunction(FunctionSearchDesc f, boolean dropIfExists) throws StarRocksException {
         dropFunction(f, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(f);
     }
@@ -183,7 +184,7 @@ public class GlobalFunctionMgr {
     public synchronized void replayDropFunction(FunctionSearchDesc f) {
         try {
             dropFunction(f, false);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Preconditions.checkArgument(false);
         }
     }

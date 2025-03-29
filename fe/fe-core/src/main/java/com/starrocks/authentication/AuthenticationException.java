@@ -12,15 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
-public class AuthenticationException extends Exception {
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.StarRocksException;
+
+public class AuthenticationException extends StarRocksException {
     public AuthenticationException(String msg) {
         super(msg);
     }
 
     public AuthenticationException(String msg, Exception e) {
         super(msg, e);
+    }
+
+    public AuthenticationException(ErrorCode errorCode, Object... objs) {
+        super(errorCode, objs);
     }
 }

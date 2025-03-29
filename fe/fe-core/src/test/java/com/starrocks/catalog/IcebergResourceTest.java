@@ -16,7 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -42,7 +42,7 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         String name = "iceberg0";
         String type = "iceberg";
         String catalogType = "HIVE";
@@ -72,7 +72,7 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";

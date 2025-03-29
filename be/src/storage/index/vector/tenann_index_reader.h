@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef WITH_TENANN
 #pragma once
 
 #include "common/status.h"
@@ -45,3 +46,4 @@ private:
 };
 
 } // namespace starrocks
+#endif

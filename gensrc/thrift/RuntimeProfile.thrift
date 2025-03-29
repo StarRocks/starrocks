@@ -56,6 +56,10 @@ struct TCounter {
   2: required Metrics.TUnit type
   3: required i64 value 
   5: optional TCounterStrategy strategy 
+  
+  // Added to reduce the total number of counters
+  6: optional i64 min_value
+  7: optional i64 max_value
 }
 
 // A single runtime profile

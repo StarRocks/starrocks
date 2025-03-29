@@ -1,0 +1,120 @@
+-- name: test_vector_index_insert @sequential
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
+CREATE TABLE t1 (
+    id bigint(20) NOT NULL,
+    v1 ARRAY<FLOAT> NOT NULL,
+    v2 ARRAY<FLOAT> NULL,
+    INDEX index_vector (v1) USING VECTOR (
+        "index_type" = "hnsw", 
+        "dim"="5", 
+        "metric_type" = "cosine_similarity", 
+        "is_vector_normed" = "true", 
+        "M" = "16", 
+        "efconstruction" = "40")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT into t1 values 
+    (1, null, null);
+
+INSERT into t1 values 
+    (1, [null, null, null, null, null], [1,2,3,4,5]);
+
+INSERT into t1 values 
+    (1, [1,2,3,4], [1,2,3,4]);
+
+INSERT into t1 values 
+    (1, [], []);
+
+INSERT INTO t1 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]);
+
+INSERT INTO t1 values
+    (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242], 
+        [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242]),
+    (2, [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093],
+        [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093]),
+    (3, [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152],
+        [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152]),
+    (4, [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152],
+        null);
+
+
+INSERT INTO t1 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]),
+    (3, null, null);
+
+INSERT INTO t1 values
+    (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242], 
+        [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242]),
+    (4, null, null),
+    (2, [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093],
+        [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093]),
+    (3, [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152],
+        [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152]),
+    (3, null, null),
+    (5, null, null),
+    (6, null, null),
+    (7, null, null),
+    (8, null, null),
+    (9, null, null),
+    (10, null, null);
+
+select * from t1 order by id;
+
+
+CREATE TABLE t2 (
+    id bigint(20) NOT NULL,
+    v1 ARRAY<FLOAT> NOT NULL,
+    v2 ARRAY<FLOAT> NULL,
+    INDEX index_vector (v1) USING VECTOR (
+        "index_type" = "hnsw", 
+        "dim"="5", 
+        "metric_type" = "cosine_similarity", 
+        "is_vector_normed" = "false", 
+        "M" = "16", 
+        "efconstruction" = "40")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t2 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]),
+    (3, [4,5,6,null,8], [4,5,6,null,8]),
+    (4, [null, null, null, null], [null, null, null, null]),
+    (5, [4,5,6,7,8], null);
+
+
+INSERT INTO t2 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7], [4,5,6,7,8]),
+    (3, [4,5,6,null,8], [4,5,6,null,8]),
+    (4, [null, null, null, null], [null, null, null, null]),
+    (5, [4,5,6,7,8], null);
+
+
+select * from t2 order by id, v1, v2;
+
+
+insert into t1 select * from t2;
+insert into t1 select * from t1;
+select * from t1 order by id, v1, v2;
+
+insert into t2 select * from t1;
+insert into t2 select id, v2, v1 from t2;
+select * from t2 order by id, v1, v2;
+
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

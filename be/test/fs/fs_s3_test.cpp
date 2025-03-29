@@ -21,7 +21,8 @@
 #include <fstream>
 
 #include "common/config.h"
-#include "fs/fs_s3.cpp"
+#include "common/s3_uri.h"
+#include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
 #include "testutil/assert.h"
 #include "util/uid_util.h"

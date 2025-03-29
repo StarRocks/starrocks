@@ -15,8 +15,11 @@
 package com.starrocks.catalog.system.sys;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -29,8 +32,7 @@ import com.starrocks.common.util.concurrent.lock.LockInfo;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.LockChecker;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -50,7 +52,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SysFeLocks {
-
     public static final String NAME = "fe_locks";
 
     public static SystemTable create() {
@@ -82,7 +83,10 @@ public class SysFeLocks {
         // authorize
         try {
             if (authenticate) {
-                Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {
             throw new TException(e.getMessage(), e);
@@ -105,14 +109,13 @@ public class SysFeLocks {
                     lockItem.setHold_time_ms(currentTime - owner.getLockAcquireTimeMs());
 
                     JsonObject ownerInfo = new JsonObject();
-                    ownerInfo.addProperty("threadId", owner.getLocker().getLockerThread().getId());
-                    ownerInfo.addProperty("threadName", owner.getLocker().getLockerThread().getName());
+                    ownerInfo.addProperty("threadId", owner.getLocker().getThreadId());
+                    ownerInfo.addProperty("threadName", owner.getLocker().getThreadName());
                     lockItem.setThread_info(ownerInfo.toString());
 
-                    Collection<Thread> threads = lockInfo.getWaiters().stream().map(LockHolder::getLocker)
-                            .map(Locker::getLockerThread).collect(Collectors.toList());
-                    lockItem.setWaiter_list(LockChecker.getLockWaiterInfoJsonArray(threads).toString());
-
+                    List<String> waiters = lockInfo.getWaiters().stream().map(LockHolder::getLocker)
+                            .map(Locker::toString).collect(Collectors.toList());
+                    lockItem.setWaiter_list(Joiner.on(",").join(waiters));
                     response.addToItems(lockItem);
                 }
             }

@@ -9,9 +9,9 @@ distribution type: GATHER
 cardinality: 2
 column statistics:
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+* sum-->[0.0, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
-* expr-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+* expr-->[0.0, 129.42348008385744, 0.0, 8.0, 2.0] ESTIMATE
 
 PLAN FRAGMENT 1(F15)
 
@@ -25,9 +25,9 @@ OutPut Exchange Id: 36
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 8.0, 2.0] ESTIMATE
 |
 34:Project
 |  output columns:
@@ -36,7 +36,7 @@ OutPut Exchange Id: 36
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 8.0, 2.0] ESTIMATE
 |
 33:AGGREGATE (merge finalize)
 |  aggregate: sum[([72: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([73: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -44,9 +44,9 @@ OutPut Exchange Id: 36
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 8.0, 2.0] ESTIMATE
 |
 32:EXCHANGE
 distribution type: SHUFFLE
@@ -66,7 +66,7 @@ OutPut Exchange Id: 32
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
 |
 30:Project
@@ -81,7 +81,7 @@ OutPut Exchange Id: 32
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 264791.38809599995] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 8.0, 264792.38809599995] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 8.0, 264792.38809599995] ESTIMATE
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -99,7 +99,7 @@ OutPut Exchange Id: 32
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 264791.38809599995] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 8.0, 264792.38809599995] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 8.0, 264792.38809599995] ESTIMATE
 |
 |----28:EXCHANGE
 |       distribution type: BROADCAST
@@ -373,7 +373,7 @@ actualRows=0, avgRowSize=33.0
 cardinality: 145100
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 145100.0] ESTIMATE
-* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
 
 PLAN FRAGMENT 8(F02)
 

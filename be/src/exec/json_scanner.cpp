@@ -94,7 +94,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = "Unrecognized json format, stop json loader.";
         LOG(WARNING) << err_msg;
-        return Status::DataQualityError(err_msg);
+        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
     }
     if (!status.ok()) {
         if (status.is_end_of_file()) {
@@ -110,6 +110,9 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
             // return Status::EndOfFile("EOF of reading json file, nothing read");
             return src_chunk;
         } else if (status.is_time_out()) {
+            if (src_chunk->is_empty()) {
+                _reusable_empty_chunk.swap(src_chunk);
+            }
             // if timeout happens at the beginning of reading src_chunk, we return the error state
             // else we will _materialize the lines read before timeout and return ok()
             return status;
@@ -236,11 +239,17 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
                 strings::Substitute("Invalid json path: $0, error: $1", jsonpath, simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
+        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
     }
 }
 
 Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
+    if (_reusable_empty_chunk) {
+        DCHECK(_reusable_empty_chunk->is_empty());
+        _reusable_empty_chunk.swap(*chunk);
+        return Status::OK();
+    }
+
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
     *chunk = std::make_shared<Chunk>();
     size_t slot_size = _src_slot_descriptors.size();
@@ -253,7 +262,7 @@ Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
 
         // The columns in source chunk are all in AdaptiveNullableColumn type;
         auto col = ColumnHelper::create_column(_json_types[column_pos], true, false, 0, true);
-        (*chunk)->append_column(col, slot_desc->id());
+        (*chunk)->append_column(std::move(col), slot_desc->id());
     }
 
     return Status::OK();
@@ -283,7 +292,13 @@ Status JsonScanner::_open_next_reader() {
     }
     _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors,
                                                     _json_types, range_desc);
-    RETURN_IF_ERROR(_cur_file_reader->open());
+    st = _cur_file_reader->open();
+    // Timeout can happen when reading data from a TimeBoundedStreamLoadPipe.
+    // In this case, open file should be successful, and just need to try to
+    // read data next time
+    if (!st.ok() && !st.is_time_out()) {
+        return st;
+    }
     _next_range++;
     return Status::OK();
 }
@@ -300,7 +315,7 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
         }
 
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[column_pos]->evaluate_checked(nullptr, src_chunk.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), col);
+        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), std::move(col));
         cast_chunk->append_column(std::move(col), slot->id());
     }
 
@@ -768,7 +783,8 @@ Status JsonReader::_check_ndjson() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << c << "]";
-            return Status::DataQualityError(fmt::format("illegal json started with {}", c));
+            return Status::DataQualityError(
+                    format_json_parse_error_msg(fmt::format("illegal json started with {}", c)));
         }
     }
     return Status::OK();

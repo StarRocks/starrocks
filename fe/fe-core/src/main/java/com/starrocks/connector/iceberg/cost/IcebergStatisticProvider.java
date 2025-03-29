@@ -125,7 +125,7 @@ public class IcebergStatisticProvider {
                 }
             }
 
-            PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
+            PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
                     version.end().get(), predicate);
             IcebergFileStats icebergFileStats;
             if (!icebergFileStatistics.containsKey(key)) {

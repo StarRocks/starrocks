@@ -167,7 +167,7 @@ Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spill
             return Status::OK();
         }
         SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-        auto chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
+        ChunkPtr chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
         bool need_aligned = _runtime_state->spill_enable_direct_io();
 
         RETURN_IF_ERROR(serde->serialize(_runtime_state, serde_ctx, chunk, output, need_aligned));
@@ -187,6 +187,8 @@ void OrderedMemTable::reset() {
     SpillableMemTable::reset();
     _chunk_slice.reset(nullptr);
     _chunk.reset();
+    _permutation.clear();
+    _permutation.shrink_to_fit();
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {

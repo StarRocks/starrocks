@@ -22,13 +22,14 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.StarRocksLoggerFactory;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.plan.ExecPlan;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -42,8 +43,6 @@ import java.util.stream.Collectors;
  * MV trace utils to help mv refresh trace in task runs.
  */
 public class MVTraceUtils {
-
-    private static final Logger LOG = LogManager.getLogger(MVTraceUtils.class);
 
     /**
      * Extract refreshed/scanned base table and its refreshed partition names
@@ -94,7 +93,7 @@ public class MVTraceUtils {
         List<String> partitionColumnNames = hiveTable.getPartitionColumnNames();
         List<String> selectedPartitionNames;
         if (hiveTable.isUnPartitioned()) {
-            selectedPartitionNames = Lists.newArrayList(hiveTable.getTableName());
+            selectedPartitionNames = Lists.newArrayList(hiveTable.getCatalogTableName());
         } else {
             Collection<Long> selectedPartitionIds = hdfsScanNode.getScanNodePredicates().getSelectedPartitionIds();
             List<PartitionKey> selectedPartitionKey = Lists.newArrayList();
@@ -106,5 +105,20 @@ public class MVTraceUtils {
                     PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).collect(Collectors.toList());
         }
         return selectedPartitionNames;
+    }
+
+    private static String getLogPrefix(MaterializedView mv) {
+        if (mv == null || Strings.isNullOrEmpty(mv.getName())) {
+            return "";
+        } else {
+            return mv.getName();
+        }
+    }
+
+    /**
+     * Get logger with mv name prefix.
+     */
+    public static Logger getLogger(MaterializedView mv, Class<?> clazz) {
+        return new StarRocksLoggerFactory(getLogPrefix(mv)).getLogger(clazz);
     }
 }

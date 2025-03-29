@@ -34,12 +34,16 @@
 
 #include "runtime/buffer_control_block.h"
 
+#include <arrow/record_batch.h>
+#include <arrow/type.h>
+
 #include <utility>
 
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
 #include "util/defer_op.h"
+#include "util/race_detect.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -96,13 +100,17 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
           _is_cancelled(false),
           _buffer_bytes(0),
           _buffer_limit(buffer_size),
-          _packet_num(0) {}
+          _packet_num(0),
+          _arrow_rows_limit(buffer_size * 4096),
+          _arrow_rows(0) {}
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();
 
     _batch_queue.clear();
+    _arrow_batch_queue.clear();
     _buffer_bytes = 0;
+    _arrow_rows = 0;
 }
 
 Status BufferControlBlock::init() {
@@ -129,6 +137,25 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     }
 
     _process_batch_without_lock(ser_res);
+    return Status::OK();
+}
+
+Status BufferControlBlock::add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result) {
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
+    }
+
+    std::unique_lock<std::mutex> l(_lock);
+    while ((_arrow_batch_queue.size() > _buffer_limit || _arrow_rows > _arrow_rows_limit) && !_is_cancelled) {
+        _data_removal.wait(l);
+    }
+
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
+    }
+
+    _process_arrow_batch_without_lock(result);
+
     return Status::OK();
 }
 
@@ -160,44 +187,29 @@ void BufferControlBlock::_process_batch_without_lock(std::unique_ptr<SerializeRe
     }
 }
 
-StatusOr<bool> BufferControlBlock::try_add_batch(std::unique_ptr<TFetchDataResult>& result) {
-    if (_is_cancelled) {
-        return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
-    }
-    std::unique_lock<std::mutex> l(_lock);
-    if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
-        return false;
-    }
-    l.unlock();
-    ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()))
-    l.lock();
-    _process_batch_without_lock(ser_res);
-    return true;
+void BufferControlBlock::_process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result) {
+    _arrow_rows += result->num_rows();
+    _arrow_batch_queue.push_back(std::move(result));
+    _data_arriaval.notify_one();
 }
 
-StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results) {
+Status BufferControlBlock::add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results) {
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
-    std::unique_lock<std::mutex> l(_lock);
-    if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
-        return false;
-    }
-    if (_is_cancelled) {
-        return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
-    }
-    l.unlock();
-    // serialize first
     for (auto& result : results) {
-        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()))
-        l.lock();
-        _buffer_bytes += ser_res->attachment.length();
-        _batch_queue.push_back(std::move(ser_res));
-        _data_arriaval.notify_one();
-        l.unlock();
+        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()));
+        result.reset();
+        {
+            std::unique_lock<std::mutex> l(_lock);
+            _buffer_bytes += ser_res->attachment.length();
+            _batch_queue.push_back(std::move(ser_res));
+            l.unlock();
+            _data_arriaval.notify_one();
+        }
     }
 
-    l.lock();
+    std::unique_lock<std::mutex> l(_lock);
     if (!_waiting_rpc.empty() && !_batch_queue.empty()) {
         std::unique_ptr<SerializeRes> ser = std::move(_batch_queue.front());
         _batch_queue.pop_front();
@@ -209,11 +221,35 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         l.unlock();
         ctx->on_data(ser.get(), packet_num);
     }
-    return true;
+
+    return Status::OK();
+}
+
+bool BufferControlBlock::is_full() const {
+    if (_is_cancelled) {
+        return false;
+    }
+    std::unique_lock<std::mutex> l(_lock);
+    if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
+        return true;
+    }
+    if (_is_cancelled) {
+        return false;
+    }
+    return false;
+}
+
+void BufferControlBlock::cancel_pending_rpc() {
+    std::unique_lock<std::mutex> l(_lock);
+    while (!_batch_queue.empty()) {
+        _buffer_bytes -= _batch_queue.front()->attachment.length();
+        _batch_queue.pop_front();
+    }
 }
 
 // seems no use?
 Status BufferControlBlock::get_batch(TFetchDataResult* result) {
+    auto notify = defer_notify();
     std::unique_ptr<SerializeRes> ser = nullptr;
     {
         std::unique_lock<std::mutex> l(_lock);
@@ -262,6 +298,7 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
 }
 
 void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
+    auto notify = defer_notify();
     std::unique_lock<std::mutex> l(_lock);
     if (!_status.ok()) {
         ctx->on_failure(_status);
@@ -288,6 +325,40 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     }
     // no ready data, push ctx to waiting list
     _waiting_rpc.push_back(ctx);
+}
+
+Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result) {
+    std::unique_lock<std::mutex> l(_lock);
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
+    }
+
+    while (_arrow_batch_queue.empty() && !_is_close && !_is_cancelled) {
+        _data_arriaval.wait(l);
+    }
+
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
+    }
+
+    if (!_arrow_batch_queue.empty()) {
+        const auto batch = std::move(_arrow_batch_queue.front());
+        *result = batch;
+        _arrow_batch_queue.pop_front();
+        _arrow_rows -= batch->num_rows();
+        _data_removal.notify_one();
+        return Status::OK();
+    }
+
+    if (_is_close) {
+        return Status::OK();
+    }
+
+    return Status::InternalError("Internal error, BufferControlBlock::get_arrow_batch");
 }
 
 Status BufferControlBlock::close(Status exec_status) {

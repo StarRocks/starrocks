@@ -148,9 +148,9 @@ public class DesensitizedInfoCollector {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation relation, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation relation, Void context) {
             collectRelationDict(relation);
-            super.visitSubquery(relation, context);
+            super.visitSubqueryRelation(relation, context);
             return null;
         }
 

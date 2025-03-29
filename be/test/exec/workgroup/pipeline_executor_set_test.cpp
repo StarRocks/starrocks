@@ -24,36 +24,35 @@ namespace starrocks::workgroup {
 PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
     CpuUtil::CpuIds empty_cpuids;
     CpuUtil::CpuIds cpuids{0, 1, 2, 3, 4, 5, 6, 7};
-
     /// check enable_cpu_borrowing
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true, nullptr);
         ASSERT_FALSE(config.enable_cpu_borrowing);
     }
 
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, false);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, false, nullptr);
         ASSERT_FALSE(config.enable_cpu_borrowing);
     }
 
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, true);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, true, nullptr);
         ASSERT_TRUE(config.enable_cpu_borrowing);
     }
 
     /// check cpuids
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true, nullptr);
         ASSERT_EQ(0, config.total_cpuids.size());
     }
 
     {
-        PipelineExecutorSetConfig config(0, 2, 2, 2, cpuids, false, true);
+        PipelineExecutorSetConfig config(0, 2, 2, 2, cpuids, false, true, nullptr);
         ASSERT_EQ(0, config.total_cpuids.size());
     }
 
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, cpuids, false, true);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, cpuids, false, true, nullptr);
         ASSERT_EQ(2, config.total_cpuids.size());
         for (int i = 0; i < 2; i++) {
             ASSERT_EQ(i, config.total_cpuids[i]);
@@ -61,7 +60,7 @@ PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
     }
 
     {
-        PipelineExecutorSetConfig config(8, 2, 2, 2, cpuids, false, true);
+        PipelineExecutorSetConfig config(8, 2, 2, 2, cpuids, false, true, nullptr);
         ASSERT_EQ(8, config.total_cpuids.size());
         for (int i = 0; i < 8; i++) {
             ASSERT_EQ(i, config.total_cpuids[i]);
@@ -69,7 +68,7 @@ PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
     }
 
     {
-        PipelineExecutorSetConfig config(100, 2, 2, 2, cpuids, false, true);
+        PipelineExecutorSetConfig config(100, 2, 2, 2, cpuids, false, true, nullptr);
         ASSERT_EQ(8, config.total_cpuids.size());
         for (int i = 0; i < 8; i++) {
             ASSERT_EQ(i, config.total_cpuids[i]);

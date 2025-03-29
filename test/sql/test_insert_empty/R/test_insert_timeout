@@ -1,0 +1,63 @@
+-- name: test_insert_timeout
+
+create database db_${uuid0};
+use db_${uuid0};
+
+set query_timeout = 2;
+select sleep(4);
+-- result:
+[REGEX].*reached its timeout of 2 seconds.*
+-- !result
+set query_timeout = 300;
+
+create table t1(k1 int);
+
+set insert_timeout = 2;
+insert into t1 select sleep(4);
+-- result:
+[REGEX].*reached its timeout of 2 seconds.*
+-- !result
+
+set insert_timeout = 10;
+insert into t1 select sleep(4);
+-- result:
+-- !result
+select * from t1;
+-- result:
+1
+-- !result
+truncate table t1;
+-- result:
+-- !result
+
+set insert_timeout = 2;
+insert into t1 properties("timeout" = "10") select sleep(4);
+-- result:
+-- !result
+select * from t1;
+-- result:
+1
+-- !result
+truncate table t1;
+-- result:
+-- !result
+
+set insert_timeout = 2;
+create table t2 as select sleep(4) as k1;
+-- result:
+[REGEX].*reached its timeout of 2 seconds.*
+-- !result
+
+set insert_timeout = 10;
+create table t2 as select sleep(4) as k1;
+-- result:
+-- !result
+select * from t2;
+-- result:
+1
+-- !result
+truncate table t2;
+-- result:
+-- !result
+
+set insert_timeout = 14400;

@@ -74,8 +74,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
@@ -143,6 +143,8 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
+    private boolean enableDynamicOverwrite = false;
+    private boolean isFromOverwrite = false;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -160,7 +162,7 @@ public class OlapTableSink extends DataSink {
             for (int i = 0; i < this.tupleDescriptor.getSlots().size(); ++i) {
                 SlotDescriptor slot = this.tupleDescriptor.getSlots().get(i);
                 if (slot.getColumn().isAutoIncrement()) {
-                    this.autoIncrementSlotId = i;
+                    this.autoIncrementSlotId = slot.getId().asInt();
                     break;
                 }
             }
@@ -229,7 +231,15 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = mode;
     }
 
-    public void complete(String mergeCondition) throws UserException {
+    public void setDynamicOverwrite(boolean enableDynamicOverwrite) {
+        this.enableDynamicOverwrite = enableDynamicOverwrite;
+    }
+
+    public void setIsFromOverwrite(boolean isFromOverwrite) {
+        this.isFromOverwrite = isFromOverwrite;
+    }
+
+    public void complete(String mergeCondition) throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
             tSink.setMerge_condition(mergeCondition);
@@ -238,7 +248,16 @@ public class OlapTableSink extends DataSink {
     }
 
     public List<Long> getOpenPartitions() {
-        if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
+        // if load start after shema change, we should open all of the partitions to avoid different schema during schema change
+        // if load start before schema change, it will be finished in waiting_txn state
+        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            return partitionIds;
+        }
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            return new ArrayList<>(Collections.singletonList(
+                    dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
+        }
+        if (isFromOverwrite || !enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
                 || partitionIds.size() < Config.max_load_initial_open_partition_number) {
             return partitionIds;
         }
@@ -255,7 +274,7 @@ public class OlapTableSink extends DataSink {
     }
 
     // must called after tupleDescriptor is computed
-    public void complete() throws UserException {
+    public void complete() throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
 
         tSink.setTable_id(dstTable.getId());
@@ -266,6 +285,9 @@ public class OlapTableSink extends DataSink {
         if (optionalPartition.isPresent()) {
             long partitionId = optionalPartition.get().getId();
             numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+        }
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            tSink.setDynamic_overwrite(true);
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
@@ -296,7 +318,7 @@ public class OlapTableSink extends DataSink {
                 tSink2.unsetPartition();
                 tSink2.unsetLocation();
                 TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
-                        enableAutomaticPartition, automaticBucketSize, doubleWritePartitionIds);
+                        false, automaticBucketSize, doubleWritePartitionIds);
                 tSink2.setPartition(partitionParam2);
                 tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, warehouseId));
                 tSink2.setIgnore_out_of_partition(true);
@@ -364,6 +386,7 @@ public class OlapTableSink extends DataSink {
                     .stream()
                     .map(column -> column.isShadowColumn() ? column.getName() : column.getColumnId().getId())
                     .collect(Collectors.toList()));
+            boolean isShadow = indexMeta.getSchema().stream().anyMatch(column -> column.isShadowColumn());
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getColumnId().getId());
@@ -388,6 +411,7 @@ public class OlapTableSink extends DataSink {
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
             indexSchema.setColumn_to_expr_value(columnToExprValue);
+            indexSchema.setIs_shadow(isShadow);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -452,7 +476,7 @@ public class OlapTableSink extends DataSink {
         return schemaParam;
     }
 
-    private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws UserException {
+    private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws StarRocksException {
         List<String> distColumns = Lists.newArrayList();
         switch (distInfo.getType()) {
             case HASH: {
@@ -466,7 +490,7 @@ public class OlapTableSink extends DataSink {
                 break;
             }
             default:
-                throw new UserException("unsupported distributed type, type=" + distInfo.getType());
+                throw new StarRocksException("unsupported distributed type, type=" + distInfo.getType());
         }
         return distColumns;
     }
@@ -486,7 +510,7 @@ public class OlapTableSink extends DataSink {
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
                                                            long automaticBucketSize,
-                                                           List<Long> partitionIds) throws UserException {
+                                                           List<Long> partitionIds) throws StarRocksException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -646,7 +670,7 @@ public class OlapTableSink extends DataSink {
                 break;
             }
             default: {
-                throw new UserException("unsupported partition for OlapTable, partition=" + partType);
+                throw new StarRocksException("unsupported partition for OlapTable, partition=" + partType);
             }
         }
         LOG.debug("partitionParam: {}", partitionParam);
@@ -722,14 +746,15 @@ public class OlapTableSink extends DataSink {
 
     private static DistributionInfo setDistributedColumns(TOlapTablePartitionParam partitionParam,
                                                           DistributionInfo selectedDistInfo,
-                                                          Partition partition, OlapTable table) throws UserException {
+                                                          Partition partition, OlapTable table) throws
+            StarRocksException {
         DistributionInfo distInfo = partition.getDistributionInfo();
         if (selectedDistInfo == null) {
             partitionParam.setDistributed_columns(getDistColumns(distInfo, table));
             return distInfo;
         } else {
             if (selectedDistInfo.getType() != distInfo.getType()) {
-                throw new UserException("different distribute types in two different partitions, type1="
+                throw new StarRocksException("different distribute types in two different partitions, type1="
                         + selectedDistInfo.getType() + ", type2=" + distInfo.getType());
             }
         }
@@ -737,7 +762,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
-                                                         boolean enableReplicatedStorage) throws UserException {
+                                                         boolean enableReplicatedStorage) throws StarRocksException {
         return createLocation(table, partitionParam, enableReplicatedStorage,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
@@ -752,7 +777,7 @@ public class OlapTableSink extends DataSink {
 
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
-                                                         long warehouseId) throws UserException {
+                                                         long warehouseId) throws StarRocksException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
@@ -761,13 +786,13 @@ public class OlapTableSink extends DataSink {
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
-        for (TOlapTablePartition partition : partitionParam.getPartitions()) {
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(partition.getId());
+        for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
             // `selectedBackedIds` keeps the selected backendIds for 1st index which will be used to choose the later index's
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
-            LOG.debug("partition: {}, physical partition: {}", partition, physicalPartition);
+            LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
             for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
@@ -782,7 +807,7 @@ public class OlapTableSink extends DataSink {
                         Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(infoService);
                         if (bePathsMap.keySet().size() < quorum) {
-                            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
                                     String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                                     "tablet_id: %s, replicas: %s. Check quorum number failed" +
                                                     "(OlapTableSink): BeReplicaSize:%s, quorum:%s",

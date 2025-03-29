@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.thrift.TStorageType;
 import org.apache.logging.log4j.LogManager;
@@ -40,19 +39,29 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
-    public AlterJobV2 build() throws UserException {
+    public AlterJobV2 build() throws StarRocksException {
         long tableId = table.getId();
+        if (optimizeClause.getPartitionDesc() != null) {
+            LOG.info("Merge partition job {} is created, table: {}", jobId, table.getName());
+            MergePartitionJob mergePartitionJob = new MergePartitionJob(jobId, dbId, tableId, table.getName(),
+                    timeoutMs, optimizeClause);
+            mergePartitionJob.setWarehouseId(warehouseId);
+            return mergePartitionJob;
+        }
         if (!Config.enable_online_optimize_table || optimizeClause.getKeysDesc() != null
                 || optimizeClause.getPartitionDesc() != null || optimizeClause.getSortKeys() != null
                 || table.getStorageType() == TStorageType.COLUMN_WITH_ROW
                 || !table.enableReplicatedStorage()
                 || table.isCloudNativeTableOrMaterializedView()) {
+            LOG.info("Optimize job {} is created, table: {}", jobId, table.getName());
             OptimizeJobV2 optimizeJob = new OptimizeJobV2(jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
+            optimizeJob.setWarehouseId(warehouseId);
             return optimizeJob;
         } else {
-            LOG.info("Online optimize job is created, table: {}", table.getName());
+            LOG.info("Online optimize job {} is created, table: {}", jobId, table.getName());
             OnlineOptimizeJobV2 onlineOptimizeJob = new OnlineOptimizeJobV2(
                     jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
+            onlineOptimizeJob.setWarehouseId(warehouseId);
             return onlineOptimizeJob;
         }
     }

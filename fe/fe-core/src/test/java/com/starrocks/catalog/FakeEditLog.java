@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.backup.BackupJob;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -110,6 +111,10 @@ public class FakeEditLog extends MockUp<EditLog> {
     @Mock
     public void logAddReplica(ReplicaPersistInfo info) {
 
+    }
+
+    @Mock
+    public void logBackupJob(BackupJob job) {
     }
 
     public TransactionState getTransaction(long transactionId) {

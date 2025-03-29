@@ -14,7 +14,9 @@
 
 package com.starrocks.statistic.sample;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
@@ -25,23 +27,21 @@ import java.util.Map;
 
 public class TabletSampleManager {
 
-    private static double HIGH_WEIGHT_READ_RATIO = 0.001;
+    private static double HIGH_WEIGHT_READ_RATIO = 0.005;
 
-    private static double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.01;
+    private static double MEDIUM_HIGH_WEIGHT_READ_RATIO = 0.1;
 
-    private static double MEDIUM_LOW_WEIGHT_READ_RATIO = 0.1;
+    private static double MEDIUM_LOW_WEIGHT_READ_RATIO = 0.2;
 
     private static double LOW_WEIGHT_READ_RATIO = 0.8;
 
-
     private static long HIGH_WEIGHT_ROWS_THRESHOLD = 10000000L;
-
 
     private static long MEDIUM_HIGH_WEIGHT_ROWS_THRESHOLD = 1000000L;
 
-
     private static long MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD = 100000L;
 
+    public static long MAX_ROW_COUNT_BY_BLOCK_SAMPLE = 1000000000;
 
     private final SampleTabletSlot highWeight;
 
@@ -52,7 +52,6 @@ public class TabletSampleManager {
     private final SampleTabletSlot lowWeight;
 
     private final long sampleRowsLimit;
-
 
     public static TabletSampleManager init(Map<String, String> properties, Table table) {
         double highSampleRatio = Double.parseDouble(properties.getOrDefault(StatsConstants.HIGH_WEIGHT_SAMPLE_RATIO,
@@ -73,8 +72,9 @@ public class TabletSampleManager {
         manager.classifyTablet(table);
         return manager;
     }
+
     private TabletSampleManager(double highSampleRatio, double mediumHighRatio, double mediumLowRatio, double lowRatio,
-                               int maxSize, long sampleRowsLimit) {
+                                int maxSize, long sampleRowsLimit) {
         this.highWeight = new SampleTabletSlot(highSampleRatio, HIGH_WEIGHT_READ_RATIO, maxSize);
         this.mediumHighWeight = new SampleTabletSlot(mediumHighRatio, MEDIUM_HIGH_WEIGHT_READ_RATIO, maxSize);
         this.mediumLowWeight = new SampleTabletSlot(mediumLowRatio, MEDIUM_LOW_WEIGHT_READ_RATIO, maxSize);
@@ -83,29 +83,33 @@ public class TabletSampleManager {
     }
 
     private void classifyTablet(Table table) {
-        for (Partition p : table.getPartitions()) {
-            if (!p.hasData()) {
-                continue;
-            }
-            long partitionId = p.getId();
-            for (Tablet tablet : p.getBaseIndex().getTablets()) {
-                long tabletId = tablet.getId();
-                long rowCount = tablet.getFuzzyRowCount();
-                TabletStats tabletStats = new TabletStats(tabletId, partitionId, rowCount);
-                if (rowCount >= HIGH_WEIGHT_ROWS_THRESHOLD) {
-                    highWeight.addTabletStats(tabletStats);
-                } else if (rowCount >= MEDIUM_HIGH_WEIGHT_ROWS_THRESHOLD) {
-                    mediumHighWeight.addTabletStats(tabletStats);
-                } else if (rowCount >= MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD) {
-                    mediumLowWeight.addTabletStats(tabletStats);
-                } else {
-                    lowWeight.addTabletStats(tabletStats);
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            for (Partition logicalPartition : olapTable.getPartitions()) {
+                if (!logicalPartition.hasData()) {
+                    continue;
+                }
+                for (PhysicalPartition physicalPartition : logicalPartition.getSubPartitions()) {
+                    for (Tablet tablet : physicalPartition.getBaseIndex().getTablets()) {
+                        long tabletId = tablet.getId();
+                        long rowCount = tablet.getFuzzyRowCount();
+                        TabletStats tabletStats = new TabletStats(tabletId, physicalPartition.getId(), rowCount);
+                        if (rowCount >= HIGH_WEIGHT_ROWS_THRESHOLD) {
+                            highWeight.addTabletStats(tabletStats);
+                        } else if (rowCount >= MEDIUM_HIGH_WEIGHT_ROWS_THRESHOLD) {
+                            mediumHighWeight.addTabletStats(tabletStats);
+                        } else if (rowCount >= MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD) {
+                            mediumLowWeight.addTabletStats(tabletStats);
+                        } else if (rowCount > 0) {
+                            lowWeight.addTabletStats(tabletStats);
+                        }
+                    }
                 }
             }
         }
     }
 
-    public SampleInfo generateSampleInfo(String dbName, String tableName) {
+    public SampleInfo generateSampleInfo() {
         List<TabletStats> highWeightTablets = highWeight.sampleTabletStats();
         List<TabletStats> mediumHighWeightTablets = mediumHighWeight.sampleTabletStats();
         List<TabletStats> mediumLowWeightTablets = mediumLowWeight.sampleTabletStats();
@@ -137,9 +141,7 @@ public class TabletSampleManager {
         long totalRows = Math.max(highWeight.getRowCount() + mediumHighWeight.getRowCount()
                 + mediumLowWeight.getRowCount() + lowWeight.getRowCount(), 1);
 
-
         return new SampleInfo(
-                dbName, tableName,
                 sampleTablets * 1.0 / totalTablets,
                 sampleRows, totalRows,
                 highWeightTablets,

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exec/hdfs_scanner.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 
@@ -21,8 +22,8 @@ namespace starrocks {
 
 class PaimonDeleteFileBuilder {
 public:
-    PaimonDeleteFileBuilder(FileSystem* fs, std::set<int64_t>* need_skip_rowids)
-            : _fs(fs), _need_skip_rowids(need_skip_rowids) {}
+    PaimonDeleteFileBuilder(FileSystem* fs, SkipRowsContextPtr skip_rows_ctx)
+            : _fs(fs), _skip_rows_ctx(std::move(skip_rows_ctx)) {}
     ~PaimonDeleteFileBuilder() = default;
     Status build(const TPaimonDeletionFile* paimon_deletion_file);
 
@@ -33,7 +34,7 @@ private:
     }
 
     FileSystem* _fs;
-    std::set<int64_t>* _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx;
 
     // Structure of a deletion file is: 1 byte version num + n * {4 bytes deletion vector length + 4 bytes magic num
     // + (length - 4) bytes bitmap + 4 bytes CRC num}, n is equal to num of data files

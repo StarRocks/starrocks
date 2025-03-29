@@ -30,7 +30,7 @@ namespace starrocks {
 TEST(ObjectColumnTest, HLL_test_filter) {
     // keep all.
     {
-        auto c = ColumnHelper::create_column(TypeDescriptor::create_hll_type(), false);
+        ColumnPtr c = ColumnHelper::create_column(TypeDescriptor::create_hll_type(), false);
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -40,7 +40,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
     }
     // filter all.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
 
         Filter filter(100, 0);
@@ -49,7 +49,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
     }
     // filter out the last 10 elements.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -62,7 +62,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
     }
     // filter out the first 10 elements.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -75,7 +75,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
     }
     // filter out half elements.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -92,7 +92,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
 TEST(ObjectColumnTest, HLL_test_filter_range) {
     // keep all.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -102,7 +102,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
     }
     // filter all.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
 
         Filter filter(100, 0);
@@ -111,7 +111,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
     }
     // filter out the last 10 elements.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -121,7 +121,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
     }
     // filter out the first 10 elements.
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -131,7 +131,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
     }
     // filter 12 elements in the middle
     {
-        auto c = HyperLogLogColumn::create();
+        HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
@@ -143,7 +143,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
 
 // NOLINTNEXTLINE
 TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
-    auto c = HyperLogLogColumn::create();
+    HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
     c->append(HyperLogLog());
 
     auto ret = c->upgrade_if_overflow();
@@ -153,8 +153,8 @@ TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
 
 // NOLINTNEXTLINE
 TEST(ObjectColumnTest, test_append_value_multiple_times) {
-    auto src_col = BitmapColumn::create();
-    auto copy_col = BitmapColumn::create();
+    BitmapColumn::Ptr src_col = BitmapColumn::create();
+    BitmapColumn::Ptr copy_col = BitmapColumn::create();
 
     BitmapValue bitmap;
     for (size_t i = 0; i < 64; i++) {
@@ -173,7 +173,7 @@ TEST(ObjectColumnTest, test_append_value_multiple_times) {
 
 // NOLINTNEXTLINE
 TEST(ObjectColumnTest, test_object_column_downgrade) {
-    auto c = HyperLogLogColumn::create();
+    HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
     c->append(HyperLogLog());
 
     auto ret = c->downgrade();
@@ -184,7 +184,7 @@ TEST(ObjectColumnTest, test_object_column_downgrade) {
 
 // NOLINTNEXTLINE
 TEST(ObjectColumnTest, HLL_test_reset_column) {
-    auto c = HyperLogLogColumn::create();
+    HyperLogLogColumn::Ptr c = HyperLogLogColumn::create();
 
     c->append(HyperLogLog());
     c->append(HyperLogLog());
@@ -203,8 +203,8 @@ TEST(ObjectColumnTest, HLL_test_reset_column) {
 
 // NOLINTNEXTLINE
 TEST(ObjectColumnTest, HLL_test_swap_column) {
-    auto c1 = HyperLogLogColumn::create();
-    auto c2 = HyperLogLogColumn::create();
+    HyperLogLogColumn::Ptr c1 = HyperLogLogColumn::create();
+    HyperLogLogColumn::Ptr c2 = HyperLogLogColumn::create();
 
     c1->append(HyperLogLog());
     c1->append(HyperLogLog());
@@ -229,7 +229,7 @@ TEST(ObjectColumnTest, HLL_test_swap_column) {
 TEST(ObjectColumnTest, Percentile_test_swap_column) {
     Columns columns;
     FunctionContext* ctx = FunctionContext::create_test_context();
-    auto s = DoubleColumn::create();
+    DoubleColumn::Ptr s = DoubleColumn::create();
     s->append(1);
     s->append(2);
     s->append(3);
@@ -243,7 +243,7 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     ASSERT_EQ(2, percentile->get_object(1)->quantile(1));
     ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
 
-    auto s1 = DoubleColumn::create();
+    DoubleColumn::Ptr s1 = DoubleColumn::create();
     s1->append(4);
     columns.clear();
     columns.push_back(s1);

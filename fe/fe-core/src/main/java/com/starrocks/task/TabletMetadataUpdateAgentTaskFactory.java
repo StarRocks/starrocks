@@ -20,6 +20,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletSchema;
@@ -62,6 +63,13 @@ public class TabletMetadataUpdateAgentTaskFactory {
     public static TabletMetadataUpdateAgentTask createIsInMemoryUpdateTask(long backendId,
                                                                            List<Pair<Long, Boolean>> inMemoryConfigs) {
         return new UpdateIsInMemoryTask(backendId, inMemoryConfigs);
+    }
+
+    public static TabletMetadataUpdateAgentTask createLakePersistentIndexUpdateTask(long backendId, Set<Long> tablets,
+                                                                                    boolean enablePersistentIndex,
+                                                                                    String persistentIndexType) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdateLakePersistentIndexTask(backendId, tablets, enablePersistentIndex, persistentIndexType);
     }
 
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
@@ -138,7 +146,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 }
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(tabletId);
-                metaInfo.setPartition_id(tabletMeta.getPartitionId());
+                metaInfo.setPartition_id(tabletMeta.getPhysicalPartitionId());
                 metaInfo.setMeta_type(TTabletMetaType.PARTITIONID);
                 metaInfos.add(metaInfo);
                 // add at most 10000 tablet meta during one sync to avoid too large task
@@ -197,6 +205,45 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(pair.first);
                 metaInfo.setEnable_persistent_index(pair.second);
+                metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateLakePersistentIndexTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private boolean enablePersistentIndex;
+        private String persistentIndexType;
+
+        private UpdateLakePersistentIndexTask(long backendId, Set<Long> tablets,
+                boolean enablePersistentIndex, String persistentIndexType) {
+            super(backendId, Objects.hash(tablets, enablePersistentIndex, persistentIndexType));
+            this.tablets = tablets;
+            this.enablePersistentIndex = enablePersistentIndex;
+            this.persistentIndexType = persistentIndexType;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setEnable_persistent_index(enablePersistentIndex);
+                if (persistentIndexType.equalsIgnoreCase("CLOUD_NATIVE")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.CLOUD_NATIVE);
+                } else if (persistentIndexType.equalsIgnoreCase("LOCAL")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.LOCAL);
+                } else {
+                    throw new IllegalArgumentException("Unknown persistent index type: " + persistentIndexType);
+                }
                 metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 metaInfos.add(metaInfo);
             }
@@ -267,7 +314,9 @@ public class TabletMetadataUpdateAgentTaskFactory {
                                        boolean createSchemaFile) {
             super(backendId, tablets.hashCode());
             this.tablets = new ArrayList<>(tablets);
-            this.tabletSchema = Objects.requireNonNull(tabletSchema, "tabletSchema is null");
+            // tabletSchema may be null when the table has multi materialized index
+            // and the schema of some materialized indexes are not needed to be updated
+            this.tabletSchema = tabletSchema;
             this.createSchemaFile = createSchemaFile;
         }
 
@@ -283,7 +332,11 @@ public class TabletMetadataUpdateAgentTaskFactory {
             for (Long tabletId : tablets) {
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(tabletId);
-                metaInfo.setTablet_schema(tabletSchema);
+
+                if (tabletSchema != null) {
+                    metaInfo.setTablet_schema(tabletSchema);
+                }
+
                 metaInfos.add(metaInfo);
                 metaInfo.setCreate_schema_file(create);
                 create = false;

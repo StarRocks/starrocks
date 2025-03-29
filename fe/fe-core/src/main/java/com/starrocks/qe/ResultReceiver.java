@@ -34,9 +34,9 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.rpc.BackendServiceClient;
@@ -62,11 +62,11 @@ public class ResultReceiver {
     private volatile boolean isDone = false;
     private volatile boolean isCancel = false;
     private long packetIdx = 0;
-    private final long timeoutTs;
+    private final int timeoutMs;
+    private final long deadlineMs;
     private final TNetworkAddress address;
     private final PUniqueId finstId;
     private final Long backendId;
-    private Thread currentThread;
 
     public ResultReceiver(TUniqueId tid, Long backendId, TNetworkAddress address, int timeoutMs) {
         this.finstId = new PUniqueId();
@@ -74,7 +74,8 @@ public class ResultReceiver {
         this.finstId.lo = tid.lo;
         this.backendId = backendId;
         this.address = address;
-        this.timeoutTs = System.currentTimeMillis() + timeoutMs;
+        this.timeoutMs = timeoutMs;
+        this.deadlineMs = System.currentTimeMillis() + timeoutMs;
     }
 
     public RowBatch getNext(Status status) throws TException {
@@ -90,11 +91,11 @@ public class ResultReceiver {
                 PFetchDataResult pResult = null;
                 while (pResult == null) {
                     long currentTs = System.currentTimeMillis();
-                    if (currentTs >= timeoutTs) {
+                    if (currentTs >= deadlineMs) {
                         throw new TimeoutException("query timeout");
                     }
                     try {
-                        pResult = future.get(timeoutTs - currentTs, TimeUnit.MILLISECONDS);
+                        pResult = future.get(deadlineMs - currentTs, TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         // continue to get result
                         LOG.info("future get interrupted Exception");
@@ -139,20 +140,16 @@ public class ResultReceiver {
             LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
-                status.setStatus(new Status(TStatusCode.TIMEOUT,
-                        String.format("Query exceeded time limit of %d seconds",
-                                ConnectContext.get().getSessionVariable().getQueryTimeoutS())));
+                status.setStatus(new Status(TStatusCode.TIMEOUT, ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                        String.format("please increase the '%s' session variable and retry", SessionVariable.QUERY_TIMEOUT))));
             } else {
                 status.setRpcStatus(e.getMessage());
                 SimpleScheduler.addToBlocklist(backendId);
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
-            status.setInternalErrorStatus(String.format("Query exceeded time limit of %d seconds",
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS()));
-            if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
-            }
+            status.setTimeOutStatus(ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                    String.format("please increase the '%s' session variable and retry", SessionVariable.QUERY_TIMEOUT)));
         }
 
         if (isCancel) {
@@ -163,5 +160,13 @@ public class ResultReceiver {
 
     public void cancel() {
         isCancel = true;
+    }
+
+    public TNetworkAddress getAddress() {
+        return address;
+    }
+
+    public Long getBackendId() {
+        return backendId;
     }
 }

@@ -32,6 +32,8 @@ import com.starrocks.thrift.TExportStatusResult;
 import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
 import com.starrocks.thrift.TMiniLoadEtlStatusResult;
 import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
@@ -196,6 +198,11 @@ public class GenericPoolTest {
         @Override
         public TTabletStatResult get_tablet_stat() throws TException {
             // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) throws TException {
             return null;
         }
 

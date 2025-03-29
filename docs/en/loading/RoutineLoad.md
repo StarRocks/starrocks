@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['Routine Load']
 ---
 
 # Load data using Routine Load

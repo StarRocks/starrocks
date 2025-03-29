@@ -105,8 +105,10 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
             newAggGroupBys.add(metaRef);
         }
 
-        LogicalMetaScanOperator newMetaScan =
-                new LogicalMetaScanOperator(metaScan.getTable(), newScanColumnRefs, aggColumnIdToNames);
+        LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder().withOperator(metaScan)
+                .setColRefToColumnMetaMap(newScanColumnRefs)
+                .setAggColumnIdToNames(aggColumnIdToNames)
+                .build();
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
                 agg.getType(), newAggGroupBys, newAggCalls);

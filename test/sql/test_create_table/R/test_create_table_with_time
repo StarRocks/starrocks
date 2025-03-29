@@ -1,0 +1,57 @@
+-- name: test_create_table_with_time
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time TIME not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Type:TIME of column:time does not support.')
+-- !result
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time array<TIME> not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Type:ARRAY<TIME> of column:time does not support.')
+-- !result
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time map<bigint, TIME> not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Type:MAP<BIGINT,TIME> of column:time does not support.')
+-- !result
+CREATE TABLE dup_test (
+    id bigint,
+    city varchar(100) not null,
+    time struct<c1 bigint, c2 TIME> not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Type:struct<c1 bigint(20), c2 TIME> of column:time does not support.')
+-- !result

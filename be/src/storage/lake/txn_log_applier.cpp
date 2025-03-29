@@ -31,6 +31,7 @@
 namespace starrocks::lake {
 
 namespace {
+
 Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
                             TabletManager* tablet_mgr) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
@@ -42,6 +43,21 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
             // because the primary index is available in cache
             // But it will be remove from index cache after apply is finished
+            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
+        }
+        // Check if the alter_meta has a persistent index type change
+        if (alter_meta.has_persistent_index_type()) {
+            // Get the previous and new persistent index types
+            PersistentIndexTypePB prev_type = metadata->persistent_index_type();
+            PersistentIndexTypePB new_type = alter_meta.persistent_index_type();
+            // Apply the changes to the persistent index type
+            metadata->set_persistent_index_type(new_type);
+            LOG(INFO) << fmt::format("alter persistent index type from {} to {} for tablet id: {}",
+                                     PersistentIndexTypePB_Name(prev_type), PersistentIndexTypePB_Name(new_type),
+                                     metadata->id());
+            // Get the update manager
+            auto update_mgr = tablet_mgr->update_mgr();
+            // Try to remove the index from the index cache
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
         // update tablet meta
@@ -75,12 +91,14 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
 
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
-    PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
+    PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version,
+                            bool rebuild_pindex)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
               _new_version(new_version),
-              _builder(_tablet, _metadata) {
+              _builder(_tablet, _metadata),
+              _rebuild_pindex(rebuild_pindex) {
         _metadata->set_version(_new_version);
     }
 
@@ -110,11 +128,30 @@ public:
         _index_entry = nullptr;
     }
 
+    Status check_rebuild_index() {
+        if (_rebuild_pindex) {
+            for (const auto& sstable : _metadata->sstable_meta().sstables()) {
+                FileMetaPB file_meta;
+                file_meta.set_name(sstable.filename());
+                file_meta.set_size(sstable.filesize());
+                _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+            _metadata->clear_sstable_meta();
+            _guard.reset(nullptr);
+            _index_entry = nullptr;
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->rebuild_primary_index(
+                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+            _rebuild_pindex = false;
+        }
+        return Status::OK();
+    }
+
     Status apply(const TxnLogPB& log) override {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
+        RETURN_IF_ERROR(check_rebuild_index());
         if (log.has_op_write()) {
             RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
         }
@@ -139,8 +176,11 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+        // local persistent index will update index version, so we need to load first
         // still need prepre primary index even there is an empty compaction
-        if (_index_entry == nullptr && _has_empty_compaction) {
+        if (_index_entry == nullptr &&
+            (_has_empty_compaction || (_metadata->enable_persistent_index() &&
+                                       _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -212,11 +252,11 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
+        RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
                                                                             &_builder, _base_version);
@@ -231,11 +271,19 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
+            // Apply the compaction operation to the cloud native pk index.
+            // This ensures that the pk index is updated with the compaction changes.
+            _builder.remove_compacted_sst(op_compaction);
+            if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
+                return Status::OK();
+            }
+            RETURN_IF_ERROR(prepare_primary_index());
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
             return Status::OK();
         }
+        RETURN_IF_ERROR(prepare_primary_index());
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
                                                                 _index_entry, &_builder, _base_version);
     }
@@ -267,23 +315,29 @@ private:
     }
 
     Status apply_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
-        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+        const auto& txn_meta = op_replication.txn_meta();
+
+        if (txn_meta.txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
             LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
-                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
-            return Status::Corruption("Invalid txn meta state: " +
-                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
-        }
-        if (op_replication.txn_meta().snapshot_version() != _new_version) {
-            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
-                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
-                         << ", new version: " << _new_version;
-            return Status::Corruption("mismatched snapshot version and new version");
+                         << ReplicationTxnStatePB_Name(txn_meta.txn_state());
+            return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
-        if (op_replication.txn_meta().incremental_snapshot()) {
-            DCHECK(_new_version - _base_version == op_replication.op_writes_size())
-                    << ", base_version: " << _base_version << ", new_version: " << _new_version
-                    << ", op_write_size: " << op_replication.op_writes_size();
+        if (txn_meta.data_version() == 0) {
+            if (txn_meta.snapshot_version() != _new_version) {
+                LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                             << ", snapshot version: " << txn_meta.snapshot_version()
+                             << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                return Status::Corruption("mismatched snapshot version and new version");
+            }
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
+                         << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
+                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+            return Status::Corruption("mismatched version");
+        }
+
+        if (txn_meta.incremental_snapshot()) {
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
             }
@@ -339,6 +393,7 @@ private:
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
+    bool _rebuild_pindex = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -540,26 +595,35 @@ private:
     }
 
     Status apply_replication_log(const TxnLogPB_OpReplication& op_replication) {
-        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+        const auto& txn_meta = op_replication.txn_meta();
+
+        if (txn_meta.txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
             LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
-                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
-            return Status::Corruption("Invalid txn meta state: " +
-                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
-        }
-        if (op_replication.txn_meta().snapshot_version() != _new_version) {
-            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
-                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
-                         << ", new version: " << _new_version;
-            return Status::Corruption("mismatched snapshot version and new version");
+                         << ReplicationTxnStatePB_Name(txn_meta.txn_state());
+            return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
-        if (op_replication.txn_meta().incremental_snapshot()) {
+        if (txn_meta.data_version() == 0) {
+            if (txn_meta.snapshot_version() != _new_version) {
+                LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                             << ", snapshot version: " << txn_meta.snapshot_version()
+                             << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                return Status::Corruption("mismatched snapshot version and new version");
+            }
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
+                         << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
+                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+            return Status::Corruption("mismatched version");
+        }
+
+        if (txn_meta.incremental_snapshot()) {
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write));
             }
             LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
-                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+                      << ", txn_id: " << txn_meta.txn_id();
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             _metadata->mutable_rowsets()->Clear();
@@ -573,7 +637,7 @@ private:
 
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
-                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+                      << ", txn_id: " << txn_meta.txn_id();
         }
 
         if (op_replication.has_source_schema()) {
@@ -589,9 +653,9 @@ private:
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
-                                                   int64_t new_version) {
+                                                   int64_t new_version, bool rebuild_pindex) {
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
-        return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version);
+        return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex);
     }
     return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version);
 }

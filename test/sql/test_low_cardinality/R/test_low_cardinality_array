@@ -10,7 +10,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -27,7 +27,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -306,11 +306,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_83043028377511ef83102207f0c28981.s1	analyze	status	OK
+test_db_6dee41681e184222aa5562c8ae3fad8d.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_83043028377511ef83102207f0c28981.s2	analyze	status	OK
+test_db_6dee41681e184222aa5562c8ae3fad8d.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's1')
 -- result:
@@ -368,15 +368,15 @@ from s2 where a2[2] = 'GD' order by v1 limit 2;
 fujian
 fujian
 -- !result
-select * from s1 join s2 on s1.v1 = s2.v1 order by s2.v1 limit 2;
+select * from s1 join s2 on s1.v1 = s2.v1 and s1.v2 = s2.v2 order by s2.v1, s2.v2 limit 2;
 -- result:
 28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]	28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
-28200	947	["Hunan","Henan"]	["FJ","MO","HEB","JL"]	28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
+28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]	28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
 -- !result
-select array_max(s1.a2), array_distinct(s2.a1) from s1 join s2 on s1.v1 = s2.v1 order by s2.v1 limit 2;
+select array_max(s1.a2), array_distinct(s2.a1) from s1 join s2 on s1.v1 = s2.v1 and s1.v2 = s2.v2 order by s2.v1, s2.v2 limit 2;
 -- result:
 JL	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]
-MO	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]
+JL	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]
 -- !result
 select * from 
 (select array_max(a1) x1 from s1) t1 join
@@ -414,7 +414,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -504,7 +504,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -522,11 +522,11 @@ insert into s4 values
 -- !result
 [UC] analyze full table s3;
 -- result:
-test_db_82fdffb4377511efb2bd2207f0c28981.s3	analyze	status	OK
+test_db_71dab433600a49a6acd0a94e9315d982.s3	analyze	status	OK
 -- !result
 [UC] analyze full table s4;
 -- result:
-test_db_82fdffb4377511efb2bd2207f0c28981.s4	analyze	status	OK
+test_db_71dab433600a49a6acd0a94e9315d982.s4	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's3')
 -- result:
@@ -563,14 +563,11 @@ from s3 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
 4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
 4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
 -- !result
-select count(a1[2]) from s3 where v3 = "GS";
--- result:
-384
--- !result
+select count(a1[2]) from s3 where v3 = "GS"; 
+
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 order by v1 limit 2;
 -- result:
-28200	947	GY	["Hunan","Henan"]	["FJ","MO","HEB","JL"]
-28200	302	JL	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
+384
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 where a1[1] = 'Jiangsu' and v3 = "BJ" order by v1 limit 2;
 -- result:
@@ -596,13 +593,13 @@ select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_opt
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-["abc", "bca"]
+["abc","bca"]
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=false)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-["abc", "bca"]
+["abc","bca"]
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=true)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-["abc", "bca"]
+["abc","bca"]
 -- !result

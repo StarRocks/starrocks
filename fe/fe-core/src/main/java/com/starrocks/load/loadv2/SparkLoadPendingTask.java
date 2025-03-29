@@ -40,7 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
@@ -58,13 +57,14 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -93,7 +93,6 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -392,36 +391,17 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
             // list partition values
-            List<List<LiteralExpr>> multiValueList = multiLiteralExprValues.get(partitionId);
-            List<List<Object>> inKeys = Lists.newArrayList();
-            if (multiValueList != null && !multiValueList.isEmpty()) {
-                for (List<LiteralExpr> list : multiValueList) {
-                    inKeys.add(initItemOfInKeys(list));
-                }
+            List<List<Object>> inKeys = PartitionUtils.calListPartitionKeys(
+                    multiLiteralExprValues.get(partitionId),
+                    literalExprValues.get(partitionId)
+            );
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                etlPartitions.add(new EtlPartition(physicalPartitionId, inKeys, bucketNum));
             }
-            List<LiteralExpr> valueList = literalExprValues.get(partitionId);
-            if (valueList != null && !valueList.isEmpty()) {
-                for (LiteralExpr literalExpr : valueList) {
-                    inKeys.add(initItemOfInKeys(Lists.newArrayList(literalExpr)));
-                }
-            }
-            etlPartitions.add(new EtlPartition(partitionId, inKeys, bucketNum));
         }
         return etlPartitions;
-    }
-
-    private List<Object> initItemOfInKeys(List<LiteralExpr> list) {
-        List<Object> curList = new ArrayList<>();
-        for (LiteralExpr literalExpr : list) {
-            Object keyValue;
-            if (literalExpr instanceof DateLiteral) {
-                keyValue = PartitionUtils.convertDateLiteralToNumber((DateLiteral) literalExpr);
-            } else {
-                keyValue = literalExpr.getRealObjectValue();
-            }
-            curList.add(keyValue);
-        }
-        return curList;
     }
 
     private List<EtlPartition> initEtlRangePartition(
@@ -448,13 +428,18 @@ public class SparkLoadPendingTask extends LoadTask {
             int bucketNum = partition.getDistributionInfo().getBucketNum();
 
             RangePartitionBoundary boundary = PartitionUtils.calRangePartitionBoundary(entry.getValue());
-            etlPartitions.add(new EtlPartition(
-                    partitionId,
-                    boundary.getStartKeys(),
-                    boundary.getEndKeys(),
-                    boundary.isMinPartition(),
-                    boundary.isMaxPartition(),
-                    bucketNum));
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+
+                etlPartitions.add(new EtlPartition(
+                        physicalPartitionId,
+                        boundary.getStartKeys(),
+                        boundary.getEndKeys(),
+                        boundary.isMinPartition(),
+                        boundary.isMaxPartition(),
+                        bucketNum));
+            }
         }
         return etlPartitions;
     }
@@ -474,8 +459,11 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
 
-            etlPartitions.add(new EtlPartition(partitionId, Lists.newArrayList(), Lists.newArrayList(),
-                    true, true, bucketNum));
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                etlPartitions.add(new EtlPartition(physicalPartitionId, Lists.newArrayList(), Lists.newArrayList(),
+                        true, true, bucketNum));
+            }
         }
         return etlPartitions;
     }
@@ -493,7 +481,7 @@ public class SparkLoadPendingTask extends LoadTask {
         // check columns
         try {
             Load.initColumns(table, copiedColumnExprList, fileGroup.getColumnToHadoopFunction());
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new LoadException(e.getMessage());
         }
         // add generated column mapping
@@ -559,6 +547,14 @@ public class SparkLoadPendingTask extends LoadTask {
             partitionIds = Lists.newArrayList(tablePartitionIds);
         }
 
+        List<Long> physicalPartitionIds = Lists.newArrayList();
+        for (Long partitionId : partitionIds) {
+            Partition partition = table.getPartition(partitionId);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalPartitionIds.add(physicalPartition.getId());
+            }
+        }
+
         // where
         // TODO: check
         String where = "";
@@ -597,13 +593,13 @@ public class SparkLoadPendingTask extends LoadTask {
         EtlFileGroup etlFileGroup = null;
         if (fileGroup.isLoadFromTable()) {
             etlFileGroup = new EtlFileGroup(SourceType.HIVE, fileFieldNames, hiveDbTableName, hiveTableProperties,
-                    fileGroup.isNegative(), columnMappings, where, partitionIds);
+                    fileGroup.isNegative(), columnMappings, where, physicalPartitionIds);
         } else {
             etlFileGroup = new EtlFileGroup(SourceType.FILE, fileGroup.getFilePaths(), fileFieldNames,
                     fileGroup.getColumnsFromPath(), fileGroup.getColumnSeparator(),
                     fileGroup.getRowDelimiter(), fileGroup.isNegative(),
                     fileGroup.getFileFormat(), columnMappings,
-                    where, partitionIds);
+                    where, physicalPartitionIds);
         }
 
         return etlFileGroup;

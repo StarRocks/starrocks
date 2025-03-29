@@ -22,12 +22,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.FileTableFunctionRelation;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.SelectList;
@@ -37,9 +34,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.ViewRelation;
-import com.starrocks.sql.ast.pipe.CreatePipeStmt;
-import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -113,7 +109,7 @@ public class AstToSQLBuilder {
             }
 
             res += '`' + fieldName + '`';
-            if (!fieldName.equalsIgnoreCase(columnName)) {
+            if (columnName != null && !fieldName.equalsIgnoreCase(columnName)) {
                 res += " AS `" + columnName + "`";
             }
             return res;
@@ -131,11 +127,13 @@ public class AstToSQLBuilder {
             }
 
             fieldName = handleColumnName(fieldName);
-            columnName = handleColumnName(columnName);
-
             res += fieldName;
-            if (!fieldName.equalsIgnoreCase(columnName)) {
-                res += " AS " + columnName;
+            
+            if (columnName != null) {
+                columnName = handleColumnName(columnName);
+                if (!fieldName.equalsIgnoreCase(columnName)) {
+                    res += " AS " + columnName;
+                }
             }
             return res;
         }
@@ -175,48 +173,7 @@ public class AstToSQLBuilder {
                 sqlBuilder.append("DISTINCT ");
             }
 
-            List<String> selectListString = new ArrayList<>();
-            if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
-                for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
-                    Expr expr = stmt.getOutputExpression().get(i);
-                    String columnName = stmt.getColumnOutputNames().get(i);
-
-                    if (expr instanceof FieldReference) {
-                        Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
-                        selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
-                    } else if (expr instanceof SlotRef) {
-                        SlotRef slot = (SlotRef) expr;
-                        if (slot.getOriginType().isStructType()) {
-                            selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
-                                    slot.getColumnName(), columnName));
-                        } else {
-                            selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
-                                    columnName));
-                        }
-                    } else {
-                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
-                    }
-                }
-            } else {
-                for (SelectListItem item : stmt.getSelectList().getItems()) {
-                    if (item.isStar()) {
-                        if (item.getTblName() != null) {
-                            selectListString.add(item.getTblName() + ".*");
-                        } else {
-                            selectListString.add("*");
-                        }
-                    } else if (item.getExpr() != null) {
-                        Expr expr = item.getExpr();
-                        String str = visit(expr);
-                        if (StringUtils.isNotEmpty(item.getAlias())) {
-                            str += " AS " + ParseUtil.backquote(item.getAlias());
-                        }
-                        selectListString.add(str);
-                    }
-                }
-            }
-
-            sqlBuilder.append(Joiner.on(", ").join(selectListString));
+            sqlBuilder.append(Joiner.on(", ").join(visitSelectItemList(stmt)));
 
             String fromClause = visit(stmt.getRelation());
             if (fromClause != null) {
@@ -242,6 +199,54 @@ public class AstToSQLBuilder {
             return sqlBuilder.toString();
         }
 
+        protected List<String> visitSelectItemList(SelectRelation stmt) {
+            if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
+                List<String> selectListString = new ArrayList<>();
+                List<String> columnNameList = stmt.getColumnOutputNames();
+                for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
+                    Expr expr = stmt.getOutputExpression().get(i);
+                    String columnName = columnNameList.get(i);
+
+                    if (expr instanceof FieldReference) {
+                        Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
+                        selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
+                    } else if (expr instanceof SlotRef slot) {
+                        if (slot.getOriginType().isStructType()) {
+                            selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
+                                    slot.getColumnName(), columnName));
+                        } else {
+                            selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
+                                    columnName));
+                        }
+                    } else if (columnName != null) {
+                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    } else {
+                        selectListString.add(visit(expr));
+                    }
+                }
+                return selectListString;
+            } else {
+                List<String> selectListString = new ArrayList<>();
+                for (SelectListItem item : stmt.getSelectList().getItems()) {
+                    if (item.isStar()) {
+                        if (item.getTblName() != null) {
+                            selectListString.add(item.getTblName() + ".*");
+                        } else {
+                            selectListString.add("*");
+                        }
+                    } else if (item.getExpr() != null) {
+                        Expr expr = item.getExpr();
+                        String str = visit(expr);
+                        if (StringUtils.isNotEmpty(item.getAlias())) {
+                            str += " AS " + ParseUtil.backquote(item.getAlias());
+                        }
+                        selectListString.add(str);
+                    }
+                }
+                return selectListString;
+            }
+        }
+
         @Override
         public String visitCTE(CTERelation relation, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
@@ -265,7 +270,7 @@ public class AstToSQLBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
@@ -299,23 +304,27 @@ public class AstToSQLBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(node.getName().toSql());
 
+            if (node.getPartitionNames() != null) {
+                List<String> partitionNames = node.getPartitionNames().getPartitionNames();
+                if (partitionNames != null && !partitionNames.isEmpty()) {
+                    sqlBuilder.append(" PARTITION (");
+                    sqlBuilder.append(partitionNames.stream().map(c -> "`" + c + "`")
+                            .collect(Collectors.joining(", ")));
+                    sqlBuilder.append(")");
+                }
+            }
+
             for (TableRelation.TableHint hint : CollectionUtils.emptyIfNull(node.getTableHints())) {
                 sqlBuilder.append(" [");
                 sqlBuilder.append(hint.name());
                 sqlBuilder.append("] ");
             }
 
-            if (node.getPartitionNames() != null) {
-                List<String> partitionNames = node.getPartitionNames().getPartitionNames();
-                if (partitionNames != null && !partitionNames.isEmpty()) {
-                    sqlBuilder.append(" PARTITION(");
-                }
-                for (String partitionName : partitionNames) {
-                    sqlBuilder.append("`").append(partitionName).append("`").append(",");
-                }
-                sqlBuilder.deleteCharAt(sqlBuilder.length() - 1);
-                sqlBuilder.append(")");
+            if (node.getSampleClause() != null) {
+                TableSampleClause sample = node.getSampleClause();
+                sqlBuilder.append(" ").append(sample.toSql());
             }
+
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
                 sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
@@ -396,83 +405,6 @@ public class AstToSQLBuilder {
         }
 
         @Override
-        public String visitInsertStatement(InsertStmt insert, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("INSERT ");
-
-            // add hint
-            if (insert.getHintNodes() != null) {
-                sb.append(extractHintStr(insert.getHintNodes()));
-            }
-
-
-            if (insert.isOverwrite()) {
-                sb.append("OVERWRITE ");
-            } else {
-                sb.append("INTO ");
-            }
-
-            // target
-            if (insert.useTableFunctionAsTargetTable()) {
-                sb.append(visitFileTableFunction(
-                        new FileTableFunctionRelation(insert.getTableFunctionProperties(), NodePosition.ZERO), context));
-            } else if (insert.useBlackHoleTableAsTargetTable()) {
-                sb.append("blackhole()");
-            } else {
-                sb.append(insert.getTableName().toSql());
-            }
-            sb.append(" ");
-
-            // target partition
-            if (insert.getTargetPartitionNames() != null &&
-                    CollectionUtils.isNotEmpty(insert.getTargetPartitionNames().getPartitionNames())) {
-                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
-                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
-            }
-
-            // label
-            if (StringUtils.isNotEmpty(insert.getLabel())) {
-                sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
-            }
-
-            // target column
-            if (CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
-                String columns = insert.getTargetColumnNames().stream()
-                        .map(x -> '`' + x + '`')
-                        .collect(Collectors.joining(","));
-                sb.append("(").append(columns).append(") ");
-            }
-
-            // source
-            if (insert.getQueryStatement() != null) {
-                sb.append(visit(insert.getQueryStatement()));
-            }
-            return sb.toString();
-        }
-
-        @Override
-        public String visitCreatePipeStatement(CreatePipeStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ");
-            if (stmt.isReplace()) {
-                sb.append("OR REPLACE ");
-            }
-            sb.append("PIPE ");
-            if (stmt.isIfNotExists()) {
-                sb.append("IF NOT EXISTS ");
-            }
-            sb.append(stmt.getPipeName()).append(" ");
-
-            Map<String, String> properties = stmt.getProperties();
-            if (properties != null && !properties.isEmpty()) {
-                sb.append("PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false, hideCredential)).append(") ");
-            }
-
-            sb.append("AS ").append(visitInsertStatement(stmt.getInsertStmt(), context));
-            return sb.toString();
-        }
-
-        @Override
         public String visitArrayExpr(ArrayExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
             Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
@@ -498,5 +430,6 @@ public class AstToSQLBuilder {
             sb.append("}");
             return sb.toString();
         }
+
     }
 }

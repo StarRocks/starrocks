@@ -1,0 +1,12 @@
+-- name: test_topn_with_large_limit
+
+set pipeline_dop=1;
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT null, null FROM TABLE(generate_series(1,  65536));
+-- see ChunksSorterTopn::tunning_buffered_chunks
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  257* 4096));
+
+select count(c0) from ( select c0 from t0 order by 1 asc nulls first limit 9223372036854775807 )t;

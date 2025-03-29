@@ -41,7 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
@@ -172,10 +172,10 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         });
     }
 
-    private void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
+    void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
         routineLoadTaskInfo.setLastScheduledTime(System.currentTimeMillis());
         // check if task has been abandoned
-        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
+        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getId())) {
             // task has been abandoned while renew task has been added in queue
             // or database has been deleted
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
@@ -253,7 +253,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                             new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
                             false);
             throw e;
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,

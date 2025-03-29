@@ -79,7 +79,7 @@ Status FlatJsonColumnWriter::append(const Column& column) {
     return Status::OK();
 }
 
-Status FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
+Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
     std::vector<const Column*> vc;
@@ -92,7 +92,7 @@ Status FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
     _flat_types = deriver.flat_types();
     _has_remain = deriver.has_remain_json();
 
-    VLOG(1) << "FlatJsonColumnWriter flat_column flat json: "
+    VLOG(2) << "FlatJsonColumnWriter flat_column flat json: "
             << JsonFlatPath::debug_flat_json(_flat_paths, _flat_types, _has_remain);
     if (_flat_paths.empty()) {
         return Status::InternalError("doesn't have flat column.");
@@ -115,13 +115,13 @@ Status FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
                 nulls->append_value_multiple_times(&IS_NULL, json_data->size());
             } else if (json_data->is_nullable()) {
                 auto* nullable_column = down_cast<const NullableColumn*>(json_data);
-                auto* nl = down_cast<NullColumn*>(nullable_column->null_column().get());
+                auto* nl = down_cast<const NullColumn*>(nullable_column->null_column().get());
                 nulls->append(*nl, 0, nl->size());
             } else {
                 nulls->append_value_multiple_times(&NOT_NULL, json_data->size());
             }
 
-            _flat_columns.insert(_flat_columns.begin(), nulls);
+            _flat_columns.insert(_flat_columns.begin(), std::move(nulls));
         }
         RETURN_IF_ERROR(_write_flat_column());
         _flat_columns.clear();
@@ -287,7 +287,7 @@ Status FlatJsonColumnWriter::finish_current_page() {
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
                                                                   TypeInfoPtr type_info, WritableFile* wfile,
                                                                   std::unique_ptr<ScalarColumnWriter> json_writer) {
-    VLOG(1) << "Create Json Column Writer is_compaction: " << opts.is_compaction << ", need_flat : " << opts.need_flat;
+    VLOG(2) << "Create Json Column Writer is_compaction: " << opts.is_compaction << ", need_flat : " << opts.need_flat;
     // compaction
     if (opts.is_compaction) {
         if (opts.need_flat) {

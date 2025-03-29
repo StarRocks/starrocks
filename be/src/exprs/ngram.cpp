@@ -15,6 +15,7 @@
 //  https://github.com/ClickHouse/ClickHouse/blob/master/src/Functions/FunctionsStringSimilarity.cpp
 
 #include "column/column_hash.h"
+#include "exprs/function_context.h"
 #include "exprs/string_functions.h"
 #include "gutil/strings/fastmem.h"
 namespace starrocks {
@@ -185,10 +186,8 @@ private:
             haystackPtr = haystack_column;
         }
         if constexpr (case_insensitive) {
-            Columns temp;
-            temp.emplace_back(haystackPtr);
-            lower = StringFunctions::lower(nullptr, temp);
-            haystackPtr = lower.value();
+            // @TODO if ngram supports utf8 in the future, we should use antoher implementation.
+            haystackPtr = StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(haystackPtr);
         }
 
         BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);
@@ -218,7 +217,7 @@ private:
         }
 
         if (haystack_column->is_nullable()) {
-            return NullableColumn::create(res, res_null);
+            return NullableColumn::create(std::move(res), std::move(res_null));
         } else {
             return res;
         }
@@ -294,7 +293,7 @@ private:
     }
 
     static NgramHash getAsciiHash(const Gram* ch, size_t gram_num) {
-        return crc_hash_32(ch, gram_num, CRC_HASH_SEED1) & (0xffffu);
+        return crc_hash_32(ch, gram_num, CRC_HASH_SEEDS::CRC_HASH_SEED1) & (0xffffu);
     }
 };
 

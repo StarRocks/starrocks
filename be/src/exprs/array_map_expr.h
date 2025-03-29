@@ -37,6 +37,8 @@ public:
     explicit ArrayMapExpr(TypeDescriptor type);
 
     Status prepare(RuntimeState* state, ExprContext* context) override;
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayMapExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
@@ -45,8 +47,8 @@ public:
 
 private:
     template <bool all_const_input, bool independent_lambda_expr>
-    StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
-                                             const std::vector<ColumnPtr>& arguments, const NullColumnPtr& null_column);
+    StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk, const Columns& arguments,
+                                             const NullColumnPtr& null_column);
 
     // use map to make sure the order of execution
     std::map<SlotId, Expr*> _outer_common_exprs;

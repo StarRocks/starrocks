@@ -40,6 +40,7 @@
 #include <atomic>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -73,6 +74,10 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
 #define ADD_TIMER(profile, name) \
     (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) \
+    (profile)->add_counter(                                \
+            name, TUnit::TIME_NS,                          \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold))
 #define ADD_PEAK_COUNTER(profile, name, type) \
     (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
 #define ADD_CHILD_COUNTER(profile, name, type, parent) \
@@ -176,6 +181,11 @@ public:
 
         virtual double double_value() const { return bit_cast<double>(_value.load(std::memory_order_relaxed)); }
 
+        virtual void set_min(int64_t min) { _min_value.emplace(min); }
+        virtual void set_max(int64_t max) { _max_value.emplace(max); }
+        virtual std::optional<int64_t> min_value() const { return _min_value; }
+        virtual std::optional<int64_t> max_value() const { return _max_value; }
+
         TUnit::type type() const { return _type; }
 
         const TCounterStrategy& strategy() const { return _strategy; }
@@ -197,6 +207,10 @@ public:
         bool skip_min_max() const { return _strategy.min_max_type == TCounterMinMaxType::SKIP_ALL; }
 
         int64_t display_threshold() const { return _strategy.display_threshold; }
+        bool should_display() const {
+            int64_t threshold = _strategy.display_threshold;
+            return threshold == 0 || value() > threshold;
+        }
 
     private:
         friend class RuntimeProfile;
@@ -204,6 +218,8 @@ public:
         std::atomic<int64_t> _value;
         const TUnit::type _type;
         const TCounterStrategy _strategy;
+        std::optional<int64_t> _min_value;
+        std::optional<int64_t> _max_value;
     };
 
     class ConcurrentTimerCounter;
@@ -718,6 +734,8 @@ public:
     void stop() { _sw.stop(); }
 
     void start() { _sw.start(); }
+
+    int64_t elapsed_time() { return _sw.elapsed_time(); }
 
     bool is_cancelled() { return _is_cancelled != nullptr && *_is_cancelled; }
 

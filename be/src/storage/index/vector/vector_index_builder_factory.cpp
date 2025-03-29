@@ -21,11 +21,11 @@ namespace starrocks {
 // =============== IndexBuilderFactory =============
 StatusOr<std::unique_ptr<VectorIndexBuilder>> VectorIndexBuilderFactory::create_index_builder(
         const std::shared_ptr<TabletIndex>& tablet_index, const std::string& segment_index_path,
-        const IndexBuilderType index_builder_type, const bool src_is_nullable) {
+        const IndexBuilderType index_builder_type, const bool is_element_nullable) {
     switch (index_builder_type) {
     case TEN_ANN:
 #ifdef WITH_TENANN
-        return std::make_unique<TenAnnIndexBuilderProxy>(tablet_index, segment_index_path, src_is_nullable);
+        return std::make_unique<TenAnnIndexBuilderProxy>(tablet_index, segment_index_path, is_element_nullable);
 #else
         return std::make_unique<EmptyVectorIndexBuilder>(tablet_index, segment_index_path);
 #endif

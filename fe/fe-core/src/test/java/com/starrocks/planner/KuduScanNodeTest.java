@@ -24,16 +24,26 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduScanToken;
+import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -129,5 +139,86 @@ public class KuduScanNodeTest {
         slotDescriptor.setColumn(columns.get(0));
         tupleDesc.addSlot(slotDescriptor);
         return tupleDesc;
+    }
+
+    @Test
+    public void testGetAllAvailableBackendOrComputeIdsInSharedNothingMode(@Mocked NodeMgr nodeMgr,
+                                                                          @Mocked SystemInfoService systemInfo) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+        };
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                return systemInfo;
+            }
+        };
+
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        Backend b2 = new Backend(10002L, "192.168.0.2", 9050);
+        ComputeNode c1 = new ComputeNode(20001, "192.168.1.2", 9050);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Long> getAvailableBackendIds() {
+                return new ArrayList<>(List.of(b1.getId(), b2.getId()));
+            }
+
+            @Mock
+            public List<Long> getAvailableComputeNodeIds() {
+                return new ArrayList<>(List.of(c1.getId()));
+            }
+        };
+
+        KuduScanNode kuduScanNode = makeKuduScanNode();
+        List<Long> allAvailableBackendOrComputeIds = kuduScanNode.getAllAvailableBackendOrComputeIds();
+        Assert.assertNotNull(allAvailableBackendOrComputeIds);
+        Assert.assertEquals(3, allAvailableBackendOrComputeIds.size());
+    }
+
+    @Test
+    public void testGetAllAvailableBackendOrComputeIdsInSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
+        mockedWarehouseManager.setAliveComputeNodes(new ArrayList<>(List.of(c1, c2)));
+
+        KuduScanNode kuduScanNode = makeKuduScanNode();
+        List<Long> allAvailableBackendOrComputeIds = kuduScanNode.getAllAvailableBackendOrComputeIds();
+        Assert.assertNotNull(allAvailableBackendOrComputeIds);
+        Assert.assertEquals(2, allAvailableBackendOrComputeIds.size());
+    }
+
+    @NotNull
+    private KuduScanNode makeKuduScanNode() {
+        List<Column> columns = createTestColumns();
+        KuduTable kuduTable = createTestKuduTable(columns);
+        TupleDescriptor tupleDesc = setupDescriptorTable(kuduTable, columns);
+        KuduScanNode kuduScanNode = new KuduScanNode(new PlanNodeId(0), tupleDesc, "KuduScanNode");
+        return kuduScanNode;
     }
 }

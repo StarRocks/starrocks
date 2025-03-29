@@ -33,8 +33,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -87,7 +87,7 @@ public class StatisticsCalculatorTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
-        optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
+        optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
 
         starRocksAssert = new StarRocksAssert(connectContext);
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
@@ -244,7 +244,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds =
                     partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         List<Column> columns = table.getColumns();
@@ -289,7 +289,7 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalIcebergTableScan() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table icebergTable = globalStateMgr.getMetadataMgr().getTable("iceberg0", "partitioned_db", "t1");
+        Table icebergTable = globalStateMgr.getMetadataMgr().getTable(connectContext, "iceberg0", "partitioned_db", "t1");
         List<Column> columns = icebergTable.getColumns();
 
         Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
@@ -349,9 +349,9 @@ public class StatisticsCalculatorTest {
         Partition partition2 = partitions.get(1);
         Partition partition3 = partitions.get(2);
         // mock one empty partition
-        partition1.setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
-        partition2.setVisibleVersion(2, System.currentTimeMillis());
-        partition3.setVisibleVersion(2, System.currentTimeMillis());
+        partition1.getDefaultPhysicalPartition().setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+        partition2.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        partition3.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
         List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
@@ -422,7 +422,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
@@ -519,7 +519,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p2")).
                     mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =

@@ -43,10 +43,12 @@ public:
 
 private:
     StatusOr<FileBlockContainerPtr> get_or_create_container(const DirPtr& dir, const TUniqueId& fragment_instance_id,
-                                                            int32_t plan_node_id, const std::string& plan_node_name);
+                                                            int32_t plan_node_id, const std::string& plan_node_name,
+                                                            size_t block_size);
 
     TUniqueId _query_id;
     std::atomic<uint64_t> _next_container_id = 0;
+    std::string _last_created_container_dir;
 
     DirManager* _dir_mgr = nullptr;
 };

@@ -6,6 +6,9 @@ use db_${uuid0};
 -- path error
 select * from files("path" = "xxx", "format" = "parquet");
 select * from files("path" = "hdfs://hdfs://test/x", "format" = "parquet");
+select * from files("path" = "s3://${oss_bucket}/x", "format" = "parquet");
+select * from files("path" = "s3://${oss_bucket}/x", "format" = "parquet", "aws.s3.access_key" = "xxx", "aws.s3.secret_key" = "yyy", "aws.s3.region" = "us-west-2");
+
 
 -- credential desensitization fail
 shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null

@@ -254,6 +254,7 @@ fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-lwp.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -422,7 +423,13 @@ if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
+    if [ ! -f $PATCHED_MARK ]; then
+        patch -p1  < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-disable-chunked-upload.patch
+        touch $PATCHED_MARK
+    fi
 fi
+cd -
+echo "Finished patching $AWS_SDK_CPP_SOURCE"
 
 # patch jemalloc_hook
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
@@ -463,8 +470,8 @@ cd -
 echo "Finished patching $VPACK_SOURCE"
 
 # patch avro-c
+cd $TP_SOURCE_DIR/$AVRO_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
-    touch $PATCHED_MARK
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
     cd $TP_SOURCE_DIR/$AVRO_SOURCE
@@ -544,6 +551,17 @@ if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     echo "Finished patching $BITSHUFFLE_SOURCE"
 fi
 
+# patch flatbuffers
+if [[ -d $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $FLATBUFFERS_SOURCE == "flatbuffers-1.10.0" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/flat-buffers-1.10.0-no-stringop-overread.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $FLATBUFFERS_SOURCE"
+fi
+
 #patch clucene
 if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$CLUCENE_SOURCE
@@ -561,6 +579,7 @@ if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
     if [ ! -f "$PATCHED_MARK" ] && [[ $POCO_SOURCE == "poco-1.12.5-release" ]] ; then
         patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-ca.patch"
         patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-zero-copy.patch"
+        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-keep-alive.patch"
         touch "$PATCHED_MARK"
     fi
     cd -

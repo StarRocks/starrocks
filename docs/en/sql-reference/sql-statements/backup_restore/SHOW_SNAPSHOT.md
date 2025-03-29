@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SHOW SNAPSHOT
 
-## Description
-
 Views data snapshots in a specified repository. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
 
 ## Syntax

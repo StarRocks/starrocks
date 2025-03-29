@@ -37,8 +37,6 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -53,9 +51,10 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
+// If you add a test in this file,
+// please add it in another file LakeSyncMaterializedViewTest too.
+// The test cases for both files are the same, but the RunMode is different.
 public class CreateSyncMaterializedViewTest {
-    private static final Logger LOG = LogManager.getLogger(CreateSyncMaterializedViewTest.class);
-
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
@@ -374,23 +373,6 @@ public class CreateSyncMaterializedViewTest {
     }
 
     @Test
-    public void testCreateSynchronousMVOnLakeTable() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        Table table = getTable("test", "mocked_cloud_table");
-        // Change table type to cloud native table
-        Deencapsulation.setField(table, "type", Table.TableType.CLOUD_NATIVE);
-        DdlException e = Assert.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
-        });
-        Assert.assertTrue(e.getMessage().contains("Creating synchronous materialized view(rollup) is not supported in " +
-                "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
-                "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
-                "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details."));
-    }
-
-    @Test
     public void testCreateSynchronousMVOnAnotherMV() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -541,7 +523,6 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("mv_month");
         for (Column column : columns) {
-            System.out.println(column.getAggregationType());
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());
@@ -595,7 +576,6 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("k3", "mv_month");
         for (Column column : columns) {
-            System.out.println(column.getAggregationType());
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());
@@ -639,6 +619,37 @@ public class CreateSyncMaterializedViewTest {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("The column[mv_sum_k3] must be the key of materialized view"));
+        }
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
+    public void testCreateMVWithAggState() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3)) as v1 from t1 group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
         }
         starRocksAssert.dropTable("t1");
     }

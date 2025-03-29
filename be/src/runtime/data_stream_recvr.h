@@ -39,11 +39,14 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge_path.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace google::protobuf {
@@ -131,6 +134,18 @@ public:
     bool is_data_ready();
 
     bool get_encode_level() const { return _encode_level; }
+
+    void attach_query_ctx(pipeline::QueryContext* query_ctx);
+    void attach_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _observable.add_observer(state, observer);
+    }
+    auto defer_notify() {
+        return DeferOp([query_ctx = _query_ctx, this]() {
+            if (auto ctx = query_ctx.lock()) {
+                this->_observable.notify_source_observers();
+            }
+        });
+    }
 
 private:
     friend class DataStreamMgr;
@@ -234,6 +249,12 @@ private:
     // concurrency of the brpc threads, so we let the size of _metrics to be the same as the pipeline's dop,
     // and use round-robin to choose the metrics for each brpc thread.
     std::vector<Metrics> _metrics;
+
+    // used in event scheduler
+    // Capture shared_ptr to avoid use-after-free.
+    std::weak_ptr<pipeline::QueryContext> _query_ctx;
+    pipeline::Observable _observable;
+
     std::atomic<size_t> _rpc_round_roubin_index = 0;
 
     // Sub plan query statistics receiver.

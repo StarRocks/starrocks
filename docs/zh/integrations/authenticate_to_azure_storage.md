@@ -11,7 +11,7 @@ StarRocks 从 3.0 版本起支持在以下场景中集成 Microsoft Azure Storag
 - 从 Azure Storage 批量导入数据。
 - 从 Azure Storage 备份数据、或把数据恢复到 Azure Storage。
 - 查询 Azure Storage 中的 Parquet 或 ORC 格式的数据文件。
-- 查询 Azure Storage 中的 [Hive](../data_source/catalog/hive_catalog.md)、[Iceberg](../data_source/catalog/iceberg_catalog.md)、[Hudi](../data_source/catalog/hudi_catalog.md)、或 [Delta Lake](../data_source/catalog/deltalake_catalog.md) 表。
+- 查询 Azure Storage 中的 [Hive](../data_source/catalog/hive_catalog.md)、[Iceberg](../data_source/catalog/iceberg/iceberg_catalog.md)、[Hudi](../data_source/catalog/hudi_catalog.md)、或 [Delta Lake](../data_source/catalog/deltalake_catalog.md) 表。
 
 StarRocks 支持通过以下类型的 Azure 存储账号来访问 Azure Storage：
 

@@ -23,7 +23,7 @@ import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadP
 ```SQL
 SHOW ROUTINE LOAD TASK
     [FROM <db_name>]
-    [ WHERE JobName = <job_name> ]
+WHERE JobName = <job_name>
 ```
 
 :::note
@@ -37,7 +37,7 @@ SHOW ROUTINE LOAD TASK
 | **参数** | **必选** | **说明**                              |
 | -------- | -------- | ------------------------------------- |
 | db_name  | 否       | Routine Load 导入作业所属数据库名称。 |
-| JobName  | 否       | Routine Load 导入作业名称。           |
+| JobName  | 是       | Routine Load 导入作业名称。           |
 
 ## 返回结果说明
 

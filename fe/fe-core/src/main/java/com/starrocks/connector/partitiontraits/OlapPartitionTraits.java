@@ -25,7 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,7 +44,7 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public String getDbName() {
+    public String getCatalogDBName() {
         throw new NotImplementedException("not support olap table");
     }
 
@@ -62,9 +62,8 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(Column partitionColumn) {
-        // TODO: check partition type
-        return ((OlapTable) table).getListPartitionItems();
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+        return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
     }
 
     @Override
@@ -84,8 +83,9 @@ public class OlapPartitionTraits extends DefaultTraits {
             List<String> baseTablePartitionInfos = Lists.newArrayList();
             for (String p : baseTable.getVisiblePartitionNames()) {
                 Partition partition = baseTable.getPartition(p);
-                baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(), partition.getVisibleVersion(),
-                        partition.getVisibleVersionTime()));
+                baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersionTime()));
             }
             LOG.debug("baseTable: {}, baseTablePartitions:{}, mvBaseTableVisibleVersionMap: {}",
                     baseTable.getName(), baseTablePartitionInfos, mvBaseTableVisibleVersionMap);
@@ -96,7 +96,7 @@ public class OlapPartitionTraits extends DefaultTraits {
         for (String partitionName : baseTable.getVisiblePartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
-                if (partition.getVisibleVersion() != 1) {
+                if (partition.getDefaultPhysicalPartition().getVisibleVersion() != 1) {
                     result.add(partitionName);
                 }
             }
@@ -106,8 +106,8 @@ public class OlapPartitionTraits extends DefaultTraits {
             String basePartitionName = versionEntry.getKey();
             Partition basePartition = baseTable.getPartition(basePartitionName);
             if (basePartition == null) {
-                // Once there is a partition deleted, refresh all partitions.
-                return baseTable.getVisiblePartitionNames();
+                // If this partition is dropped, ignore it.
+                continue;
             }
             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo = versionEntry.getValue();
             if (mvRefreshedPartitionInfo == null) {
@@ -134,8 +134,9 @@ public class OlapPartitionTraits extends DefaultTraits {
     public static boolean isBaseTableChanged(Partition partition,
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
         return mvRefreshedPartitionInfo.getId() != partition.getId()
-                || partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
+                || partition.getDefaultPhysicalPartition().getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || partition.getDefaultPhysicalPartition().getVisibleVersionTime()
+                > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     public List<Column> getPartitionColumns() {

@@ -109,7 +109,7 @@ public class TransactionChecker {
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
 
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                    long partitionId = partitionCommitInfo.getPartitionId();
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                     PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     if (partition == null) {
                         continue;

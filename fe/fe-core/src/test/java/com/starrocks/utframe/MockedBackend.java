@@ -44,6 +44,8 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -58,6 +60,8 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PUpdateTransactionStateRequest;
+import com.starrocks.proto.PUpdateTransactionStateResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
@@ -525,8 +529,18 @@ public class MockedBackend {
             return null;
         }
 
+        @Override
+        public Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request) {
+            return null;
+        }
+
         public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request) {
+            throw new NotImplementedException("TODO");
         }
     }
 

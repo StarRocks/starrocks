@@ -420,13 +420,14 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     int index = 0;
 
     std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
-    auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name) -> Status {
+    auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id) -> Status {
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
             LOG(WARNING) << "Ignored lost segment " << seg_name;
         } else {
-            return segment_or.status();
+            return segment_or.status().clone_and_prepend(fmt::format(
+                    "load_segments failed tablet:{} rowset:{} segid:{}", _tablet_id, metadata().id(), seg_id));
         }
         return Status::OK();
     };
@@ -470,25 +471,26 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
                              << ", try to load segment serially, seg_id: " << seg_id;
                 auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id, &footer_size_hint, lake_io_opts,
                                                             lake_io_opts.fill_metadata_cache, _tablet_schema);
-                if (auto status = check_status(segment_or, seg_name); !status.ok()) {
+                if (auto status = check_status(segment_or, seg_name, seg_id); !status.ok()) {
                     return status;
                 }
             }
             seg_id++;
             segment_futures.push_back(task->get_future());
         } else {
-            auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
+            auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id, &footer_size_hint, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
-            if (auto status = check_status(segment_or, seg_name); !status.ok()) {
+            if (auto status = check_status(segment_or, seg_name, seg_id); !status.ok()) {
                 return status;
             }
+            seg_id++;
         }
     }
 
-    for (auto& fut : segment_futures) {
-        auto result_pair = fut.get();
+    for (int i = 0; i < segment_futures.size(); i++) {
+        auto result_pair = segment_futures[i].get();
         auto segment_or = result_pair.first;
-        if (auto status = check_status(segment_or, result_pair.second); !status.ok()) {
+        if (auto status = check_status(segment_or, result_pair.second, i); !status.ok()) {
             return status;
         }
     }

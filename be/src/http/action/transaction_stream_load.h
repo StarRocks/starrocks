@@ -55,10 +55,13 @@ public:
 
     void on_chunk_data(HttpRequest* req) override;
 
+    void free_handler_ctx(void* ctx) override;
+
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);
     Status _channel_on_header(HttpRequest* http_req, StreamLoadContext* ctx);
     Status _exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx);
+    void _finish_and_reply(HttpRequest* req, const std::string& reply);
     void _send_error_reply(HttpRequest* req, const Status& st);
     Status _parse_request(HttpRequest* http_req, StreamLoadContext* ctx, TStreamLoadPutRequest& request);
 

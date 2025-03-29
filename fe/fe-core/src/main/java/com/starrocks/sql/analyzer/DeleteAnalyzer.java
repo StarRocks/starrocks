@@ -38,6 +38,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -190,16 +191,16 @@ public class DeleteAnalyzer {
         properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
                 String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
     }
 
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         analyzeProperties(deleteStatement, session);
 
         TableName tableName = deleteStatement.getTableName();
-        tableName.normalization(session);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(tableName.getCatalog(), tableName.getDb());
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -228,10 +229,10 @@ public class DeleteAnalyzer {
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
-            if (col.isKey()) {
+            if (col.isKey() || col.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             } else {
-                break;
+                continue;
             }
             selectList.addItem(item);
         }

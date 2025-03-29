@@ -132,11 +132,11 @@ TEST_F(MetadataCacheTest, test_manual_evcit) {
         rowsets.push_back(rowset_ptr);
     }
     for (int i = 0; i < 10; i++) {
-        metadata_cache_ptr->warmup_rowset(rowsets[i].get());
+        metadata_cache_ptr->refresh_rowset(rowsets[i].get());
         ASSERT_TRUE(rowsets[i]->segment_memory_usage() > 0);
         metadata_cache_ptr->evict_rowset(rowsets[i].get());
         ASSERT_TRUE(rowsets[i]->segment_memory_usage() == 0);
-        metadata_cache_ptr->warmup_rowset(rowsets[i].get());
+        metadata_cache_ptr->refresh_rowset(rowsets[i].get());
     }
 }
 
@@ -172,9 +172,40 @@ TEST_F(MetadataCacheTest, test_warmup) {
             rowsets.push_back(rowset_ptr);
         }
         // warmup first rowset
-        metadata_cache_ptr->warmup_rowset(rowsets[0].get());
-        metadata_cache_ptr->set_capacity(rowsets[0]->segment_memory_usage() * 32);
+        metadata_cache_ptr->refresh_rowset(rowsets[0].get());
+        metadata_cache_ptr->set_capacity(rowsets[0]->segment_memory_usage() * 64);
         ASSERT_TRUE(rowsets[0]->segment_memory_usage() > 0);
+    }
+}
+
+TEST_F(MetadataCacheTest, test_concurrency_issue) {
+    const size_t N = 100;
+    vector<int64_t> keys;
+    for (size_t i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    vector<RowsetSharedPtr> rowsets;
+    auto tablet_ptr = create_tablet(1002, 10005);
+    auto metadata_cache_ptr = std::make_unique<MetadataCache>(1);
+    std::vector<std::thread> threads;
+    threads.emplace_back([&]() {
+        for (int i = 0; i < 100; i++) {
+            auto rowset_ptr = create_rowset(tablet_ptr, keys);
+            ASSERT_TRUE(rowset_ptr->load().ok());
+            ASSERT_TRUE(rowset_ptr->segment_memory_usage() > 0);
+            metadata_cache_ptr->cache_rowset(rowset_ptr.get());
+        }
+    });
+    threads.emplace_back([&]() {
+        for (int i = 0; i < 100; i++) {
+            auto rowset_ptr = create_rowset(tablet_ptr, keys);
+            ASSERT_TRUE(rowset_ptr->load().ok());
+            ASSERT_TRUE(rowset_ptr->segment_memory_usage() > 0);
+            metadata_cache_ptr->cache_rowset(rowset_ptr.get());
+        }
+    });
+    for (auto& t : threads) {
+        t.join();
     }
 }
 

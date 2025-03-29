@@ -7,7 +7,7 @@ toc_max_heading_level: 5
 
 ## 功能
 
-Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持。有关 Broker Load 的背景信息、基本原理、支持的数据文件格式、如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作、以及如何查看导入作业的结果等信息，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/cloud_storage_load.md)。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持。有关 Broker Load 的背景信息、基本原理、支持的数据文件格式、如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作、以及如何查看导入作业的结果等信息，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/objectstorage.mdx)。
 
 > **注意**
 >
@@ -253,7 +253,7 @@ StarRocks 访问存储系统的认证配置。
   
     - 如果采用有 Broker 的导入，您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
   
-    - 如果采用无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE（或 CN）节点的 `{deploy}/conf` 目录下。
+    - 如果采用无 Broker 的导入，您需要在各个 FE、BE、CN 节点的部署路径下的 `conf/core-site.xml` 文件中设置 `hadoop.security.authentication = kerberos`，并通过 `kinit` 命令配置 Kerberos 账号。
 
   - 在单 HDFS 集群、并且配置了多 Kerberos 用户的场景下，只支持有 Broker 的导入。您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
 
@@ -405,7 +405,7 @@ StarRocks 访问存储系统的认证配置。
 | ---------------------- | ------------------------------------------------------------ |
 | fs.oss.accessKeyId     | 访问阿里云 OSS 存储空间的 AccessKey ID，用于标识用户。           |
 | fs.oss.accessKeySecret | 访问阿里云 OSS 存储空间的 AccessKey Secret，是用于加密签名字符串和 OSS 用来验证签名字符串的密钥。 |
-| fs.oss.endpoint        | 访问阿里云 OSS 存储空间的连接地址。                              |
+| fs.oss.endpoint        | 访问阿里云 OSS 存储空间的连接地址。<br />**注意**<br />请勿在端点地址中指定 `https`。 |
 
 请参见阿里云官方文档[用户签名验证](https://help.aliyun.com/document_detail/31950.html)。
 
@@ -425,7 +425,7 @@ StarRocks 访问存储系统的认证配置。
 | ------------------------------ | ------------------------------------------------------------ |
 | fs.cosn.userinfo.secretId      | 访问腾讯云 COS 存储空间的 SecretId，用于标识 API 调用者的身份。  |
 | fs.cosn.userinfo.secretKey     | 访问腾讯云 COS 存储空间的 SecretKey，是用于加密签名字符串和服务端验证签名字符串的密钥。 |
-| fs.cosn.bucket.endpoint_suffix | 访问腾讯云 COS 存储空间的连接地址。                              |
+| fs.cosn.bucket.endpoint_suffix | 访问腾讯云 COS 存储空间的连接地址。<br />**注意**<br />请勿在端点地址中指定 `https`。  |
 
 请参见腾讯云官方文档[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。
 
@@ -445,7 +445,7 @@ StarRocks 访问存储系统的认证配置。
 | ---------------------- | ------------------------------------------------------------ |
 | fs.obs.access.key      | 访问华为云 OBS 存储空间的 Access Key ID，与私有访问密钥关联的唯一标识符。|
 | fs.obs.secret.key      | 访问华为云 OBS 存储空间的 Secret Access Key，对请求进行加密签名，可标识发送方，并防止请求被修改。 |
-| fs.obs.endpoint        | 访问华为云 OBS 存储空间的连接地址。                              |
+| fs.obs.endpoint        | 访问华为云 OBS 存储空间的连接地址。<br />**注意**<br />请勿在端点地址中指定 `https`。 |
 
 请参见华为云官方文档[通过永久访问密钥访问 OBS](https://support.huaweicloud.com/perms-cfg-obs/obs_40_0007.html)。
 

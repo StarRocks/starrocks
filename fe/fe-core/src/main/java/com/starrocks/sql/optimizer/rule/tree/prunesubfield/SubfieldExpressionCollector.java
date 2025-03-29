@@ -20,6 +20,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -34,6 +35,7 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
     private final List<ScalarOperator> complexExpressions = Lists.newArrayList();
     private Set<String> checkFunctions;
     private final boolean enableJsonCollect;
+    private boolean forPushDownSubFiled;
 
     public List<ScalarOperator> getComplexExpressions() {
         return complexExpressions;
@@ -57,6 +59,7 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
     public static SubfieldExpressionCollector buildPushdownCollector() {
         SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
         collector.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PUSHDOWN_FUNCTIONS);
+        collector.forPushDownSubFiled = true;
         return collector;
     }
 
@@ -92,6 +95,15 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
         }
         complexExpressions.add(subfieldOperator);
         return null;
+    }
+
+    @Override
+    public Void visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
+        // we should not collect subfield expression in lambda when push down sub filed
+        if (forPushDownSubFiled) {
+            return null;
+        }
+        return visit(operator, context);
     }
 
     @Override

@@ -22,8 +22,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -55,7 +57,8 @@ public class UniqueConstraint extends Constraint {
     public List<String> getUniqueColumnNames(Table selfTable) {
         Table targetTable;
         if (selfTable.isMaterializedView()) {
-            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(new ConnectContext(), catalogName, dbName, tableName);
             if (targetTable == null) {
                 throw new SemanticException("Table %s.%s.%s is not found", catalogName, dbName, tableName);
             }
@@ -82,7 +85,8 @@ public class UniqueConstraint extends Constraint {
     // foreignKeys must be in lower case for case-insensitive
     public boolean isMatch(Table parentTable, Set<String> foreignKeys) {
         if (catalogName != null && dbName != null && tableName != null) {
-            Table uniqueTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            Table uniqueTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(new ConnectContext(), catalogName, dbName, tableName);
             if (uniqueTable == null) {
                 LOG.warn("can not find unique constraint table: {}.{}.{}", catalogName, dbName, tableName);
                 return false;
@@ -112,6 +116,9 @@ public class UniqueConstraint extends Constraint {
     }
 
     public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints, Table selfTable) {
+        if (CollectionUtils.isEmpty(constraints)) {
+            return "";
+        }
         List<String> constraintStrs = Lists.newArrayList();
         for (UniqueConstraint constraint : constraints) {
             StringBuilder constraintSb = new StringBuilder();

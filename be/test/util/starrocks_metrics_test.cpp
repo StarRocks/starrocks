@@ -37,8 +37,8 @@
 #include <gtest/gtest.h>
 
 #include "common/config.h"
-#include "runtime/mem_tracker.h"
 #include "storage/page_cache.h"
+#include "testutil/assert.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -49,15 +49,11 @@ public:
     ~StarRocksMetricsTest() override = default;
 
 protected:
-    void SetUp() override {
-        auto _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        static const int kNumShardBits = 5;
-        static const int kNumShards = 1 << kNumShardBits;
-        StoragePageCache::release_global_cache();
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), kNumShards * 100000);
-    }
+    void SetUp() override { _page_cache = CacheEnv::GetInstance()->page_cache(); }
 
-    void TearDown() override { StoragePageCache::instance()->prune(); }
+    void TearDown() override {}
+
+    StoragePageCache* _page_cache;
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
@@ -105,7 +101,7 @@ private:
 
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
-    auto instance = std::make_unique<StarRocksMetrics>();
+    auto instance = StarRocksMetrics::instance();
     auto metrics = instance->metrics();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
@@ -280,26 +276,25 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     ASSERT_TRUE(hit_metric != nullptr);
     auto capacity_metric = metrics->get_metric("page_cache_capacity");
     ASSERT_TRUE(capacity_metric != nullptr);
-    auto cache = StoragePageCache::instance();
     {
-        StoragePageCache::CacheKey key("abc", 0);
-        char* buf = new char[1024];
-        PageCacheHandle handle;
-        Slice data(buf, 1024);
-        cache->insert(key, data, &handle, false);
-        auto found = cache->lookup(key, &handle);
-        ASSERT_TRUE(found);
+        {
+            StoragePageCache::CacheKey key("abc", 0);
+            PageCacheHandle handle;
+            Slice data(new char[1024], 1024);
+            ASSERT_OK(_page_cache->insert(key, data, &handle, false));
+            ASSERT_TRUE(_page_cache->lookup(key, &handle));
+        }
         for (int i = 0; i < 1024; i++) {
             PageCacheHandle handle;
             StoragePageCache::CacheKey key(std::to_string(i), 0);
-            cache->lookup(key, &handle);
+            _page_cache->lookup(key, &handle);
         }
     }
     config::enable_metric_calculator = false;
     metrics->collect(&visitor);
     ASSERT_STREQ("1025", lookup_metric->to_string().c_str());
     ASSERT_STREQ("1", hit_metric->to_string().c_str());
-    ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());
+    ASSERT_STREQ(std::to_string(_page_cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());
 }
 
 void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegistry* instance) {
@@ -328,7 +323,28 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("segment_flush", instance);
     assert_threadpool_metrics_register("update_apply", instance);
     assert_threadpool_metrics_register("pk_index_compaction", instance);
+    assert_threadpool_metrics_register("drop", instance);
+    assert_threadpool_metrics_register("create_tablet", instance);
+    assert_threadpool_metrics_register("alter_tablet", instance);
+    assert_threadpool_metrics_register("clear_transaction", instance);
+    assert_threadpool_metrics_register("storage_medium_migrate", instance);
+    assert_threadpool_metrics_register("check_consistency", instance);
+    assert_threadpool_metrics_register("manual_compaction", instance);
+    assert_threadpool_metrics_register("compaction_control", instance);
+    assert_threadpool_metrics_register("update_schema", instance);
+    assert_threadpool_metrics_register("upload", instance);
+    assert_threadpool_metrics_register("download", instance);
+    assert_threadpool_metrics_register("make_snapshot", instance);
+    assert_threadpool_metrics_register("release_snapshot", instance);
+    assert_threadpool_metrics_register("move_dir", instance);
+    assert_threadpool_metrics_register("update_tablet_meta_info", instance);
+    assert_threadpool_metrics_register("drop_auto_increment_map_dir", instance);
+    assert_threadpool_metrics_register("clone", instance);
+    assert_threadpool_metrics_register("remote_snapshot", instance);
+    assert_threadpool_metrics_register("replicate_snapshot", instance);
+    assert_threadpool_metrics_register("load_channel", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
+    ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_memtable_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_writer_duration_us"));
@@ -337,8 +353,12 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_execute_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_pending_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("delta_writer_commit_task_total"));
+    ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("delta_writer_pk_preload_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_replica_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("delta_writer_txn_commit_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_finalize_duration_us"));
 }
 

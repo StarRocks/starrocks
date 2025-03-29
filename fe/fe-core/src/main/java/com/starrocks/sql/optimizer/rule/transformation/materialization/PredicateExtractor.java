@@ -68,8 +68,7 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
     }
 
     @Override
-    public RangePredicate visitBinaryPredicate(
-            BinaryPredicateOperator predicate, PredicateExtractorContext context) {
+    public RangePredicate visitBinaryPredicate(BinaryPredicateOperator predicate, PredicateExtractorContext context) {
         RangePredicate rangePredicate = rewriteBinaryPredicate(predicate);
         if (rangePredicate != null) {
             return rangePredicate;
@@ -238,6 +237,10 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 if (columnRangePredicateMap.containsKey(columnRangePredicate.getExpression())) {
                     ColumnRangePredicate newRangePredicate = columnRangePredicateMap.get(columnRangePredicate.getExpression());
                     newRangePredicate = mergeOp.apply(newRangePredicate, columnRangePredicate);
+                    if (newRangePredicate.equals(ColumnRangePredicate.FALSE)) {
+                        rangePredicates.add(newRangePredicate);
+                        return;
+                    }
                     if (newRangePredicate.isUnbounded()) {
                         columnRangePredicateMap.remove(columnRangePredicate.getExpression());
                     } else {

@@ -675,7 +675,9 @@ public class InsertPlanTest extends PlanTestBase {
                     "  1:Project\n" +
                     "  |  <slot 1> : 1: pk\n" +
                     "  |  <slot 4> : CAST(2: v1 AS VARCHAR)\n" +
-                    "  |  <slot 5> : 3: v2\n");
+                    "  |  <slot 5> : 3: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
         }
         {
             // KesType is AGG_KEYS
@@ -806,8 +808,8 @@ public class InsertPlanTest extends PlanTestBase {
         Column k2 = new Column("k2", Type.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
-        builder.setRemoteDbName("iceberg_db");
-        builder.setRemoteTableName("iceberg_table");
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_table");
         builder.setSrTableName("iceberg_table");
         builder.setFullSchema(Lists.newArrayList(k1, k2));
         builder.setNativeTable(nativeTable);
@@ -848,26 +850,24 @@ public class InsertPlanTest extends PlanTestBase {
             }
         };
 
-
         new Expectations(metadata) {
             {
-                metadata.getDb("iceberg_catalog", "iceberg_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
                 result = new Database(12345566, "iceberg_db");
                 minTimes = 0;
 
-
-                metadata.getTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+                metadata.getTable((ConnectContext) any, "iceberg_catalog", "iceberg_db", "iceberg_table");
                 result = icebergTable;
                 minTimes = 0;
             }
         };
-
 
         new MockUp<MetaUtils>() {
             @Mock
             public Database getDatabase(String catalogName, String tableName) {
                 return new Database(12345566, "iceberg_db");
             }
+
             @Mock
             public com.starrocks.catalog.Table getSessionAwareTable(
                     ConnectContext context, Database database, TableName tableName) {

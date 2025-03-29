@@ -218,19 +218,43 @@ public class EsUtil {
     }
 
     /**
-     * content
+     * {
+     *     "<table>" : {
+     *          "mappings": {
+     *              "dynamic": "false",
+     *              "_source": {....}
+     *              "properties": {
+     *              .....
+     *              }
+     *          }
+     *     }
+     * }
      *
-     * @param mappings
-     * @return
+     * NOTE: different version of ES can have various format, currently it takes care of 5.x/6.x/7.x/8.x
+     * @return root object of properties
      */
     private static JSONObject parsePropertiesRoot(JSONObject mappings) {
-        String element = mappings.keySet().iterator().next();
-        if (!"properties".equals(element)) {
-            // If type is not passed in takes the first type.
-            return (JSONObject) mappings.get(element);
+        if (mappings == null || mappings.isEmpty()) {
+            throw new IllegalArgumentException("empty mappings");
         }
-        // Equal 7.x and after
-        return mappings;
+
+        // 7.x+ format
+        if (mappings.has("properties")) {
+            return mappings;
+        }
+
+        // 6.x format with type
+        Iterator<String> iterator = mappings.keySet().iterator();
+        while (iterator.hasNext()) {
+            String element = iterator.next();
+            Object value = mappings.get(element);
+
+            if (value instanceof JSONObject && ((JSONObject) value).has("properties")) {
+                return (JSONObject) value;
+            }
+        }
+
+        throw new IllegalArgumentException("No properties found in mappings");
     }
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()

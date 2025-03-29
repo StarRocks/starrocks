@@ -2,30 +2,93 @@
 displayed_sidebar: docs
 ---
 
-# Tableau Desktop
+# Tableau
 
-Tableau Desktop supports querying and visualizing both internal data and external data in StarRocks.
+This topic describes how to connect StarRocks to Tableau Desktop and Tableau Server with StarRocks Tableau JDBC Connector.
 
-Create a database in Tableau Desktop:
+## Overview
 
-![Tableau Desktop](../../_assets/BI_tableau_1.png)
+The StarRocks Tableau JDBC Connector is a custom extension for Tableau Desktop and Tableau Server. It simplifies the process of connecting Tableau to StarRocks and enhances support for standard Tableau functionality, outperforming the default Generic ODBC/JDBC connection.
 
-Take note of the following points:
+### Key Features
 
-- Select **Other Databases(****JDBC****)** as the data source.
-- For **Dialect**, select **MySQL**.
-- For **URL**, enter a URL in the MySQL URI format as below:
+- LDAP Support: Enables LDAP login with password prompts for secure authentication.
+- High Compatibility: Achieves 99.99% compatibility in TDVT (Tableau Design Verification Tool) testing, with only one minor failure case.
 
-  ```SQL
-  jdbc:mysql://<Host>:<Port>/<Catalog>.<Databases>
-  ```
+## Prerequisites
 
-  The parameters in the URL are described as follows:
+Before proceeding, make sure the following requirements are met:
 
-  - `Host`: the FE host IP address of your StarRocks cluster.
-  - `Port`: the FE query port of your StarRocks cluster, for example, `9030`.
-  - `Catalog`: the target catalog in your StarRocks cluster. Both internal and external catalogs are supported.
-  - `Database`: the target database in your StarRocks cluster. Both internal and external databases are supported.
-- Configure **Username** and **Password**.
-  - **Username**: the username that is used to log in to your StarRocks cluster, for example, `admin`.
-  - **Password**: the password that is used to log in to your StarRocks cluster.
+- Tableau Version: Tableau 2020.4 and later
+- StarRocks Version: v3.2 and later
+
+## Install Connector for Tableau Desktop
+
+1. Download the [MySQL JDBC Driver 8.0.33](https://downloads.mysql.com/archives/c-j/).
+2. Store the driver file in the following directory (create the directory if it does not exist):
+
+   - macOS: `~/Library/Tableau/Drivers`
+   - Windows: `C:\Program Files\Tableau\Drivers`
+
+3. Download the [StarRocks Tableau JDBC Connector file](https://releases.starrocks.io/resources/starrocks_jdbc-v1.2.0_signed.taco).
+4. Store the connector file in the following directory:
+
+   - macOS: `~/Documents/My Tableau Repository/Connectors`
+   - Windows: `C:\Users\[Windows User]\Documents\My Tableau Repository\Connectors`
+
+5. Launch Tableau Desktop.
+6. Navigate to **Connect** -> **To a Server** -> **StarRocks JDBC by CelerData**.
+
+## Install Connector for Tableau Server
+
+1. Download the [MySQL JDBC Driver 8.0.33](https://downloads.mysql.com/archives/c-j/).
+2. Store the driver file in the following directory (create the directory if it does not exist):
+
+   - Linux: `/opt/tableau/tableau_driver/jdbc`
+   - Windows: `C:\Program Files\Tableau\Drivers`
+
+   :::info
+
+   On Linux, you must permit the "Tableau" user to access the directory.
+
+   Follow these steps:
+
+   1. Create the directory and copy the driver file to the directory:
+
+      ```Bash
+      sudo mkdir -p /opt/tableau/tableau_driver/jdbc
+
+      # Replace <path_to_driver_file_name> with the absolute path of the driver file.
+      sudo cp /<path_to_driver_file_name>.jar /opt/tableau/tableau_driver/jdbc
+      ```
+  
+   2. Grant permission to the the "Tableau" user.
+
+      ```Bash
+      # Replace <driver_file_name> with the name of the driver file.
+      sudo chmod 755 /opt/tableau/tableau_driver/jdbc/<driver_file_name>.jar
+      ```
+
+   :::
+
+3. Download the [StarRocks Tableau JDBC Connector file](https://releases.starrocks.io/resources/starrocks_jdbc-v1.2.0_signed.taco).
+4. Store the connector file in the following directory of each node:
+
+   - Linux: `/opt/tableau/connectors`
+   - Windows: `C:\Program Files\Tableau\Connectors`
+
+5. Restart Tableau Server.
+
+   ```Bash
+   tsm restart
+   ```
+
+   :::info
+
+   You must restart Tableau Server to apply the changes whenever you add, remove, or update a connector.
+
+   :::
+
+## Usage notes
+
+If LDAP login support is required, you can tick the **Enable LDAP** switch in the **Advanced** tab during configuration.

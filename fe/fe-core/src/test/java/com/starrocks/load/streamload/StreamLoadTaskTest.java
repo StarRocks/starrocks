@@ -18,7 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -29,6 +29,7 @@ import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -62,7 +63,7 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-    public void testAfterCommitted() throws UserException {
+    public void testAfterCommitted() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         new Expectations() {
             {
@@ -82,7 +83,7 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-    public void testAfterAborted() throws UserException {
+    public void testAfterAborted() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         new Expectations() {
             {
@@ -98,8 +99,19 @@ public class StreamLoadTaskTest {
         QeProcessorImpl.INSTANCE.registerQuery(streamLoadTask.getTUniqueId(), coord);
         Assert.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
+        long ts = System.currentTimeMillis();
         streamLoadTask.afterAborted(txnState, txnOperated, "");
         Assert.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
+    }
+
+    @Test
+    public void testAfterVisible() {
+        TransactionState txnState = new TransactionState();
+        boolean txnOperated = true;
+        long ts = System.currentTimeMillis();
+        streamLoadTask.afterVisible(txnState, txnOperated);
+        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
 
     @Test
@@ -120,9 +132,9 @@ public class StreamLoadTaskTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
-        ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
@@ -171,7 +183,7 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-    public void testBuildProfile() throws UserException {
+    public void testBuildProfile() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         streamLoadTask.setIsSyncStreamLoad(true);
         new Expectations() {

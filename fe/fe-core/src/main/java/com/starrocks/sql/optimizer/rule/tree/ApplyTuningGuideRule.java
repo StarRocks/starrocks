@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
@@ -55,6 +56,14 @@ public class ApplyTuningGuideRule implements TreeRewriteRule {
         OperatorTuningGuides tuningGuides = PlanTuningAdvisor.getInstance().getTuningGuides(sql, pair.first);
         if (tuningGuides == null) {
             return root;
+        }
+
+        if (!tuningGuides.isEmpty()) {
+            if (!tuningGuides.isUseful()) {
+                Tracers.record("CandidateTuningGuides", "Tuning guides are useless");
+            } else {
+                Tracers.record("CandidateTuningGuides", tuningGuides.getTuneGuidesInfo(true));
+            }
         }
 
         // delete the useless tuning guides

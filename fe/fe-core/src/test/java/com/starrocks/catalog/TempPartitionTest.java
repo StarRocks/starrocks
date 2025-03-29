@@ -100,6 +100,16 @@ public class TempPartitionTest {
 
     }
 
+    private static void waitAllPartitionClearFinished(long time) {
+        while (!GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartitionInfoIsEmpty()) {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
@@ -143,7 +153,7 @@ public class TempPartitionTest {
         if (tabletMeta == null) {
             return -1;
         }
-        return tabletMeta.getPartitionId();
+        return tabletMeta.getPhysicalPartitionId();
     }
 
     private void getPartitionNameToTabletIdMap(String tbl, boolean isTemp, Map<String, Long> partNameToTabletId)
@@ -493,6 +503,7 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        waitAllPartitionClearFinished(System.currentTimeMillis());
 
         checkTabletExists(tempPartitionTabletIds2.values(), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p3")), true);
@@ -780,6 +791,7 @@ public class TempPartitionTest {
         TempPartitions readTempPartition = TempPartitions.read(in);
         List<Partition> partitions = readTempPartition.getAllPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(2, partitions.get(0).getMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assert.assertEquals(2, partitions.get(0).getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.VISIBLE).size());
     }
 }

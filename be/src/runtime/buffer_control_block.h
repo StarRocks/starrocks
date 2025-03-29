@@ -44,9 +44,18 @@
 
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
+#include "util/race_detect.h"
 #include "util/runtime_profile.h"
+
+namespace arrow {
+class RecordBatch;
+}
 
 namespace google::protobuf {
 class Closure;
@@ -95,15 +104,19 @@ public:
     // this method is reserved and is only used in the non-pipeline engine
     Status add_batch(TFetchDataResult* result, bool need_free = true);
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
+    Status add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result);
 
     // non-blocking version of add_batch
-    StatusOr<bool> try_add_batch(std::unique_ptr<TFetchDataResult>& result);
-    StatusOr<bool> try_add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results);
+    Status add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results);
+    bool is_full() const;
+    // cancel all pending rpc. this is called from pipeline->cancelled
+    void cancel_pending_rpc();
 
     // get result from batch, use timeout?
     Status get_batch(TFetchDataResult* result);
 
     void get_batch(GetResultBatchCtx* ctx);
+    Status get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result);
 
     // close buffer block, set _status to exec_status and set _is_close to true;
     // called because data has been read or error happened.
@@ -126,13 +139,36 @@ public:
         }
     }
 
+    void attach_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _observable.add_observer(state, observer);
+    }
+
+    auto defer_notify() {
+        return DeferOp([query_ctx = _query_ctx, this]() {
+            if (auto ctx = query_ctx.lock()) {
+                this->_observable.notify_source_observers();
+                CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+            }
+        });
+    }
+
+    void attach_query_ctx(const std::shared_ptr<pipeline::QueryContext>& query_ctx) {
+        if (_query_ctx.use_count() == 0) {
+            _query_ctx = query_ctx;
+        }
+    }
+
 private:
     void _process_batch_without_lock(std::unique_ptr<SerializeRes>& result);
+
+    void _process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result);
 
     StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
 
     // as no idea of whether sending sorted results, can't use concurrentQueue here.
     typedef std::list<std::unique_ptr<SerializeRes>> ResultQueue;
+    typedef std::list<std::shared_ptr<arrow::RecordBatch>> ArrowResultQueue;
+
     // result's query id
     TUniqueId _fragment_id;
     std::atomic_bool _is_close;
@@ -141,11 +177,15 @@ private:
     std::atomic_int64_t _buffer_bytes;
     int _buffer_limit;
     std::atomic<int64_t> _packet_num;
+    int _arrow_rows_limit;
+    int _arrow_rows;
 
     // blocking queue for batch
     ResultQueue _batch_queue;
+    ArrowResultQueue _arrow_batch_queue;
+
     // protects all subsequent data in this block
-    std::mutex _lock;
+    mutable std::mutex _lock;
     // signal arrival of new batch or the eos/cancelled condition
     std::condition_variable _data_arriaval;
     // signal removal of data by stream consumer
@@ -158,6 +198,9 @@ private:
     // multithreaded access.
     std::shared_ptr<QueryStatistics> _query_statistics;
     static const size_t _max_memory_usage = 1UL << 28; // 256MB
+
+    std::weak_ptr<pipeline::QueryContext> _query_ctx;
+    pipeline::Observable _observable;
 };
 
 } // namespace starrocks

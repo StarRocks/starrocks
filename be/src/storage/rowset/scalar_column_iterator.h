@@ -65,6 +65,8 @@ public:
 
     ordinal_t num_rows() const override { return _reader->num_rows(); }
 
+    bool has_zone_map() const override { return _reader->has_zone_map(); }
+
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
                                       const ColumnPredicate* del_predicate, SparseRange<>* range,
                                       CompoundNodeType pred_relationn) override;
@@ -93,6 +95,8 @@ public:
     ParsedPage* get_current_page() { return _page.get(); }
 
     ColumnReader* get_column_reader() override { return _reader; }
+
+    Status null_count(size_t* count) override;
 
     bool is_nullable();
 

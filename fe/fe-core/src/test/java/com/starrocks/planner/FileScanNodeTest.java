@@ -29,7 +29,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
@@ -97,7 +97,7 @@ public class FileScanNodeTest {
     public void testCreateScanRangeLocations(@Mocked GlobalStateMgr globalStateMgr,
                                              @Mocked SystemInfoService systemInfoService,
                                              @Injectable Database db, @Injectable OlapTable table)
-            throws UserException {
+            throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -476,7 +476,7 @@ public class FileScanNodeTest {
         List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
         scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
 
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "No files were found matching the pattern(s) or path(s): " +
                         "'hdfs://127.0.0.1:9001/file1, hdfs://127.0.0.1:9001/file2, hdfs://127.0.0.1:9001/file3, ...'",
                 () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
@@ -500,7 +500,7 @@ public class FileScanNodeTest {
         List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
         scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
 
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "No files were found matching the pattern(s) or path(s): 'hdfs://127.0.0.1:9001/file*'",
                 () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
     }
@@ -546,7 +546,7 @@ public class FileScanNodeTest {
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
                 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "The valid bytes length for 'column separator' is [1, 50]",
                 () -> scanNode.init(analyzer));
     }
@@ -591,7 +591,7 @@ public class FileScanNodeTest {
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
                 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "The valid bytes length for 'row delimiter' is [1, 50]",
                 () -> scanNode.init(analyzer));
     }

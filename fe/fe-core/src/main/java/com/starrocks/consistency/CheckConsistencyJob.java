@@ -40,8 +40,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MetaObject;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
@@ -147,20 +148,20 @@ public class CheckConsistencyJob {
                     LockType.READ)) {
             OlapTable olapTable = (OlapTable) table;
 
-            Partition partition = olapTable.getPartition(tabletMeta.getPartitionId());
-            if (partition == null) {
-                LOG.debug("partition[{}] does not exist", tabletMeta.getPartitionId());
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                LOG.debug("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return false;
             }
 
             // check partition's replication num. if 1 replication. skip
-            short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
+            short replicationNum = olapTable.getPartitionInfo().getReplicationNum(physicalPartition.getParentId());
             if (replicationNum == (short) 1) {
-                LOG.debug("partition[{}]'s replication num is 1. skip consistency check", partition.getId());
+                LOG.debug("partition[{}]'s replication num is 1. skip consistency check", physicalPartition.getParentId());
                 return false;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex index = physicalPartition.getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 LOG.debug("index[{}] does not exist", tabletMeta.getIndexId());
                 return false;
@@ -172,7 +173,7 @@ public class CheckConsistencyJob {
                 return false;
             }
 
-            checkedVersion = partition.getVisibleVersion();
+            checkedVersion = physicalPartition.getVisibleVersion();
             checkedSchemaHash = olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId());
 
             int sentTaskReplicaNum = 0;
@@ -191,7 +192,7 @@ public class CheckConsistencyJob {
                 CheckConsistencyTask task = new CheckConsistencyTask(null, replica.getBackendId(),
                             tabletMeta.getDbId(),
                             tabletMeta.getTableId(),
-                            tabletMeta.getPartitionId(),
+                            tabletMeta.getPhysicalPartitionId(),
                             tabletMeta.getIndexId(),
                             tabletId, checkedSchemaHash,
                             checkedVersion);
@@ -272,13 +273,13 @@ public class CheckConsistencyJob {
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) table;
 
-            Partition partition = olapTable.getPartition(tabletMeta.getPartitionId());
-            if (partition == null) {
-                LOG.warn("partition[{}] does not exist", tabletMeta.getPartitionId());
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                LOG.warn("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return -1;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex index = physicalPartition.getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 LOG.warn("index[{}] does not exist", tabletMeta.getIndexId());
                 return -1;
@@ -303,7 +304,8 @@ public class CheckConsistencyJob {
                 Iterator<Map.Entry<Long, Long>> iter = checksumMap.entrySet().iterator();
                 while (iter.hasNext()) {
                     Map.Entry<Long, Long> entry = iter.next();
-                    if (tablet.getReplicaByBackendId(entry.getKey()) == null) {
+                    Replica replica = tablet.getReplicaByBackendId(entry.getKey());
+                    if (replica == null) {
                         LOG.debug("tablet[{}]'s replica in backend[{}] does not exist. remove from checksumMap",
                                     tabletId, entry.getKey());
                         iter.remove();
@@ -314,6 +316,9 @@ public class CheckConsistencyJob {
                         LOG.debug("tablet[{}] has unfinished replica check sum task. backend[{}]",
                                     tabletId, entry.getKey());
                         isFinished = false;
+                    } else {
+                        // set replica's checksum
+                        replica.setChecksum(entry.getValue());
                     }
                 }
 
@@ -356,7 +361,9 @@ public class CheckConsistencyJob {
             long lastCheckTime = System.currentTimeMillis();
             db.setLastCheckTime(lastCheckTime);
             olapTable.setLastCheckTime(lastCheckTime);
-            partition.setLastCheckTime(lastCheckTime);
+            if (physicalPartition instanceof MetaObject) {
+                ((MetaObject) physicalPartition).setLastCheckTime(lastCheckTime);
+            }
             index.setLastCheckTime(lastCheckTime);
             tablet.setLastCheckTime(lastCheckTime);
             tablet.setIsConsistent(isConsistent);
@@ -365,7 +372,7 @@ public class CheckConsistencyJob {
             tablet.setCheckedVersion(checkedVersion);
 
             // log
-            ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), partition.getId(),
+            ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), physicalPartition.getId(),
                         index.getId(), tabletId, lastCheckTime,
                         checkedVersion, isConsistent);
             journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);

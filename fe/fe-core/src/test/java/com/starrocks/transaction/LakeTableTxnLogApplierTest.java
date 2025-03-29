@@ -25,20 +25,21 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
         TransactionState state = newTransactionState();
         state.setTransactionStatus(TransactionStatus.COMMITTED);
-        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId, 2, 0);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
 
         applier.applyCommitLog(state, tableCommitInfo);
-        Assert.assertEquals(1, table.getPartition(partitionId).getVisibleVersion());
-        Assert.assertEquals(3, table.getPartition(partitionId).getNextVersion());
+        Assert.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
 
         state.setTransactionStatus(TransactionStatus.VISIBLE);
         partitionCommitInfo.setVersionTime(System.currentTimeMillis());
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
-        Assert.assertEquals(2, table.getPartition(partitionId).getVisibleVersion());
-        Assert.assertEquals(3, table.getPartition(partitionId).getNextVersion());
-        Assert.assertEquals(partitionCommitInfo.getVersionTime(), table.getPartition(partitionId).getVisibleVersionTime());
+        Assert.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(3, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+        Assert.assertEquals(partitionCommitInfo.getVersionTime(), table.getPartition(partitionId).getDefaultPhysicalPartition()
+                .getVisibleVersionTime());
     }
 
     @Test
@@ -51,13 +52,13 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
 
         applier.applyCommitLog(state, tableCommitInfo);
-        Assert.assertEquals(1, table.getPartition(partitionId).getVisibleVersion());
-        Assert.assertEquals(2, table.getPartition(partitionId).getNextVersion());
+        Assert.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
 
         state.setTransactionStatus(TransactionStatus.VISIBLE);
         partitionCommitInfo.setVersionTime(System.currentTimeMillis());
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
-        Assert.assertEquals(1, table.getPartition(partitionId).getVisibleVersion());
-        Assert.assertEquals(2, table.getPartition(partitionId).getNextVersion());
+        Assert.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
     }
 }

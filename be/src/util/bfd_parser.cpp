@@ -103,9 +103,17 @@ void BfdParser::init_bfd() {
     }
     std::lock_guard<std::mutex> lock(_bfd_mutex);
     bfd_init();
+#if defined(__x86_64__)
     if (!bfd_set_default_target("elf64-x86-64")) {
         LOG(ERROR) << "set default target to elf64-x86-64 failed.";
     }
+#elif defined(__aarch64__)
+    if (!bfd_set_default_target("elf64-littleaarch64")) {
+        LOG(ERROR) << "set default target to elf64-littleaarch64 failed.";
+    }
+#else
+#error "Not supported architecture"
+#endif
     _is_bfd_inited = true;
 }
 

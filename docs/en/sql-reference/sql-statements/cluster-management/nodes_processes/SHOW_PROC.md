@@ -17,12 +17,12 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 ## Syntax
 
 ```SQL
-SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' 
-          | '/jobs' | '/statistic' | '/tasks' | '/frontends' 
-          | '/brokers' | '/resources' | '/load_error_hub' 
-          | '/transactions' | '/monitor' | '/current_queries' 
-          | '/current_backend_instances' | '/cluster_balance' 
-          | '/routine_loads' | '/colocation_group' | '/catalog' }
+SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs' 
+          | '/statistic' | '/tasks' | '/frontends' | '/brokers' 
+          | '/resources' | '/load_error_hub' | '/transactions' 
+          | '/monitor' | '/current_queries' | '/current_backend_instances' 
+          | '/cluster_balance' | '/routine_loads' | '/colocation_group' 
+          | '/catalog' | '/replications'  | '/global_current_queries' }
 ```
 
 ## Parameters
@@ -47,6 +47,8 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs'
 | '/routine_loads'             | Shows the information of Routine Load in the cluster.        |
 | '/colocation_group'          | Shows the information of Colocate Join groups in the cluster. |
 | '/catalog'                   | Shows the information of catalogs in the cluster.            |
+| '/replications'              | Shows the information of data replication tasks in the cluster. |
+| '/global_current_queries'    | Shows the information of running queries on all FE nodes in the cluster. |
 
 ## Examples
 
@@ -442,3 +444,55 @@ mysql> SHOW PROC '/catalog';
 | Catalog    | Catalog name.             |
 | Type       | Catalog type.             |
 | Comment    | Comments for the catalog. |
+
+Example 14: Shows the information of replication tasks in the cluster.
+
+```Plain
+mysql> SHOW PROC '/replications';
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+| JobID                                           | DatabaseID | TableID | TxnID | CreatedTime         | FinishedTime        | State     | Progress | Error |
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+| FAILOVER_GROUP_group1-11006-11010-1725593360156 | 11006      | 11010   | 99    | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11009-1725593360161 | 11006      | 11009   | 98    | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11074-1725593360161 | 11006      | 11074   | 100   | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-12474-1725593360250 | 11006      | 12474   | 102   | 2024-09-06 11:29:20 | 2024-09-06 11:29:24 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11024-1725593360293 | 11006      | 11024   | 101   | 2024-09-06 11:29:20 | 2024-09-06 11:29:24 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-13861-1725607270963 | 11006      | 13861   | 627   | 2024-09-06 15:21:10 | 2024-09-06 15:21:14 | COMMITTED |          |       |
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+```
+
+| **Return**   | **Description**                 |
+| ------------ | ------------------------------- |
+| JobID        | Job ID.                         |
+| DatabaseID   | Database ID.                    |
+| TableID      | Table ID.                       |
+| TxnID        | Transaction ID.                 |
+| CreatedTime  | Time when the task was created. |
+| FinishedTime | Time when the task finished.    |
+| State        | Status of the task. Valid values: INITIALIZING, SNAPSHOTING, REPLICATING, COMMITTED, ABORTED. |
+| Progress     | Progress of the task.           |
+| Error        | Error message (if any).         |
+
+
+**Example 15: Shows the information of running queries on the current FE node.**
+
+```sql
+MySQL > show proc '/current_queries';
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
+| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime  | ExecTime | Warehouse         | CustomQueryId | ResourceGroup |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
+| 2025-03-07 02:00:19 | 172.26.92.227 | ddbd69b9-fab4-11ef-8063-461f20abc3f0 | 11           | tpcds_2  | root | 120.573 MB | 5859503 rows | 296.432 MB  | 0.000 B       | 27.888 s | 3.153 s  | default_warehouse |               | rg1           |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
+```
+
+**Example 16: Shows the information of running queries on all FE nodes in the cluster.**
+
+```sql
+MySQL > show proc '/global_current_queries';
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
+| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime | ExecTime | Warehouse         | CustomQueryId | ResourceGroup |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
+| 2025-03-07 02:02:47 | 172.26.92.227 | 3603d566-fab5-11ef-8063-461f20abc3f0 | 12           | tpcds_2  | root | 100.886 MB | 4899036 rows | 114.491 MB  | 0.000 B       | 5.700 s | 0.713 s  | default_warehouse |               | rg1           |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
+
+```

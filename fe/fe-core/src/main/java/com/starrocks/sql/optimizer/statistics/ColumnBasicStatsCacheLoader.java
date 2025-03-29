@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,6 +47,7 @@ import java.util.concurrent.Executor;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
+import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
 
 public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<ColumnStatistic>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
@@ -55,6 +57,9 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
                                                                            @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            if (FeConstants.enableUnitStatistics) {
+                return Optional.empty();
+            }
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
@@ -66,7 +71,8 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return Optional.empty();
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -79,6 +85,20 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public CompletableFuture<Map<@NonNull ColumnStatsCacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            if (FeConstants.enableUnitStatistics) {
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+                for (ColumnStatsCacheKey key : keys) {
+                    result.put(key, Optional.empty());
+                }
+                return result;
+            }
+
+            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+            // There may be no statistics for the column in BE
+            // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
+            for (ColumnStatsCacheKey cacheKey : keys) {
+                result.put(cacheKey, Optional.empty());
+            }
 
             try {
                 long tableId = -1;
@@ -90,13 +110,8 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
+
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableId, columns);
-                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
-                // There may be no statistics for the column in BE
-                // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
-                for (ColumnStatsCacheKey cacheKey : keys) {
-                    result.put(cacheKey, Optional.empty());
-                }
 
                 for (TStatisticData data : statisticData) {
                     ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
@@ -105,7 +120,8 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 }
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -191,10 +207,15 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
             distinctValues = 1;
         }
 
+        double collectionSize = statisticData.isSetCollectionSize() ? statisticData.getCollectionSize() :
+                DEFAULT_COLLECTION_SIZE;
+
         return builder.setMinValue(minValue).
                 setMaxValue(maxValue).
                 setDistinctValuesCount(distinctValues).
                 setAverageRowSize(statisticData.dataSize / Math.max(statisticData.rowCount, 1)).
-                setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
+                setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1))
+                .setCollectionSize(collectionSize)
+                .build();
     }
 }

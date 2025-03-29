@@ -22,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -88,7 +89,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_lake_partition", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "test_lake_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_lake_partition");
@@ -134,7 +135,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
+                    .addPartitions(Util.getOrCreateInnerContext(), db, "site_access", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("site_access");
@@ -257,5 +258,13 @@ public class AlterTest {
             e.printStackTrace();
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testAlterWarehouse() throws Exception {
+        Exception e = Assert.assertThrows(DdlException.class, () ->
+                starRocksAssert.ddl("alter warehouse default_warehouse set ('compute_replica'='2')")
+        );
+        Assert.assertEquals("Multi-Warehouse is not implemented", e.getMessage());
     }
 }

@@ -44,8 +44,9 @@ Status HorizontalGeneralTabletWriter::open() {
 }
 
 Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, SegmentPB* segment) {
-    if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
-        _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
+    if (_seg_writer == nullptr ||
+        (_auto_flush && (_seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
+                         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/))) {
         RETURN_IF_ERROR(flush_segment_writer(segment));
         RETURN_IF_ERROR(reset_segment_writer());
     }

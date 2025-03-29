@@ -26,6 +26,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
+        connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
     }
 
