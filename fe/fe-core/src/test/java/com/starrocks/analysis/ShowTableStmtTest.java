@@ -77,16 +77,18 @@ public class ShowTableStmtTest {
 
         stmt = new ShowTableStmt("abc", true, null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals(3, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("Table_comment", stmt.getMetaData().getColumn(2).getName());
 
         stmt = new ShowTableStmt("abc", true, "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals(3, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("Table_comment", stmt.getMetaData().getColumn(2).getName());
         Assert.assertEquals("bcd", stmt.getPattern());
 
         String sql = "show full tables where table_type !='VIEW'";
@@ -95,8 +97,9 @@ public class ShowTableStmtTest {
 
         QueryStatement queryStatement = stmt.toSelectStmt();
         String expect = "SELECT information_schema.tables.TABLE_NAME AS Tables_in_testDb, " +
-                "information_schema.tables.TABLE_TYPE AS Table_type FROM " +
-                "information_schema.tables WHERE (information_schema.tables.TABLE_SCHEMA = 'testDb') AND (information_schema.tables.TABLE_TYPE != 'VIEW')";
+                "information_schema.tables.TABLE_TYPE AS Table_type, " +
+                "information_schema.tables.TABLE_COMMENT AS Table_comment " +
+                "FROM information_schema.tables WHERE (information_schema.tables.TABLE_SCHEMA = 'testDb') AND (information_schema.tables.TABLE_TYPE != 'VIEW')";
         Assert.assertEquals(expect, AstToStringBuilder.toString(queryStatement));
     }
 
