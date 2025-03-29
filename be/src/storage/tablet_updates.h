@@ -593,6 +593,7 @@ private:
     std::atomic<double> _pk_index_write_amp_score{0.0};
 
     std::atomic<bool> _apply_schedule{false};
+    size_t _apply_failed_time = 0;
 };
 
 } // namespace starrocks
