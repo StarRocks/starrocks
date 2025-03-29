@@ -30,7 +30,7 @@
 #include "exprs/expr.h"
 #include "exprs/runtime_filter.h"
 #include "gen_cpp/Metrics_types.h"
-#include "gutil/strings/substitute.h"
+#include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
@@ -80,7 +80,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _mor_reader_mode(param._mor_reader_mode),
-          _enable_late_materialization(param._enable_late_materialization) {
+          _enable_late_materialization(param._enable_late_materialization),
+          _is_skew_join(param._is_skew_join) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -584,6 +585,8 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
             columns.push_back(column);
         }
 
+        TypeDescriptor type_descriptor = _build_expr_ctxs[expr_order]->root()->type();
+
         MutableRuntimeFilterPtr filter = nullptr;
         auto multi_partitioned = rf_desc->layout().pipeline_level_multi_partitioned();
         multi_partitioned |= rf_desc->num_colocate_partition() > 0;
@@ -601,7 +604,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         }
 
         _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeMembershipFilterBuildParam(
-                multi_partitioned, eq_null, is_empty, std::move(columns), std::move(filter)));
+                multi_partitioned, eq_null, is_empty, std::move(columns), std::move(filter), type_descriptor));
     }
     return Status::OK();
 }
