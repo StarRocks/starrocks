@@ -34,6 +34,8 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaInfoSnapshot;
+import com.staros.proto.ReplicaInfoSnapshotList;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
@@ -51,6 +53,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -649,11 +652,9 @@ public class StarOSAgent {
         return ids.iterator().next();
     }
 
-    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
-            throws StarRocksException {
+    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
         try {
-            ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-            return getAllNodeIdsByShard(shardInfo);
+            return getAllNodeIdsInWorkerGroupByShard(shardId, workerGroupId);
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }
@@ -667,6 +668,63 @@ public class StarOSAgent {
                 .forEach(x -> x.ifPresent(nodeIds::add));
 
         return nodeIds;
+    }
+
+    public List<Long> getAllNodeIdsInWorkerGroupByShard(long shardId, long workerGroupId) throws StarClientException {
+        List<ReplicaInfoSnapshotList> snapshotLists =
+                client.getReplicaWorkerInfoSnapshotList(serviceId, Lists.newArrayList(shardId), workerGroupId);
+        Preconditions.checkState(snapshotLists.size() == 1);
+        List<ReplicaInfoSnapshot> snapshotList = snapshotLists.get(0).getReplicaSnapshotList();
+        List<Long> nodeIds = new ArrayList<>();
+        snapshotList.stream()
+                .map(this::getOrUpdateNodeIdByReplicaSnapshot)
+                .forEach(x -> x.ifPresent(nodeIds::add));
+        return nodeIds;
+    }
+
+    private Optional<Long> getOrUpdateNodeIdByReplicaSnapshot(ReplicaInfoSnapshot snapshot) {
+        long workerId = snapshot.getWorkerId();
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            // get the backend id directly from workerToBackend
+            Long beId = workerToNode.get(workerId);
+            if (beId != null) {
+                return Optional.of(beId);
+            }
+        }
+        String workerAddr = snapshot.getIpPort();
+        String[] hostPorts = workerAddr.split(":");
+        String host = hostPorts[0];
+        int starletPort = -1;
+        try {
+            starletPort = Integer.parseInt(hostPorts[1]);
+        } catch (NumberFormatException ex) {
+            LOG.warn("Malformed worker address info:" + workerAddr);
+            return Optional.empty();
+        }
+        Optional<Long> result = getNodeIdByHostStarletPort(host, starletPort);
+        if (!result.isPresent()) {
+            LOG.info("can't find backendId with starletPort for {}, try using be_heartbeat_port to search again",
+                    workerAddr);
+            // FIXME: workaround fix of missing starletPort due to Backend::write() missing the field during
+            //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
+            if (StringUtils.isNotEmpty(snapshot.getBeHeartbeatPort())) {
+                int heartbeatPort = -1;
+                try {
+                    heartbeatPort = Integer.parseInt(snapshot.getBeHeartbeatPort());
+                } catch (NumberFormatException ex) {
+                    LOG.warn("Malformed be_heartbeat_port for worker:" + workerAddr);
+                    return Optional.empty();
+                }
+                result = getNodeIdByHostHeartbeatPort(host, heartbeatPort);
+            }
+        }
+        if (result.isPresent()) {
+            try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+                workerToId.put(workerAddr, workerId);
+                workerToNode.put(workerId, result.get());
+            }
+        }
+        return result;
     }
 
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
