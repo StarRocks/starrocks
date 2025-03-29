@@ -20,10 +20,13 @@
 namespace starrocks::pipeline {
 
 BalancedChunkBuffer::BalancedChunkBuffer(BalanceStrategy strategy, int output_operators, ChunkBufferLimiterPtr limiter)
-        : _output_operators(output_operators), _strategy(strategy), _limiter(std::move(limiter)) {
+        : _output_operators(output_operators),
+          _strategy(strategy),
+          _sub_buffers(std::make_unique<SubBuffer[]>(output_operators)),
+          _limiter(std::move(limiter)) {
     DCHECK_GT(output_operators, 0);
     for (int i = 0; i < output_operators; i++) {
-        _sub_buffers.emplace_back(std::make_unique<QueueT>());
+        _sub_buffers[i] = std::make_unique<QueueT>();
     }
 }
 
@@ -44,12 +47,8 @@ size_t BalancedChunkBuffer::size(int buffer_index) const {
 }
 
 bool BalancedChunkBuffer::all_empty() const {
-    for (auto& buffer : _sub_buffers) {
-        if (!buffer->empty()) {
-            return false;
-        }
-    }
-    return true;
+    return std::all_of(_sub_buffers.get(), _sub_buffers.get() + _output_operators,
+                       [](const SubBuffer& buffer) { return buffer->empty(); });
 }
 
 bool BalancedChunkBuffer::empty(int buffer_index) const {
@@ -57,9 +56,8 @@ bool BalancedChunkBuffer::empty(int buffer_index) const {
 }
 
 void BalancedChunkBuffer::close() {
-    for (auto& buffer : _sub_buffers) {
-        buffer->clear();
-    }
+    std::for_each(_sub_buffers.get(), _sub_buffers.get() + _output_operators,
+                  [](const SubBuffer& buffer) { buffer->clear(); });
 }
 
 bool BalancedChunkBuffer::try_get(int buffer_index, ChunkPtr* output_chunk) {
