@@ -162,7 +162,7 @@ TEST_F(UpdateManagerTest, testDelVec) {
 }
 
 TEST_F(UpdateManagerTest, testExpireEntry) {
-    srand(time(nullptr));
+    srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     // write
     const int N = 8000;
@@ -198,7 +198,7 @@ TEST_F(UpdateManagerTest, testExpireEntry) {
 }
 
 TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
-    srand(time(nullptr));
+    srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     TabletSegmentId tsid;
     tsid.tablet_id = _tablet->tablet_id();
@@ -214,7 +214,7 @@ TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
 }
 
 TEST_F(UpdateManagerTest, test_on_rowset_finished) {
-    srand(time(nullptr));
+    srand(GetCurrentTimeMicros());
     create_tablet(rand(), rand());
     const int N = 10;
     std::vector<int64_t> keys;
