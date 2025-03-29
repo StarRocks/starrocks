@@ -21,7 +21,7 @@ import com.starrocks.catalog.Type;
 import java.util.Objects;
 
 public class CastOperator extends CallOperator {
-    private final boolean isImplicit;
+    private boolean isImplicit;
 
     public CastOperator(Type returnType, ScalarOperator args) {
         super("cast", returnType, Lists.newArrayList(args));
@@ -82,6 +82,14 @@ public class CastOperator extends CallOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), isImplicit, type);
+    }
+
+    @Override
+    public ScalarOperator clone() {
+        CastOperator operator = (CastOperator) super.clone();
+        // Deep copy here
+        operator.isImplicit = this.isImplicit;
+        return operator;
     }
 
     @Override
