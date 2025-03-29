@@ -118,7 +118,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: test_cosine, rollup: test_cosine\n" +
+                "     TABLE: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
                 "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
                 "     preAggregation: on\n" +
@@ -400,7 +400,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: test_cosine, rollup: test_cosine\n" +
+                "     TABLE: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
                 "          IVFPQ: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
                 "     preAggregation: on\n" +
@@ -477,20 +477,20 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         System.out.println(plan);
         assertContains(plan, "  1:OlapScanNode\n" +
-                "     table: test_cosine, rollup: test_cosine\n" +
+                "     TABLE: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
                 "          IVFPQ: OFF, Distance Column: <24:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
         assertContains(plan, "  7:OlapScanNode\n" +
-                "     table: test_l2, rollup: test_l2\n" +
+                "     TABLE: test_l2, rollup: test_l2\n" +
                 "     VECTORINDEX: ON\n" +
                 "          IVFPQ: OFF, Distance Column: <23:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
         assertContains(plan, "  13:OlapScanNode\n" +
-                "     table: test_cosine, rollup: test_cosine\n" +
+                "     TABLE: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: OFF");
         assertContains(plan, "  25:OlapScanNode\n" +
-                "     table: test_no_vector_index, rollup: test_no_vector_index\n" +
+                "     TABLE: test_no_vector_index, rollup: test_no_vector_index\n" +
                 "     VECTORINDEX: OFF");
     }
 
@@ -524,7 +524,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: test_ivfpq, rollup: test_ivfpq\n" +
+                "     TABLE: test_ivfpq, rollup: test_ivfpq\n" +
                 "     VECTORINDEX: ON\n" +
                 "          IVFPQ: ON, Distance Column: <0:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, Query Vector: [1.1, 2.2, 3.3, 4.4], Predicate Range: -1.0");
     }
