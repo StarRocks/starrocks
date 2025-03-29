@@ -50,6 +50,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -230,6 +231,24 @@ public class SelectAnalyzer {
                             INTERNAL_ERROR);
                 }
 
+                List<String> excludedColumns = item.getExcludedColumns();
+                if (excludedColumns != null && !excludedColumns.isEmpty()) {
+                    Set<String> existingColumns = fields.stream()
+                            .map(Field::getName)
+                            .collect(Collectors.toSet());
+                    List<String> missingColumns = excludedColumns.stream()
+                            .filter(col -> !existingColumns.contains(col))
+                            .collect(Collectors.toList());
+                    if (!missingColumns.isEmpty()) {
+                        String tableDesc = item.getTblName() != null ? 
+                                "table '" + item.getTblName() + "'" : "current scope";
+                        throw new SemanticException("Column(s) %s do not exist in %s", 
+                                missingColumns, tableDesc);
+                    }
+                    fields = fields.stream()
+                            .filter(field -> !excludedColumns.contains(field.getName()))
+                            .collect(Collectors.toList());
+                }
                 for (Field field : fields) {
                     int fieldIndex = scope.getRelationFields().indexOf(field);
                     /*

@@ -234,6 +234,11 @@ public class AstToSQLBuilder {
                         } else {
                             selectListString.add("*");
                         }
+                        if (!item.getExcludedColumns().isEmpty()) {
+                            selectListString.add(" EXCLUDE(");
+                            selectListString.add(Joiner.on(",").join(item.getExcludedColumns()));
+                            selectListString.add(")");
+                        }
                     } else if (item.getExpr() != null) {
                         Expr expr = item.getExpr();
                         String str = visit(expr);
