@@ -50,6 +50,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ResourceDesc;
 
 import java.io.File;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -201,15 +202,7 @@ public class SparkResource extends Resource {
     // Each SparkResource has and only has one SparkRepository.
     // This method get the remote archive which matches the dpp version from remote repository
     public synchronized SparkRepository.SparkArchive prepareArchive() throws LoadException {
-        String remoteRepositoryPath = workingDir + "/" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
-                + "/" + SparkRepository.REPOSITORY_DIR + name;
-        BrokerDesc brokerDesc;
-        if (hasBroker) {
-            brokerDesc = new BrokerDesc(broker, getBrokerPropertiesWithoutPrefix());
-        } else {
-            brokerDesc = new BrokerDesc(getBrokerPropertiesWithoutPrefix());
-        }
-        SparkRepository repository = new SparkRepository(remoteRepositoryPath, brokerDesc);
+        SparkRepository repository = initSparkRepository();
         // This checks and uploads the remote archive.
         repository.prepare();
         SparkRepository.SparkArchive archive = repository.getCurrentArchive();
@@ -386,5 +379,40 @@ public class SparkResource extends Resource {
         for (Map.Entry<String, String> entry : brokerProperties.entrySet()) {
             result.addRow(Lists.newArrayList(name, lowerCaseType, entry.getKey(), entry.getValue()));
         }
+    }
+
+    private SparkRepository initSparkRepository() {
+        String remoteRepositoryPath = workingDir + "/" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
+                + "/" + SparkRepository.REPOSITORY_DIR + name;
+        BrokerDesc brokerDesc;
+        if (hasBroker) {
+            brokerDesc = new BrokerDesc(broker, getBrokerPropertiesWithoutPrefix());
+        } else {
+            brokerDesc = new BrokerDesc(getBrokerPropertiesWithoutPrefix());
+        }
+        SparkRepository repository = new SparkRepository(remoteRepositoryPath, brokerDesc);
+        return repository;
+    }
+
+    public void deleteArchive() throws LoadException {
+        try {
+            SparkRepository repository = initSparkRepository();
+
+            // init current archive
+            String remoteArchivePath = repository.getRemoteArchivePath(repository.getCurrentDppVersion());
+            List<SparkRepository.SparkLibrary> libraries = Lists.newArrayList();
+            repository.getLibraries(remoteArchivePath, libraries);
+
+            // Normally, an archive should contain a DPP library and a SPARK library
+            if (libraries.isEmpty()) {
+                return;
+            }
+
+            // delete the remote repository dir
+            repository.delete(repository.getRemoteRepositoryPath());
+        } catch (LoadException e) {
+            throw new LoadException("delete spark archive process fail, reason: " + e.getMessage());
+        }
+
     }
 }
