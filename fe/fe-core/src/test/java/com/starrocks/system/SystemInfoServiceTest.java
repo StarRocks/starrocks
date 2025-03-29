@@ -15,9 +15,11 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.UpdateHistoricalNodeLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -37,6 +39,7 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -176,6 +179,9 @@ public class SystemInfoServiceTest {
             }
         };
 
+        Boolean savedConfig = Config.enable_trace_historical_node;
+        Config.enable_trace_historical_node = true;
+
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
 
@@ -205,6 +211,40 @@ public class SystemInfoServiceTest {
         service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
+
+        Config.enable_trace_historical_node = savedConfig;
+    }
+
+    @Test
+    public void testReplayUpdateHistoricalNode() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getHistoricalNodeMgr();
+                result = historicalNodeMgr;
+            }
+        };
+
+        List<Long> backendIds = Arrays.asList(101L, 102L);
+        List<Long> computeNodeIds = Arrays.asList(201L, 202L, 203L);
+        long updateTime = System.currentTimeMillis();
+        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        UpdateHistoricalNodeLog log = new UpdateHistoricalNodeLog(warehouse, updateTime, backendIds, computeNodeIds);
+
+        service.replayUpdateHistoricalNode(log);
+        Assert.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), 2);
+        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), 3);
     }
 
     @Test

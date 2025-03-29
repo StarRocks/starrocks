@@ -221,7 +221,7 @@ public class DefaultWorkerProviderTest {
     public void testSelectWorker() throws StarRocksException {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true);
+                        true, 0);
         for (long id = -1; id < 20; id++) {
             if (availableId2Worker.containsKey(id)) {
                 workerProvider.selectWorker(id);
@@ -254,22 +254,22 @@ public class DefaultWorkerProviderTest {
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true);
+                        true, 0);
         testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
 
         workerProvider =
-                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true, 0);
         testSelectNextWorkerHelper(workerProvider, availableId2Backend);
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        false);
+                        false, 0);
         testSelectNextWorkerHelper(workerProvider, availableId2Backend);
 
         ImmutableMap<Long, ComputeNode> id2BackendHalfDead = genWorkers(0, 10, Backend::new, true);
         workerProvider =
                 new DefaultWorkerProvider(id2BackendHalfDead, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(),
-                        false);
+                        false, 0);
         DefaultWorkerProvider finalWorkerProvider = workerProvider;
 
         SchedulerException e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
@@ -301,13 +301,13 @@ public class DefaultWorkerProviderTest {
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        false);
+                        false, 0);
         computeNodes = workerProvider.selectAllComputeNodes();
         Assert.assertTrue(computeNodes.isEmpty());
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true);
+                        true, 0);
         computeNodes = workerProvider.selectAllComputeNodes();
         Assert.assertEquals(availableId2ComputeNode.size(), computeNodes.size());
         Set<Long> computeNodeSet = new HashSet<>(computeNodes);
@@ -342,7 +342,7 @@ public class DefaultWorkerProviderTest {
     public void testGetBackend() {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true);
+                        true, 0);
         testGetBackendHelper(workerProvider, availableId2Backend);
     }
 
@@ -352,18 +352,18 @@ public class DefaultWorkerProviderTest {
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true);
+                        true, 0);
         assertThat(workerProvider.getAllWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
 
         workerProvider =
-                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true, 0);
         assertThat(workerProvider.getAllWorkers())
                 .containsOnlyOnceElementsOf(availableId2Backend.values());
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        false);
+                        false, 0);
         assertThat(workerProvider.getAllWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
     }
@@ -372,14 +372,14 @@ public class DefaultWorkerProviderTest {
     public void testReportBackendNotFoundException() {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true);
+                        true, 0);
         Assert.assertThrows(SchedulerException.class, workerProvider::reportDataNodeNotFoundException);
     }
 
     @Test
     public void testNextWorkerOverflow() throws NonRecoverableException {
         DefaultWorkerProvider workerProvider =
-                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true, 0);
         for (int i = 0; i < 100; i++) {
             Long workerId = workerProvider.selectNextWorker();
             assertThat(workerId).isNotNegative();
