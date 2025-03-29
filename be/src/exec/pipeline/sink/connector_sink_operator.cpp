@@ -17,6 +17,8 @@
 #include <tuple>
 #include <utility>
 
+#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "connector/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
@@ -85,6 +87,8 @@ bool ConnectorSinkOperator::is_finished() const {
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     _no_more_input = true;
     RETURN_IF_ERROR(_connector_chunk_sink->finish());
+    state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+        state->query_ctx(), state->fragment_ctx());
     return Status::OK();
 }
 
