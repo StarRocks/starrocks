@@ -35,6 +35,7 @@
 #pragma once
 
 #include "exec/parquet_builder.h"
+#include "formats/csv/csv_builder_options.h"
 #include "fs/fs.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "parquet/file_writer.h"
@@ -52,8 +53,6 @@ class WritableFile;
 struct ResultFileOptions {
     std::string file_path;
     TFileFormatType::type file_format;
-    std::string column_separator;
-    std::string row_delimiter;
     size_t max_file_size_bytes = 1 * 1024 * 1024 * 1024; // 1GB
     std::vector<TNetworkAddress> broker_addresses;
     std::map<std::string, std::string> broker_properties;
@@ -62,12 +61,11 @@ struct ResultFileOptions {
     bool use_broker;
     std::vector<std::string> file_column_names;
     parquet::ParquetBuilderOptions parquet_options;
+    csv::CsvBuilderOptions csv_options;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;
         file_format = t_opt.file_format;
-        column_separator = t_opt.__isset.column_separator ? t_opt.column_separator : "\t";
-        row_delimiter = t_opt.__isset.row_delimiter ? t_opt.row_delimiter : "\n";
         max_file_size_bytes = t_opt.__isset.max_file_size_bytes ? t_opt.max_file_size_bytes : max_file_size_bytes;
 
         if (t_opt.__isset.broker_addresses) {
@@ -96,6 +94,20 @@ struct ResultFileOptions {
         }
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.compression_type) {
             parquet_options.compression_type = t_opt.parquet_options.compression_type;
+        }
+
+        if (t_opt.__isset.csv_options && t_opt.csv_options.__isset.column_separator) {
+            csv_options.column_separator = t_opt.csv_options.column_separator;
+        } else {
+            csv_options.column_separator = "\t";
+        }
+        if (t_opt.__isset.csv_options && t_opt.csv_options.__isset.row_delimiter) {
+            csv_options.row_delimiter = t_opt.csv_options.row_delimiter;
+        } else {
+            csv_options.row_delimiter = "\n";
+        }
+        if (t_opt.__isset.csv_options && t_opt.csv_options.__isset.print_header) {
+            csv_options.print_header = t_opt.csv_options.print_header;
         }
     }
 
