@@ -11,3 +11,4 @@ select cast('-' as largeint);
 select cast('+' as largeint);
 -- name: test_cast_bigint_to_string
 select cast(cast((9-1)/3+1 as bigint) as string);
+select cast(cast((9-1)/3+1 as bigint) as double);
