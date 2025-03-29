@@ -5693,11 +5693,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSelectAll(StarRocksParser.SelectAllContext context) {
         NodePosition pos = createPos(context);
+        List<String> excludedColumns = new ArrayList<>();
+        if (context.excludeClause() != null) {
+            StarRocksParser.ExcludeClauseContext excludeCtx = context.excludeClause();
+            for (StarRocksParser.IdentifierContext idCtx : excludeCtx.identifier()) {
+                excludedColumns.add(((Identifier) visit(idCtx)).getValue());
+            }
+        }
         if (context.qualifiedName() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            return new SelectListItem(qualifiedNameToTableName(qualifiedName), pos);
+            return new SelectListItem(qualifiedNameToTableName(qualifiedName), pos, excludedColumns);
         }
-        return new SelectListItem(null, pos);
+        return new SelectListItem(null, pos, excludedColumns);
     }
 
     @Override
