@@ -158,7 +158,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         // cascaded cast cannot be reduced if middle type's size is smaller than two sides
         // e.g. cast(cast(smallint as tinyint) as int)
-        if (parentSlotSize > childSlotSize && childSlotSize <= grandChildSlotSize) {
+        if (parentSlotSize >= childSlotSize && childSlotSize <= grandChildSlotSize) {
             return false;
         }
 
