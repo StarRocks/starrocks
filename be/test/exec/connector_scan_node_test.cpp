@@ -49,7 +49,7 @@ protected:
     std::vector<TScanRangeParams> create_scan_ranges_cloud(size_t num);
 
     std::shared_ptr<TPlanNode> create_tplan_node_hive();
-    std::vector<TScanRangeParams> create_scan_ranges_hive(size_t num);
+    std::vector<TScanRangeParams> create_scan_ranges_hive(size_t num, std::string scanner_type);
 
     std::shared_ptr<TPlanNode> create_tplan_node_stream_load();
     std::vector<TScanRangeParams> create_scan_ranges_stream_load(RuntimeState* runtime_state,
@@ -188,7 +188,7 @@ std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_hive() {
     return tnode;
 }
 
-std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_hive(size_t num) {
+std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_hive(size_t num, std::string scanner_type) {
     std::vector<TScanRangeParams> scan_ranges;
 
     for (int i = 0; i < num; i++) {
@@ -196,6 +196,9 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_hive(siz
         hdfs_scan_range.__set_full_path("file");
         hdfs_scan_range.__set_offset(i);
         hdfs_scan_range.__set_length(1);
+        if (scanner_type == "kudu") {
+            hdfs_scan_range.__set_use_kudu_jni_reader(true);
+        }
 
         TScanRange scan_range;
         scan_range.__set_hdfs_scan_range(hdfs_scan_range);
@@ -223,7 +226,7 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_hi
 
     // dop is 1 and not so much morsels
     int pipeline_dop = 1;
-    auto scan_ranges = create_scan_ranges_hive(1);
+    auto scan_ranges = create_scan_ranges_hive(1, "hive");
     ASSIGN_OR_ABORT(auto morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
@@ -232,7 +235,7 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_hi
 
     // dop is 2 and not so much morsels
     pipeline_dop = 2;
-    scan_ranges = create_scan_ranges_hive(pipeline_dop * scan_node->io_tasks_per_scan_operator());
+    scan_ranges = create_scan_ranges_hive(pipeline_dop * scan_node->io_tasks_per_scan_operator(), "hive");
     ASSIGN_OR_ABORT(morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
@@ -241,7 +244,7 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_hi
 
     // dop is 2 and so much morsels
     pipeline_dop = 2;
-    scan_ranges = create_scan_ranges_hive(pipeline_dop * scan_node->io_tasks_per_scan_operator() + 1);
+    scan_ranges = create_scan_ranges_hive(pipeline_dop * scan_node->io_tasks_per_scan_operator() + 1, "hive");
     ASSIGN_OR_ABORT(morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
@@ -349,6 +352,50 @@ TEST_F(ConnectorScanNodeTest, test_stream_load_thread_pool) {
     ASSERT_EQ(1, tuple.get(0).get_int32());
     ASSERT_EQ("test", tuple.get(1).get_slice());
     ASSERT_TRUE(scan_node->use_stream_load_thread_pool());
+}
+
+TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_kudu) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_hive();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    bool enable_tablet_internal_parallel = false;
+    auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::AUTO;
+    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
+
+    // dop is 1 and not so much morsels
+    int pipeline_dop = 1;
+    auto scan_ranges = create_scan_ranges_hive(1, "kudu");
+    scan_node->set_scan_ranges(scan_ranges);
+    ASSIGN_OR_ABORT(auto morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
+                            enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+    ASSERT_TRUE(morsel_queue_factory->is_shared());
+
+    // dop is 2 and not so much morsels
+    pipeline_dop = 2;
+    scan_ranges = create_scan_ranges_hive(pipeline_dop * scan_node->io_tasks_per_scan_operator(), "kudu");
+    scan_node->set_scan_ranges(scan_ranges);
+    ASSIGN_OR_ABORT(morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
+                            enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+    ASSERT_FALSE(morsel_queue_factory->is_shared());
+
+    // dop is 2 and so much morsels
+    pipeline_dop = 2;
+    scan_ranges = create_scan_ranges_hive(pipeline_dop * scan_node->io_tasks_per_scan_operator() + 1, "kudu");
+    scan_node->set_scan_ranges(scan_ranges);
+    ASSIGN_OR_ABORT(morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
+                            enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+    ASSERT_TRUE(morsel_queue_factory->is_shared());
 }
 
 } // namespace starrocks
