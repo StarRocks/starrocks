@@ -1135,3 +1135,56 @@ SELECT SUM(CASE WHEN c3 = 1 THEN c1 ELSE NULL END) AS sum_c1_1,
 FROM t1
 GROUP BY c0;
 ```
+
+### EXCLUDE
+
+この機能はバージョン3.4からサポートされています。
+
+この機能は、クエリ結果から指定した列を除外し、特定の列を無視する必要がある場合のクエリ文を簡略化します。多数の列を含むテーブルを扱う際に特に便利で、明示的に保持する列名を全て列挙する手間を省けます。
+
+#### 構文
+
+```sql
+SELECT 
+  * EXCLUDE (<column_name> [, <column_name> ...]) 
+  | <table_alias>.* EXCLUDE (<column_name> [, <column_name> ...])
+FROM ...
+```
+
+#### パラメータ
+
+- **`* EXCLUDE`**  
+  ワイルドカード `*` は全ての列を選択し、`EXCLUDE` の後に除外する列名のリストを指定します。
+- **`<table_alias>.* EXCLUDE`**  
+  テーブルエイリアスが存在する場合、特定のテーブルの列を除外するように指定できます（エイリアスと組み合わせて使用する必要があります）。
+- **`<column_name>`**  
+  除外する列名。複数の列名はカンマで区切ります。列がテーブルに存在しない場合はエラーが発生します。
+
+#### 使用例
+
+##### 基本使用法
+
+```sql
+-- テストテーブルの作成
+CREATE TABLE test_table (
+  id INT,
+  name VARCHAR(50),
+  age INT,
+  email VARCHAR(100)
+) DUPLICATE KEY(id);
+
+-- 単一列を除外 (age)
+SELECT * EXCLUDE (age) FROM test_table;
+-- 以下のクエリと同等：
+SELECT id, name, email FROM test_table;
+
+-- 複数列を除外 (name, email)
+SELECT * EXCLUDE (name, email) FROM test_table;
+-- 以下のクエリと同等：
+SELECT id, age FROM test_table;
+
+-- テーブルエイリアスを使用して列を除外
+SELECT test_table.* EXCLUDE (email) FROM test_table;
+-- 以下のクエリと同等：
+SELECT id, name, age FROM test_table;
+```

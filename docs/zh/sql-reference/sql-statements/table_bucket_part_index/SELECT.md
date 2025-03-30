@@ -1136,3 +1136,56 @@ SELECT SUM(CASE WHEN c3 = 1 THEN c1 ELSE NULL END) AS sum_c1_1,
 FROM t1
 GROUP BY c0;
 ```
+
+### EXCLUDE
+
+该函数从 3.4 版本开始支持。
+
+该功能用于在查询结果中排除指定的列，简化需忽略部分列时的查询语句。这在处理包含大量列的表时尤为便捷，避免显式列出所有需要保留的列名。
+
+#### 语法
+
+```sql
+SELECT 
+  * EXCLUDE (<column_name> [, <column_name> ...]) 
+  | <table_alias>.* EXCLUDE (<column_name> [, <column_name> ...])
+FROM ...
+```
+
+#### 参数
+
+- **`* EXCLUDE`**  
+  通配符 `*` 表示选择所有列，`EXCLUDE` 后跟随需要排除的列名列表。
+- **`<table_alias>.* EXCLUDE`**  
+  当存在表别名时，可指定排除某张表的特定列（需与别名结合使用）。
+- **`<column_name>`**  
+  需要排除的列名，多个列名以逗号分隔。列必须存在于表中，否则将报错。
+
+#### 示例
+
+##### 基础用法
+
+```sql
+-- 创建测试表
+CREATE TABLE test_table (
+  id INT,
+  name VARCHAR(50),
+  age INT,
+  email VARCHAR(100)
+) DUPLICATE KEY(id);
+
+-- 排除单列 (age)
+SELECT * EXCLUDE (age) FROM test_table;
+-- 结果等同于以下查询：
+SELECT id, name, email FROM test_table;
+
+-- 排除多列 (name, email)
+SELECT * EXCLUDE (name, email) FROM test_table;
+-- 结果等同于以下查询：
+SELECT id, age FROM test_table;
+
+-- 使用表别名排除列
+SELECT test_table.* EXCLUDE (email) FROM test_table;
+-- 结果等同于以下查询：
+SELECT id, name, age FROM test_table;
+```
