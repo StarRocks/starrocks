@@ -1138,3 +1138,55 @@ SELECT SUM(CASE WHEN c3 = 1 THEN c1 ELSE NULL END) AS sum_c1_1,
 FROM t1
 GROUP BY c0;
 ```
+### EXCLUDE  
+
+This feature is supported starting from version 3.4.  
+
+This functionality is used to exclude specified columns from query results, simplifying SQL statements when certain columns need to be ignored. It is particularly convenient when working with tables containing a large number of columns, avoiding the need to explicitly list all columns to be retained.  
+
+#### Syntax
+
+```sql  
+SELECT  
+  * EXCLUDE (<column_name> [, <column_name> ...])  
+  | <table_alias>.* EXCLUDE (<column_name> [, <column_name> ...])  
+FROM ...  
+```  
+
+#### Parameters
+
+- **`* EXCLUDE`**  
+  The wildcard `*` selects all columns, followed by `EXCLUDE` and a list of column names to exclude.  
+- **`<table_alias>.* EXCLUDE`**  
+  When a table alias exists, this allows excluding specific columns from that table (must be used with the alias).  
+- **`<column_name>`**  
+  The column name(s) to exclude. Multiple columns are separated by commas. Columns must exist in the table; otherwise, an error will be thrown.  
+
+#### Examples
+
+##### Basic Usage
+
+```sql  
+-- Create test table  
+CREATE TABLE test_table (  
+  id INT,  
+  name VARCHAR(50),  
+  age INT,  
+  email VARCHAR(100)  
+) DUPLICATE KEY(id);  
+
+-- Exclude a single column (age)  
+SELECT * EXCLUDE (age) FROM test_table;  
+-- Equivalent to:  
+SELECT id, name, email FROM test_table;  
+
+-- Exclude multiple columns (name, email)  
+SELECT * EXCLUDE (name, email) FROM test_table;  
+-- Equivalent to:  
+SELECT id, age FROM test_table;  
+
+-- Exclude columns using a table alias  
+SELECT test_table.* EXCLUDE (email) FROM test_table;  
+-- Equivalent to:  
+SELECT id, name, age FROM test_table;  
+```
