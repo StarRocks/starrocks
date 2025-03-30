@@ -887,7 +887,7 @@ CREATE DATABASE <database_name>
 
 ## 統合カタログからデータベースを削除
 
-StarRocks の内部データベースと同様に、統合カタログ内に作成されたデータベースに対して [DROP](../../administration/user_privs/privilege_overview.md#database) 権限を持っている場合、そのデータベースを削除するために [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用できます。空のデータベースのみを削除できます。
+StarRocks の内部データベースと同様に、統合カタログ内に作成されたデータベースに対して [DROP](../../administration/user_privs/user_privs.md#database) 権限を持っている場合、そのデータベースを削除するために [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用できます。空のデータベースのみを削除できます。
 
 > **注意**
 >
@@ -905,7 +905,7 @@ DROP DATABASE <database_name>
 
 ## 統合カタログにテーブルを作成
 
-StarRocks の内部データベースと同様に、統合カタログ内に作成されたデータベースに対して [CREATE TABLE](../../administration/user_privs/privilege_overview.md#database) 権限を持っている場合、そのデータベースにテーブルを作成するために [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) または [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) ステートメントを使用できます。
+StarRocks の内部データベースと同様に、統合カタログ内に作成されたデータベースに対して [CREATE TABLE](../../administration/user_privs/user_privs.md#database) 権限を持っている場合、そのデータベースにテーブルを作成するために [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) または [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) ステートメントを使用できます。
 
 > **注意**
 >
@@ -939,7 +939,7 @@ PARTITION BY (id,dt);
 
 ## 統合カタログのテーブルにデータをシンク
 
-StarRocks の内部テーブルと同様に、統合カタログ内に作成されたテーブルに対して [INSERT](../../administration/user_privs/privilege_overview.md#table) 権限を持っている場合、その統合カタログテーブルに StarRocks テーブルのデータをシンクするために [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用できます（現在、Parquet 形式の統合カタログテーブルのみがサポートされています）。
+StarRocks の内部テーブルと同様に、統合カタログ内に作成されたテーブルに対して [INSERT](../../administration/user_privs/user_privs.md#table) 権限を持っている場合、その統合カタログテーブルに StarRocks テーブルのデータをシンクするために [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用できます（現在、Parquet 形式の統合カタログテーブルのみがサポートされています）。
 
 > **注意**
 >
@@ -974,7 +974,7 @@ VALUES
 
 ## 統合カタログからテーブルを削除
 
-StarRocks の内部テーブルと同様に、統合カタログ内に作成されたテーブルに対して [DROP](../../administration/user_privs/privilege_overview.md#table) 権限を持っている場合、そのテーブルを削除するために [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用できます。
+StarRocks の内部テーブルと同様に、統合カタログ内に作成されたテーブルに対して [DROP](../../administration/user_privs/user_privs.md#table) 権限を持っている場合、そのテーブルを削除するために [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用できます。
 
 > **注意**
 >

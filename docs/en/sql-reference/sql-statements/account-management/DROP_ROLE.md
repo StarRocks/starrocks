@@ -11,7 +11,7 @@ Drops a role. If a role has been granted to a user, the user still has the privi
 :::tip
 
 - Only users with the `user_admin` role can drop a role.
-- [StarRocks system-defined roles](../../../administration/user_privs/privilege_overview.md#system-defined-roles) cannot be dropped.
+- [StarRocks system-defined roles](../../../administration/user_privs/user_privs.md#system-defined-roles) cannot be dropped.
 
 :::
 

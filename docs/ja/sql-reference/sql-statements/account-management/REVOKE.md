@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-特定の権限またはロールをユーザーまたはロールから取り消します。StarRocks がサポートする権限については、[Privileges supported by StarRocks](../../../administration/user_privs/privilege_overview.md) を参照してください。
+特定の権限またはロールをユーザーまたはロールから取り消します。StarRocks がサポートする権限については、[Privileges supported by StarRocks](../../../administration/user_privs/user_privs.md) を参照してください。
 
 :::tip
 
