@@ -604,28 +604,21 @@ public class AstToStringBuilder {
                     }
                     selectItemLabel = visit(item.getExpr()) + ((aliasSql == null) ? "" : " " + aliasSql);
                 } else if (item.getTblName() != null) {
-                    if (!item.getExcludedColumns().isEmpty()) {
-                        selectItemLabel = item.getTblName().toString() + ".* EXCLUDE( ";
-                        selectItemLabel += item.getExcludedColumns().stream()
-                                .map(col -> "\"" + col + "\"")
-                                .collect(Collectors.joining(", "));
-                        selectItemLabel += ")";
-                    } else {
-                        selectItemLabel = item.getTblName().toString() + ".*";
-                    }
+                    selectItemLabel = item.getTblName().toString() + ".*";
                 } else {
-                    if (!item.getExcludedColumns().isEmpty()) {
-                        selectItemLabel = "* EXCLUDE( ";
-                        selectItemLabel += item.getExcludedColumns().stream()
-                                .map(col -> "\"" + col + "\"")
-                                .collect(Collectors.joining(", "));
-                        selectItemLabel += ")";
-                    } else {
-                        selectItemLabel = "*";
-                    }
+                    selectItemLabel = "*";
                 }
-
                 sqlBuilder.append(selectItemLabel);
+
+                if (item.isStar() && !item.getExcludedColumns().isEmpty()) {
+                    sqlBuilder.append(" EXCLUDE( ");
+                    sqlBuilder.append(
+                            item.getExcludedColumns().stream()
+                            .map(col -> "\"" + col + "\"")
+                            .collect(Collectors.joining(", "))
+                    );
+                    sqlBuilder.append(")");
+                }
             }
 
             String fromClause = visit(stmt.getRelation());
