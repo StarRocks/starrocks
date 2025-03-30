@@ -233,21 +233,31 @@ public class SelectAnalyzer {
 
                 List<String> excludedColumns = item.getExcludedColumns();
                 if (excludedColumns != null && !excludedColumns.isEmpty()) {
-                    Set<String> existingColumns = fields.stream()
-                            .map(Field::getName)
+                    Set<String> existingColumnsLower = fields.stream()
+                            .map(field -> field.getName().toLowerCase())
+                            .collect(Collectors.toSet());
+                    Set<String> excludedLower = excludedColumns.stream()
+                            .map(String::toLowerCase)
                             .collect(Collectors.toSet());
                     List<String> missingColumns = excludedColumns.stream()
-                            .filter(col -> !existingColumns.contains(col))
+                            .filter(col -> !existingColumnsLower.contains(col.toLowerCase()))
                             .collect(Collectors.toList());
+
                     if (!missingColumns.isEmpty()) {
                         String tableDesc = item.getTblName() != null ? 
                                 "table '" + item.getTblName() + "'" : "current scope";
                         throw new SemanticException("Column(s) %s do not exist in %s", 
                                 missingColumns, tableDesc);
                     }
+
                     fields = fields.stream()
-                            .filter(field -> !excludedColumns.contains(field.getName()))
+                            .filter(field -> !excludedLower.contains(field.getName().toLowerCase()))
                             .collect(Collectors.toList());
+                    if (fields.isEmpty()) {
+                        String tableDesc = item.getTblName() != null ? 
+                                "table '" + item.getTblName() + "'" : "query scope";
+                        throw new SemanticException("EXCLUDE clause removes all columns from %s", tableDesc);
+                    }
                 }
                 for (Field field : fields) {
                     int fieldIndex = scope.getRelationFields().indexOf(field);
