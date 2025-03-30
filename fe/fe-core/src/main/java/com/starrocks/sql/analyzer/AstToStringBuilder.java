@@ -596,30 +596,34 @@ public class AstToStringBuilder {
                 }
 
                 String selectItemLabel;
-                StringBuilder sb = new StringBuilder();
                 SelectListItem item = selectList.getItems().get(i);
                 if (!item.isStar()) {
                     String aliasSql = null;
                     if (item.getAlias() != null) {
                         aliasSql = "AS " + item.getAlias();
                     }
-                    sb.append(visit(item.getExpr()) + ((aliasSql == null) ? "" : " " + aliasSql));
+                    selectItemLabel = visit(item.getExpr()) + ((aliasSql == null) ? "" : " " + aliasSql);
                 } else if (item.getTblName() != null) {
-                    sb.append(item.getTblName().toString() + ".*");
+                    if (!item.getExcludedColumns().isEmpty()) {
+                        selectItemLabel = item.getTblName().toString() + ".* EXCLUDE( ";
+                        selectItemLabel += item.getExcludedColumns().stream()
+                                .map(col -> "\"" + col + "\"")
+                                .collect(Collectors.joining(", "));
+                        selectItemLabel += ")";
+                    } else {
+                        selectItemLabel = item.getTblName().toString() + ".*";
+                    }
                 } else {
-                    sb.append("*");
+                    if (!item.getExcludedColumns().isEmpty()) {
+                        selectItemLabel = "* EXCLUDE( ";
+                        selectItemLabel += item.getExcludedColumns().stream()
+                                .map(col -> "\"" + col + "\"")
+                                .collect(Collectors.joining(", "));
+                        selectItemLabel += ")";
+                    } else {
+                        selectItemLabel = "*";
+                    }
                 }
-
-                if (!item.getExcludedColumns().isEmpty()) {
-                    sb.append(" EXCLUDE( ");
-                    sb.append(
-                            item.getExcludedColumns().stream()
-                            .map(col -> "\"" + col + "\"")
-                            .collect(Collectors.joining(", "))
-                    );
-                    sb.append(")");
-                }
-                selectItemLabel = sb.toString();
 
                 sqlBuilder.append(selectItemLabel);
             }
