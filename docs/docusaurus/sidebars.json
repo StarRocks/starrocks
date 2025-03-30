@@ -499,6 +499,7 @@
                         "id": "administration/user_privs/privilege_overview"
                     },
                     "items": [
+                        "administration/user_privs/ssl_authentication",
                         "administration/user_privs/privilege_item",
                         "administration/user_privs/User_privilege",
                         "administration/user_privs/ranger_plugin",
