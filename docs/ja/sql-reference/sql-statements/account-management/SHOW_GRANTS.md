@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ユーザーまたはロールに付与されたすべての権限を表示します。
 
-ロールと権限の詳細については、[権限の概要](../../../administration/user_privs/privilege_overview.md)を参照してください。
+ロールと権限の詳細については、[権限の概要](../../../administration/user_privs/user_privs.md)を参照してください。
 
 :::tip
 すべてのロールとユーザーは、自分に付与された権限や割り当てられたロールを確認できます。指定されたユーザーまたはロールの権限を表示できるのは、`user_admin` ロールを持つユーザーのみです。

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 5
 ---
 
 # Overview of privileges
