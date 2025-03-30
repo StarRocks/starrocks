@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 30
 ---
 
 # ユーザー権限の管理

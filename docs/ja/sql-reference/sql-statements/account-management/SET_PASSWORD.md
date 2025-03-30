@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 - すべてのユーザーは自分のパスワードをリセットできます。
 - `user_admin` ロールを持つユーザーのみが他のユーザーのパスワードを変更できます。
-- `root` ユーザー自身のみがそのパスワードを変更できます。詳細については、[権限の概要](../../../administration/user_privs/privilege_overview.md)を参照してください。
+- `root` ユーザー自身のみがそのパスワードを変更できます。詳細については、[権限の概要](../../../administration/user_privs/user_privs.md)を参照してください。
 
 :::
 

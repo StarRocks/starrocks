@@ -49,7 +49,7 @@ StarRocks は、Primary Key tables、Duplicate Key tables、Aggregate tables、U
 
 ビュー、または論理ビューは、データを保持しない仮想テーブルです。ビューは、他の既存の物理テーブルに対するクエリの結果としてのデータのみを表示します。ビューを定義するクエリは、クエリ内でビューが参照されるたびに実行されます。
 
-## [Privileges](../administration/user_privs/privilege_overview.md)
+## [Privileges](../administration/user_privs/user_privs.md)
 
 権限は、どのユーザーがどのオブジェクトに対してどの操作を実行できるかを決定します。StarRocks は、アイデンティティベースのアクセス制御とロールベースのアクセス制御の 2 種類の権限モデルを採用しています。最初に権限をロールに割り当て、次にロールをユーザーに割り当てることができます。この場合、権限はロールを通じてユーザーに渡されます。または、ユーザーのアイデンティティに直接権限を割り当てることもできます。
 

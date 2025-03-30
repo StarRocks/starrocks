@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 40
 ---
 
 # Apache Ranger で権限を管理する
