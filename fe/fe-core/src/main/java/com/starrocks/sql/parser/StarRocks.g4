@@ -1051,12 +1051,17 @@ modifyCommentClause
     : COMMENT '=' string
     ;
 
+optimizeRange
+    : BETWEEN start=string AND end=string
+    ;
+
 optimizeClause
     : partitionNames?
       keyDesc?
       partitionDesc?
       orderByDesc?
       distributionDesc?
+      optimizeRange?
      ;
 
 addColumnClause
@@ -1364,15 +1369,15 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)?
+    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META (WHERE expression)?
+    : SHOW STATS META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META (WHERE expression)?
+    : SHOW HISTOGRAM META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 killAnalyzeStatement

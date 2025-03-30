@@ -30,11 +30,14 @@ import org.apache.commons.collections4.MapUtils;
 import java.io.DataInput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
 
 public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -62,9 +65,13 @@ public class BasicStatsMeta implements Writable {
     // The old semantics indicated the increment of ingestion tasks after last statistical collect job.
     // Since manually collecting sampled job would reset it to zero, affecting the incremental information,
     // it is now changed to record the total number of rows in the table.
+    // Every time data is imported, it will be appended.
+    // Every time tablet stats is synchronized, it is set to the total value of the latest snapshot.
     @SerializedName("updateRows")
-    private long updateRows;
+    private long totalRows;
 
+    // Every time data is imported, it will be appended.
+    // Every time tablet stats is synchronized, it will be reset to 0.
     @SerializedName("deltaRows")
     private long deltaRows;
 
@@ -88,17 +95,15 @@ public class BasicStatsMeta implements Writable {
                           StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
                           Map<String, String> properties,
-                          long updateRows) {
+                          long totalRows) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.columns = columns;
         this.type = type;
         this.updateTime = updateTime;
         this.properties = properties;
-        this.updateRows = updateRows;
+        this.totalRows = totalRows;
     }
-
-
 
     public static BasicStatsMeta read(DataInput in) throws IOException {
         String s = Text.readString(in);
@@ -143,7 +148,6 @@ public class BasicStatsMeta implements Writable {
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
-        long totalPartitionCount = table.getPartitions().size();
 
         long tableRowCount = 1L;
         long cachedTableRowCount = 1L;
@@ -153,7 +157,11 @@ public class BasicStatsMeta implements Writable {
         Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), table.getPartitions());
 
-        for (Partition partition : table.getPartitions()) {
+        Collection<Partition> allPartitions = table.getPartitions().stream()
+                .filter(p -> !(p.getName().startsWith(SHADOW_PARTITION_PREFIX)))
+                .collect(Collectors.toSet());
+        long totalPartitionCount = allPartitions.size();
+        for (Partition partition : allPartitions) {
             tableRowCount += partition.getRowCount();
             Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
             cachedTableRowCount += statistic.orElse(0L);
@@ -162,7 +170,7 @@ public class BasicStatsMeta implements Writable {
                 updatePartitionCount++;
             }
         }
-        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount + deltaRows, updateRows) - cachedTableRowCount);
+        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount + deltaRows, totalRows) - cachedTableRowCount);
 
         double updateRatio;
         // 1. If none updated partitions, health is 1
@@ -180,16 +188,16 @@ public class BasicStatsMeta implements Writable {
         return 1 - Math.min(updateRatio, 1.0);
     }
 
-    public long getUpdateRows() {
-        return updateRows;
+    public long getTotalRows() {
+        return totalRows;
     }
 
-    public void setUpdateRows(Long updateRows) {
-        this.updateRows = updateRows;
+    public void setTotalRows(Long totalRows) {
+        this.totalRows = totalRows;
     }
 
     public void increaseDeltaRows(Long delta) {
-        updateRows += delta;
+        totalRows += delta;
         deltaRows += delta;
     }
 

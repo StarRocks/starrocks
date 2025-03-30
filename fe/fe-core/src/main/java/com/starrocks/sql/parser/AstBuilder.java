@@ -313,6 +313,7 @@ import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.OptimizeRange;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -2852,12 +2853,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             predicate = (Predicate) visit(context.expression());
         }
 
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+
         if (context.STATUS() != null) {
-            return new ShowAnalyzeStatusStmt(predicate, pos);
+            return new ShowAnalyzeStatusStmt(predicate, orderByElements, limitElement, pos);
         } else if (context.JOB() != null) {
-            return new ShowAnalyzeJobStmt(predicate, pos);
+            return new ShowAnalyzeJobStmt(predicate, orderByElements, limitElement, pos);
         } else {
-            return new ShowAnalyzeJobStmt(predicate, pos);
+            return new ShowAnalyzeJobStmt(predicate, orderByElements, limitElement, pos);
         }
     }
 
@@ -2868,7 +2878,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             predicate = (Predicate) visit(context.expression());
         }
 
-        return new ShowBasicStatsMetaStmt(predicate, createPos(context));
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+
+        return new ShowBasicStatsMetaStmt(predicate, orderByElements, limitElement, createPos(context));
     }
 
     @Override
@@ -2878,7 +2898,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             predicate = (Predicate) visit(context.expression());
         }
 
-        return new ShowHistogramStatsMetaStmt(predicate, createPos(context));
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+
+        return new ShowHistogramStatsMetaStmt(predicate, orderByElements, limitElement, createPos(context));
     }
 
     private AnalyzeStmt histogramStatement(StarRocksParser.HistogramStatementContext context) {
@@ -4642,9 +4672,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitOptimizeClause(StarRocksParser.OptimizeClauseContext context) {
-        if (context.partitionDesc() != null) {
-            throw new ParsingException("Partition clause is not supported in optimize statement", createPos(context));
-        }
         return new OptimizeClause(
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
@@ -4653,7 +4680,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
                                 .stream().map(Identifier::getValue).collect(toList()),
                 context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
+                context.optimizeRange() == null ? null : (OptimizeRange) visit(context.optimizeRange()),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitOptimizeRange(StarRocksParser.OptimizeRangeContext context) {
+        StringLiteral start = null;
+        StringLiteral end = null;
+        
+        // Extract start value if present
+        if (context.start != null) {
+            start = (StringLiteral) visit(context.start);
+        }
+        
+        // Extract end value if present
+        if (context.end != null) {
+            end = (StringLiteral) visit(context.end);
+        }
+        
+        // Create and return OptimizeRange object with position information
+        return new OptimizeRange(start, end, createPos(context));
     }
 
     @Override

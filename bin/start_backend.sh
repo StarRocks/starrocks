@@ -112,31 +112,13 @@ if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
     export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
+    export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
     java_version=$(jdk_version)
-    if [[ $java_version -gt 8 ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
-        # JAVA_HOME is jdk
-    elif [[ -d "$JAVA_HOME/jre"  ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
-        # JAVA_HOME is jre
-    else
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
+    if [[ $java_version -lt 17 ]]; then
+        echo "[WARNING] jdk versions lower than 17 are not supported"
     fi
 fi
 
-# Appending the option to avoid "process heaper" stack overflow exceptions.
-# Tried to adding this option to LIBHDFS_OPTS only, but that doesn't work.
-export JAVA_OPTS="$JAVA_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
-export JAVA_OPTS_FOR_JDK_9_AND_LATER="$JAVA_OPTS_FOR_JDK_9_AND_LATER -Djdk.lang.processReaperUseDefaultStackSize=true"
-
-# check java version and choose correct JAVA_OPTS
-JAVA_VERSION=$(jdk_version)
-final_java_opt=$JAVA_OPTS
-if [[ "$JAVA_VERSION" -gt 8 ]]; then
-    if [ -n "$JAVA_OPTS_FOR_JDK_9_AND_LATER" ]; then
-        final_java_opt=$JAVA_OPTS_FOR_JDK_9_AND_LATER
-    fi
-fi
 
 # check NUMA setting
 NUMA_CMD=""
@@ -147,6 +129,15 @@ if [[ "${RUN_NUMA}" -ne "-1" ]]; then
     set +e
 fi
 
+final_java_opt=${JAVA_OPTS}
+# Compatible with scenarios upgraded from jdk9~jdk16
+if [ ! -z "${JAVA_OPTS_FOR_JDK_9_AND_LATER}" ] ; then
+    echo "Warning: Configuration parameter JAVA_OPTS_FOR_JDK_9_AND_LATER is not supported, JAVA_OPTS is the only place to set jvm parameters"
+    final_java_opt=${JAVA_OPTS_FOR_JDK_9_AND_LATER}
+fi
+
+# Appending the option to avoid "process heaper" stack overflow exceptions.
+final_java_opt="$final_java_opt -Djdk.lang.processReaperUseDefaultStackSize=true"
 export LIBHDFS_OPTS=$final_java_opt
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.

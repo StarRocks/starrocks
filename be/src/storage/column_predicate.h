@@ -260,4 +260,9 @@ ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info,
 
 ColumnPredicate* new_column_placeholder_predicate(const TypeInfoPtr& type_info, ColumnId id);
 
+template <LogicalType LT>
+class Bitset;
+template <LogicalType LT>
+ColumnPredicate* new_bitset_in_predicate(const TypeInfoPtr& type_info, ColumnId id, const Bitset<LT>& bitset);
+
 } //namespace starrocks

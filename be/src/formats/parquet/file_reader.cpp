@@ -102,11 +102,11 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 }
 
 std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-    if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
-        // If we want read this parquet file with iceberg schema,
+    if (_scanner_ctx->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
+        // If we want read this parquet file with iceberg/paimon schema,
         // we also need to make sure it contains parquet field id.
-        return std::make_shared<IcebergMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
-                                                   _scanner_ctx->iceberg_schema);
+        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
+                                                _scanner_ctx->lake_schema);
     } else {
         return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive);
     }

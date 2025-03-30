@@ -65,6 +65,7 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
@@ -508,13 +509,11 @@ void CacheEnv::try_release_resource_before_core_dump() {
 
     if (_page_cache != nullptr && need_release("data_cache")) {
         _page_cache->set_capacity(0);
-        LOG(INFO) << "release storage page cache memory";
     }
     if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
         // TODO: Currently, block cache don't support shutdown now,
         //  so here will temporary use update_mem_quota instead to release memory.
         (void)_block_cache->update_mem_quota(0, false);
-        LOG(INFO) << "release block cache";
     }
 }
 
@@ -786,6 +785,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
+    _diagnose_daemon = new DiagnoseDaemon();
+    RETURN_IF_ERROR(_diagnose_daemon->init());
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
@@ -890,6 +891,10 @@ void ExecEnv::stop() {
         _dictionary_cache_pool->shutdown();
     }
 
+    if (_diagnose_daemon) {
+        _diagnose_daemon->stop();
+    }
+
 #ifndef BE_TEST
     close_s3_clients();
 #endif
@@ -948,6 +953,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     SAFE_DELETE(_put_combined_txn_log_thread_pool);
+    SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _metrics = nullptr;
@@ -1024,35 +1030,27 @@ void ExecEnv::try_release_resource_before_core_dump() {
 
     if (_workgroup_manager != nullptr && need_release("connector_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
-        LOG(INFO) << "close connector scan executor";
     }
     if (_workgroup_manager != nullptr && need_release("olap_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
-        LOG(INFO) << "close olap scan executor";
     }
     if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
         _thread_pool->shutdown();
-        LOG(INFO) << "shutdown non-pipeline scan thread pool";
     }
     if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
         _pipeline_prepare_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline prepare thread pool";
     }
     if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
         _pipeline_sink_io_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline sink io thread pool";
     }
     if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
         _query_rpc_pool->shutdown();
-        LOG(INFO) << "shutdown query rpc thread pool";
     }
     if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
         _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
-        LOG(INFO) << "stop task worker pool for publish version";
     }
     if (_workgroup_manager != nullptr && need_release("wg_driver_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
-        LOG(INFO) << "stop worker group driver executor";
     }
 }
 

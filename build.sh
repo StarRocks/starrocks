@@ -108,6 +108,7 @@ Usage: $0 <options>
      --without-avx2     build Backend without avx2(instruction)    
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
+     --output           specify the output directory (default: $STARROCKS_HOME/output)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
@@ -117,6 +118,7 @@ Usage: $0 <options>
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
     $0 --hive-udf                                build Hive UDF
+    $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
   "
   exit 1
@@ -146,6 +148,7 @@ OPTS=$(getopt \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
   -l 'with-maven-batch-mode:' \
+  -l 'output:' \
   -l 'help' \
   -- "$@")
 
@@ -285,6 +288,7 @@ else
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
+            --output) STARROCKS_OUTPUT=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -479,7 +483,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
-        ${MVN_CMD} $addon_mvn_opts package -DskipTests
+        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -509,15 +513,16 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
-    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}
 fi
 
 
 # Clean and prepare output dir
-STARROCKS_OUTPUT=${STARROCKS_HOME}/output/
+STARROCKS_OUTPUT=${STARROCKS_OUTPUT:="${STARROCKS_HOME}/output/"}
+echo "OUTPUT DIR=${STARROCKS_OUTPUT}"
 mkdir -p ${STARROCKS_OUTPUT}
 
 # Copy Frontend and Backend

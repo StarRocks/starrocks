@@ -15,6 +15,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
@@ -38,13 +40,12 @@ import java.util.List;
 
 public class ShowBasicStatsMetaStmt extends ShowStmt {
 
-    public ShowBasicStatsMetaStmt(Predicate predicate) {
-        this(predicate, NodePosition.ZERO);
-    }
-
-    public ShowBasicStatsMetaStmt(Predicate predicate, NodePosition pos) {
+    public ShowBasicStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
+                                  LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
+        this.limitElement = limitElement;
+        this.orderByElements = orderByElements;
     }
 
     private static final ShowResultSetMetaData META_DATA =
@@ -107,12 +108,12 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
 
         List<String> columns = basicStatsMeta.getColumns();
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
         }
         row.set(0, catalogName + "." + dbName);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
         }

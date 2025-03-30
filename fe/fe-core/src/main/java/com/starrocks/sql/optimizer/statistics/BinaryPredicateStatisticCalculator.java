@@ -106,7 +106,7 @@ public class BinaryPredicateStatisticCalculator {
                     .setNullsFraction(0)
                     .setMinValue(min)
                     .setMaxValue(max)
-                    .setDistinctValuesCount(1)
+                    .setDistinctValuesCount(columnStatistic.getDistinctValuesCount())
                     .build();
 
             double predicateFactor;

@@ -214,6 +214,8 @@ import com.starrocks.thrift.TFinishCheckpointResponse;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
 import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
 import com.starrocks.thrift.TGetDbsParams;
@@ -423,23 +425,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
-        LOG.debug("get db names: {}", dbNames);
-
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
+        LOG.debug("get db names: {}", dbNames);
 
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -479,9 +481,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(catalogName, params.db);
-
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
@@ -489,12 +488,19 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
 
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(context, catalogName, params.db);
+
         if (db != null) {
-            for (String tableName : metadataMgr.listTableNames(catalogName, params.db)) {
+            for (String tableName : metadataMgr.listTableNames(context, catalogName, params.db)) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 Table tbl = null;
                 try {
-                    tbl = metadataMgr.getTable(catalogName, params.db, tableName);
+                    tbl = metadataMgr.getTable(context, catalogName, params.db, tableName);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }
@@ -504,9 +510,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(currentUser);
-                    context.setCurrentRoleIds(currentUser);
                     Authorizer.checkAnyActionOnTableLikeObject(context, params.db, tbl);
                 } catch (AccessDeniedException e) {
                     continue;
@@ -988,6 +991,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
+
         long limit = params.isSetLimit() ? params.getLimit() : -1;
 
         // if user query schema meta such as "select * from information_schema.columns limit 10;",
@@ -1005,20 +1012,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(catalogName, params.db);
+        Database db = metadataMgr.getDb(context, catalogName, params.db);
 
         if (db != null) {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
-                Table table = metadataMgr.getTable(catalogName, params.db, params.table_name);
+                Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
                 if (table == null) {
                     return result;
                 }
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(currentUser);
-                    context.setCurrentRoleIds(currentUser);
                     Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
                 } catch (AccessDeniedException e) {
                     return result;
@@ -1035,13 +1039,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // dbs and tables, when reach limit, we break;
     private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
+
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(context);
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkAnyActionOnOrInDb(context,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
@@ -1059,9 +1064,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
 
                         try {
-                            ConnectContext context = new ConnectContext();
-                            context.setCurrentUserIdentity(currentUser);
-                            context.setCurrentRoleIds(currentUser);
                             Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
                         } catch (AccessDeniedException e) {
                             continue;
@@ -1845,7 +1847,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String table = request.getTable_name();
             List<String> partitions = request.getPartitions() == null ? new ArrayList<>() : request.getPartitions();
             LOG.info("Start to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
-            GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(catalog, db, table), partitions);
+            GlobalStateMgr.getCurrentState().refreshExternalTable(new ConnectContext(),
+                    new TableName(catalog, db, table), partitions);
             LOG.info("Finish to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (Exception e) {
@@ -2385,13 +2388,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
+                String errMsg = "Alter job conflicts with partition creation, for more details please check "
+                        + "https://docs.starrocks.io/docs/faq/Others#how-can-i-prevent-expression-partition-conflicts"
+                        + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.ROLLUP,
-                                    new TableName(db.getFullName(), olapTable.getName())),
-                            "conflict with expression partition");
+                                    new TableName(db.getFullName(), olapTable.getName())), errMsg);
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -2399,8 +2404,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.COLUMN,
-                                    new TableName(db.getFullName(), olapTable.getName())),
-                            "conflict with expression partition");
+                                    new TableName(db.getFullName(), olapTable.getName())), errMsg);
                 }
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
@@ -3238,6 +3242,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
         return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo();
+    }
+
+    @Override
+    public TGetApplicableRolesResponse getApplicableRoles(TGetApplicableRolesRequest request) throws TException {
+        return InformationSchemaDataSource.generateApplicableRolesResp(request);
     }
 
     @Override

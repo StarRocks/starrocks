@@ -1394,7 +1394,7 @@ public class QueryAnalyzer {
 
             Database db;
             try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
-                db = metadataMgr.getDb(catalogName, dbName);
+                db = metadataMgr.getDb(session, catalogName, dbName);
             }
 
             MetaUtils.checkDbNullAndReport(db, dbName);
@@ -1403,7 +1403,7 @@ public class QueryAnalyzer {
             if (tableRelation.isSyncMVQuery()) {
                 try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
                     Pair<Table, MaterializedIndexMeta> materializedIndex =
-                            metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndex(dbName, tbName);
                     if (materializedIndex != null) {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
@@ -1423,7 +1423,7 @@ public class QueryAnalyzer {
                 }
                 if (table == null) {
                     try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                        table = metadataMgr.getTable(catalogName, dbName, tbName);
+                        table = metadataMgr.getTable(session, catalogName, dbName, tbName);
                     }
                 }
             }

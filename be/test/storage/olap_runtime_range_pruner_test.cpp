@@ -39,8 +39,8 @@ protected:
     StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> _gen_runtime_filter_desc();
 
     using Int32Decoder = detail::RuntimeColumnPredicateBuilder::DummyDecoder<int32_t>;
-    using Int32RuntimeFilter = ComposedRuntimeFilter<TYPE_INT>;
-    using Decimal32RuntimeFilter = ComposedRuntimeFilter<TYPE_DECIMAL32>;
+    using Int32RuntimeFilter = ComposedRuntimeBloomFilter<TYPE_INT>;
+    using Decimal32RuntimeFilter = ComposedRuntimeBloomFilter<TYPE_DECIMAL32>;
 
     const TypeDescriptor TYPE_DECIMAL32_DESC = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 4);
 

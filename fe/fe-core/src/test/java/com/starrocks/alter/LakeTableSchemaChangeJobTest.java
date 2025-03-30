@@ -107,7 +107,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @After
     public void after() throws Exception {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
     }
 
     @Test

@@ -165,6 +165,7 @@ set(EXEC_FILES
     schema_scanner/schema_recyclebin_catalogs.cpp
     schema_scanner/schema_cluster_snapshots_scanner.cpp
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
+    schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
@@ -188,6 +189,7 @@ set(EXEC_FILES
     pipeline/exchange/spillable_multi_cast_local_exchange.cpp
     pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
     pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
+    pipeline/exchange/split_local_exchange.cpp
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
@@ -295,6 +297,7 @@ set(EXEC_FILES
     pipeline/schedule/observer.cpp
     pipeline/schedule/pipeline_timer.cpp
     pipeline/wait_operator.cpp
+    pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp

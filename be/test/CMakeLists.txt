@@ -378,6 +378,7 @@ set(EXEC_FILES
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
+        ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
         ./runtime/http_result_writer_test.cpp
@@ -493,9 +494,11 @@ set(EXEC_FILES
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
+        ./util/stack_util_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./service/mem_hook_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./storage/metadata_util_test.cpp
@@ -512,6 +515,8 @@ set(EXEC_FILES
         ./cache/object_cache/lrucache_module_test.cpp
         ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
+        ./udf/java/java_native_method_test.cpp
+        ./udf/java/java_data_converter_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")

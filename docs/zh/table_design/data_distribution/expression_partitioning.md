@@ -23,7 +23,7 @@ sidebar_position: 10
 ```sql
 PARTITION BY expression
 ...
-[ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
+[ PROPERTIES( { 'partition_live_number' = 'xxx' | 'partition_retention_condition' = 'expr' } ) ]
 
 expression ::=
     { date_trunc ( <time_unit> , <partition_column> ) |
@@ -32,12 +32,41 @@ expression ::=
 
 ### 参数解释
 
-| 参数                    | 是否必填 | 说明                                                         |
-| ----------------------- | -------- | ------------------------------------------------------------ |
-| `expression`            | 是       | 使用 [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) 或 [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) 的简单时间函数表达式。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
-| `time_unit`             | 是       | 分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。 |
-| `partition_column`      | 是       | 分区列。  <br /> <ul><li>仅支持为日期类型（DATE 或 DATETIME），不支持为其它类型。如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。分区列的值支持为 `NULL`。</li><li> 如果分区列是 DATE 类型，则范围支持为 [0000-01-01 ~ 9999-12-31]。如果分区列是 DATETIME 类型，则范围支持为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。</li><li> 目前仅支持指定一个分区列，不支持指定多个分区列。</li></ul> |
-| `partition_live_number` | 否       | 保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。|
+#### `expression`
+
+- 必填：是
+- 说明：使用 [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) 或 [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) 的简单时间函数表达式。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。
+
+#### `time_unit`
+
+- 必填：是
+- 说明：分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。
+
+#### `partition_column`
+
+- 必填：是
+- 说明：分区列。仅支持为日期类型（DATE 或 DATETIME），不支持为其它类型。
+  - 如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。
+  - 如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。分区列的值支持为 `NULL`。
+  - 如果分区列是 DATE 类型，则范围支持为 [0000-01-01 ~ 9999-12-31]。
+  - 如果分区列是 DATETIME 类型，则范围支持为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。
+  - 目前仅支持指定一个分区列，不支持指定多个分区列。
+
+#### `partition_live_number`
+
+- 必填：否
+- 说明：保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。
+
+#### `partition_retention_condition`
+
+从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+
+- 必填：否
+- 说明：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。示例：`"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。
+  - 表达式只能包含分区列和常量。不支持非分区列。
+  - 通用分区表达式处理 List 分区和 Range 分区的方式不同：
+    - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+    - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
 
 ### 使用说明
 

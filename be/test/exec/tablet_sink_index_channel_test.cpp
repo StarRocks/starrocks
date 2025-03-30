@@ -39,7 +39,8 @@ public:
 
     void test_load_channel_profile_base(RuntimeState* runtime_state, const PLoadChannelProfileConfig& expect_config);
 
-    void test_load_diagnose_base(const std::string& error_text, bool should_diagnose);
+    void test_load_diagnose_base(const std::string& error_text, int64_t rpc_timeout_sec, bool diagnose_profile,
+                                 bool diagnose_stack_trace);
 
 protected:
     std::unique_ptr<RuntimeState> _build_runtime_state(TQueryOptions& query_options) {
@@ -234,10 +235,10 @@ using RpcOpenPair = std::pair<PTabletWriterOpenRequest*, RefCountClosure<PTablet
 using RpcAddChunkPair = std::pair<PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*>;
 using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*>;
 
-void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& error_text, bool should_diagnose) {
+void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& error_text, int64_t rpc_timeout_sec,
+                                                         bool diagnose_profile, bool diagnose_stack_trace) {
     TQueryOptions query_options;
-    // let query_timeout / 2 > load_diagnose_small_rpc_timeout_threshold_ms
-    query_options.__set_query_timeout(300);
+    query_options.__set_query_timeout(2 * rpc_timeout_sec);
     auto runtime_state = _build_runtime_state(query_options);
     DescriptorTbl* desc_tbl = nullptr;
     ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
@@ -287,9 +288,17 @@ void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& erro
     int32_t num_diagnose = 0;
     SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::load_diagnose_send", [&](void* arg) {
         RpcLoadDisagnosePair* rpc_pair = (RpcLoadDisagnosePair*)arg;
+        PLoadDiagnoseRequest* request = rpc_pair->first;
         RefCountClosure<PLoadDiagnoseResult>* closure = rpc_pair->second;
-        closure->result.mutable_profile_status()->set_status_code(TStatusCode::OK);
-        _serialize_load_profile(closure->result.mutable_profile_data());
+        if (diagnose_profile) {
+            EXPECT_TRUE(request->has_profile() && request->profile());
+            closure->result.mutable_profile_status()->set_status_code(TStatusCode::OK);
+            _serialize_load_profile(closure->result.mutable_profile_data());
+        }
+        if (diagnose_stack_trace) {
+            EXPECT_TRUE(request->has_stack_trace() && request->stack_trace());
+            closure->result.mutable_stack_trace_status()->set_status_code(TStatusCode::OK);
+        }
         closure->Run();
     });
     SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::load_diagnose_join", [&](void* arg) {
@@ -305,18 +314,22 @@ void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& erro
     chunk->get_column_by_index(1)->append_datum(Datum(1L));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     ASSERT_FALSE(sink->close(runtime_state.get(), Status::OK()).ok());
-    if (should_diagnose) {
-        ASSERT_EQ(1, num_diagnose);
-        ASSERT_EQ(1, runtime_state->load_channel_profile()->num_children());
-    } else {
-        ASSERT_EQ(0, num_diagnose);
-        ASSERT_EQ(0, runtime_state->load_channel_profile()->num_children());
-    }
+    ASSERT_EQ((diagnose_profile || diagnose_stack_trace) ? 1 : 0, num_diagnose);
+    ASSERT_EQ((diagnose_profile ? 1 : 0), runtime_state->load_channel_profile()->num_children());
 }
 
 TEST_F(TabletSinkIndexChannelTest, load_diagnose) {
-    test_load_diagnose_base("[E1008]Reached timeout 150000ms@10.128.8.78:8060", true);
-    test_load_diagnose_base("artificial failure", false);
+    // not diagnose because the error is no rpc timeout
+    test_load_diagnose_base("artificial failure", 30, false, false);
+    // only diagnose profile. it's a small rpc timeout which is less than
+    // config::load_diagnose_rpc_timeout_profile_threshold_ms and
+    // config::load_diagnose_rpc_timeout_stack_trace_threshold_ms
+    test_load_diagnose_base("[E1008]Reached timeout 30000ms@10.128.8.78:8060", 30, true, false);
+    // not diagnose profile. it's a small rpc timeout, and only trigger profile every 20 times
+    test_load_diagnose_base("[E1008]Reached timeout 30000ms@10.128.8.78:8060", 30, false, false);
+    // diagnose both profile and stack trace because the timeout is larger than
+    // config::load_diagnose_rpc_timeout_stack_trace_threshold_ms
+    test_load_diagnose_base("[E1008]Reached timeout 1200000ms@10.128.8.78:8060", 1200, true, true);
 }
 
 } // namespace starrocks

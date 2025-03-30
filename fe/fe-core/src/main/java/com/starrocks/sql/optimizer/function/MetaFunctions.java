@@ -84,7 +84,7 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 public class MetaFunctions {
 
     public static Table inspectExternalTable(TableName tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
@@ -421,7 +421,8 @@ public class MetaFunctions {
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
-        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableNameValue);
+        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), tableNameValue);
         maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
         if (!(maybeTable.get() instanceof OlapTable)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");

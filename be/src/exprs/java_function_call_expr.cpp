@@ -47,17 +47,8 @@ struct UDFFunctionCallHelper {
     StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
-        std::vector<DirectByteBuffer> buffers;
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
-
-        for (auto& column : columns) {
-            if (column->only_null()) {
-                // we will handle NULL later
-            } else if (column->is_constant()) {
-                column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
-            }
-        }
 
         for (const auto& col : columns) {
             input_cols.emplace_back(col.get());
@@ -68,29 +59,26 @@ struct UDFFunctionCallHelper {
         auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
         // convert input columns to object columns
         std::vector<jobject> input_col_objs;
-        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
-                                                                &input_col_objs);
-        RETURN_IF_UNLIKELY(!st.ok(), ColumnHelper::create_const_null_column(size));
+        auto st =
+                JavaDataTypeConverter::convert_to_boxed_array(ctx, input_cols.data(), num_cols, size, &input_col_objs);
+        RETURN_IF_ERROR(st);
 
         // call UDF method
         ASSIGN_OR_RETURN(auto res, helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(),
                                                      input_col_objs.size(), size));
-
-        RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
         return result_cols;
     }
 
-    ColumnPtr get_boxed_result(FunctionContext* ctx, jobject result, size_t num_rows) {
+    StatusOr<ColumnPtr> get_boxed_result(FunctionContext* ctx, jobject result, size_t num_rows) {
         if (result == nullptr) {
             return ColumnHelper::create_const_null_column(num_rows);
         }
         auto& helper = JVMFunctionHelper::getInstance();
         DCHECK(call_desc->method_desc[0].is_box);
-        TypeDescriptor type_desc(call_desc->method_desc[0].type);
-        auto res = ColumnHelper::create_column(type_desc, true);
-        helper.get_result_from_boxed_array(ctx, type_desc.type, res.get(), result, num_rows);
+        auto res = ColumnHelper::create_column(ctx->get_return_type(), true);
+        RETURN_IF_ERROR(helper.get_result_from_boxed_array(ctx->get_return_type().type, res.get(), result, num_rows));
         down_cast<NullableColumn*>(res.get())->update_has_null();
         return res;
     }

@@ -129,7 +129,7 @@ public:
 
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
-    void diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response);
+    void diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response);
 
 private:
     void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
