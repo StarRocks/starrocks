@@ -162,6 +162,193 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     closure_guard.release();
 }
 
+class ReplicaWaiter {
+public:
+    ReplicaWaiter(const PUniqueId& load_id, int64_t txn_id, int64_t tablet_id, int64_t sink_id,
+                  AsyncDeltaWriter* delta_writer, int64_t timeout_ms)
+            : _load_id(load_id),
+              _txn_id(txn_id),
+              _tablet_id(tablet_id),
+              _sink_id(sink_id),
+              _delta_writer(delta_writer),
+              _timeout_ms(timeout_ms) {
+        StarRocksMetrics::instance()->load_replica_waiting_num.increment(1);
+    }
+
+    ~ReplicaWaiter() {
+        _release_replica_state_closure();
+        StarRocksMetrics::instance()->load_replica_waiting_num.increment(-1);
+    }
+
+    Status wait() {
+        _watch.start();
+        Status status;
+        for (int64_t loop = 0; status.ok(); loop++) {
+            auto state = _delta_writer->get_state();
+            if (state == kCommitted || state == kAborted || state == kUninitialized) {
+                break;
+            }
+            // only sleep in bthread
+            bthread_usleep(10000); // 10ms
+            FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_wait_secondary_replica_block, {
+                int32_t timeout_ms = config::load_fp_tablets_channel_wait_secondary_replica_block_ms;
+                if (timeout_ms > 0) {
+                    bthread_usleep(timeout_ms * 1000);
+                }
+            });
+            _try_check_primary_state();
+            _try_diagnose_primary_replica();
+            int64_t elapse_time_ms = _watch.elapsed_time() / 1000000;
+            if (loop % 6000 == 0) {
+                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(_load_id)
+                          << " wait tablet " << _tablet_id << " secondary replica finish already " << elapse_time_ms
+                          << "ms still in state " << state
+                          << ", primary replica host: " << _delta_writer->replicas()[0].host();
+            }
+            if (elapse_time_ms > _timeout_ms) {
+                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(_load_id)
+                          << " wait tablet " << _tablet_id << " secondary replica finish timeout " << _timeout_ms
+                          << "ms still in state " << state
+                          << ", primary replica host: " << _delta_writer->replicas()[0].host();
+                status = Status::TimedOut("replica wait timeout");
+            }
+        }
+        return status;
+    }
+
+private:
+    void _try_check_primary_state() {
+        if (_replica_state_closure != nullptr) {
+            if (_replica_state_closure->count() != 1) {
+                return;
+            }
+            _replica_state_closure->join();
+            _last_get_replicate_state_time_ms = MonotonicMillis();
+            bool need_abort = false;
+            std::string abort_reason;
+            if (_replica_state_closure->cntl.Failed()) {
+                _replicate_state_fail_num += 1;
+                if (_replicate_state_fail_num >= 3) {
+                    need_abort = true;
+                    abort_reason = "can't get state from primary replica for more than 3 times, error: " +
+                                   _replica_state_closure->cntl.ErrorText();
+                }
+            } else {
+                _replicate_state_fail_num = 0;
+                PLoadReplicaStateResult& result = _replica_state_closure->result;
+                if (result.tablet_states().size() == 1 && result.tablet_states(0).tablet_id() == _tablet_id) {
+                    auto state = result.tablet_states(0).state();
+                    if (state == PLoadReplicaStateResult_ReplicaStatePB_NOT_FOUND ||
+                        state == PLoadReplicaStateResult_ReplicaStatePB_FAILED) {
+                        need_abort = true;
+                        abort_reason = fmt::format("the state at primary replica is {}, message: {}",
+                                                   PLoadReplicaStateResult_ReplicaStatePB_Name(state),
+                                                   result.tablet_states(0).message());
+                    }
+                }
+            }
+            _release_replica_state_closure();
+            if (need_abort) {
+                _delta_writer->cancel(Status::Cancelled(abort_reason));
+                _delta_writer->abort(true);
+            }
+        } else {
+            if (_last_get_replicate_state_time_ms <= 0) {
+                _last_get_replicate_state_time_ms = MonotonicMillis();
+                return;
+            }
+            if (MonotonicMillis() - _last_get_replicate_state_time_ms <= config::load_replica_state_probe_interval_ms) {
+                return;
+            }
+            auto& primary_replica = _delta_writer->writer()->replicas()[0];
+            auto stub =
+                    ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+            if (stub == nullptr) {
+                _last_get_replicate_state_time_ms = MonotonicMillis();
+                _replicate_state_fail_num += 1;
+                if (_replicate_state_fail_num >= 3) {
+                    _delta_writer->cancel(Status::Cancelled("can't get stub from primary replica"));
+                    _delta_writer->abort(true);
+                }
+                return;
+            }
+            _replica_state_closure = new ReusableClosure<PLoadReplicaStateResult>();
+            _replica_state_closure->cntl.set_timeout_ms(5000);
+            SET_IGNORE_OVERCROWDED(_replica_state_closure->cntl, load);
+            PLoadReplicaStateRequest request;
+            request.mutable_load_id()->set_hi(_load_id.hi());
+            request.mutable_load_id()->set_hi(_load_id.lo());
+            request.set_txn_id(_txn_id);
+            request.set_index_id(_delta_writer->writer()->index_id());
+            request.set_sink_id(_sink_id);
+            request.set_node_id(_delta_writer->writer()->node_id());
+            request.add_tablet_ids(_tablet_id);
+            _replica_state_closure->ref();
+            stub->load_replica_state(&_replica_state_closure->cntl, &request, &_replica_state_closure->result,
+                                     _replica_state_closure);
+        }
+    }
+
+    void _try_diagnose_primary_replica() {
+        if (_trigger_diagnose ||
+            _watch.elapsed_time() / 1000000 <= config::load_diagnose_rpc_timeout_stack_trace_threshold_ms) {
+            return;
+        }
+        _trigger_diagnose = true;
+        auto delta_writer = _delta_writer->writer();
+        auto& primary_replica = delta_writer->replicas()[0];
+        auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+        if (stub == nullptr) {
+            LOG(WARNING) << "failed to diagnose primary replica, txn_id: " << _txn_id
+                         << ", load_id: " << print_id(_load_id) << ", tablet_id: " << _tablet_id
+                         << ", primary_replica: [" << primary_replica.host() << ":" << primary_replica.port() << "]";
+            return;
+        }
+        auto closure = new ReusableClosure<PLoadDiagnoseResult>();
+        closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
+        SET_IGNORE_OVERCROWDED(closure->cntl, load);
+        PLoadDiagnoseRequest request;
+        request.mutable_id()->set_hi(_load_id.hi());
+        request.mutable_id()->set_hi(_load_id.lo());
+        request.set_txn_id(_txn_id);
+        request.set_stack_trace(true);
+        closure->ref();
+#ifndef BE_TEST
+        // best effort to diagnose so do not wait the result
+        stub->load_diagnose(&closure->cntl, &request, &closure->result, closure);
+#else
+        std::pair<PLoadDiagnoseRequest*, ReusableClosure<PLoadDiagnoseResult>*> rpc_pair{&request, closure};
+        TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::rpc::load_diagnose_send", &rpc_pair);
+#endif
+        LOG(INFO) << "send request to diagnose primary replica, txn_id: " << _txn_id
+                  << ", load_id: " << print_id(_load_id) << ", tablet_id: " << _tablet_id << ", primary_replica: ["
+                  << primary_replica.host() << ":" << primary_replica.port() << "]";
+    }
+
+    void _release_replica_state_closure() {
+        if (_replica_state_closure == nullptr) {
+            return;
+        }
+        _replica_state_closure->cancel();
+        if (_replica_state_closure->unref()) {
+            delete _replica_state_closure;
+            _replica_state_closure = nullptr;
+        }
+    }
+
+    const PUniqueId& _load_id;
+    int64_t _txn_id;
+    int64_t _tablet_id;
+    int64_t _sink_id;
+    AsyncDeltaWriter* _delta_writer;
+    int64_t _timeout_ms;
+    bool _trigger_diagnose{false};
+    MonotonicStopWatch _watch;
+    int64_t _replicate_state_fail_num{0};
+    int64_t _last_get_replicate_state_time_ms{-1};
+    ReusableClosure<PLoadReplicaStateResult>* _replica_state_closure{nullptr};
+};
+
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                     PTabletWriterAddBatchResult* response, bool* close_channel_ptr) {
     bool& close_channel = *close_channel_ptr;
@@ -344,54 +531,15 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // We need wait all secondary replica commit before we close the channel
     if (_is_replicated_storage && close_channel && response->status().status_code() == TStatusCode::OK) {
-        bool timeout = false;
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
-            // Wait util seconary replica commit/abort by primary
             if (delta_writer->replica_state() == Secondary) {
-                StarRocksMetrics::instance()->load_replica_waiting_num.increment(1);
-                DeferOp defer([&]() { StarRocksMetrics::instance()->load_replica_waiting_num.increment(-1); });
-                int i = 0;
-                int64_t start_wait_time_ms = MonotonicMillis();
-                bool trigger_diagnose = false;
-                do {
-                    auto state = delta_writer->get_state();
-                    if (state == kCommitted || state == kAborted || state == kUninitialized) {
-                        break;
-                    }
-                    i++;
-                    // only sleep in bthread
-                    bthread_usleep(10000); // 10ms
-                    FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_wait_secondary_replica_block, {
-                        int32_t timeout_ms = config::load_fp_tablets_channel_wait_secondary_replica_block_ms;
-                        if (timeout_ms > 0) {
-                            bthread_usleep(timeout_ms * 1000);
-                        }
-                    });
-                    if (!trigger_diagnose && (MonotonicMillis() - start_wait_time_ms >
-                                              config::load_diagnose_rpc_timeout_stack_trace_threshold_ms)) {
-                        _diagnose_primary_replica_stack_trace(tablet_id, request.id(), delta_writer.get());
-                        trigger_diagnose = true;
-                    }
-                    auto elapse_time_ms = watch.elapsed_time() / 1000000;
-                    if (elapse_time_ms > request.timeout_ms()) {
-                        LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                                  << " wait tablet " << tablet_id << " secondary replica finish timeout "
-                                  << request.timeout_ms() << "ms still in state " << state
-                                  << ", primary replica host: " << delta_writer->replicas()[0].host();
-                        timeout = true;
-                        break;
-                    }
-
-                    if (i % 6000 == 0) {
-                        LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                                  << " wait tablet " << tablet_id << " secondary replica finish already "
-                                  << elapse_time_ms << "ms still in state " << state
-                                  << ", primary replica host: " << delta_writer->replicas()[0].host();
-                    }
-                } while (true);
-            }
-            if (timeout) {
-                break;
+                int64_t left_timeout_ms = std::max((uint64_t)0, request.timeout_ms() - watch.elapsed_time() / 1000000);
+                ReplicaWaiter waiter(request.id(), _txn_id, tablet_id, request.sink_id(), delta_writer.get(),
+                                     left_timeout_ms);
+                Status status = waiter.wait();
+                if (status.is_time_out()) {
+                    break;
+                }
             }
         }
     }
@@ -1108,6 +1256,48 @@ void LocalTabletsChannel::update_profile() {
     }
 }
 
+void LocalTabletsChannel::get_replica_state(const std::string& remote_ip, const PLoadReplicaStateRequest* request,
+                                            PLoadReplicaStateResult* response) {
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    for (int64_t tablet_id : request->tablet_ids()) {
+        PLoadReplicaStateResult_ReplicaStatePB replica_state;
+        std::string message;
+        auto it = _delta_writers.find(tablet_id);
+        if (it == _delta_writers.end()) {
+            replica_state = PLoadReplicaStateResult_ReplicaStatePB_NOT_FOUND;
+            message = "can't find the delta writer";
+        } else {
+            auto writer = it->second.get()->writer();
+            if (writer->replica_state() != Primary) {
+                replica_state = PLoadReplicaStateResult_ReplicaStatePB_IN_PROCESSING;
+                message = fmt::format("it's not primary replica, replica state is {}",
+                                      DeltaWriter::replica_state_name(writer->replica_state()));
+            } else {
+                auto writer_state = writer->get_state();
+                if (writer_state == kCommitted) {
+                    auto status = writer->replicate_token()->get_replica_status(request->node_id());
+                    if (status.ok()) {
+                        replica_state = PLoadReplicaStateResult_ReplicaStatePB_SUCCESS;
+                    } else {
+                        replica_state = PLoadReplicaStateResult_ReplicaStatePB_FAILED;
+                        message = "primary replica is committed, but replica failed, error: " + status.to_string();
+                    }
+                } else if (writer_state == kAborted) {
+                    replica_state = PLoadReplicaStateResult_ReplicaStatePB_FAILED;
+                    message = "primary replica is aborted, error: " + writer->get_err_status().to_string();
+                } else {
+                    replica_state = PLoadReplicaStateResult_ReplicaStatePB_IN_PROCESSING;
+                    message = fmt::format("primary replica state is {}", DeltaWriter::state_name(writer_state));
+                }
+            }
+        }
+        auto state = response->add_tablet_states();
+        state->set_tablet_id(tablet_id);
+        state->set_state(replica_state);
+        state->set_message(message);
+    }
+}
+
 #define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
 #define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
 
@@ -1184,41 +1374,6 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_UPDATE_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns);
-}
-
-void LocalTabletsChannel::_diagnose_primary_replica_stack_trace(int64_t tablet_id, const PUniqueId& load_id,
-                                                                AsyncDeltaWriter* async_delta_writer) {
-    auto delta_writer = async_delta_writer->writer();
-    if (delta_writer->replica_state() != ReplicaState::Secondary || delta_writer->replicas().empty()) {
-        return;
-    }
-    auto& primary_replica = delta_writer->replicas()[0];
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
-    if (stub == nullptr) {
-        LOG(WARNING) << "failed to diagnose primary replica, txn_id: " << _txn_id << ", load_id: " << print_id(load_id)
-                     << ", tablet_id: " << tablet_id << ", primary_replica: [" << primary_replica.host() << ":"
-                     << primary_replica.port() << "]";
-        return;
-    }
-    auto closure = new ReusableClosure<PLoadDiagnoseResult>();
-    closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(closure->cntl, load);
-    PLoadDiagnoseRequest request;
-    request.mutable_id()->set_hi(load_id.hi());
-    request.mutable_id()->set_hi(load_id.lo());
-    request.set_txn_id(_txn_id);
-    request.set_stack_trace(true);
-    closure->ref();
-#ifndef BE_TEST
-    // best effort to diagnose so do not wait the result
-    stub->load_diagnose(&closure->cntl, &request, &closure->result, closure);
-#else
-    std::pair<PLoadDiagnoseRequest*, ReusableClosure<PLoadDiagnoseResult>*> rpc_pair{&request, closure};
-    TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::rpc::load_diagnose_send", &rpc_pair);
-#endif
-    LOG(INFO) << "send request to diagnose primary replica, txn_id: " << _txn_id << ", load_id: " << print_id(load_id)
-              << ", tablet_id: " << tablet_id << ", primary_replica: [" << primary_replica.host() << ":"
-              << primary_replica.port() << "]";
 }
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
