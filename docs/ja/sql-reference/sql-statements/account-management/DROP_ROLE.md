@@ -11,7 +11,7 @@ displayed_sidebar: docs
 :::tip
 
 - `user_admin` ロールを持つユーザーのみがロールを削除できます。
-- [StarRocks システム定義ロール](../../../administration/user_privs/privilege_overview.md#system-defined-roles) は削除できません。
+- [StarRocks システム定義ロール](../../../administration/user_privs/user_privs.md#system-defined-roles) は削除できません。
 
 :::
 
