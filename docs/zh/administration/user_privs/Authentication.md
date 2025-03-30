@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 50
 ---
 
 # 设置用户认证
