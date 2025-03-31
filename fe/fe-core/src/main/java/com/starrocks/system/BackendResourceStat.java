@@ -133,6 +133,9 @@ public class BackendResourceStat {
     }
 
     public static int getAvgNumHardwareCoresOfBe(Map<Long, Integer> numHardwareCoresPerBe) {
+        if (numHardwareCoresPerBe.isEmpty()) {
+            return DEFAULT_CORES_OF_BE;
+        }
         int sum = numHardwareCoresPerBe.values().stream().reduce(Integer::sum).orElse(DEFAULT_CORES_OF_BE);
         int avg = sum / numHardwareCoresPerBe.size();
         LOG.info("update avgNumHardwareCoresOfBe to {}, current cpuCores stats: {}", avg, numHardwareCoresPerBe);
@@ -176,6 +179,9 @@ public class BackendResourceStat {
     }
 
     public static long getAvgMemLimitBytes(Map<Long, Long> memLimitBytesPerBe) {
+        if (memLimitBytesPerBe.isEmpty()) {
+            return DEFAULT_MEM_LIMIT_BYTES;
+        }
         long sum = memLimitBytesPerBe.values().stream().reduce(Long::sum).orElse(DEFAULT_MEM_LIMIT_BYTES);
         long avg = sum / memLimitBytesPerBe.size();
         return avg;
