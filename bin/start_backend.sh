@@ -158,8 +158,12 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 
 
 # ================= native section =====================
+<<<<<<< HEAD
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop-lib/native:$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 export_cachelib_lib_path
+=======
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+>>>>>>> 380ea06964 ([BugFix] fix hadoop-lib for upgrade compatibility (#57436))
 
 
 # ====== handle meta_tool sub command before any modification change
