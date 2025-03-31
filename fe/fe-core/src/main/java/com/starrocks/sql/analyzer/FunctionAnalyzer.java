@@ -475,6 +475,18 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.DICT_MERGE)) {
+            if (functionCallExpr.hasChild(1)) {
+                Expr kExpr = functionCallExpr.getChild(1);
+                Optional<Long> k = extractIntegerValue(kExpr);
+                if (!k.isPresent() || k.get() >= Integer.MAX_VALUE || k.get() < 0) {
+                    throw new SemanticException(
+                            "The second parameter of DICT_MERGE must be a constant positive integer: " +
+                                    functionCallExpr.toSql(), kExpr.getPos());
+                }
+            }
+        }
+
         if (fnName.getFunction().equals(FunctionSet.APPROX_TOP_K)) {
             Optional<Long> k = Optional.empty();
             Optional<Long> counterNum = Optional.empty();
