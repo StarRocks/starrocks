@@ -755,6 +755,10 @@ under the License.
                         <groupId>ch.qos.reload4j</groupId>
                         <artifactId>reload4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
