@@ -432,7 +432,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                            .refreshMaterializedView(dbName, materializedView.getName(), false, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
@@ -586,6 +586,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
                     doInactiveMaterializedView(mv, reason);
                 }
+            } finally {
+                // clear version map to make sure the MV will be refreshed
+                mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             }
         }
     }
