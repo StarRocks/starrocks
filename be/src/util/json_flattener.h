@@ -139,6 +139,9 @@ private:
 
     void _visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row);
 
+    // clean sparsity path, to save memory
+    void _clean_sparsity_path(JsonFlatPath* root, size_t check_hits_min);
+
 private:
     struct JsonFlatDesc {
         // json compatible type
