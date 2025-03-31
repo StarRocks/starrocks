@@ -22,7 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -65,7 +65,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public boolean readyToExecute() throws UserException {
+    public boolean readyToExecute() throws StarRocksException {
         // Got initialPositions, we need to execute even there's no backlogs
         if (!initialPositions.isEmpty()) {
             return true;
@@ -100,7 +100,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
         PulsarRoutineLoadJob routineLoadJob = (PulsarRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
@@ -170,7 +170,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         return "Task id: " + getId() + ", partitions: " + partitions + ", initial positions: " + initialPositions;
     }
 
-    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);

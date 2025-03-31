@@ -119,13 +119,17 @@ public class TaskBuilder {
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
-        ConnectContext ctx = ConnectContext.get();
-        if (ctx == null) {
+        final ConnectContext ctx = ConnectContext.get();
+        return getAnalyzeMVStmt(ctx, tableName);
+    }
+
+    public static String getAnalyzeMVStmt(ConnectContext ctx, String tableName) {
+        if (FeConstants.runningUnitTest || ctx == null) {
             return "";
         }
-        String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        final String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        final String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         String stmt;
-        String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         if ("sample".equalsIgnoreCase(analyze)) {
             stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
         } else if ("full".equalsIgnoreCase(analyze)) {
@@ -133,16 +137,17 @@ public class TaskBuilder {
         } else {
             stmt = "";
         }
-        if (FeConstants.runningUnitTest) {
-            stmt = "";
-        }
         return stmt;
     }
 
-    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
+    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName,
+                                                 long warehouseId) {
         OptimizeTask task = new OptimizeTask(name);
         task.setSource(Constants.TaskSource.INSERT);
         task.setDbName(dbName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(warehouseId);
+        properties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
         task.setProperties(properties);
         task.setDefinition(sql);
         task.setExpireTime(0L);

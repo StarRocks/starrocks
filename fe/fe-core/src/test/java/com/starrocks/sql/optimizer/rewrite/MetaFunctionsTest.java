@@ -21,10 +21,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.leader.ReportHandler;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
@@ -197,7 +197,7 @@ public class MetaFunctionsTest {
             Assert.assertNull(lookupString("t1", "v1", "c1"));
 
             // normal
-            new MockUp<RepoExecutor>() {
+            new MockUp<SimpleExecutor>() {
                 @Mock
                 public List<TResultBatch> executeDQL(String sql) {
                     MetaFunctions.LookupRecord record = new MetaFunctions.LookupRecord();
@@ -213,7 +213,7 @@ public class MetaFunctionsTest {
             Assert.assertEquals("v1", lookupString("t1", "v1", "c1"));
 
             // record not found
-            new MockUp<RepoExecutor>() {
+            new MockUp<SimpleExecutor>() {
                 @Mock
                 public List<TResultBatch> executeDQL(String sql) {
                     throw new RuntimeException("query failed if record not exist in dict table");

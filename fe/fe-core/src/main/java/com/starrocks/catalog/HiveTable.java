@@ -45,8 +45,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.constraint.ForeignKeyConstraint;
-import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -56,7 +54,6 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -77,7 +74,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
-public class HiveTable extends Table implements HiveMetaStoreTable {
+public class HiveTable extends Table {
     public enum HiveTableType {
         VIRTUAL_VIEW,
         EXTERNAL_TABLE,
@@ -135,14 +132,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @SerializedName(value = "sp")
     private Map<String, String> serdeProperties = Maps.newHashMap();
 
-    // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
-    // 1. `useMetadataCache` is false means that this query need to list all selected partitions files from hdfs/s3.
-    // 2. Insert into statement could ignore the additional overhead caused by list partitions.
-    // 3. The most import point is that query result may be wrong with cached and expired partition files, causing insert data
-    // is wrong.
-    // This error will happen when appending files to an existed partition on user side.
-    private boolean useMetadataCache = true;
-
     private HiveTableType hiveTableType = HiveTableType.MANAGED_TABLE;
 
     private HiveStorageFormat storageFormat;
@@ -185,32 +174,18 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "hive") : catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return hiveDbName;
     }
 
     @Override
-    public String getTableName() {
+    public String getCatalogTableName() {
         return hiveTableName;
     }
 
     public HiveStorageFormat getStorageFormat() {
         return storageFormat;
-    }
-
-    public boolean isUseMetadataCache() {
-        if (ConnectContext.get() != null &&
-                ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
-            return true;
-        } else {
-            return useMetadataCache;
-        }
-    }
-
-    public void useMetadataCache(boolean useMetadataCache) {
-        if (!isResourceMappingCatalog(getCatalogName())) {
-            this.useMetadataCache = useMetadataCache;
-        }
     }
 
     @Override
@@ -234,6 +209,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+    @Override
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }
@@ -243,6 +219,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames.size() == 0;
     }
 
+    @Override
+    public boolean isHMSExternalTable() {
+        return hiveTableType.equals(HiveTableType.EXTERNAL_TABLE);
+    }
+
+    @Override
     public String getTableLocation() {
         return this.tableLocation;
     }
@@ -348,7 +330,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         List<PartitionInfo> hivePartitions;
         try {
-            useMetadataCache = true;
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getPartitions(this.getCatalogName(), this, partitionNames);
         } catch (StarRocksConnectorException e) {
@@ -425,16 +406,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         sb.append(", createTime=").append(createTime);
         sb.append('}');
         return sb.toString();
-    }
-
-    @Override
-    public List<UniqueConstraint> getUniqueConstraints() {
-        return uniqueConstraints;
-    }
-
-    @Override
-    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
-        return foreignKeyConstraints;
     }
 
     @Override

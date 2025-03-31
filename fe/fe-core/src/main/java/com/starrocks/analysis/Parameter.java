@@ -90,7 +90,7 @@ public class Parameter extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsWithoutChild(Object obj) {
         if (obj == null) {
             return false;
         }

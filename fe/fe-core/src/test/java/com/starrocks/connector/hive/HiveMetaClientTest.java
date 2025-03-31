@@ -43,6 +43,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
+
 public class HiveMetaClientTest {
     @Test
     public void testClientPool(@Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
@@ -127,8 +129,10 @@ public class HiveMetaClientTest {
         };
 
         HiveConf hiveConf = new HiveConf();
+        hiveConf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, "48");
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
+        Assert.assertEquals(48, client.getMaxClientPoolSize());
         try {
             client.getTable("db", "tbl");
         } catch (Exception e) {

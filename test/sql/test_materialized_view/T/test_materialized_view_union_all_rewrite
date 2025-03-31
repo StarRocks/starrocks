@@ -30,17 +30,17 @@ REFRESH MATERIALIZED VIEW mv0 PARTITION START ('1') END ('3') with sync mode;
 
 -- default mode
 set materialized_view_union_rewrite_mode = 0;
-function: check_hit_materialized_view("select * from mt1 where k1 < 3 and v2 != 2", "mv0")
-function: check_hit_materialized_view("select * from mt1 where k1 = 1 and v2 >= 4 ", "mv0")
+function: print_hit_materialized_view("select * from mt1 where k1 < 3 and v2 != 2", "mv0")
+function: print_hit_materialized_view("select * from mt1 where k1 = 1 and v2 >= 4 ", "mv0")
 
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT distinct k1,k2, v1,v2 from mt1", "mv0", "UNION")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 != 3", "mv0", "UNION")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 = 'a' and v2 != 4", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 = 'a' and v2 >= 4", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 != 4", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 = 2", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 <= 2", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT distinct k1,k2, v1,v2 from mt1", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 != 3", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 = 'a' and v2 != 4", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 = 'a' and v2 >= 4", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 != 4", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 = 2", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 <= 2", "mv0")
 
 select * from mt1 where k1 < 3 and v2 != 2 order by 1;
 select * from mt1 where k1 = 1 and v2 >= 4  order by 1;
@@ -55,14 +55,14 @@ SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 >= 4  order by 1;
 
 -- mode 1
 set materialized_view_union_rewrite_mode = 1;
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT distinct k1,k2, v1,v2 from mt1", "mv0", "UNION")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 >= 4 ", "mv0", "UNION")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 = 'a' and v2 != 4", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 = 'a' and v2 >= 4", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 != 4", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 = 2", "mv0")
-function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 <= 2", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT distinct k1,k2, v1,v2 from mt1", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 >= 4 ", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 = 'a' and v2 != 4", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 = 'a' and v2 >= 4", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 != 4", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 = 2", "mv0")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 <= 2", "mv0")
 
 select * from mt1 where k1 < 3 and v2 != 2 order by 1;
 select * from mt1 where k1 = 1 and v2 >= 4  order by 1;
@@ -77,14 +77,14 @@ SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 >= 4  order by 1;
 
 -- mode 2
 set materialized_view_union_rewrite_mode = 2;
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 = 'a' and v2 != 4", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 = 'a' and v2 >= 4", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 != 3", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 != 4", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT distinct k1,k2, v1,v2 from mt1", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 = 2", "mv0", "UNION")
-function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 <= 2", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 = 'a' and v2 != 4", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 = 'a' and v2 >= 4", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 WHERE k1 <6 and v2 != 3", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 != 4", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT distinct k1,k2, v1,v2 from mt1", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 = 2", "mv0", "UNION")
+function: print_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where v2 <= 2", "mv0", "UNION")
 
 select * from mt1 where k1 < 3 and v2 != 2 order by 1;
 select * from mt1 where k1 = 1 and v2 >= 4  order by 1;
@@ -110,12 +110,12 @@ group by k1, k2 ;
 REFRESH MATERIALIZED VIEW mv0 PARTITION START ('1') END ('3') with sync mode;
 
 set materialized_view_union_rewrite_mode = 0;
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1;", "mv0")
-function: check_no_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1;", "mv0")
-function: check_no_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 > 1 group by k1;", "mv0")
-function: check_no_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 != 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 > 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 != 1 group by k1;", "mv0")
 
 select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1 order by 1;
 select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1 order by 1;
@@ -125,12 +125,12 @@ select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1 order by 1;
 select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1 order by 1;
 
 set materialized_view_union_rewrite_mode = 1;
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1;", "mv0")
-function: check_no_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1;", "mv0")
-function: check_no_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 > 1 group by k1;", "mv0")
-function: check_no_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 != 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 > 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 != 1 group by k1;", "mv0")
 
 select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1 order by 1;
 select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1 order by 1;
@@ -140,12 +140,12 @@ select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1 order by 1;
 select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1 order by 1;
 
 set materialized_view_union_rewrite_mode = 2;
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 > 1 group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 != 1 group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1;", "mv0")
-function: check_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 > 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 != 1 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 < 5 group by k1;", "mv0")
+function: print_hit_materialized_view("select k1, sum(v1), sum(v2) from mt1 where k1 <= 3 group by k1;", "mv0")
 
 select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' group by k1 order by 1;
 select k1, sum(v1), sum(v2) from mt1 where k2 != 'a' and k1 >= 1 group by k1 order by 1;

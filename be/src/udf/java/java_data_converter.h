@@ -1,3 +1,17 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include "column/binary_column.h"
@@ -6,6 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 
@@ -16,38 +31,6 @@ struct JavaUDAFState {
     // UDAF State
     int handle;
 };
-// Column to DirectByteBuffer, which could avoid some memory copy,
-// directly access the C++ address space in Java
-// Because DirectBuffer does not hold the referece of these memory,
-// we must ensure that it is valid during accesses to it
-
-class ConvertDirectBufferVistor : public ColumnVisitorAdapter<ConvertDirectBufferVistor> {
-public:
-    ConvertDirectBufferVistor(std::vector<DirectByteBuffer>& buffers) : ColumnVisitorAdapter(this), _buffers(buffers) {}
-    Status do_visit(const NullableColumn& column);
-    Status do_visit(const BinaryColumn& column);
-
-    template <typename T>
-    Status do_visit(const FixedLengthColumn<T>& column) {
-        get_buffer_data(column, &_buffers);
-        return Status::OK();
-    }
-
-    template <typename T>
-    Status do_visit(const T& column) {
-        return Status::NotSupported("UDF Not Support Type");
-    }
-
-private:
-    template <class ColumnType>
-    void get_buffer_data(const ColumnType& column, std::vector<DirectByteBuffer>* buffers) {
-        const auto& container = column.get_data();
-        buffers->emplace_back((void*)container.data(), container.size() * sizeof(typename ColumnType::ValueType));
-    }
-
-private:
-    std::vector<DirectByteBuffer>& _buffers;
-};
 
 class JavaDataTypeConverter {
 public:
@@ -55,13 +38,18 @@ public:
     static jobject convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
                                                  const uint8_t* filter, int num_rows);
 
-    static Status convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                         const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
+    static Status convert_to_boxed_array(FunctionContext* ctx, const Column** columns, int num_cols, int num_rows,
+                                         std::vector<jobject>* res);
 };
 
-template <bool handle_null>
-jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num);
+#define SET_FUNCTION_CONTEXT_ERR(status, context)       \
+    if (UNLIKELY(!status.ok())) {                       \
+        context->set_error(status.to_string().c_str()); \
+    }
+
+StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, const Column* col, int row_num);
+
 void release_jvalue(bool is_boxed, jvalue val);
-void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
-Status check_type_matched(MethodTypeDescriptor method_type_desc, jobject val);
+Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, jvalue val);
+Status check_type_matched(const TypeDescriptor& type_desc, jobject val);
 } // namespace starrocks

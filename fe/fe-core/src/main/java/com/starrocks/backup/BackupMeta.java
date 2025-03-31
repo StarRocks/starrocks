@@ -34,8 +34,11 @@
 
 package com.starrocks.backup;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -46,7 +49,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -63,6 +65,10 @@ public class BackupMeta implements Writable, GsonPostProcessable {
     private Map<String, Table> tblNameMap = Maps.newHashMap();
     // tbl id -> tbl
     private Map<Long, Table> tblIdMap = Maps.newHashMap();
+    @SerializedName(value = "functions")
+    private List<Function> functions = Lists.newArrayList();
+    @SerializedName(value = "catalogs")
+    private List<Catalog> catalogs = Lists.newArrayList();
 
     private BackupMeta() {
 
@@ -85,6 +91,22 @@ public class BackupMeta implements Writable, GsonPostProcessable {
 
     public Table getTable(Long tblId) {
         return tblIdMap.get(tblId);
+    }
+
+    public void setFunctions(List<Function> functions) {
+        this.functions = functions;
+    }
+
+    public List<Function> getFunctions() {
+        return functions;
+    }
+
+    public void setCatalogs(List<Catalog> catalogs) {
+        this.catalogs = catalogs;
+    }
+
+    public List<Catalog> getCatalogs() {
+        return catalogs;
     }
 
     public static BackupMeta fromFile(String filePath, int starrocksMetaVersion) throws IOException {
@@ -114,10 +136,7 @@ public class BackupMeta implements Writable, GsonPostProcessable {
         return GsonUtils.GSON.fromJson(Text.readString(in), BackupMeta.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {

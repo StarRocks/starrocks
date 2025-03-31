@@ -22,7 +22,9 @@
 #include <fmt/format.h>
 
 #include "common/logging.h"
+#include "io/io_profiler.h"
 #include "io/s3_zero_copy_iostream.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::io {
 
@@ -40,6 +42,8 @@ S3OutputStream::S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::s
 }
 
 Status S3OutputStream::write(const void* data, int64_t size) {
+    MonotonicStopWatch watch;
+    watch.start();
     _buffer.append(static_cast<const char*>(data), size);
     if (_upload_id.empty() && _buffer.size() > _max_single_part_size) {
         RETURN_IF_ERROR(create_multipart_upload());
@@ -49,6 +53,7 @@ Status S3OutputStream::write(const void* data, int64_t size) {
         RETURN_IF_ERROR(multipart_upload());
         _buffer.clear();
     }
+    IOProfiler::add_write(size, watch.elapsed_time());
     return Status::OK();
 }
 
@@ -77,12 +82,15 @@ Status S3OutputStream::close() {
         return Status::OK();
     }
 
+    MonotonicStopWatch watch;
+    watch.start();
     if (_upload_id.empty()) {
         RETURN_IF_ERROR(singlepart_upload());
     } else {
         RETURN_IF_ERROR(multipart_upload());
         RETURN_IF_ERROR(complete_multipart_upload());
     }
+    IOProfiler::add_sync(watch.elapsed_time());
     _client = nullptr;
     return Status::OK();
 }

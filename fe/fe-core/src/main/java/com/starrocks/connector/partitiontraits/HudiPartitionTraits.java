@@ -14,7 +14,6 @@
 package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.BaseTableInfo;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
@@ -23,12 +22,6 @@ import java.util.List;
 import java.util.Set;
 
 public class HudiPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return ((HiveMetaStoreTable) table).getDbName();
-    }
-
     @Override
     public PartitionKey createEmptyKey() {
         return new HudiPartitionKey();
@@ -41,7 +34,7 @@ public class HudiPartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
-        return ((HiveMetaStoreTable) table).getTableName();
+        return table.getCatalogTableName();
     }
 
     @Override

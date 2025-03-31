@@ -36,12 +36,14 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -138,8 +140,12 @@ public abstract class BaseAction implements IAction {
         writeCustomHeaders(response, responseObj);
         writeCookies(response, responseObj);
 
-        boolean keepAlive = HttpUtil.isKeepAlive(request.getRequest());
+        // Connection can be keep-alive only when
+        // - The client requests to keep-alive and,
+        // - The action doesn't close the connection forcibly.
+        boolean keepAlive = HttpUtil.isKeepAlive(request.getRequest()) && !response.isForceCloseConnection();
         if (!keepAlive) {
+            responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(), HttpHeaderValues.CLOSE.toString());
             request.getContext().write(responseObj).addListener(ChannelFutureListener.CLOSE);
         } else {
             responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(), HttpHeaderValues.KEEP_ALIVE.toString());
@@ -310,17 +316,13 @@ public abstract class BaseAction implements IAction {
     }
 
     // return currentUserIdentity from StarRocks auth
-    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
-            throws AccessDeniedException {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        UserIdentity currentUser =
-                globalStateMgr.getAuthenticationMgr().checkPlainPassword(
-                        authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
-        if (currentUser == null) {
-            throw new AccessDeniedException("Access denied for "
-                    + authInfo.fullUserName + "@" + authInfo.remoteIp);
+    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
+        try {
+            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
+                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8), null);
+        } catch (AuthenticationException e) {
+            throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }
-        return currentUser;
     }
 
     public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)

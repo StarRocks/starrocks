@@ -137,7 +137,11 @@ public:
     }
     ~CompactionTask() override;
 
+#ifdef BE_TEST
+    virtual void run();
+#else
     void run() override;
+#endif
 
     bool should_stop() const override;
 
@@ -240,7 +244,7 @@ protected:
     Status _validate_compaction(const Statistics& stats) {
         // check row number
         DCHECK(_output_rowset) << "_output_rowset is null";
-        VLOG(1) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
+        VLOG(2) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
                 << ", output rowset rows:" << _output_rowset->num_rows() << ", merged_rows:" << stats.merged_rows
                 << ", filtered_rows:" << stats.filtered_rows;
         if (_task_info.input_rows_num != _output_rowset->num_rows() + stats.merged_rows + stats.filtered_rows) {
@@ -287,7 +291,7 @@ protected:
                 StorageEngine::instance()->add_unused_rowset(rs);
             }
         }
-        VLOG(1) << "commit compaction. output version:" << _task_info.output_version
+        VLOG(2) << "commit compaction. output version:" << _task_info.output_version
                 << ", output rowset version:" << _output_rowset->version()
                 << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
                 << ", max_version:" << _tablet->max_continuous_version();

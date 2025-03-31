@@ -23,6 +23,7 @@
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
+#include "service/brpc_service_test_util.h"
 #include "storage/async_delta_writer.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
@@ -231,19 +232,6 @@ protected:
     std::string _primary_tablet_segment_dir;
     RuntimeState _runtime_state;
     ObjectPool _pool;
-};
-
-class MockClosure : public ::google::protobuf::Closure {
-public:
-    MockClosure() = default;
-    ~MockClosure() override = default;
-
-    void Run() override { _run.store(true); }
-
-    bool has_run() { return _run.load(); }
-
-private:
-    std::atomic_bool _run = false;
 };
 
 TEST_F(SegmentFlushExecutorTest, test_write_and_commit_segment) {

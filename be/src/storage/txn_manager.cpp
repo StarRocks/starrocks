@@ -278,9 +278,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                            !rowset_ptr->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() &&
                            !tablet->is_update_schema_running();
         if (skip_schema) {
-            // avoid `update_max_version_schema` and `commit_txn` run concurrency, so hold a read
-            // lock for `schema_lock` is enough
-            std::shared_lock l(tablet->get_schema_lock());
             skip_schema = tablet->add_committed_rowset(rowset_ptr);
             if (skip_schema) {
                 rowset_ptr->rowset_meta()->set_skip_tablet_schema(true);
@@ -325,7 +322,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         }
         // [tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
-        VLOG(1) << "Commit txn successfully. "
+        VLOG(2) << "Commit txn successfully. "
                 << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
                 << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files()
                 << " #uptfiles:" << rowset_ptr->num_update_files();
@@ -345,7 +342,7 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
         }
     } else {
         tablet->overwrite_rowset(rowset, version);
-        VLOG(1) << "publish overwrite txn. txn_id: " << transaction_id << ", partition_id: " << partition_id
+        VLOG(2) << "publish overwrite txn. txn_id: " << transaction_id << ", partition_id: " << partition_id
                 << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                 << ", rowset_id: " << rowset->rowset_id() << ", version: " << rowset->version();
     }
@@ -364,7 +361,7 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
             txn_info.version = version;
             add_txn_info_history(txn_info);
             it->second.erase(tablet_txn_info_itr);
-            VLOG(1) << "add txn info history. txn_id: " << transaction_id << ", partition_id: " << partition_id
+            VLOG(2) << "add txn info history. txn_id: " << transaction_id << ", partition_id: " << partition_id
                     << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                     << ", rowset_id: " << rowset->rowset_id() << ", version: " << version;
         }
@@ -411,7 +408,7 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
             txn_info.version = version;
             add_txn_info_history(txn_info);
             it->second.erase(tablet_txn_info_itr);
-            VLOG(1) << "add txn info history. txn_id: " << transaction_id << ", partition_id: " << partition_id
+            VLOG(2) << "add txn info history. txn_id: " << transaction_id << ", partition_id: " << partition_id
                     << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                     << ", rowset_id: " << rowset->rowset_id() << ", version: " << version;
         }
@@ -527,7 +524,7 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
         }
         it->second.erase(tablet_info);
         if (with_log) {
-            VLOG(1) << "rollback transaction partition_id: " << key.first << ", txn_id: " << key.second
+            VLOG(2) << "rollback transaction partition_id: " << key.first << ", txn_id: " << key.second
                     << ", tablet: " << tablet_info.to_string();
         }
         if (it->second.empty()) {

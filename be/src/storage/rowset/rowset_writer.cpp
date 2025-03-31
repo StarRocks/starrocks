@@ -46,6 +46,7 @@
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
+#include "fs/key_cache.h"
 #include "io/io_error.h"
 #include "runtime/exec_env.h"
 #include "segment_options.h"
@@ -154,6 +155,13 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     _rowset_meta_pb->set_empty(_num_rows_written == 0);
     _rowset_meta_pb->set_creation_time(time(nullptr));
     _rowset_meta_pb->set_num_segments(_num_segment);
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    for (auto& encryption_meta : _segment_encryption_metas) {
+        _rowset_meta_pb->add_segment_encryption_metas(encryption_meta);
+    }
     // newly created rowset do not have rowset_id yet, use 0 instead
     _rowset_meta_pb->set_rowset_seg_id(0);
     _rowset_meta_pb->set_gtid(_context.gtid);
@@ -163,7 +171,15 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
         if (!_delfile_idxes.empty()) {
             _rowset_meta_pb->mutable_delfile_idxes()->Add(_delfile_idxes.begin(), _delfile_idxes.end());
         }
+        DCHECK(_delfile_encryption_metas.size() == _num_delfile);
+        for (auto& encryption_meta : _delfile_encryption_metas) {
+            _rowset_meta_pb->add_delfile_encryption_metas(encryption_meta);
+        }
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
+        DCHECK(_updatefile_encryption_metas.size() == _num_uptfile);
+        for (auto& encryption_meta : _updatefile_encryption_metas) {
+            _rowset_meta_pb->add_updatefile_encryption_metas(encryption_meta);
+        }
         _rowset_meta_pb->set_num_update_files(_num_uptfile);
         _rowset_meta_pb->set_total_update_row_size(_total_update_row_size);
         _rowset_meta_pb->set_num_rows_upt(_num_rows_upt);
@@ -294,6 +310,11 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
         _total_index_size += segment_pb.index_size();
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
+        DCHECK(_segment_encryption_metas.size() == _num_segment);
+        RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                           Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                             _segment_encryption_metas.size(), _num_segment)));
+        _segment_encryption_metas.emplace_back(segment_pb.encryption_meta());
         _num_segment++;
     }
 
@@ -391,6 +412,8 @@ Status RowsetWriter::_flush_delete_file(const SegmentPB& segment_pb, butil::IOBu
     // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
     // new delete file
     _delfile_idxes.emplace_back(_num_segment + _num_delfile);
+    DCHECK(_delfile_encryption_metas.size() == _num_delfile);
+    _delfile_encryption_metas.emplace_back(segment_pb.delete_encryption_meta());
     _num_delfile++;
     _num_rows_del += segment_pb.delete_num_rows();
 
@@ -434,6 +457,8 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
     // 3. update statistic
     {
         std::lock_guard<std::mutex> l(_lock);
+        DCHECK(_updatefile_encryption_metas.size() == _num_uptfile);
+        _updatefile_encryption_metas.emplace_back(segment_pb.update_encryption_meta());
         _num_uptfile++;
         _num_rows_upt += segment_pb.update_num_rows();
         _total_update_row_size += segment_pb.update_row_size();
@@ -545,10 +570,21 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
         // temporary segment files.
         path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     }
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        _writer_options.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, path));
     const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    _segment_encryption_metas.emplace_back(_writer_options.encryption_meta);
     ++_num_segment;
     return std::move(segment_writer);
 }
@@ -641,8 +677,15 @@ Status HorizontalRowsetWriter::_flush_chunk(const Chunk& chunk, SegmentPB* seg_i
 Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                                         SegmentPB* seg_info) {
     auto flush_del_file = [&](const Column& deletes, SegmentPB* seg_info) {
-        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_del_file_path(
-                                             _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
+        WritableFileOptions wopts;
+        string encryption_meta;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            wopts.encryption_info = pair.info;
+            encryption_meta = std::move(pair.encryption_meta);
+        }
+        auto file_path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
         if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
@@ -658,10 +701,13 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             seg_info->set_delete_id(_num_delfile);
             seg_info->set_delete_data_size(content.size());
             seg_info->set_delete_path(wfile->filename());
+            seg_info->set_delete_encryption_meta(encryption_meta);
         }
         // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
         // new delete file
         _delfile_idxes.emplace_back(_num_segment + _num_delfile);
+        DCHECK(_delfile_encryption_metas.size() == _num_delfile);
+        _delfile_encryption_metas.emplace_back(encryption_meta);
         _num_delfile++;
         _num_rows_del += deletes.size();
         return Status::OK();
@@ -715,6 +761,25 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
     _total_index_size += static_cast<int64_t>(rowset->rowset_meta()->index_disk_size());
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    auto& meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+    if (meta_pb.segment_encryption_metas_size() == 0) {
+        for (int i = 0; i < rowset->num_segments(); ++i) {
+            _segment_encryption_metas.emplace_back(string());
+        }
+    } else {
+        DCHECK_EQ(meta_pb.segment_encryption_metas_size(), rowset->num_segments());
+        RETURN_IF_UNLIKELY(
+                meta_pb.segment_encryption_metas_size() != rowset->num_segments(),
+                Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                  meta_pb.segment_encryption_metas_size(), rowset->num_segments())));
+        for (int i = 0; i < rowset->num_segments(); ++i) {
+            _segment_encryption_metas.emplace_back(meta_pb.segment_encryption_metas(i));
+        }
+    }
     _num_segment += static_cast<int>(rowset->num_segments());
     // TODO update zonemap
     if (rowset->rowset_meta()->has_delete_predicate()) {
@@ -773,7 +838,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         std::string tmp_segment_file =
                 Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-        FileInfo tmp_segment_info{.path = tmp_segment_file};
+        FileInfo tmp_segment_info{.path = tmp_segment_file, .encryption_meta = _segment_encryption_metas[seg_id]};
         auto segment_ptr = Segment::open(_fs, tmp_segment_info, seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
@@ -848,6 +913,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
+        _segment_encryption_metas.clear();
+        _delfile_encryption_metas.clear();
         _num_segment = 0;
         _num_delfile = 0;
         _num_rows_written = 0;
@@ -1017,6 +1084,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
+        _segment_encryption_metas.clear();
+        _delfile_encryption_metas.clear();
         _num_segment = 0;
         _num_delfile = 0;
         _num_rows_written = 0;
@@ -1125,6 +1194,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         seg_info->set_index_size(index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
         seg_info->set_path((*segment_writer)->segment_path());
+        seg_info->set_encryption_meta((*segment_writer)->encryption_meta());
         if (_context.tablet_schema && !_context.tablet_schema->indexes()->empty()) {
             auto mutable_indexes = seg_info->mutable_seg_indexes();
             for (const auto& index : *(_context.tablet_schema->indexes())) {
@@ -1311,11 +1381,23 @@ Status VerticalRowsetWriter::final_flush() {
 StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_file_path(_context.rowset_path_prefix,
-                                                                                  _context.rowset_id, _num_segment)));
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        _writer_options.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile,
+                     _fs->new_writable_file(wopts, Rowset::segment_file_path(_context.rowset_path_prefix,
+                                                                             _context.rowset_id, _num_segment)));
     const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
+    DCHECK(_segment_encryption_metas.size() == _num_segment);
+    RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
+                       Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
+                                                         _segment_encryption_metas.size(), _num_segment)));
+    _segment_encryption_metas.emplace_back(_writer_options.encryption_meta);
     ++_num_segment;
     return std::move(segment_writer);
 }

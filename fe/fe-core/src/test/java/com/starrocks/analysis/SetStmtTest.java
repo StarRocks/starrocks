@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -74,7 +74,7 @@ public class SetStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         List<SetListItem> vars = Lists.newArrayList(new UserVariable("times", new IntLiteral(100L),
                         NodePosition.ZERO),
                 new SetNamesVar("utf8"));
@@ -98,7 +98,7 @@ public class SetStmtTest {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
-    public void testNonConstantExpr() throws UserException {
+    public void testNonConstantExpr() throws StarRocksException {
         SlotDescriptor descriptor = new SlotDescriptor(new SlotId(1), "x",
                 Type.INT, false);
         Expr lhsExpr = new SlotRef(descriptor);
@@ -127,7 +127,7 @@ public class SetStmtTest {
     }
 
     @Test
-    public void testSetNonNegativeLongVariable() throws UserException {
+    public void testSetNonNegativeLongVariable() throws StarRocksException {
         List<String> fields = Lists.newArrayList(
                 SessionVariable.LOAD_MEM_LIMIT,
                 SessionVariable.QUERY_MEM_LIMIT,

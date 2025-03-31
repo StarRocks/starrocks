@@ -39,8 +39,8 @@ public:
     }
 
     void mock_insert(string expr_name) {
-        auto* handle =
-                engine->get_func_cache()->insert(expr_name, nullptr, 1000, [](const CacheKey& key, void* value) {});
+        auto* handle = engine->get_func_cache()->insert(expr_name, nullptr, 1000, 1000,
+                                                        [](const CacheKey& key, void* value) {});
         if (handle != nullptr) {
             engine->get_func_cache()->release(handle);
         }
@@ -79,7 +79,7 @@ TEST_F(JITFunctionCacheTest, cache) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
 
-                auto v = std::static_pointer_cast<Int8Column>(ptr);
+                auto v = Int8Column::static_pointer_cast(ptr);
                 ASSERT_EQ(10, v->size());
 
                 for (int j = 0; j < v->size(); ++j) {
@@ -93,7 +93,7 @@ TEST_F(JITFunctionCacheTest, cache) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
 
-                auto v = std::static_pointer_cast<Int8Column>(ptr);
+                auto v = Int8Column::static_pointer_cast(ptr);
                 ASSERT_EQ(10, v->size());
 
                 for (int j = 0; j < v->size(); ++j) {
@@ -125,7 +125,7 @@ TEST_F(JITFunctionCacheTest, cache) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
 
-                auto v = std::static_pointer_cast<Int32Column>(ptr);
+                auto v = Int32Column::static_pointer_cast(ptr);
                 ASSERT_EQ(10, v->size());
 
                 for (int j = 0; j < v->size(); ++j) {
@@ -139,7 +139,7 @@ TEST_F(JITFunctionCacheTest, cache) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
 
-                auto v = std::static_pointer_cast<Int32Column>(ptr);
+                auto v = Int32Column::static_pointer_cast(ptr);
                 ASSERT_EQ(10, v->size());
 
                 for (int j = 0; j < v->size(); ++j) {
@@ -171,7 +171,7 @@ TEST_F(JITFunctionCacheTest, cache) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
 
-                auto v = std::static_pointer_cast<Int128Column>(ptr);
+                auto v = Int128Column::static_pointer_cast(ptr);
                 ASSERT_EQ(10, v->size());
 
                 for (int j = 0; j < v->size(); ++j) {
@@ -185,7 +185,7 @@ TEST_F(JITFunctionCacheTest, cache) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
 
-                auto v = std::static_pointer_cast<Int128Column>(ptr);
+                auto v = Int128Column::static_pointer_cast(ptr);
                 ASSERT_EQ(10, v->size());
 
                 for (int j = 0; j < v->size(); ++j) {

@@ -1,0 +1,14 @@
+-- name: test_cast_json_to_struct
+
+select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int, col3 int>);
+select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int>);
+select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int, col3 int, col4 int>);
+select cast(PARSE_JSON('[1,   2,    3, "a"]') as struct<col1 int, col2 int, col3 int, col4 int>);
+select cast(PARSE_JSON('[1.1, 2.2, 3.3]') as struct<col1 double, col2 double, col3 double>);
+select cast(PARSE_JSON('[1.1, 2.2, 3.3]') as struct<col1 double, col2 double, col3 int>);
+select cast(PARSE_JSON('{"star": "rocks", "number": 1}') as struct<number int, star varchar>);
+select cast(PARSE_JSON('{"star": "rocks", "number": 1}') as struct<number int, not_found varchar>);
+select cast(PARSE_JSON('{"star": "rocks", "number": [1, 2, 3]}') as struct<number array<int>, not_found varchar>);
+select cast(PARSE_JSON('[1, [{"star": "rocks"}, {"star": "rocks"}]]') as struct<col1 int, col2 array<json>>);
+select cast(PARSE_JSON('{"star" : "rocks", "length": 5, "numbers": [1, 4, 7], "nest": [1, 2, 3]}') as struct<star varchar(10), length int, numbers array<int>, nest struct<col1 int, col2 int, col3 int>>);
+select cast(PARSE_JSON('[{"star" : "rocks", "length": 5, "numbers": [1, 4, 7], "nest": [1, 2, 3]}, {"star" : "rockses", "length": 33, "numbers": [2, 5, 9], "nest": [3, 6, 9]}]') as array<struct<star varchar(10), length int, numbers array<int>, nest struct<col1 int, col2 int, col3 int>>>);

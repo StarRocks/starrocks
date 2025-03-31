@@ -410,6 +410,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_tablet_not_running) {
     ASSERT_EQ(1, versions.size());
     ASSERT_EQ(0, versions[0].first);
     ASSERT_EQ(5, versions[0].second);
+    tablet->delete_all_files();
 }
 
 TEST_F(SizeTieredCompactionPolicyTest, test_max_compaction) {

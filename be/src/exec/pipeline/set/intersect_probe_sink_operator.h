@@ -52,17 +52,23 @@ public:
     }
 
     Status set_finishing(RuntimeState* state) override {
+        auto notify_src = _intersect_ctx->observable().defer_notify_source();
+        auto notify = _intersect_ctx->observable().defer_notify_sink();
         ONCE_DETECT(_set_finishing_once);
         _is_finished = true;
         _intersect_ctx->finish_probe_ht();
         return Status::OK();
     }
 
+    Status prepare(RuntimeState* state) override;
+
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+
+    std::string get_name() const override;
 
 private:
     IntersectContextPtr _intersect_ctx;
@@ -83,6 +89,7 @@ public:
               _intersect_partition_ctx_factory(std::move(intersect_partition_ctx_factory)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         IntersectContextPtr intersect_ctx = _intersect_partition_ctx_factory->get_or_create(driver_sequence);

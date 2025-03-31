@@ -32,10 +32,16 @@ public interface StatisticStorage {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
-    default void refreshTableStatistic(Table table) {
+    default void refreshTableStatistic(Table table, boolean isSync) {
     }
 
-    default void refreshTableStatisticSync(Table table) {
+    default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
+    }
+
+    default void refreshMultiColumnStatistics(Long tableId) {
+    }
+
+    default void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     /**
@@ -59,10 +65,6 @@ public interface StatisticStorage {
         return null;
     }
 
-    default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
-        return getColumnStatistics(table, columns);
-    }
-
     default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
         return columns.stream().
                 map(col -> ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
@@ -75,17 +77,20 @@ public interface StatisticStorage {
     default Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
     }
-
-    default Map<String, Histogram> getHistogramStatisticsSync(Table table, List<String> columns) {
-        return getHistogramStatistics(table, columns);
-    }
-
+    
     default Map<String, Histogram> getConnectorHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
     }
 
     default Map<String, Histogram> getConnectorHistogramStatisticsSync(Table table, List<String> columns) {
         return getConnectorHistogramStatistics(table, columns);
+    }
+
+    default MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
+        return MultiColumnCombinedStatistics.EMPTY;
+    }
+
+    default void expireMultiColumnStatistics(Long tableId) {
     }
 
     default void expireHistogramStatistics(Long tableId, List<String> columns) {
@@ -95,6 +100,9 @@ public interface StatisticStorage {
     }
 
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+    }
+
+    default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {

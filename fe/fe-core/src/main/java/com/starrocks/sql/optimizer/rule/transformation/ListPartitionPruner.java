@@ -24,6 +24,8 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -41,20 +43,21 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -62,6 +65,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ListPartitionPruner implements PartitionPruner {
@@ -206,13 +210,13 @@ public class ListPartitionPruner implements PartitionPruner {
         // If a match is found, the intersection data is taken.
         // If no partition is specified, the match result will be taken
         if (matches == null) {
-            if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
+            if (CollectionUtils.isNotEmpty(specifyPartitionIds)) {
                 return specifyPartitionIds;
             } else {
                 return null;
             }
         } else {
-            if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
+            if (CollectionUtils.isNotEmpty(specifyPartitionIds)) {
                 // intersect
                 return specifyPartitionIds.stream().filter(matches::contains).collect(Collectors.toList());
             } else {
@@ -232,6 +236,15 @@ public class ListPartitionPruner implements PartitionPruner {
         } else if (conjunct instanceof InPredicateOperator) {
             InPredicateOperator inOp = conjunct.cast();
             return !inOp.isNotIn() && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant);
+        } else if (conjunct instanceof IsNullPredicateOperator) {
+            return true;
+        } else if (conjunct instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator cop = conjunct.cast();
+            // all children should be pruneable
+            if (cop.getChildren().stream().anyMatch(conj -> !canPruneWithConjunct(conj))) {
+                return false;
+            }
+            return true;
         }
         return false;
     }
@@ -249,7 +262,7 @@ public class ListPartitionPruner implements PartitionPruner {
         }
         List<String> result = Lists.newArrayList(partitionColumnNames);
 
-        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+        Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
             return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
         };
         Consumer<SlotRef> slotRefConsumer = (slot) -> {
@@ -265,7 +278,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
                     for (ColumnRefOperator ref : columnRefOperatorList) {
                         result.add(ref.getName());
@@ -292,7 +305,7 @@ public class ListPartitionPruner implements PartitionPruner {
         if (!deduceExtraConjuncts) {
             return;
         }
-        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+        Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
             return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
         };
         // The GeneratedColumn doesn't have the correct type info, let's help it
@@ -312,7 +325,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
 
                     for (ColumnRefOperator ref : columnRefOperatorList) {
@@ -425,8 +438,10 @@ public class ListPartitionPruner implements PartitionPruner {
             return null;
         }
 
-        // Fold constants
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        // implicit cast
+        result = rewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
+        // fold constant
         result = rewriter.rewrite(result, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
         return result;
     }
@@ -589,7 +604,7 @@ public class ListPartitionPruner implements PartitionPruner {
                     } else {
                         Set<Long> partitionIds = partitionValueMap.get(literal);
                         for (Long id : partitionIds) {
-                            if (listPartitionInfo.pruneById(id)) {
+                            if (listPartitionInfo.isSingleValuePartition(id)) {
                                 matches.remove(id);
                             }
                         }
@@ -706,7 +721,18 @@ public class ListPartitionPruner implements PartitionPruner {
             Set<Long> partitions = partitionValueMap.get(literal);
             if (partitions != null) {
                 if (inPredicate.isNotIn()) {
-                    matches.removeAll(partitions);
+                    // external table, one partition column for one partition can only have one value
+                    if (listPartitionInfo == null) {
+                        matches.removeAll(partitions);
+                    } else {
+                        // for olap table, if one partition is multi value partition like PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego")
+                        // and we have a not in predicate like city not in ("Los Angeles"), it's not safe to remove this partition
+                        for (Long id : partitions) {
+                            if (listPartitionInfo.isSingleValuePartition(id)) {
+                                matches.remove(id);
+                            }
+                        }
+                    }
                 } else {
                     matches.addAll(partitions);
                 }
@@ -773,5 +799,92 @@ public class ListPartitionPruner implements PartitionPruner {
             }
         }
         return Pair.create(lefts, existNoEval);
+    }
+
+    public static void collectOlapTablePartitionValuesMap(
+            OlapTable olapTable,
+            Set<Long> partitionIds,
+            Map<Column, ColumnRefOperator> columnRefOperatorMap,
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
+            boolean isStrict) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (!partitionInfo.isListPartition()) {
+            return;
+        }
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        // single item list partition has only one column mapper
+        Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
+        List<Column> partitionColumns = listPartitionInfo.getPartitionColumns(olapTable.getIdToColumn());
+        if (!CollectionUtils.sizeIsEmpty(literalExprValuesMap)) {
+            Set<Long> nullPartitionIds = new HashSet<>();
+            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
+            for (Map.Entry<Long, List<LiteralExpr>> entry : literalExprValuesMap.entrySet()) {
+                Long partitionId = entry.getKey();
+                if (!partitionIds.contains(partitionId)) {
+                    continue;
+                }
+                List<LiteralExpr> values = entry.getValue();
+                if (CollectionUtils.isEmpty(values)) {
+                    continue;
+                }
+                if (values.size() == 1 || !isStrict) {
+                    for (LiteralExpr value : values) {
+                        // store null partition value seperated from non-null partition values
+                        if (value.isConstantNull()) {
+                            nullPartitionIds.add(partitionId);
+                        } else {
+                            putValueMapItem(partitionValueToIds, partitionId, value);
+                        }
+                    }
+                }
+            }
+            // single item list partition has only one column
+            Column column = partitionColumns.get(0);
+            ColumnRefOperator columnRefOperator = columnRefOperatorMap.get(column);
+            columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
+            columnToNullPartitions.put(columnRefOperator, nullPartitionIds);
+        }
+
+        // multiItem list partition mapper
+        Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
+        if (multiLiteralExprValues != null && multiLiteralExprValues.size() > 0) {
+            for (int i = 0; i < partitionColumns.size(); i++) {
+                ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
+                Set<Long> nullPartitionIds = new HashSet<>();
+                for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
+                    Long partitionId = entry.getKey();
+                    if (!partitionIds.contains(partitionId)) {
+                        continue;
+                    }
+                    List<List<LiteralExpr>> multiValues = entry.getValue();
+                    if (CollectionUtils.isEmpty(multiValues)) {
+                        continue;
+                    }
+                    if (multiValues.size() == 1 || !isStrict) {
+                        for (List<LiteralExpr> values : multiValues) {
+                            LiteralExpr value = values.get(i);
+                            // store null partition value seperated from non-null partition values
+                            if (value.isConstantNull()) {
+                                nullPartitionIds.add(partitionId);
+                            } else {
+                                putValueMapItem(partitionValueToIds, partitionId, value);
+                            }
+                        }
+                    }
+                }
+                Column column = partitionColumns.get(i);
+                ColumnRefOperator columnRefOperator = columnRefOperatorMap.get(column);
+                columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
+                columnToNullPartitions.put(columnRefOperator, nullPartitionIds);
+            }
+        }
+    }
+
+    private static void putValueMapItem(ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds,
+                                        Long partitionId,
+                                        LiteralExpr value) {
+        partitionValueToIds.computeIfAbsent(value, ignored -> Sets.newHashSet())
+                .add(partitionId);
     }
 }

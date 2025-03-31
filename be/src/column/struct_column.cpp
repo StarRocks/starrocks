@@ -19,6 +19,42 @@
 
 namespace starrocks {
 
+StructColumn::StructColumn(MutableColumns&& fields) {
+    for (auto& f : fields) {
+        DCHECK(f->is_nullable());
+        DCHECK_EQ(f->size(), size());
+        f->check_or_die();
+        _fields.emplace_back(std::move(f));
+    }
+}
+
+StructColumn::StructColumn(MutableColumns&& fields, std::vector<std::string> field_names)
+        : _field_names(std::move(field_names)) {
+    // Struct must have at least one field.
+    DCHECK(_field_names.size() > 0);
+    for (auto& f : fields) {
+        _fields.emplace_back(std::move(f));
+    }
+    DCHECK(_fields.size() > 0);
+    // fields and field_names must have the same size.
+    DCHECK(_fields.size() == _field_names.size());
+}
+
+StructColumn::Ptr StructColumn::create(const Columns& columns, std::vector<std::string> field_names) {
+    auto column = StructColumn::create(MutableColumns());
+    column->_fields.reserve(columns.size());
+    column->_fields.assign(columns.begin(), columns.end());
+    column->_field_names = std::move(field_names);
+    return column;
+}
+
+StructColumn::Ptr StructColumn::create(const Columns& columns) {
+    auto column = StructColumn::create(MutableColumns());
+    column->_fields.reserve(columns.size());
+    column->_fields.assign(columns.begin(), columns.end());
+    return column;
+}
+
 bool StructColumn::is_struct() const {
     return true;
 }
@@ -72,21 +108,21 @@ size_t StructColumn::byte_size(size_t idx) const {
 }
 
 void StructColumn::reserve(size_t n) {
-    for (const auto& column : _fields) {
+    for (auto& column : _fields) {
         column->reserve(n);
     }
     // Don't need to reserve _field_names, because the number of struct subfield is fixed.
 }
 
 void StructColumn::resize(size_t n) {
-    for (const auto& column : _fields) {
+    for (auto& column : _fields) {
         column->resize(n);
     }
     // Don't need to resize _field_names, because the number of struct subfield is fixed.
 }
 
 StatusOr<ColumnPtr> StructColumn::upgrade_if_overflow() {
-    for (ColumnPtr& column : _fields) {
+    for (auto& column : _fields) {
         StatusOr<ColumnPtr> status = upgrade_helper_func(&column);
         if (!status.ok()) {
             return status;
@@ -96,7 +132,7 @@ StatusOr<ColumnPtr> StructColumn::upgrade_if_overflow() {
 }
 
 StatusOr<ColumnPtr> StructColumn::downgrade() {
-    for (ColumnPtr& column : _fields) {
+    for (auto& column : _fields) {
         StatusOr<ColumnPtr> status = downgrade_helper_func(&column);
         if (!status.ok()) {
             return status;
@@ -131,7 +167,7 @@ void StructColumn::append_datum(const Datum& datum) {
 }
 
 void StructColumn::remove_first_n_values(size_t count) {
-    for (const auto& column : _fields) {
+    for (auto& column : _fields) {
         column->remove_first_n_values(count);
     }
 }
@@ -146,7 +182,7 @@ void StructColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void StructColumn::fill_default(const Filter& filter) {
-    for (const ColumnPtr& field : _fields) {
+    for (auto& field : _fields) {
         field->fill_default(filter);
     }
 }
@@ -180,12 +216,12 @@ void StructColumn::append_value_multiple_times(const Column& src, uint32_t index
 
 bool StructColumn::append_nulls(size_t count) {
     // check subfield column is nullable column first
-    for (const ColumnPtr& field : _fields) {
+    for (auto& field : _fields) {
         if (!field->is_nullable()) {
             return false;
         }
     }
-    for (const ColumnPtr& field : _fields) {
+    for (auto& field : _fields) {
         if (!field->append_nulls(count)) {
             DCHECK(false) << "StructColumn subfield append_nulls failed, that should not happened!";
             return false;
@@ -211,35 +247,35 @@ void StructColumn::append_value_multiple_times(const void* value, size_t count) 
 }
 
 void StructColumn::append_default() {
-    for (ColumnPtr& column : _fields) {
+    for (auto& column : _fields) {
         column->append_default();
     }
 }
 
 void StructColumn::append_default(size_t count) {
-    for (ColumnPtr& column : _fields) {
+    for (auto& column : _fields) {
         column->append_default(count);
     }
 }
 
-uint32_t StructColumn::serialize(size_t idx, uint8_t* pos) {
+uint32_t StructColumn::serialize(size_t idx, uint8_t* pos) const {
     uint32_t ser_size = 0;
-    for (ColumnPtr& column : _fields) {
+    for (auto& column : _fields) {
         ser_size += column->serialize(idx, pos + ser_size);
     }
     return ser_size;
 }
 
-uint32_t StructColumn::serialize_default(uint8_t* pos) {
+uint32_t StructColumn::serialize_default(uint8_t* pos) const {
     uint32_t ser_size = 0;
-    for (ColumnPtr& column : _fields) {
+    for (auto& column : _fields) {
         ser_size += column->serialize_default(pos + ser_size);
     }
     return ser_size;
 }
 
 void StructColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                   uint32_t max_one_row_size) {
+                                   uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
@@ -276,11 +312,12 @@ uint32_t StructColumn::serialize_size(size_t idx) const {
 }
 
 MutableColumnPtr StructColumn::clone_empty() const {
-    Columns fields;
+    MutableColumns fields;
+    fields.reserve(_fields.size());
     for (const auto& field : _fields) {
         fields.emplace_back(field->clone_empty());
     }
-    return create_mutable(fields, _field_names);
+    return create(std::move(fields), _field_names);
 }
 
 size_t StructColumn::filter_range(const Filter& filter, size_t from, size_t to) {
@@ -466,37 +503,29 @@ void StructColumn::check_or_die() const {
 
 void StructColumn::reset_column() {
     Column::reset_column();
-    for (ColumnPtr& field : _fields) {
+    for (auto& field : _fields) {
         field->reset_column();
     }
 }
 
-const Columns& StructColumn::fields() const {
-    return _fields;
-}
-
-Columns& StructColumn::fields_column() {
-    return _fields;
-}
-
-ColumnPtr StructColumn::field_column(const std::string& field_name) const {
+size_t StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
     for (size_t i = 0; i < _field_names.size(); i++) {
-        if (field_name == _field_names[i]) {
-            return _fields[i];
+        if (_field_names[i] == field_name) {
+            return i;
         }
     }
     DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
-    return nullptr;
+    return -1;
+}
+
+const ColumnPtr& StructColumn::field_column(const std::string& field_name) const {
+    size_t idx = _find_field_idx_by_name(field_name);
+    return _fields.at(idx);
 }
 
 ColumnPtr& StructColumn::field_column(const std::string& field_name) {
-    for (size_t i = 0; i < _field_names.size(); i++) {
-        if (field_name == _field_names[i]) {
-            return _fields[i];
-        }
-    }
-    DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
-    return _fields[0];
+    size_t idx = _find_field_idx_by_name(field_name);
+    return _fields[idx];
 }
 
 Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {

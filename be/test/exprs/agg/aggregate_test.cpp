@@ -226,7 +226,8 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     int64_t mem_usage = 0;
     ctx->set_mem_usage_counter(&mem_usage);
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    auto result_column = ResultColumn::create();
+    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::Ptr;
+    ResultColumnPtr result_column = ResultColumn::create();
 
     // update input column 1
     auto aggr_state = ManagedAggrState::create(ctx, func);
@@ -263,8 +264,9 @@ template <LogicalType LT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, ty
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                TResult update_result2, TResult merge_result) {
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
+    using ResultColumnPtr = typename RunTimeColumnType<TYPE_DECIMAL128>::Ptr;
     const auto& result_type = ctx->get_return_type();
-    auto result_column = ResultColumn::create(result_type.precision, result_type.scale);
+    ResultColumnPtr result_column = ResultColumn::create(result_type.precision, result_type.scale);
 
     // update input column 1
     auto aggr_state = ManagedAggrState::create(ctx, func);
@@ -299,7 +301,8 @@ template <typename T, typename TResult>
 void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                 TResult update_result2, TResult merge_result) {
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    auto result_column = ResultColumn::create();
+    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::Ptr;
+    ResultColumnPtr result_column = ResultColumn::create();
 
     auto state = ManagedAggrState::create(ctx, func);
     // update input column 1
@@ -679,13 +682,13 @@ TEST_F(AggregateTest, test_stddev_samp) {
 
 void test_max_by_helper(FunctionContext* ctx, const char* max_by_name) {
     const AggregateFunction* func = get_aggregate_function(max_by_name, TYPE_VARCHAR, TYPE_INT, false);
-    auto result_column = Int32Column::create();
+    Int32Column::Ptr result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx, func);
-    auto int_column = Int32Column::create();
+    Int32Column::Ptr int_column = Int32Column::create();
     for (int i = 0; i < 10; i++) {
         int_column->append(i);
     }
-    auto varchar_column = BinaryColumn::create();
+    BinaryColumn::Ptr varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
     varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
@@ -703,23 +706,24 @@ void test_max_by_helper(FunctionContext* ctx, const char* max_by_name) {
     //test nullable column
     func = get_aggregate_function(max_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, false);
     aggr_state = ManagedAggrState::create(ctx, func);
-    auto data_column1 = DoubleColumn::create();
-    auto null_column1 = NullColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
+    NullColumn::Ptr null_column1 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column1->append(i + 0.11);
         null_column1->append(i % 13 ? false : true);
     }
-    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
-    auto data_column2 = DecimalColumn::create();
-    auto null_column2 = NullColumn::create();
+    NullableColumn::Ptr doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    DecimalColumn::Ptr data_column2 = DecimalColumn::create();
+    NullColumn::Ptr null_column2 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column2->append(DecimalV2Value(i));
         null_column2->append(i % 11 ? false : true);
     }
-    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
-    auto data_column3 = DoubleColumn::create();
-    auto null_column3 = NullColumn::create();
-    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    NullableColumn::Ptr decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    DoubleColumn::Ptr data_column3 = DoubleColumn::create();
+    NullColumn::Ptr null_column3 = NullColumn::create();
+    NullableColumn::Ptr nullable_result_column =
+            NullableColumn::create(std::move(data_column3), std::move(null_column3));
     Columns nullColumns;
     nullColumns.emplace_back(doubleColumn);
     nullColumns.emplace_back(decimalColumn);
@@ -743,13 +747,13 @@ TEST_F(AggregateTest, test_max_by_v2) {
 
 void test_min_by_helper(FunctionContext* ctx, const char* min_by_name) {
     const AggregateFunction* func = get_aggregate_function(min_by_name, TYPE_VARCHAR, TYPE_INT, false);
-    auto result_column = Int32Column::create();
+    Int32Column::Ptr result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx, func);
-    auto int_column = Int32Column::create();
+    Int32Column::Ptr int_column = Int32Column::create();
     for (int i = 0; i < 10; i++) {
         int_column->append(i);
     }
-    auto varchar_column = BinaryColumn::create();
+    BinaryColumn::Ptr varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"ccc"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
     varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
@@ -767,23 +771,24 @@ void test_min_by_helper(FunctionContext* ctx, const char* min_by_name) {
     //test nullable column
     func = get_aggregate_function(min_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, false);
     aggr_state = ManagedAggrState::create(ctx, func);
-    auto data_column1 = DoubleColumn::create();
-    auto null_column1 = NullColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
+    NullColumn::Ptr null_column1 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column1->append(i + 0.11);
         null_column1->append(i % 13 ? false : true);
     }
-    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
-    auto data_column2 = DecimalColumn::create();
-    auto null_column2 = NullColumn::create();
+    NullableColumn::Ptr doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    DecimalColumn::Ptr data_column2 = DecimalColumn::create();
+    NullColumn::Ptr null_column2 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column2->append(DecimalV2Value(i));
         null_column2->append(i % 11 ? false : true);
     }
-    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
-    auto data_column3 = DoubleColumn::create();
-    auto null_column3 = NullColumn::create();
-    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    NullableColumn::Ptr decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    DoubleColumn::Ptr data_column3 = DoubleColumn::create();
+    NullColumn::Ptr null_column3 = NullColumn::create();
+    NullableColumn::Ptr nullable_result_column =
+            NullableColumn::create(std::move(data_column3), std::move(null_column3));
     Columns nullColumns;
     nullColumns.emplace_back(doubleColumn);
     nullColumns.emplace_back(decimalColumn);
@@ -811,13 +816,13 @@ void test_max_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
             {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
 
-    auto result_column = Int32Column::create();
+    Int32Column::Ptr result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx_with_args0, func);
-    auto int_column = Int32Column::create();
+    Int32Column::Ptr int_column = Int32Column::create();
     for (int i = 0; i < 10; i++) {
         int_column->append(i);
     }
-    auto varchar_column = BinaryColumn::create();
+    BinaryColumn::Ptr varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
     varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
@@ -840,23 +845,24 @@ void test_max_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
     std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
 
     aggr_state = ManagedAggrState::create(ctx_with_args1, func);
-    auto data_column1 = DoubleColumn::create();
-    auto null_column1 = NullColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
+    NullColumn::Ptr null_column1 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column1->append(i + 0.11);
         null_column1->append(i % 13 ? false : true);
     }
-    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
-    auto data_column2 = DecimalColumn::create();
-    auto null_column2 = NullColumn::create();
+    NullableColumn::Ptr doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    DecimalColumn::Ptr data_column2 = DecimalColumn::create();
+    NullColumn::Ptr null_column2 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column2->append(DecimalV2Value(i));
         null_column2->append(i % 11 ? false : true);
     }
-    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
-    auto data_column3 = DoubleColumn::create();
-    auto null_column3 = NullColumn::create();
-    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    NullableColumn::Ptr decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    DoubleColumn::Ptr data_column3 = DoubleColumn::create();
+    NullColumn::Ptr null_column3 = NullColumn::create();
+    NullableColumn::Ptr nullable_result_column =
+            NullableColumn::create(std::move(data_column3), std::move(null_column3));
     Columns nullColumns;
     nullColumns.emplace_back(doubleColumn);
     nullColumns.emplace_back(decimalColumn);
@@ -882,13 +888,13 @@ void test_min_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
             {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
 
-    auto result_column = Int32Column::create();
+    Int32Column::Ptr result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx_with_args0, func);
-    auto int_column = Int32Column::create();
+    Int32Column::Ptr int_column = Int32Column::create();
     for (int i = 0; i < 10; i++) {
         int_column->append(i);
     }
-    auto varchar_column = BinaryColumn::create();
+    BinaryColumn::Ptr varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"xxx"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
     varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
@@ -911,23 +917,24 @@ void test_min_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
     std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
 
     aggr_state = ManagedAggrState::create(ctx_with_args1, func);
-    auto data_column1 = DoubleColumn::create();
-    auto null_column1 = NullColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
+    NullColumn::Ptr null_column1 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column1->append(i + 0.11);
         null_column1->append(i % 13 ? false : true);
     }
-    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
-    auto data_column2 = DecimalColumn::create();
-    auto null_column2 = NullColumn::create();
+    NullableColumn::Ptr doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    DecimalColumn::Ptr data_column2 = DecimalColumn::create();
+    NullColumn::Ptr null_column2 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column2->append(DecimalV2Value(i));
         null_column2->append(i % 11 ? false : true);
     }
-    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
-    auto data_column3 = DoubleColumn::create();
-    auto null_column3 = NullColumn::create();
-    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    NullableColumn::Ptr decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    DoubleColumn::Ptr data_column3 = DoubleColumn::create();
+    NullColumn::Ptr null_column3 = NullColumn::create();
+    NullableColumn::Ptr nullable_result_column =
+            NullableColumn::create(std::move(data_column3), std::move(null_column3));
     Columns nullColumns;
     nullColumns.emplace_back(doubleColumn);
     nullColumns.emplace_back(decimalColumn);
@@ -1140,19 +1147,19 @@ TEST_F(AggregateTest, test_window_funnel) {
     builder.append(true);
     builder.append(true);
     builder.append(true);
-    auto data_col = NullableColumn::create(builder.build(false), NullColumn::create(6, 0));
+    NullableColumn::Ptr data_col = NullableColumn::create(builder.build(false), NullColumn::create(6, 0));
 
-    auto offsets = UInt32Column::create();
-    offsets->append(2);                                    // [true, true]
-    offsets->append(4);                                    // [true, true]
-    offsets->append(6);                                    // [true, true]
-    auto column4 = ArrayColumn::create(data_col, offsets); // array_column, 4th column
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    offsets->append(2);                                                // [true, true]
+    offsets->append(4);                                                // [true, true]
+    offsets->append(6);                                                // [true, true]
+    ArrayColumn::Ptr column4 = ArrayColumn::create(data_col, offsets); // array_column, 4th column
 
-    auto column1 = Int64Column::create(); // first column, but there use const.
+    Int64Column::Ptr column1 = Int64Column::create(); // first column, but there use const.
     column1->append(1800);
     // column1->append(1800);
 
-    auto column2 = TimestampColumn::create();
+    TimestampColumn::Ptr column2 = TimestampColumn::create();
     column2->append(TimestampValue::create(2022, 6, 10, 12, 30, 30)); // 2nd column.
 
     auto const_column1 = ColumnHelper::create_const_column<TYPE_BIGINT>(1800, 1);
@@ -1171,7 +1178,8 @@ TEST_F(AggregateTest, test_window_funnel) {
     raw_column[3] = column4.get();
 
     using ResultColumn = typename ColumnTraits<int32_t>::ColumnType;
-    auto result_column = ResultColumn::create();
+    using ResultColumnPtr = typename ResultColumn::Ptr;
+    ResultColumnPtr result_column = ResultColumn::create();
     auto state = ManagedAggrState::create(ctx, func);
     func->update(local_ctx.get(), raw_column.data(), state->state(), 0);
     func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
@@ -1188,9 +1196,9 @@ TEST_F(AggregateTest, test_dict_merge) {
     builder.append(Slice("starrocks-1"));
     builder.append(Slice("starrocks-starrocks"));
     builder.append(Slice("starrocks-starrocks"));
-    auto data_col = NullableColumn::create(builder.build(false), NullColumn::create(5, 0));
+    NullableColumn::Ptr data_col = NullableColumn::create(builder.build(false), NullColumn::create(5, 0));
 
-    auto offsets = UInt32Column::create();
+    UInt32Column::Ptr offsets = UInt32Column::create();
     offsets->append(0);
     offsets->append(0);
     offsets->append(2);
@@ -1198,12 +1206,12 @@ TEST_F(AggregateTest, test_dict_merge) {
     // []
     // [key1, key2]
     // [sr-1, sr-2, sr-3]
-    auto col = ArrayColumn::create(data_col, offsets);
+    ArrayColumn::Ptr col = ArrayColumn::create(data_col, offsets);
     const Column* column = col.get();
     auto state = ManagedAggrState::create(ctx, func);
     func->update_batch_single_state(ctx, col->size(), &column, state->state());
 
-    auto res = BinaryColumn::create();
+    BinaryColumn::Ptr res = BinaryColumn::create();
     func->finalize_to_column(ctx, state->state(), res.get());
 
     ASSERT_EQ(res->size(), 1);
@@ -1244,14 +1252,14 @@ TEST_F(AggregateTest, test_sum_nullable) {
     const AggregateFunction* sum_null = get_aggregate_function("sum", TYPE_INT, TYPE_BIGINT, true);
     auto state = ManagedAggrState::create(ctx, sum_null);
 
-    auto data_column = Int32Column::create();
-    auto null_column = NullColumn::create();
+    Int32Column::Ptr data_column = Int32Column::create();
+    NullColumn::Ptr null_column = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column->append(i);
         null_column->append(i % 2 ? 1 : 0);
     }
 
-    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
     const Column* row_column = column.get();
 
     // test update
@@ -1261,26 +1269,26 @@ TEST_F(AggregateTest, test_sum_nullable) {
     ASSERT_EQ(2450, result);
 
     // test serialize
-    auto serde_column2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    NullableColumn::Ptr serde_column2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
     sum_null->serialize_to_column(ctx, state->state(), serde_column2.get());
 
     // test merge
     auto state2 = ManagedAggrState::create(ctx, sum_null);
 
-    auto data_column2 = Int32Column::create();
-    auto null_column2 = NullColumn::create();
+    Int32Column::Ptr data_column2 = Int32Column::create();
+    NullColumn::Ptr null_column2 = NullColumn::create();
     for (int i = 0; i < 100; i++) {
         data_column2->append(i);
         null_column2->append(i % 2 ? 0 : 1);
     }
-    auto column2 = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    NullableColumn::Ptr column2 = NullableColumn::create(std::move(data_column2), std::move(null_column2));
     const Column* row_column2 = column2.get();
 
     sum_null->update_batch_single_state(ctx, column2->size(), &row_column2, state2->state());
 
     sum_null->merge(ctx, serde_column2.get(), state2->state(), 0);
 
-    auto result_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    NullableColumn::Ptr result_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
     sum_null->finalize_to_column(ctx, state2->state(), result_column.get());
 
     const Column& result_data_column = result_column->data_column_ref();
@@ -1292,15 +1300,15 @@ TEST_F(AggregateTest, test_count_nullable) {
     const AggregateFunction* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, true);
     auto state = ManagedAggrState::create(ctx, func);
 
-    auto data_column = Int32Column::create();
-    auto null_column = NullColumn::create();
+    Int32Column::Ptr data_column = Int32Column::create();
+    NullColumn::Ptr null_column = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
         data_column->append(i);
         null_column->append(i % 2 ? 1 : 0);
     }
 
-    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
 
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
@@ -1313,21 +1321,21 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
     const AggregateFunction* bitmap_null = get_aggregate_function("bitmap_union_int", TYPE_INT, TYPE_BIGINT, true);
     auto state = ManagedAggrState::create(ctx, bitmap_null);
 
-    auto data_column = Int32Column::create();
-    auto null_column = NullColumn::create();
+    Int32Column::Ptr data_column = Int32Column::create();
+    NullColumn::Ptr null_column = NullColumn::create();
 
     for (int i = 0; i < 100; i++) {
         data_column->append(i);
         null_column->append(i % 2 ? 1 : 0);
     }
 
-    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
     const Column* row_column = column.get();
 
     // test update
     bitmap_null->update_batch_single_state(ctx, column->size(), &row_column, state->state());
 
-    auto result_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    NullableColumn::Ptr result_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
     bitmap_null->finalize_to_column(ctx, state->state(), result_column.get());
 
     const Column& result_data_column = result_column->data_column_ref();
@@ -1341,7 +1349,7 @@ TEST_F(AggregateTest, test_group_concat) {
             get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
     auto state = ManagedAggrState::create(ctx, group_concat_function);
 
-    auto data_column = BinaryColumn::create();
+    BinaryColumn::Ptr data_column = BinaryColumn::create();
 
     for (int i = 0; i < 6; i++) {
         std::string val("starrocks");
@@ -1354,7 +1362,7 @@ TEST_F(AggregateTest, test_group_concat) {
     // test update
     group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
 
-    auto result_column = BinaryColumn::create();
+    BinaryColumn::Ptr result_column = BinaryColumn::create();
     group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ("starrocks0, starrocks1, starrocks2, starrocks3, starrocks4, starrocks5", result_column->get_data()[0]);
@@ -1371,7 +1379,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
             get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
     auto state = ManagedAggrState::create(ctx, group_concat_function);
 
-    auto data_column = BinaryColumn::create();
+    BinaryColumn::Ptr data_column = BinaryColumn::create();
 
     data_column->append("abc");
     data_column->append("bcd");
@@ -1399,7 +1407,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
     group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
                                                      state->state());
 
-    auto result_column = BinaryColumn::create();
+    BinaryColumn::Ptr result_column = BinaryColumn::create();
     group_concat_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
 
     ASSERT_EQ("abcbcdcdedefefgfghghihijijk", result_column->get_data()[0]);
@@ -1413,12 +1421,12 @@ TEST_F(AggregateTest, test_percentile_cont) {
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
 
-    auto data_column1 = DoubleColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
     data_column1->append(3.0);
     data_column1->append(4.0);
 
-    auto data_column2 = DoubleColumn::create();
+    DoubleColumn::Ptr data_column2 = DoubleColumn::create();
     data_column2->append(5.0);
     data_column2->append(6.0);
 
@@ -1444,7 +1452,7 @@ TEST_F(AggregateTest, test_percentile_cont) {
     auto state3 = ManagedAggrState::create(ctx, func);
 
     // merge column 1 and column 2
-    auto result_column = DoubleColumn::create();
+    DoubleColumn::Ptr result_column = DoubleColumn::create();
     ColumnPtr serde_column1 = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
     ColumnPtr serde_column2 = BinaryColumn::create();
@@ -1467,12 +1475,12 @@ TEST_F(AggregateTest, test_percentile_cont_1) {
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
 
-    auto data_column1 = DoubleColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
     data_column1->append(3.0);
     data_column1->append(4.0);
 
-    auto data_column2 = DoubleColumn::create();
+    DoubleColumn::Ptr data_column2 = DoubleColumn::create();
     data_column2->append(5.0);
     data_column2->append(6.0);
 
@@ -1498,7 +1506,7 @@ TEST_F(AggregateTest, test_percentile_cont_1) {
     auto state3 = ManagedAggrState::create(ctx, func);
 
     // merge column 1 and column 2
-    auto result_column = DoubleColumn::create();
+    DoubleColumn::Ptr result_column = DoubleColumn::create();
     ColumnPtr serde_column1 = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
     ColumnPtr serde_column2 = BinaryColumn::create();
@@ -1521,7 +1529,7 @@ TEST_F(AggregateTest, test_percentile_cont_2) {
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
 
-    auto data_column1 = DoubleColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
     data_column1->append(2.0);
     data_column1->append(3.0);
     data_column1->append(4.0);
@@ -1538,7 +1546,7 @@ TEST_F(AggregateTest, test_percentile_cont_2) {
     func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
 
     // merge column 1 and column 2
-    auto result_column = DoubleColumn::create();
+    DoubleColumn::Ptr result_column = DoubleColumn::create();
     func->finalize_to_column(local_ctx.get(), state1->state(), result_column.get());
 
     // [2,3,4,5,6], rate = 0.25 -> 3
@@ -1556,7 +1564,7 @@ TEST_F(AggregateTest, test_percentile_disc) {
     // update input column 1
     auto state1 = ManagedAggrState::create(ctx, func);
 
-    auto data_column1 = DoubleColumn::create();
+    DoubleColumn::Ptr data_column1 = DoubleColumn::create();
     auto const_colunm1 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
     data_column1->append(3.0);
     data_column1->append(4.0);
@@ -1571,7 +1579,7 @@ TEST_F(AggregateTest, test_percentile_disc) {
     // update input column 2
     auto state2 = ManagedAggrState::create(ctx, func);
 
-    auto data_column2 = DoubleColumn::create();
+    DoubleColumn::Ptr data_column2 = DoubleColumn::create();
     auto const_colunm2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
     data_column2->append(6.0);
 
@@ -1584,7 +1592,7 @@ TEST_F(AggregateTest, test_percentile_disc) {
 
     // merge column 1 and column 2
     ColumnPtr serde_column = BinaryColumn::create();
-    auto result_column = DoubleColumn::create();
+    DoubleColumn::Ptr result_column = DoubleColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_column.get());
     func->merge(local_ctx.get(), serde_column.get(), state2->state(), 0);
     func->finalize_to_column(local_ctx.get(), state2->state(), result_column.get());
@@ -1598,8 +1606,8 @@ TEST_F(AggregateTest, test_intersect_count) {
             get_aggregate_function("intersect_count", TYPE_INT, TYPE_BIGINT, false);
     auto state = ManagedAggrState::create(ctx, group_concat_function);
 
-    auto data_column = BitmapColumn::create();
-    auto int_column = Int32Column::create();
+    BitmapColumn::Ptr data_column = BitmapColumn::create();
+    Int32Column::Ptr int_column = Int32Column::create();
     auto int_const1 = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
     auto int_const2 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
 
@@ -1642,7 +1650,7 @@ TEST_F(AggregateTest, test_intersect_count) {
     // test update
     group_concat_function->update_batch_single_state(ctx, data_column->size(), raw_columns.data(), state->state());
 
-    auto result_column = Int64Column::create();
+    Int64Column::Ptr result_column = Int64Column::create();
     group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(1, result_column->get_data()[0]);
@@ -1653,7 +1661,7 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
             get_aggregate_function("bitmap_intersect", TYPE_OBJECT, TYPE_OBJECT, false);
     auto state = ManagedAggrState::create(ctx, group_concat_function);
 
-    auto data_column = BitmapColumn::create();
+    BitmapColumn::Ptr data_column = BitmapColumn::create();
 
     BitmapValue b1;
     b1.add(1);
@@ -1674,7 +1682,7 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
     // test update
     group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
 
-    auto result_column = BitmapColumn::create();
+    BitmapColumn::Ptr result_column = BitmapColumn::create();
     group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ("1", result_column->get_pool()[0].to_string());
@@ -1724,11 +1732,13 @@ TEST_F(AggregateTest, test_histogram) {
     raw_columns[1] = const1.get();
     raw_columns[2] = const2.get();
     raw_columns[3] = const3.get();
-    for (int i = 0; i < data_column->size(); ++i) {
-        histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
-    }
+    histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                  state->state());
+    // for (int i = 0; i < data_column->size(); ++i) {
+    //     histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
+    // }
 
-    auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    NullableColumn::Ptr result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
     ASSERT_EQ(
             "['[[\"0\",\"100\",\"102\",\"2\"],[\"101\",\"201\",\"204\",\"1\"],[\"202\",\"303\",\"306\",\"1\"],[\"304\","
@@ -1743,8 +1753,8 @@ TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
             get_aggregate_function("bitmap_intersect", TYPE_OBJECT, TYPE_OBJECT, true);
     auto state = ManagedAggrState::create(ctx, group_concat_function);
 
-    auto data_column = BitmapColumn::create();
-    auto null_column = NullColumn::create();
+    BitmapColumn::Ptr data_column = BitmapColumn::create();
+    NullColumn::Ptr null_column = NullColumn::create();
 
     BitmapValue b1;
     b1.add(1);
@@ -1763,13 +1773,13 @@ TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
     data_column->append(&b3);
     null_column->append(false);
 
-    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
     const Column* row_column = column.get();
 
     // test update
     group_concat_function->update_batch_single_state(ctx, column->size(), &row_column, state->state());
 
-    auto result_column = NullableColumn::create(BitmapColumn::create(), NullColumn::create());
+    NullableColumn::Ptr result_column = NullableColumn::create(BitmapColumn::create(), NullColumn::create());
     group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     const Column& result_data_column = result_column->data_column_ref();
@@ -1781,10 +1791,11 @@ TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
 template <typename T, typename TResult>
 void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFunction* func) {
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
+    using ResultColumnPtr = typename ResultColumn::Ptr;
     using ExpeactedResultColumnType = typename ColumnTraits<T>::ColumnType;
     auto state = ManagedAggrState::create(ctx, func);
     // update input column 1
-    auto result_column1 = ResultColumn::create();
+    ResultColumnPtr result_column1 = ResultColumn::create();
     ColumnPtr column = gen_input_column1<T>();
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
@@ -1794,7 +1805,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     ASSERT_EQ(expected_column1.get_data()[0], result_column1->get_data()[0]);
 
     // update input column 2
-    auto result_column2 = ResultColumn::create();
+    ResultColumnPtr result_column2 = ResultColumn::create();
     auto state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
@@ -1805,7 +1816,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     ASSERT_EQ(expected_column2.get_data()[0], result_column2->get_data()[0]);
 
     // merge column 1 and column 2
-    auto final_result_column = ResultColumn::create();
+    ResultColumnPtr final_result_column = ResultColumn::create();
     func->serialize_to_column(ctx, state->state(), final_result_column.get());
     func->merge(ctx, final_result_column.get(), state2->state(), 0);
     func->finalize_to_column(ctx, state2->state(), final_result_column.get());
@@ -1856,13 +1867,13 @@ TEST_F(AggregateTest, test_exchange_bytes) {
             get_aggregate_function("exchange_bytes", TYPE_BIGINT, TYPE_BIGINT, false);
     auto state = ManagedAggrState::create(ctx, exchange_bytes_function);
 
-    auto data_column = BinaryColumn::create();
+    BinaryColumn::Ptr data_column = BinaryColumn::create();
 
     data_column->append("abc");
     data_column->append("bcd");
     data_column->append("cde");
 
-    auto data_column_bigint = Int64Column::create();
+    Int64Column::Ptr data_column_bigint = Int64Column::create();
     data_column_bigint->append(21023);
     data_column_bigint->append(410223);
     data_column_bigint->append(710233);
@@ -1876,7 +1887,7 @@ TEST_F(AggregateTest, test_exchange_bytes) {
     exchange_bytes_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
                                                        state->state());
 
-    auto result_column = Int64Column::create();
+    Int64Column::Ptr result_column = Int64Column::create();
     exchange_bytes_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
 
     ASSERT_EQ(data_column_bigint->byte_size() + data_column->byte_size(), result_column->get_data()[0]);
@@ -1900,7 +1911,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // nullable columns input
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        ColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -1908,7 +1919,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        ColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -1946,7 +1957,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
@@ -1963,7 +1974,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        ColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[[NULL,'cdrdfe','bcd',NULL,'esfg']]"), 0);
     }
@@ -1971,7 +1982,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, false);
+        ColumnPtr char_column = ColumnHelper::create_column(char_type, false);
         char_column->append_datum("");
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -1979,7 +1990,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, false);
+        ColumnPtr int_column = ColumnHelper::create_column(int_type, false);
         int_column->append_datum(2);
         int_column->append_datum(9);
         int_column->append_datum(5);
@@ -2017,7 +2028,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],int:[2,9,5,7,6]}]"),
@@ -2038,7 +2049,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // append only column + const column
     {
-        auto char_column = ColumnHelper::create_const_null_column(2);
+        ColumnPtr char_column = ColumnHelper::create_const_null_column(2);
         auto int_column = ColumnHelper::create_const_column<TYPE_INT>(3, 2);
 
         std::vector<const Column*> raw_columns;
@@ -2074,7 +2085,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg',NULL,NULL],int:[2,9,5,7,6,3,3]}]"),
@@ -2089,7 +2100,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        ColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['bcd','Datum()','esfg','cdrdfe',NULL,NULL,'']]"), 0);
     }
@@ -2097,7 +2108,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // only column + const column
     state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
-        auto char_column = ColumnHelper::create_const_null_column(2);
+        ColumnPtr char_column = ColumnHelper::create_const_null_column(2);
         auto int_column = ColumnHelper::create_const_column<TYPE_INT>(3, 2);
 
         std::vector<const Column*> raw_columns;
@@ -2131,7 +2142,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL,NULL],int:[3,3]}]"), 0);
 
@@ -2148,7 +2159,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // append nullable columns input
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        ColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2156,7 +2167,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        ColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2196,7 +2207,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,NULL,NULL,'bcd','cdrdfe',NULL,'esfg'],int:[3,3,NULL,9,NULL,7,6]}]"),
@@ -2213,7 +2224,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        ColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['cdrdfe',NULL,'bcd',NULL,'esfg',NULL,NULL]]"), 0);
     }
@@ -2221,7 +2232,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     {
         auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        ColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2229,7 +2240,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        ColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2267,7 +2278,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
@@ -2283,7 +2294,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        ColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         local_ctx->state()->set_is_cancelled(true);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_TRUE(local_ctx->has_error());
@@ -2310,7 +2321,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     // nullable columns input
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        ColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2320,7 +2331,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        ColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2362,7 +2373,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
@@ -2376,7 +2387,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
                   "[NULL, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],sep:[','],int:[NULL]}, "
                   "NULL, {vchar:['esfg'],sep:[','],int:[6]}]");
 
-        auto res_col = ColumnHelper::create_column(char_type, false);
+        ColumnPtr res_col = ColumnHelper::create_column(char_type, false);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "['cdrdfe,bcd,esfg']");
     }
@@ -2385,7 +2396,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     state = ManagedAggrState::create(local_ctx.get(), gc_func);
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, false);
+        ColumnPtr char_column = ColumnHelper::create_column(char_type, false);
         char_column->append_datum("");
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2395,7 +2406,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, false);
+        ColumnPtr int_column = ColumnHelper::create_column(int_type, false);
         int_column->append_datum(2);
         int_column->append_datum(9);
         int_column->append_datum(5);
@@ -2436,7 +2447,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],sep:[',',',',',',',',','],int:[2,9,5,7,6]}]");
@@ -2451,7 +2462,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
                   "[{vchar:[''],sep:[','],int:[2]}, {vchar:['bcd'],sep:[','],int:[9]}, "
                   "{vchar:['cdrdfe'],sep:[','],int:[5]}, {vchar:['Datum()'],sep:[','],int:[7]}, "
                   "{vchar:['esfg'],sep:[','],int:[6]}]");
-        auto res_col = ColumnHelper::create_column(char_type, false);
+        ColumnPtr res_col = ColumnHelper::create_column(char_type, false);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "['bcd,Datum(),esfg,cdrdfe,']");
     }
@@ -2460,7 +2471,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     state = ManagedAggrState::create(local_ctx.get(), gc_func);
     // append only column + const column
     {
-        auto char_column = ColumnHelper::create_const_null_column(2);
+        ColumnPtr char_column = ColumnHelper::create_const_null_column(2);
         auto int_column = ColumnHelper::create_const_column<TYPE_INT>(3, 2);
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 2);
 
@@ -2496,7 +2507,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->size(), 1); // empty also need output
 
@@ -2508,7 +2519,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(), "[NULL, NULL]");
 
-        auto res_col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_VARCHAR), true);
+        ColumnPtr res_col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_VARCHAR), true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "[NULL]");
     }
@@ -2519,7 +2530,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     // nullable columns input with cancelled
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        ColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2529,7 +2540,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        ColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2571,7 +2582,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        ColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
@@ -2585,7 +2596,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
                   "[NULL, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],sep:[','],int:[NULL]}, "
                   "NULL, {vchar:['esfg'],sep:[','],int:[6]}]");
 
-        auto res_col = ColumnHelper::create_column(char_type, false);
+        ColumnPtr res_col = ColumnHelper::create_column(char_type, false);
         local_ctx->state()->set_is_cancelled(true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_TRUE(local_ctx->has_error());
@@ -2596,7 +2607,7 @@ TEST_F(AggregateTest, test_array_agg) {
     const AggregateFunction* agg_function = get_aggregate_function("array_agg", TYPE_VARCHAR, TYPE_ARRAY, false);
     auto state = ManagedAggrState::create(ctx, agg_function);
 
-    auto data_column = BinaryColumn::create();
+    BinaryColumn::Ptr data_column = BinaryColumn::create();
 
     for (int i = 0; i < 6; i++) {
         std::string val("starrocks");
@@ -2608,9 +2619,9 @@ TEST_F(AggregateTest, test_array_agg) {
     // test update
     agg_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
 
-    auto elem = BinaryColumn::create();
-    auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    BinaryColumn::Ptr elem = BinaryColumn::create();
+    UInt32Column::Ptr offsets = UInt32Column::create(0);
+    ArrayColumn::Ptr result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
     agg_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     for (int i = 0; i < 6; i++) {
@@ -2625,7 +2636,7 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
             get_aggregate_function("array_agg_distinct", TYPE_VARCHAR, TYPE_ARRAY, false);
     auto state = ManagedAggrState::create(ctx, agg_function);
 
-    auto data_column = BinaryColumn::create();
+    BinaryColumn::Ptr data_column = BinaryColumn::create();
 
     for (int i = 0; i < 6; i++) {
         std::string val("starrocks");
@@ -2639,9 +2650,9 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
     // test update
     agg_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
 
-    auto elem = BinaryColumn::create();
-    auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    BinaryColumn::Ptr elem = BinaryColumn::create();
+    UInt32Column::Ptr offsets = UInt32Column::create(0);
+    ArrayColumn::Ptr result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
     agg_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(6, elem->size());
@@ -2651,21 +2662,21 @@ TEST_F(AggregateTest, test_array_agg_nullable) {
     const AggregateFunction* func = get_aggregate_function("array_agg", TYPE_INT, TYPE_ARRAY, true);
     auto state = ManagedAggrState::create(ctx, func);
 
-    auto data_column = Int32Column::create();
-    auto null_column = NullColumn::create();
+    Int32Column::Ptr data_column = Int32Column::create();
+    NullColumn::Ptr null_column = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
         data_column->append(i % 2 ? 0 : i);
         null_column->append(i % 2 ? 1 : 0);
     }
 
-    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
 
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
-    auto elem = Int32Column::create();
-    auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    Int32Column::Ptr elem = Int32Column::create();
+    UInt32Column::Ptr offsets = UInt32Column::create(0);
+    ArrayColumn::Ptr result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(1024, offsets->get_data().back());
@@ -2675,21 +2686,21 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     const AggregateFunction* func = get_aggregate_function("array_agg_distinct", TYPE_INT, TYPE_ARRAY, true);
     auto state = ManagedAggrState::create(ctx, func);
 
-    auto data_column = Int32Column::create();
-    auto null_column = NullColumn::create();
+    Int32Column::Ptr data_column = Int32Column::create();
+    NullColumn::Ptr null_column = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
         data_column->append(i % 100);
         null_column->append(i % 4 ? 1 : 0);
     }
 
-    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
 
-    auto elem = Int32Column::create();
-    auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    Int32Column::Ptr elem = Int32Column::create();
+    UInt32Column::Ptr offsets = UInt32Column::create(0);
+    ArrayColumn::Ptr result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
 
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
@@ -2718,6 +2729,69 @@ TEST_F(AggregateTest, test_get_aggregate_function_by_type) {
         auto* agg_func = get_aggregate_function("avg", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
         ASSERT_TRUE(agg_func != nullptr);
     }
+}
+
+TEST_F(AggregateTest, test_ds_theta_count_distinct) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta_count_distinct", TYPE_DOUBLE, TYPE_BIGINT, false);
+    ASSERT_EQ("ds_theta_count_distinct", func->get_name());
+    auto reset_state = ManagedAggrState::create(ctx, func);
+    func->reset(local_ctx.get(), Columns{}, reset_state->state());
+    auto convert_data_column = DoubleColumn::create();
+    convert_data_column->append(1.0);
+    convert_data_column->append(2.0);
+    ColumnPtr convert_result_column = BinaryColumn::create();
+    func->convert_to_serialize_format(local_ctx.get(), Columns{convert_data_column}, 2, &convert_result_column);
+    const AggregateFunction* str_arg_func =
+            get_aggregate_function("ds_theta_count_distinct", TYPE_VARCHAR, TYPE_BIGINT, false);
+    auto ubswf_state = ManagedAggrState::create(ctx, str_arg_func);
+    std::vector<TypeDescriptor> str_arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::unique_ptr<FunctionContext> str_local_ctx(
+            FunctionContext::create_test_context(std::move(str_arg_types), return_type));
+    auto ubswf_data_column = BinaryColumn::create();
+    ubswf_data_column->append("abc");
+    ubswf_data_column->append("bcd");
+    std::vector<const Column*> ubswf_raw_columns;
+    ubswf_raw_columns.resize(1);
+    ubswf_raw_columns[0] = ubswf_data_column.get();
+    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(),
+                                                       ubswf_raw_columns.data(), 0, 0, 0, 2);
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column2->append(6.0);
+
+    auto state1 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(1);
+    raw_columns1[0] = data_column1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    auto state2 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(1);
+    raw_columns2[0] = data_column2.get();
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    auto state3 = ManagedAggrState::create(ctx, func);
+    auto result_column = Int64Column::create();
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+    ASSERT_EQ(5, result_column->get_data()[0]);
 }
 
 } // namespace starrocks

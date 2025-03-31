@@ -29,13 +29,15 @@
    <a href="https://twitter.com/StarRocksLabs">
     <img src="https://img.shields.io/twitter/follow/StarRocksLabs?style=social" alt="Twitter">
   </a>
+  <a href="https://gurubase.io/g/starrocks">
+    <img src="https://img.shields.io/badge/Gurubase-Ask%20StarRocks%20Guru-006BFF" alt="Gurubase">
+  </a>
  </p>
 
 <div align="center"> 
 
 </div>
-StarRocks, a Linux Foundation project, is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
-It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility. <br></br>
+StarRocks is the world's fastest open query engine for sub-second, ad-hoc analytics both on and off the data lakehouse. With average query performance 3x faster than other popular alternatives, StarRocks is a query engine that eliminates the need for denormalization and adapts to your use cases, without having to move your data or rewrite SQL. A Linux Foundation project. <br></br>
 
 Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData)
 
@@ -74,7 +76,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules: Fronte
 Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
 
  <p align="center">
-    <img src="docs/en/_assets/shared-data.png">
+    <img src="docs/en/_assets/shared-data.png" width="55%" height="55%">
    </a>
 </p>
 
@@ -130,6 +132,14 @@ This project is used by the following companies. Learn more about their use case
 - [Coinbase](https://www.youtube.com/watch?v=3Z9jSCaHnYg&list=PL0eWwaesODdhBhKSnvpfIEAB9sgk8rKmy)
 - [Tencent(Games)](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
 - [Tencent(LLM)](https://www.youtube.com/watch?v=WVHXFks9EQk)
+- [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
+- [Airtable](https://medium.com/airtable-eng/live-shard-data-archive-export-and-ingestion-to-starrocks-for-validation-6af555e8b3fe)
 - [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
+- [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
+- [Xiaohongshu/RedNote](https://www.youtube.com/watch?v=2cvIZY4EDak&list=PL0eWwaesODdiJ0aXLzSTyNfkjjIFYpOTf)
+- [HerdWatch](https://medium.com/p/a7916a7e87bf)
+- [TRM Labs](https://www.trmlabs.com/post/from-bigquery-to-lakehouse-how-we-built-a-petabyte-scale-data-analytics-platform-part-1)
+- [Verisoul](https://celerdata.com/blog/verisoul-enables-real-time-analytics-by-transitioning-off-bigquery)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
-- [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks) 
+- [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks)
+- [Grab](https://engineering.grab.com/building-a-spark-observability)

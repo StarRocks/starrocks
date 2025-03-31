@@ -69,7 +69,7 @@ public class SampleInfoTest extends PlanTestBase {
 
     @Test
     public void generateComplexTypeColumnTask() {
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo("test", "t_struct");
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
@@ -88,7 +88,7 @@ public class SampleInfoTest extends PlanTestBase {
 
     @Test
     public void generatePrimitiveTypeColumnTask() {
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo("test", "t_struct");
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
@@ -101,7 +101,7 @@ public class SampleInfoTest extends PlanTestBase {
         InsertStmt insertStmt = (InsertStmt) stmt.get(0);
         Assert.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof UnionRelation);
         UnionRelation unionRelation = (UnionRelation) insertStmt.getQueryStatement().getQueryRelation();
-        Assert.assertTrue(unionRelation.getRelations().size() == 4);
+        Assert.assertEquals(2, unionRelation.getRelations().size());
         Assert.assertTrue(unionRelation.getRelations().get(0) instanceof SelectRelation);
         SelectRelation selectRelation = (SelectRelation) unionRelation.getRelations().get(0);
         Assert.assertTrue(selectRelation.getSelectList().getItems().size() == 12);
@@ -109,7 +109,7 @@ public class SampleInfoTest extends PlanTestBase {
 
     @Test
     public void generateSubFieldTypeColumnTask() {
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo("test", "t_struct");
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
         List<String> columnNames = Lists.newArrayList("c1", "c4.b", "c6.c.b");
         List<Type> columnTypes = Lists.newArrayList(Type.DATE, new ArrayType(Type.ANY_STRUCT), Type.INT);
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,

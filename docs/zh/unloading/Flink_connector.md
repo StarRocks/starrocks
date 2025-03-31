@@ -30,11 +30,12 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ## 版本要求
 
-| Connector | Flink       | StarRocks  | Java | Scala      |
-| --------- | ----------- | ---------- | ---- | ---------- |
-| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
-| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
-| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
+| Connector | Flink                    | StarRocks  | Java | Scala      |
+| --------- | ------------------------ | ---------- | ---- | ---------- |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 及以上  | 8    | 2.11,2.12  |
 
 ## 前提条件
 
@@ -114,7 +115,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | connector                   | 是       | STRING   | 固定设置为 `starrocks`。                                     |
 | scan-url                    | 是       | STRING   | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 格式如下：`<fe_host>:<fe_http_port>`。默认端口号为 `8030`。多个地址之间用逗号 (,) 分隔。例如 `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
 | jdbc-url                    | 是       | STRING   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。格式如下：`jdbc:mysql://<fe_host>:<fe_query_port>`。默认端口号为 `9030`。 |
-| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/user_privs/privilege_overview.md)。 |
+| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/user_privs/user_privs.md)。 |
 | password                    | 是       | STRING   | 用于访问 StarRocks 集群的用户密码。                          |
 | database-name               | 是       | STRING   | 待读取数据的 StarRocks 数据库的名称。                        |
 | table-name                  | 是       | STRING   | 待读取数据的 StarRocks 表的名称。                            |
@@ -159,6 +160,11 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
+| JSON       | STRING <br /> **说明** <br /> **自 1.2.10 版起支持。** |
+| ARRAY      | ARRAY  <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| STRUCT     | ROW    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| MAP        | MAP    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+
 
 ## 使用示例
 
@@ -283,6 +289,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 - 使用 SQL 语句时，支持自动进行谓词下推。如过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 Flink Connector 中并转换成适用于 StarRocks 的语句后，再执行查询，不需要额外配置。
 - 不支持 LIMIT 语句。
 - StarRocks 暂时不支持 Checkpoint 机制。因此，如果读取任务失败，则无法保证数据一致性。
+- 建表中的字段顺序需要与StarRocks表建表的字段顺序一致。
 
 ### 使用 Flink DataStream 读取数据
 

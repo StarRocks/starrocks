@@ -14,10 +14,13 @@
 
 #include "exec/tablet_sink_index_channel.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
+#include "common/tracer.h"
 #include "common/utils.h"
 #include "config.h"
 #include "exec/tablet_sink.h"
@@ -27,12 +30,16 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
+#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
+#include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(node_channel_set_brpc_timeout);
 
 class OlapTableSink; // forward declaration
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause)
@@ -65,6 +72,12 @@ NodeChannel::~NodeChannel() noexcept {
         _rpc_request.mutable_requests(i)->release_id();
     }
     _rpc_request.release_id();
+    if (_diagnose_closure) {
+        if (_diagnose_closure->unref()) {
+            delete _diagnose_closure;
+        }
+        _diagnose_closure = nullptr;
+    }
 }
 
 Status NodeChannel::init(RuntimeState* state) {
@@ -91,6 +104,12 @@ Status NodeChannel::init(RuntimeState* state) {
     }
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000 / 2;
+    FAIL_POINT_TRIGGER_EXECUTE(node_channel_set_brpc_timeout, {
+        int32_t timeout_ms = config::load_fp_brpc_timeout_ms;
+        if (timeout_ms > 0) {
+            _rpc_timeout_ms = timeout_ms;
+        }
+    });
 
     // Initialize _rpc_request
     for (const auto& [index_id, tablets] : _index_tablets_map) {
@@ -237,7 +256,13 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
         VLOG(2) << "NodeChannel::_open() issue a http rpc, request size = " << request.ByteSizeLong();
     } else {
+#ifndef BE_TEST
         _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+#else
+        std::pair<PTabletWriterOpenRequest*, RefCountClosure<PTabletWriterOpenResult>*> rpc_pair{&request,
+                                                                                                 open_closure};
+        TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::open_send", &rpc_pair);
+#endif
     }
     request.release_id();
     request.release_schema();
@@ -289,7 +314,11 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     if (open_closure == nullptr) {
         return _err_st;
     }
+#ifndef BE_TEST
     open_closure->join();
+#else
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::open_join", open_closure);
+#endif
     if (open_closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(open_closure->cntl.ErrorText());
@@ -628,8 +657,13 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     AddMultiChunkReq add_chunk = std::move(_request_queue.front());
     _request_queue.pop_front();
 
-    auto request = add_chunk.second;
     auto chunk = std::move(add_chunk.first);
+
+    // reset mem tracker since we don't want to send the brpc request under query_mem_tracker
+    // and the memory usage of the request is recorded by the olap_sink's mem tracker
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+
+    auto request = add_chunk.second;
 
     _mem_tracker->release(chunk->memory_usage());
 
@@ -719,9 +753,15 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
         } else {
+#ifndef BE_TEST
             _stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+#else
+            std::pair<PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*> rpc_pair{
+                    &request, _add_batch_closures[_current_request_index]};
+            TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::add_chunk_send", &rpc_pair);
+#endif
         }
     }
     _next_packet_seq++;
@@ -733,21 +773,32 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
 }
 
 Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure) {
+#ifndef BE_TEST
     if (!closure->join()) {
         return Status::OK();
     }
+#else
+    bool result;
+    std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*> rpc_pair{closure, &result};
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::add_chunk_join", &rpc_pair);
+    if (!result) {
+        return Status::OK();
+    }
+#endif
     _mem_tracker->release(closure->request_size);
 
     _ts_profile->client_rpc_timer->update(closure->latency());
 
     if (closure->cntl.Failed()) {
         _cancelled = true;
-        _err_st = Status::InternalError(closure->cntl.ErrorText());
+        auto error_text = closure->cntl.ErrorText();
+        _err_st = Status::InternalError(error_text);
 
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
         _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _try_diagnose(error_text);
         return _err_st;
     }
 
@@ -791,7 +842,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         }
     }
 
-    std::vector<int64_t> tablet_ids;
+    std::set<int64_t> tablet_ids;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -818,7 +869,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
 
         if (tablet_ids.size() < 128) {
-            tablet_ids.emplace_back(commit_info.tabletId);
+            tablet_ids.insert(commit_info.tabletId);
         }
     }
     for (auto& log : *(closure->result.mutable_lake_tablet_data()->mutable_txn_logs())) {
@@ -833,6 +884,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     }
 
     if (closure->result.has_load_channel_profile()) {
+        SCOPED_TIMER(_ts_profile->update_load_channel_profile_timer);
         const auto* buf = (const uint8_t*)(closure->result.load_channel_profile().data());
         uint32_t len = closure->result.load_channel_profile().size();
         TRuntimeProfileTree thrift_profile;
@@ -952,7 +1004,7 @@ Status NodeChannel::try_finish() {
 }
 
 bool NodeChannel::is_close_done() {
-    return (_closed && _check_all_prev_request_done()) || _cancelled;
+    return ((_closed && _check_all_prev_request_done()) || _cancelled) && _is_diagnose_done();
 }
 
 bool NodeChannel::is_finished() {
@@ -960,6 +1012,7 @@ bool NodeChannel::is_finished() {
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
+    DeferOp defer([&]() { _wait_diagnose(state); });
     if (_cancelled) {
         return _err_st;
     }
@@ -1034,6 +1087,112 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     SET_IGNORE_OVERCROWDED(closure->cntl, load);
     _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
     request.release_id();
+}
+
+static std::atomic_int64_t s_small_rpc_timeout_profile_count{0};
+
+void NodeChannel::_try_diagnose(const std::string& error_text) {
+    if (error_text.find("[E1008]Reached timeout") == std::string::npos) {
+        return;
+    }
+    if (!config::enable_load_diagnose || _diagnose_closure != nullptr) {
+        return;
+    }
+    bool enable_profile = _rpc_timeout_ms > config::load_diagnose_rpc_timeout_profile_threshold_ms ||
+                          (s_small_rpc_timeout_profile_count.fetch_add(1) % 20 == 0);
+    bool enable_stack_trace = _rpc_timeout_ms > config::load_diagnose_rpc_timeout_stack_trace_threshold_ms;
+    if (!enable_profile && !enable_stack_trace) {
+        return;
+    }
+    _diagnose_closure = new RefCountClosure<PLoadDiagnoseResult>();
+    _diagnose_closure->ref();
+    SET_IGNORE_OVERCROWDED(_diagnose_closure->cntl, load);
+    _diagnose_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
+    PLoadDiagnoseRequest request;
+    request.set_allocated_id(&_parent->_load_id);
+    request.set_txn_id(_parent->_txn_id);
+    request.set_profile(enable_profile);
+    request.set_stack_trace(enable_stack_trace);
+    _diagnose_closure->ref();
+#ifndef BE_TEST
+    _stub->load_diagnose(&_diagnose_closure->cntl, &request, &_diagnose_closure->result, _diagnose_closure);
+#else
+    std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*> rpc_pair{&request, _diagnose_closure};
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_send", &rpc_pair);
+#endif
+    request.release_id();
+    VLOG(2) << "NodeChannel[" << _load_info << "] send diagnose request to [" << _node_info->host << ":"
+            << _node_info->brpc_port << "], rpc_timeout_ms: " << _rpc_timeout_ms
+            << ", enable_profile: " << enable_profile << ", enable_stack_trace: " << enable_stack_trace;
+}
+
+bool NodeChannel::_is_diagnose_done() {
+    return _diagnose_closure == nullptr || _diagnose_closure->count() == 1;
+}
+
+void NodeChannel::_wait_diagnose(RuntimeState* state) {
+    if (_diagnose_closure == nullptr) {
+        return;
+    }
+#ifndef BE_TEST
+    _diagnose_closure->join();
+#else
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_join", _diagnose_closure);
+#endif
+    if (_diagnose_closure->cntl.Failed()) {
+        LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose failed, node: [" << _node_info->host << ":"
+                     << _node_info->brpc_port << "], error: " << _diagnose_closure->cntl.ErrorText();
+        return;
+    }
+    PLoadDiagnoseResult& result = _diagnose_closure->result;
+    bool has_profile = _process_diagnose_profile(state, result);
+    bool has_stack_trace = false;
+    if (result.has_stack_trace_status()) {
+        Status status = Status(result.stack_trace_status());
+        if (!status.ok()) {
+            LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose stack trace failed, node: [" << _node_info->host
+                         << ":" << _node_info->brpc_port << "], error: " << status;
+        } else {
+            has_stack_trace = true;
+        }
+    }
+    VLOG(2) << "NodeChannel[" << _load_info << "] diagnose success, node: [" << _node_info->host << ":"
+            << _node_info->brpc_port << "], has_profile: " << has_profile << ", has_stack_trace: " << has_stack_trace;
+}
+
+bool NodeChannel::_process_diagnose_profile(RuntimeState* state, PLoadDiagnoseResult& result) {
+    if (!result.has_profile_status()) {
+        return false;
+    }
+    Status status = Status(result.profile_status());
+    if (!status.ok()) {
+        LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose profile failed, node: [" << _node_info->host << ":"
+                     << _node_info->brpc_port << "], error: " << status;
+        return false;
+    }
+    if (!result.has_profile_data()) {
+        return false;
+    }
+    SCOPED_TIMER(_ts_profile->update_load_channel_profile_timer);
+    const auto* buf = (const uint8_t*)(result.profile_data().data());
+    uint32_t len = result.profile_data().size();
+    TRuntimeProfileTree thrift_profile;
+    bool has_profile = false;
+    auto profile_st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &thrift_profile);
+    if (!profile_st.ok()) {
+        LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose profile failed, node: [" << _node_info->host << ":"
+                     << _node_info->brpc_port << "], size: " << len << ", error: " << profile_st;
+    } else {
+        RuntimeProfile* load_channel_profile = state->load_channel_profile();
+        load_channel_profile->update(thrift_profile);
+        // Query context is only available for pipeline engine
+        auto query_ctx = state->query_ctx();
+        if (query_ctx) {
+            query_ctx->set_enable_profile();
+        }
+        has_profile = true;
+    }
+    return has_profile;
 }
 
 IndexChannel::~IndexChannel() {

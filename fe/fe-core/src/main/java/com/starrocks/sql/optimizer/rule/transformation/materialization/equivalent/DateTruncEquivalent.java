@@ -34,13 +34,18 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
 
     /**
      * TODO: we can support this later.
-     * Change date_trunc('month', col) to col = '2023-12-01' will get a wrong result.
-     * MV       : select date_trunc('day', col) as dt from t
-     * Query    : select date_trunc('month, col) from t where date_trunc('month', col) = '2023-11-01'
+     * Change date_trunc('month', dt) to col = '2023-12-01' will get a wrong result.
+     * MV       : select date_trunc('day', dt) as dt from t
+     * Query1   : select date_trunc('month, dt) from t dt = '2023-11-01'
+     * -- cannot be rewritten, rewrite  result will be wrong
+     * Rewritten: select date_trunc('month, dt) from t where date_trunc('month', dt) = '2023-11-01'
+     *
+     * Query2   : select date_trunc('month, dt) from t where dt between '2023-11-01' and '2023-12-01'
+     * -- cannot be rewritten, dt='2023-12-01' doesn't match with date_trunc('month', dt)= '2023-11-01'
+     * Rewritten : select date_trunc('month, dt) from t where date_trunc('month', dt) between '2023-11-01' and '2023-12-01'
      */
     private static Set<BinaryType> SUPPORTED_BINARY_TYPES = ImmutableSet.of(
             BinaryType.GE,
-            BinaryType.LE,
             BinaryType.GT,
             BinaryType.LT
     );
@@ -56,6 +61,9 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
         }
         CallOperator func = (CallOperator) op1;
         if (!checkDateTrucFunc(func)) {
+            return false;
+        }
+        if (!(op1.getChild(0) instanceof ConstantOperator)) {
             return false;
         }
         ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
@@ -106,6 +114,9 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
                 return null;
             }
             BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
+            if (!isSupportedBinaryType(predicate.getBinaryType())) {
+                return null;
+            }
             predicate.setChild(0, replace);
             return predicate;
         } else if (newInput instanceof CallOperator) {

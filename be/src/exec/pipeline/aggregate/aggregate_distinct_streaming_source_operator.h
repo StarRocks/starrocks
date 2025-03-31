@@ -31,6 +31,7 @@ public:
 
     ~AggregateDistinctStreamingSourceOperator() override = default;
 
+    Status prepare(RuntimeState* state) override;
     bool has_output() const override;
     bool is_finished() const override;
 
@@ -59,6 +60,8 @@ public:
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateDistinctStreamingSourceOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctStreamingSourceOperator>(

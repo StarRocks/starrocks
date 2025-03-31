@@ -278,7 +278,7 @@ protected:
                 Columns dst_columns;
                 dst_columns.emplace_back(std::move(dst_f1_column));
 
-                ColumnPtr dst_column = StructColumn::create(dst_columns, std::vector<std::string>{"f1"});
+                auto dst_column = StructColumn::create(std::move(dst_columns), std::vector<std::string>{"f1"});
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());

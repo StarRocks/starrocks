@@ -278,3 +278,133 @@ with w1 as (select column_0 as source, column_1 as key1, column_2 as key2 from (
           ([5, 6], null, [1, 1])
 ) t)
 select array_sortby(source, key1, key2), source, key1, key2 from w1;
+
+-- name: test_array_sortby_all_type
+CREATE TABLE test_array_sortby (
+    id INT,
+    array_boolean ARRAY<BOOLEAN>,
+    array_tinyint ARRAY<TINYINT>,
+    array_smallint ARRAY<SMALLINT>,
+    array_int ARRAY<INT>,
+    array_bigint ARRAY<BIGINT>,
+    array_largeint ARRAY<LARGEINT>,
+    array_float ARRAY<FLOAT>,
+    array_double ARRAY<DOUBLE>,
+    array_decimal32 ARRAY<DECIMAL32(9, 2)>,
+    array_decimal64 ARRAY<DECIMAL64(18, 2)>,
+    array_decimal128 ARRAY<DECIMAL128(38, 10)>,
+    array_decimalv2 ARRAY<DECIMALV2>,
+    array_varchar ARRAY<VARCHAR(100)>,
+    array_datetime ARRAY<DATETIME>,
+    array_date ARRAY<DATE>,
+    array_json ARRAY<JSON>
+) 
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO test_array_sortby VALUES
+(1, [true, false], [1, 3], [100, 50], [10, 5], [1000, 500], [9223372036854775806, 9223372036854775807], 
+ [1.5, 2.5], [2.345, 1.234], [12345.67, 45678.90], [1234567890.12, 987654321.12], 
+ [12345678901234567890.1234567890, 9876543210987654321.1234567890], 
+ [12345.67, 67890.12], ['apple', 'banana'], 
+ ['2025-01-24 10:30:00', '2024-12-31 23:59:59'], 
+ ['2025-01-24', '2024-12-31'], 
+ ['{"key":"value1"}', '{"key":"value2"}']),
+(2, [false, true], [5, 7], [200, 150], [30, 20], [1500, 1250], [9223372036854775803, 9223372036854775802],
+ [0.1, 0.3], [5.678, 4.567], [56789.01, 67890.12], [2345678901.23, 3456789012.34],
+ [456789123456789123.1234567890, 123456789012345678.9876543210],
+ [34567.89, 23456.78], ['grape', 'pear'],
+ ['2025-02-01 12:00:00', '2025-01-01 08:15:00'],
+ ['2025-02-01', '2025-01-15'],
+ ['{"key":"value4"}', '{"key":"value5"}']),
+(3, [true, true], [2, 1], [75, 100], [15, 10], [750, 1000], [9223372036854775807, 9223372036854775806],
+ [1.5, 0.5], [3.456, 1.234], [78901.12, 12345.67], [987654321.12, 1234567890.12],
+ [9876543210987654321.1234567890, 12345678901234567890.1234567890],
+ [78901.34, 12345.67], ['cherry', 'apple'],
+ ['2025-01-01 00:00:00', '2024-12-31 23:59:59'],
+ ['2025-01-01', '2024-12-31'],
+ ['{"key":"value7"}', '{"key":"value8"}']),
+(4, [false], [6], [300], [45], [2000], [9223372036854775804],
+ [0.8], [6.789], [12345.67], [6789012345.67],
+ [7891234567890123456.1234567890],
+ [45678.90], ['mango'],
+ ['2025-03-01 10:10:10'],
+ ['2025-03-01'],
+ ['{"key":"value10"}']),
+(5, [true, false, true], [9, 3, 6], [400, 200, 100], [60, 30, 10], [3000, 1500, 500], [9223372036854775805, 9223372036854775803, 9223372036854775802], 
+ [2.0, 1.0, 3.0], [7.123, 6.234, 8.456], [45678.12, 23456.34, 78901.56], [3456789012.45, 2345678901.23, 1234567890.12], 
+ [1234567890123456789.1234567890, 987654321098765432.1234567890, 456789123456789123.1234567890], 
+ [56789.12, 23456.34, 78901.56], ['kiwi', 'orange', 'pear'], 
+ ['2025-04-15 15:30:00', '2025-04-16 10:00:00', '2025-04-17 08:15:00'], 
+ ['2025-04-15', '2025-04-16', '2025-04-17'], 
+ ['{"key":"value11"}', '{"key":"value12"}', '{"key":"value13"}']),
+(6, [false, false], [1, 1], [10, 20], [5, 15], [50, 150], [9223372036854775801, 9223372036854775801], 
+ [0.5, 0.5], [1.123, 1.123], [1234.56, 1234.56], [123456.78, 123456.78], 
+ [1234567890.1234567890, 1234567890.1234567890], 
+ [1234.56, 1234.56], ['lemon', 'lime'], 
+ ['2025-05-01 12:00:00', '2025-05-01 12:00:00'], 
+ ['2025-05-01', '2025-05-01'], 
+ ['{"key":"value14"}', '{"key":"value14"}']),
+(7, [true], [8], [250], [20], [1200], [9223372036854775806], 
+ [1.7], [4.321], [23456.78], [345678901.23], 
+ [9876543210123456789.9876543210], 
+ [12345.67], ['melon'], 
+ ['2025-06-01 13:30:00'], 
+ ['2025-06-01'], 
+ ['{"key":"value15"}']),
+(8, [false, true, false], [2, 4, 8], [75, 100, 50], [15, 10, 5], [1500, 1000, 500], [9223372036854775807, 9223372036854775806, 9223372036854775805],
+ [2.5, 1.5, 0.5], [1.234, 3.456, 2.345], [12345.67, 78901.12, 45678.90], [987654321.12, 123123123.45, 1234567890.12],
+ [12345678901234567890.1234567890, 456789123456789123.1234567890, 9876543210987654321.1234567890],
+ [67890.12, 78901.34, 12345.67], ['apple', 'banana', 'cherry'],
+ ['2025-01-24 10:30:00', '2024-12-31 23:59:59', '2025-01-01 00:00:00'],
+ ['2025-01-24', '2024-12-31', '2025-01-01'],
+ ['{"key":"value1"}', '{"key":"value2"}', '{"key":"value3"}']);
+
+SELECT array_sortby(array_boolean, [false, true]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_boolean, [false, true]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_tinyint, [2, 1]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_tinyint, [2, 1]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_smallint, [50, 100]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_smallint, [50, 100]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_int, [15, 10]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_int, [15, 10]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_bigint, [750, 500]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_bigint, [750, 500]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_largeint, [9223372036854775805, 9223372036854775806]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_largeint, [9223372036854775805, 9223372036854775806]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_float, [0.5, 1.5]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_float, [0.5, 1.5]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_double, [1.234, 2.345]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_double, [1.234, 2.345]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_decimal32, [45678.90, 12345.67]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_decimal32, [45678.90, 12345.67]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_decimal64, [123123123.45, 987654321.12]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_decimal64, [123123123.45, 987654321.12]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_decimal128, [9876543210987654321.1234567890, 12345678901234567890.1234567890]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_decimal128, [9876543210987654321.1234567890, 12345678901234567890.1234567890]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_decimalv2, [67890.12, 78901.34]) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_decimalv2, [67890.12, 78901.34]) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_varchar, ['banana', 'cherry']) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_varchar, ['banana', 'cherry']) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_datetime, ['2025-01-01 00:00:00', '2025-01-24 10:30:00']) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_datetime, ['2025-01-01 00:00:00', '2025-01-24 10:30:00']) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_date, ['2025-01-01', '2024-12-31']) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_date, ['2025-01-01', '2024-12-31']) FROM test_array_sortby WHERE id = 7;
+
+SELECT array_sortby(array_json, ['{"key":"value1"}', '{"key":"value2"}']) FROM test_array_sortby WHERE id = 1;
+SELECT array_sortby(array_json, ['{"key":"value1"}', '{"key":"value2"}']) FROM test_array_sortby WHERE id = 7;

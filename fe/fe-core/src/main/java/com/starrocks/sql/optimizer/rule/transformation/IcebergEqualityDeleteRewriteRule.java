@@ -15,18 +15,17 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorTableId;
-import com.starrocks.connector.GetRemoteFilesParams;
-import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
-import com.starrocks.connector.iceberg.IcebergRemoteFileDesc;
+import com.starrocks.connector.iceberg.IcebergDeleteSchema;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -37,73 +36,34 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
-import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.EQUALITY_DELETE_TABLE_COMMENT;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
-
-/**
- * <p>This optimizer implements iceberg equality deletes as a join, rather than reading the data file as the left table and
- * the delete the file as the right table for local left anti join.
- * This approach significantly enhances performance for equality deletes.
- * This optimization replaces the previous solution of using local hash joiner in each scanner thread.
- * Compared to the previous solution, the main purpose is to reduce the overhead of repeatedly reading delete files and
- * repeatedly building hashtable since a iceberg equality delete file may be matched by many data files after iceberg planning.
- * This rule needs to strictly meet the check requirements before it can be rewritten.
- *
- * There are three rewriting patterns when meeting rewritten condition in this rule.
- *
- * The first case (common case):
- * <p>For example, consider the following query:
- * <code>SELECT * FROM table;</code>
- * With 1 delete schema: [k1], the query will be transformed into:
- * <pre>
- * SELECT *, $data_sequence_number FROM table left
- * LEFT ANTI JOIN table_eq_deletes_k1 t1 ON left.k1 = t1.k1 AND left.$data_sequence_number < t1.$data_sequence_number
- * </pre>
- *
- * The second case (query hit mutable delete schema):
- * <p>For example, consider the following query:
- * <code>SELECT * FROM table;</code>
- * With 2 delete schemas: [k1], [k2], the query will be transformed into:
- * <pre>
- * SELECT *, $data_sequence_number FROM table left
- * LEFT ANTI JOIN table_eq_deletes_k1 t1 ON left.k1 = t1.k1 AND left.$data_sequence_number < t1.$data_sequence_number
- * LEFT ANTI JOIN table_eq_deletes_K2 t2 ON left.k2 = t2.k2 AND left."$data_sequence_number" < d2."$data_sequence_number"
- * </pre>
- *
- * The third case (the same iceberg identifier column but with different partition layout or partition evolution):
- * <code>SELECT * FROM table;</code>
- * Partition Table With 1 delete schema: [k1, p1], Partition column: (p1). Write some records to this table.
- * Then alter table partition field (partition evolution): (p1 -> bucket(5, p1)). Write some records to this table.
- * the query will be transformed into:
- * <pre>
- * SELECT *, $data_sequence_number, $spec_id FROM table left
- * LEFT ANTI JOIN table_eq_deletes_k1_p1 t1 ON left.k1 = t1.k1 AND left.p1 = t1.p1 AND
- * left.$data_sequence_number < t1.$data_sequence_number AND left.$spec_id = t1.$spec_id.
- * </pre>
- */
 
 public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
     public IcebergEqualityDeleteRewriteRule() {
@@ -116,6 +76,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         if (!(op instanceof LogicalIcebergScanOperator)) {
             return false;
         }
+
         LogicalIcebergScanOperator scanOperator = op.cast();
         if (scanOperator.isFromEqDeleteRewriteRule()) {
             return false;
@@ -125,6 +86,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         if (snapshotId.isEmpty()) {
             return false;
         }
+
         IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
         if (!icebergTable.isV2Format()) {
             return false;
@@ -141,29 +103,15 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             return false;
         }
 
-        // Use the same PredicateSearchKey to get iceberg scan tasks in the query level cache.
-        GetRemoteFilesParams params =
-                GetRemoteFilesParams.newBuilder().setTableVersionRange(scanOperator.getTableVersionRange())
-                        .setPredicate(scanOperator.getPredicate()).build();
-        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, params);
-        if (splits.isEmpty()) {
-            return false;
-        }
+        Set<DeleteFile> deleteFiles = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDeleteFiles(icebergTable, snapshotId.get(), scanOperator.getPredicate(), FileContent.EQUALITY_DELETES);
 
-        IcebergRemoteFileDesc remoteFileDesc = (IcebergRemoteFileDesc) splits.get(0).getFiles().get(0);
-        if (remoteFileDesc == null) {
-            return false;
-        }
+        Set<IcebergDeleteSchema> deleteSchemas = deleteFiles.stream()
+                .map(f -> IcebergDeleteSchema.of(f.equalityFieldIds(), f.specId()))
+                .collect(Collectors.toSet());
+        scanOperator.setDeleteSchemas(deleteSchemas);
 
-        for (FileScanTask fileScanTask : remoteFileDesc.getIcebergScanTasks()) {
-            for (DeleteFile deleteFile : fileScanTask.deletes()) {
-                if (deleteFile.content() == FileContent.EQUALITY_DELETES) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return !deleteSchemas.isEmpty();
     }
 
     @Override
@@ -171,7 +119,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         LogicalIcebergScanOperator scanOperator = input.getOp().cast();
         IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
         Table table = icebergTable.getNativeTable();
-        Set<DeleteSchema> deleteSchemas = collectDeleteSchemas(scanOperator, icebergTable);
+        Set<IcebergDeleteSchema> deleteSchemas = scanOperator.getDeleteSchemas();
         if (deleteSchemas.isEmpty()) {
             scanOperator.setFromEqDeleteRewriteRule(true);
             return Collections.singletonList(input);
@@ -179,17 +127,36 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
         long limit = scanOperator.getLimit();
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
-        boolean hasPartitionEvolution = deleteSchemas.stream().map(x -> x.specId).distinct().count() > 1;
+        boolean hasPartitionEvolution = deleteSchemas.stream().map(IcebergDeleteSchema::specId).distinct().count() > 1;
         if (hasPartitionEvolution && !context.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution()) {
             throw new StarRocksConnectorException("Equality delete files aren't supported for tables with partition evolution." +
                     "You can execute `set enable_read_iceberg_equality_delete_with_partition_evolution = true` then rerun it");
         }
 
-        LogicalIcebergScanOperator newScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
-                deleteSchemas, scanOperator, columnRefFactory, hasPartitionEvolution);
-        OptExpression optExpression = OptExpression.create(newScanOp);
+        List<List<Integer>> allIds = deleteSchemas.stream()
+                .map(IcebergDeleteSchema::equalityIds)
+                .distinct()
+                .collect(Collectors.toList());
 
-        List<List<Integer>> allIds = deleteSchemas.stream().map(x -> x.equalityIds).distinct().collect(Collectors.toList());
+        List<IcebergMORParams> tableFullMorParams = Stream.concat(
+                        Stream.of(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, IcebergMORParams.DATA_FILE_WITH_EQ_DELETE),
+                        allIds.stream().map(ids -> IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, ids)))
+                .collect(Collectors.toList());
+        IcebergTableMORParams icebergTableFullMorParams = new IcebergTableMORParams(icebergTable.getId(), tableFullMorParams);
+
+        scanOperator.setMORParam(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+        scanOperator.setTableFullMORParams(icebergTableFullMorParams);
+        scanOperator.setFromEqDeleteRewriteRule(true);
+        OptExpression dataFileWithoutDeleteScanOp = OptExpression.create(scanOperator);
+
+        ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion = ImmutableMap.builder();
+        LogicalIcebergScanOperator icebergDataFileWithDeleteScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
+                deleteSchemas, scanOperator, columnRefFactory, projectForUnion, hasPartitionEvolution);
+        icebergDataFileWithDeleteScanOp.setMORParam(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE);
+        icebergDataFileWithDeleteScanOp.setTableFullMORParams(icebergTableFullMorParams);
+        icebergDataFileWithDeleteScanOp.setFromEqDeleteRewriteRule(true);
+        OptExpression optExpression = OptExpression.create(icebergDataFileWithDeleteScanOp);
+
         for (int i = 0; i < allIds.size(); i++) {
             List<Integer> equalityIds = allIds.get(i);
             String equalityDeleteTableName = buildEqualityDeleteTableName(icebergTable, equalityIds);
@@ -199,8 +166,8 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             List<Column> deleteColumns = columnNames.stream().map(icebergTable::getColumn).collect(Collectors.toList());
             IcebergTable equalityDeleteTable = new IcebergTable(
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), equalityDeleteTableName,
-                    icebergTable.getCatalogName(), icebergTable.getResourceName(), icebergTable.getRemoteDbName(),
-                    icebergTable.getRemoteTableName(), EQUALITY_DELETE_TABLE_COMMENT, deleteColumns,
+                    icebergTable.getCatalogName(), icebergTable.getResourceName(), icebergTable.getCatalogDBName(),
+                    icebergTable.getCatalogTableName(), EQUALITY_DELETE_TABLE_COMMENT, deleteColumns,
                     icebergTable.getNativeTable(), ImmutableMap.of());
 
             ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumn = ImmutableMap.builder();
@@ -210,20 +177,24 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 colRefToColumn.put(columnRef, column);
                 columnToColRef.put(column, columnRef);
             }
+
             fillExtendedColumns(columnRefFactory, colRefToColumn, columnToColRef, hasPartitionEvolution, icebergTable);
             LogicalIcebergEqualityDeleteScanOperator eqScanOp = new LogicalIcebergEqualityDeleteScanOperator(
                     equalityDeleteTable, colRefToColumn.build(), columnToColRef.build(), -1, null,
                     scanOperator.getTableVersionRange());
-            eqScanOp.setOriginPredicate(newScanOp.getPredicate());
-            eqScanOp.setEqualityIds(equalityIds);
-            eqScanOp.setHitMutableIdentifierColumns(allIds.size() > 1);
+            eqScanOp.setOriginPredicate(scanOperator.getPredicate());
+            eqScanOp.setTableFullMORParams(icebergTableFullMorParams);
+            eqScanOp.setMORParams(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, equalityIds));
 
-            ScalarOperator onPredicate = buildOnPredicate(newScanOp.getColumnNameToColRefMap(), eqScanOp.getOutputColumns());
+            ScalarOperator onPredicate = buildOnPredicate(
+                    icebergDataFileWithDeleteScanOp.getColumnNameToColRefMap(), eqScanOp.getOutputColumns());
 
             LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder()
                     .setJoinType(JoinOperator.LEFT_ANTI_JOIN)
+                    .setJoinHint(JoinOperator.HINT_BROADCAST)
                     .setOnPredicate(onPredicate)
                     .setOriginalOnPredicate(onPredicate);
+
             if (i == allIds.size() - 1) {
                 builder.setLimit(limit);
             }
@@ -231,6 +202,24 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             optExpression = OptExpression.create(builder.build(), optExpression, OptExpression.create(eqScanOp));
         }
 
+        // build projection for correct union all
+        LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectForUnion.build(), limit);
+        optExpression = OptExpression.create(logicalProjectOperator, optExpression);
+
+        // build union all
+        List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
+        childOutputColumns.add(scanOperator.getOutputColumns());
+        childOutputColumns.add(new ArrayList<>(logicalProjectOperator.getColumnRefMap().keySet()));
+
+        LogicalUnionOperator unionOperator = LogicalUnionOperator.builder()
+                .isUnionAll(true)
+                .isFromIcebergEqualityDeleteRewrite(true)
+                .setOutputColumnRefOp(scanOperator.getOutputColumns())
+                .setChildOutputColumns(childOutputColumns)
+                .setLimit(limit)
+                .build();
+
+        optExpression = OptExpression.create(unionOperator, dataFileWithoutDeleteScanOp, optExpression);
         return Collections.singletonList(optExpression);
     }
 
@@ -254,44 +243,83 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
     }
 
     private LogicalIcebergScanOperator buildNewScanOperatorWithUnselectedAndExtendedField(
-            Set<DeleteSchema> deleteSchemas,
+            Set<IcebergDeleteSchema> deleteSchemas,
             LogicalIcebergScanOperator scanOperator,
             ColumnRefFactory columnRefFactory,
+            ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion,
             boolean hasPartitionEvolution) {
-        IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
-        Table nativeTable = icebergTable.getNativeTable();
-        List<Column> deleteColumns = deleteSchemas.stream()
-                .map(schema -> schema.equalityIds)
+        IcebergTable noDeleteTable = (IcebergTable) scanOperator.getTable();
+        String tableName = noDeleteTable.getName() + "_" + "with_delete_file";
+        IcebergTable withDeleteIcebergTable = new IcebergTable(
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), tableName,
+                noDeleteTable.getCatalogName(), noDeleteTable.getResourceName(), noDeleteTable.getCatalogDBName(),
+                noDeleteTable.getCatalogTableName(), "iceberg_table_with_delete", noDeleteTable.getFullSchema(),
+                noDeleteTable.getNativeTable(), ImmutableMap.of());
+        Table nativeTable = noDeleteTable.getNativeTable();
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
+
+        Map<ColumnRefOperator, Column> deleteColumns = deleteSchemas.stream()
+                .map(IcebergDeleteSchema::equalityIds)
                 .flatMap(List::stream)
                 .distinct()
                 .map(fieldId -> nativeTable.schema().findColumnName(fieldId))
-                .map(icebergTable::getColumn)
-                .collect(Collectors.toList());
+                .map(withDeleteIcebergTable::getColumn)
+                .collect(Collectors.toMap(columnMetaToColRefMap::get, column -> column));
 
         ImmutableMap.Builder<ColumnRefOperator, Column> newColRefToColBuilder =
                 ImmutableMap.builder();
         ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder =
                 ImmutableMap.builder();
 
-        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
-        Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
-        newColRefToColBuilder.putAll(colRefToColumnMetaMap);
-        newColToColRefBuilder.putAll(columnMetaToColRefMap);
+        // fill ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder
+        Map<ColumnRefOperator, ColumnRefOperator> originToNewCols = new HashMap<>();
+        for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
+            Column originalCol = entry.getKey();
+            ColumnRefOperator originalColRef = entry.getValue();
+            ColumnRefOperator newColRef = buildNewColumnRef(originalCol, columnRefFactory, withDeleteIcebergTable);
+            newColToColRefBuilder.put(originalCol, newColRef);
+            originToNewCols.put(originalColRef, newColRef);
+        }
 
-        for (Column column : deleteColumns) {
-            ColumnRefOperator columnRefOperator = columnMetaToColRefMap.get(column);
-            if (!colRefToColumnMetaMap.containsKey(columnRefOperator)) {
-                newColRefToColBuilder.put(columnRefOperator, column);
+        // fill newColRefToColBuilder and projectForUnion to guarantee column order.
+        for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
+            ColumnRefOperator originRef = entry.getKey();
+            Column originCol = entry.getValue();
+            ColumnRefOperator newRef = originToNewCols.get(originRef);
+            projectForUnion.put(newRef, newRef);
+            newColRefToColBuilder.put(newRef, originCol);
+        }
+
+        // fill unselected delete columns
+        for (Map.Entry<ColumnRefOperator, Column> entry : deleteColumns.entrySet()) {
+            ColumnRefOperator deleteColRef = entry.getKey();
+            Column deleteCol = entry.getValue();
+            if (!colRefToColumnMetaMap.containsKey(deleteColRef)) {
+                newColRefToColBuilder.put(originToNewCols.get(deleteColRef), deleteCol);
             }
         }
 
-        fillExtendedColumns(columnRefFactory, newColRefToColBuilder, newColToColRefBuilder, hasPartitionEvolution, icebergTable);
+        fillExtendedColumns(columnRefFactory, newColRefToColBuilder, newColToColRefBuilder, hasPartitionEvolution, noDeleteTable);
+
+        // build new table's predicate
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originToNewCols);
+        ScalarOperator newPredicate = rewriter.rewrite(scanOperator.getPredicate());
 
         // we shouldn't push down limit to scan node in this pattern.
-        LogicalIcebergScanOperator newOp =  new LogicalIcebergScanOperator(icebergTable, newColRefToColBuilder.build(),
-                newColToColRefBuilder.build(), -1, scanOperator.getPredicate(), scanOperator.getTableVersionRange());
+        LogicalIcebergScanOperator newOp =  new LogicalIcebergScanOperator(withDeleteIcebergTable, newColRefToColBuilder.build(),
+                newColToColRefBuilder.build(), -1, newPredicate, scanOperator.getTableVersionRange());
         newOp.setFromEqDeleteRewriteRule(true);
         return newOp;
+    }
+
+    private ColumnRefOperator buildNewColumnRef(Column originalCol, ColumnRefFactory factory, IcebergTable table) {
+        int relationId = factory.getNextRelationId();
+        ColumnRefOperator newColumnRef = factory.create(originalCol.getName(), originalCol.getType(), true);
+        factory.updateColumnToRelationIds(newColumnRef.getId(), relationId);
+        factory.updateColumnRefToColumns(newColumnRef, originalCol, table);
+        return newColumnRef;
     }
 
     private void fillExtendedColumns(ColumnRefFactory columnRefFactory,
@@ -299,19 +327,14 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                                      ImmutableMap.Builder<Column, ColumnRefOperator> newColumnMetaToColRefMapBuilder,
                                      boolean hasPartitionEvolution,
                                      IcebergTable icebergTable) {
-        int relationId = columnRefFactory.getNextRelationId();
-        ColumnRefOperator columnRef = columnRefFactory.create(DATA_SEQUENCE_NUMBER, Type.BIGINT, true);
         Column column = new Column(DATA_SEQUENCE_NUMBER, Type.BIGINT, true);
-        columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-        columnRefFactory.updateColumnRefToColumns(columnRef, column, icebergTable);
+        ColumnRefOperator columnRef = buildNewColumnRef(column, columnRefFactory, icebergTable);
         newColRefToColumnMetaMapBuilder.put(columnRef, column);
         newColumnMetaToColRefMapBuilder.put(column, columnRef);
 
         if (hasPartitionEvolution) {
-            ColumnRefOperator specIdColumnRef = columnRefFactory.create(SPEC_ID, Type.INT, true);
             Column specIdcolumn = new Column(SPEC_ID, Type.INT, true);
-            columnRefFactory.updateColumnToRelationIds(specIdColumnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(specIdColumnRef, specIdcolumn, icebergTable);
+            ColumnRefOperator specIdColumnRef = buildNewColumnRef(specIdcolumn, columnRefFactory, icebergTable);
             newColRefToColumnMetaMapBuilder.put(specIdColumnRef, specIdcolumn);
             newColumnMetaToColRefMapBuilder.put(specIdcolumn, specIdColumnRef);
         }
@@ -319,58 +342,8 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
     // equality table name format : origin_table_name + "_eq_delete_" + [pk1_pk2_pk3_..._]
     private String buildEqualityDeleteTableName(IcebergTable icebergTable, List<Integer> equalityIds) {
-        return icebergTable.getRemoteTableName() + "_eq_delete_" + equalityIds.stream()
+        return icebergTable.getCatalogTableName() + "_eq_delete_" + equalityIds.stream()
                         .map(id -> icebergTable.getNativeTable().schema().findColumnName(id))
                         .collect(Collectors.joining("_"));
-    }
-
-    private Set<DeleteSchema> collectDeleteSchemas(LogicalIcebergScanOperator scanOperator,
-                                                   IcebergTable icebergTable) {
-        Set<DeleteSchema> deleteSchemas = Sets.newHashSet();
-        GetRemoteFilesParams params =
-                GetRemoteFilesParams.newBuilder().setTableVersionRange(scanOperator.getTableVersionRange())
-                        .setPredicate(scanOperator.getPredicate()).build();
-        IcebergRemoteFileDesc remoteFileDesc = (IcebergRemoteFileDesc) GlobalStateMgr.getCurrentState()
-                .getMetadataMgr().getRemoteFiles(icebergTable, params).get(0).getFiles().get(0);
-        for (FileScanTask fileScanTask : remoteFileDesc.getIcebergScanTasks()) {
-            for (DeleteFile deleteFile : fileScanTask.deletes()) {
-                if (deleteFile.content() != FileContent.EQUALITY_DELETES) {
-                    continue;
-                }
-                deleteSchemas.add(DeleteSchema.of(deleteFile.equalityFieldIds(), deleteFile.specId()));
-            }
-        }
-        return deleteSchemas;
-    }
-
-    private static class DeleteSchema {
-        private final List<Integer> equalityIds;
-        private final Integer specId;
-
-        public static DeleteSchema of(List<Integer> equalityIds, Integer specId) {
-            return new DeleteSchema(equalityIds, specId);
-        }
-
-        public DeleteSchema(List<Integer> equalityIds, Integer specId) {
-            this.equalityIds = equalityIds;
-            this.specId = specId;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            DeleteSchema that = (DeleteSchema) o;
-            return Objects.equals(equalityIds, that.equalityIds) && Objects.equals(specId, that.specId);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(equalityIds, specId);
-        }
     }
 }

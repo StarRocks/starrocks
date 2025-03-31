@@ -67,11 +67,13 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
+class BaseRowset;
 struct CompactionCandidate;
 struct CompactionContext;
 struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 
 class ChunkIterator;
 
@@ -112,6 +114,8 @@ public:
     size_t num_rows() const override;
     size_t version_count() const;
     Version max_version() const;
+
+    bool belonged_to_cloud_native() const override { return false; }
 
     // propreties encapsulated in TabletSchema
     KeysType keys_type() const;
@@ -164,7 +168,7 @@ public:
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
     [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
-    [[nodiscard]] bool has_delete_predicates(const Version& version);
+    [[nodiscard]] StatusOr<bool> has_delete_predicates(const Version& version) override;
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -272,7 +276,11 @@ public:
 
     void set_compaction_context(std::unique_ptr<CompactionContext>& context);
 
+#ifdef BE_TEST
+    virtual std::shared_ptr<CompactionTask> create_compaction_task();
+#else
     std::shared_ptr<CompactionTask> create_compaction_task();
+#endif
 
     bool has_compaction_task();
 
@@ -344,6 +352,9 @@ public:
     int64_t committed_rowset_size() { return _committed_rs_map.size(); }
 
     void on_shutdown() override;
+
+    // get average row size
+    int64_t get_average_row_size();
 
 private:
     int64_t _mem_usage() { return sizeof(Tablet); }

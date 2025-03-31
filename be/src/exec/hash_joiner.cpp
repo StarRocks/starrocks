@@ -28,8 +28,9 @@
 #include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
+#include "exprs/runtime_filter.h"
 #include "gen_cpp/Metrics_types.h"
-#include "gutil/strings/substitute.h"
+#include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
@@ -56,7 +57,8 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
     build_keys_per_bucket = ADD_COUNTER(runtime_profile, "BuildKeysPerBucket%", TUnit::UNIT);
     hash_table_memory_usage = ADD_COUNTER(runtime_profile, "HashTableMemoryUsage", TUnit::BYTES);
-    partial_runtime_bloom_filter_bytes = ADD_COUNTER(runtime_profile, "PartialRuntimeBloomFilterBytes", TUnit::BYTES);
+    partial_runtime_bloom_filter_bytes =
+            ADD_COUNTER(runtime_profile, "PartialRuntimeMembershipFilterBytes", TUnit::BYTES);
     partition_nums = ADD_COUNTER(runtime_profile, "PartitionNums", TUnit::UNIT);
 }
 
@@ -78,7 +80,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _mor_reader_mode(param._mor_reader_mode),
-          _enable_late_materialization(param._enable_late_materialization) {
+          _enable_late_materialization(param._enable_late_materialization),
+          _is_skew_join(param._is_skew_join) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -574,7 +577,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         int expr_order = rf_desc->build_expr_order();
         bool eq_null = _is_null_safes[expr_order];
         bool is_empty = false;
-        std::vector<ColumnPtr> columns;
+        Columns columns;
 
         for (auto* ht : hash_tables) {
             ColumnPtr column = ht->get_key_columns()[expr_order];
@@ -582,25 +585,26 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
             columns.push_back(column);
         }
 
-        MutableJoinRuntimeFilterPtr filter = nullptr;
+        TypeDescriptor type_descriptor = _build_expr_ctxs[expr_order]->root()->type();
+
+        MutableRuntimeFilterPtr filter = nullptr;
         auto multi_partitioned = rf_desc->layout().pipeline_level_multi_partitioned();
         multi_partitioned |= rf_desc->num_colocate_partition() > 0;
         if (multi_partitioned) {
             LogicalType build_type = rf_desc->build_expr_type();
-            filter = std::shared_ptr<JoinRuntimeFilter>(
-                    RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type));
+            filter = std::shared_ptr<RuntimeFilter>(
+                    RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type, rf_desc->join_mode()));
             if (filter == nullptr) {
                 _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
-            filter->set_join_mode(rf_desc->join_mode());
-            filter->init(ht_row_count);
-            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(columns, build_type, filter.get(),
-                                                                           kHashJoinKeyColumnOffset, eq_null));
+            filter->get_membership_filter()->init(ht_row_count);
+            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_filter(columns, build_type, filter.get(),
+                                                                     kHashJoinKeyColumnOffset, eq_null));
         }
 
-        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(
-                multi_partitioned, eq_null, is_empty, std::move(columns), std::move(filter)));
+        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeMembershipFilterBuildParam(
+                multi_partitioned, eq_null, is_empty, std::move(columns), std::move(filter), type_descriptor));
     }
     return Status::OK();
 }

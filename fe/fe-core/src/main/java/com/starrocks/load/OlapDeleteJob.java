@@ -57,8 +57,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -304,10 +304,10 @@ public class OlapDeleteJob extends DeleteJob {
         }
 
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
-            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPartitionId());
+            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPhysicalPartitionId());
             if (replicaNum == null) {
                 // should not happen
-                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPartitionId() +
+                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPhysicalPartitionId() +
                             " when commit delete job");
             }
             if (tDeleteInfo.getFinishedReplicas().size() == replicaNum) {
@@ -339,8 +339,8 @@ public class OlapDeleteJob extends DeleteJob {
         return pushTasks;
     }
 
-    public boolean addFinishedReplica(long partitionId, long tabletId, Replica replica) {
-        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(partitionId, tabletId));
+    public boolean addFinishedReplica(long physicalPartitionId, long tabletId, Replica replica) {
+        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(physicalPartitionId, tabletId));
         TabletDeleteInfo tDeleteInfo = tabletDeleteInfoMap.get(tabletId);
         return tDeleteInfo.addFinishedReplica(replica);
     }
@@ -390,7 +390,7 @@ public class OlapDeleteJob extends DeleteJob {
     }
 
     @Override
-    public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
         long transactionId = getTransactionId();
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         try {

@@ -94,7 +94,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         Configs that are not ready for production but it can be used for testing.
         """
         default_configs = [
-            "'enable_mv_refresh_insert_strict' = 'true'",
+            "'mv_refresh_fail_on_filter_data' = 'true'",
             "'enable_mv_refresh_query_rewrite' = 'true'",
             # enlarge task run concurrency to speed up mv's refresh and find more potential bugs
             "'task_runs_concurrency' = '16'",
@@ -132,6 +132,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.close_trino()
         self.close_spark()
         self.close_hive()
+        self.close_starrocks_arrow()
 
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))

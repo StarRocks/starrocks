@@ -88,7 +88,7 @@ public:
     void set_morsel(pipeline::ScanMorsel* morsel) { _morsel = morsel; }
 
     void set_driver_sequence(size_t driver_sequence) {
-        runtime_bloom_filter_eval_context.driver_sequence = driver_sequence;
+        runtime_membership_filter_eval_context.driver_sequence = driver_sequence;
     }
 
 protected:
@@ -96,7 +96,7 @@ protected:
     bool _has_any_predicate = false;
     std::vector<ExprContext*> _conjunct_ctxs;
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
-    RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
+    RuntimeMembershipFilterEvalContext runtime_membership_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
@@ -125,9 +125,10 @@ using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
 public:
-    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;  // 16MB
-    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024; // 256MB
-    static constexpr int64_t PER_FIELD_MEM_BYTES = 1 * 1024 * 1024;         // 1MB
+    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;     // 16MB
+    static constexpr int64_t DEFAULT_DATA_SOURCE_MEM_BYTES = 64 * 1024 * 1024; // 64MB
+    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024;    // 256MB
+    static constexpr int64_t PER_FIELD_MEM_BYTES = 1 * 1024 * 1024;            // 1MB
 
     virtual ~DataSourceProvider() = default;
 

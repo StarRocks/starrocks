@@ -56,6 +56,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
+import org.junit.Assert;
 
 import java.io.File;
 import java.io.IOException;
@@ -213,12 +214,17 @@ public class MockedFrontend {
         private final String[] args;
         private final boolean startBDB;
         private final RunMode runMode;
+        private volatile boolean isReady = false;
 
         public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, String[] args) {
             this.frontend = frontend;
             this.startBDB = startBDB;
             this.runMode = runMode;
             this.args = args;
+        }
+
+        public boolean isReady() {
+            return isReady;
         }
 
         @Override
@@ -277,6 +283,7 @@ public class MockedFrontend {
                 StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
 
                 GlobalStateMgr.getCurrentState().waitForReady();
+                isReady = true;
 
                 while (true) {
                     Thread.sleep(2000);
@@ -295,15 +302,17 @@ public class MockedFrontend {
             throw new NotInitException("fe process is not initialized");
         }
         initLock.unlock();
-        Thread feThread = new Thread(new FERunnable(this, startBDB, runMode, args), FE_PROCESS);
+        FERunnable fe = new FERunnable(this, startBDB, runMode, args);
+        Thread feThread = new Thread(fe, FE_PROCESS);
         feThread.start();
-        waitForCatalogReady();
-        System.out.println("Fe process is started");
+        waitForCatalogReady(fe);
+        Assert.assertEquals(runMode, RunMode.getCurrentRunMode());
+        System.out.println("Fe process is started with runMode:" + runMode);
     }
 
-    private void waitForCatalogReady() throws FeStartException {
+    private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
-        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 600) {
+        while (!fe.isReady() && tryCount < 600) {
             try {
                 tryCount++;
                 Thread.sleep(1000);

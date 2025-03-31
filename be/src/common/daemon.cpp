@@ -36,10 +36,10 @@
 
 #include <gflags/gflags.h>
 
-#include "block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -47,16 +47,15 @@
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "service/backend_options.h"
+#include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
-#include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/misc.h"
@@ -70,19 +69,6 @@
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
-
-// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-std::atomic<bool> k_starrocks_exit = false;
-
-// NOTE: when call `/api/_stop_be` http interface, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-// The difference between k_starrocks_exit and the flag is that
-// k_starrocks_exit not only require waiting for all existing fragment to complete,
-// but also waiting for all threads to exit gracefully.
-std::atomic<bool> k_starrocks_exit_quick = false;
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -148,36 +134,22 @@ void calculate_metrics(void* arg_this) {
                                                                                 &lst_net_receive_bytes);
         }
 
-        // update datacache mem_tracker
-        int64_t datacache_mem_bytes = 0;
-        auto datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
-        if (datacache_mem_tracker) {
-            BlockCache* block_cache = BlockCache::instance();
-            if (block_cache->is_initialized()) {
-                auto datacache_metrics = block_cache->cache_metrics();
-                datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
-            }
-#ifdef USE_STAROS
-            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
-#endif
-            datacache_mem_tracker->set(datacache_mem_bytes);
-        }
-
         auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
 
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
                 "metadata({}), compaction({}), schema_change({}), "
-                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({}), "
+                "page_cache({}), update({}), chunk_allocator({}), passthrough({}), clone({}), consistency({}), "
                 "datacache({}), jit({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
                 mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
-                mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->clone_mem_bytes.value(),
-                mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
-                mem_metrics->jit_cache_mem_bytes.value());
+                mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->passthrough_mem_bytes.value(),
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(),
+                mem_metrics->datacache_mem_bytes.value(), mem_metrics->jit_cache_mem_bytes.value());
 
+        StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }
@@ -225,31 +197,11 @@ void jemalloc_tracker_daemon(void* arg_this) {
         JemallocStats stats;
         retrieve_jemalloc_stats(&stats);
 
-        // metadata
+        // Jemalloc metadata
         if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
             auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
             int64_t delta = stats.metadata - tracker->consumption();
             tracker->consume(delta);
-        }
-
-        // fragmentation
-        if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
-            if (stats.resident > 0 && stats.allocated > 0 && stats.metadata > 0) {
-                int64_t fragmentation = stats.resident - stats.allocated - stats.metadata;
-                fragmentation *= config::jemalloc_fragmentation_ratio;
-
-                // In case that released a lot of memory but not get purged, we would not consider it as fragmentation
-                bool released_a_lot = stats.allocated < (stats.resident * 0.5);
-                if (released_a_lot) {
-                    fragmentation = 0;
-                }
-
-                if (fragmentation >= 0) {
-                    auto tracker = GlobalEnv::GetInstance()->jemalloc_fragmentation_traker();
-                    int64_t delta = fragmentation - tracker->consumption();
-                    tracker->consume(delta);
-                }
-            }
         }
 
         nap_sleep(1, [daemon] { return daemon->stopped(); });
@@ -286,7 +238,7 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
     } else {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     }
-    k_starrocks_exit.store(true);
+    set_process_exit();
 }
 
 int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
@@ -343,6 +295,14 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
     LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
+    auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
+    if (!unsupported_flags.empty()) {
+        LOG(FATAL) << fmt::format(
+                "CPU flags check failed! The following instruction sets are enabled during compiling but not supported "
+                "in current running env: {}!",
+                fmt::join(unsupported_flags, ","));
+        std::abort();
+    }
 
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
@@ -366,6 +326,12 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     init_signals();
     init_minidump();
+
+    // Don't bother set the limit if the process is running with very limited memory capacity
+    if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
+        // set mem hook to reject the memory allocation if large than available physical memory detected.
+        set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
+    }
 }
 
 void Daemon::stop() {

@@ -20,6 +20,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -36,15 +39,12 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -84,13 +84,11 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 public class MetaFunctions {
 
     public static Table inspectExternalTable(TableName tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
-            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
-                    tableName);
+            Authorizer.checkAnyActionOnTable(connectContext, tableName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     tableName.getCatalog(),
@@ -108,8 +106,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkAnyActionOnTable(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
+                    connectContext,
                     tableName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -124,8 +121,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
+                    connectContext,
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -203,8 +199,7 @@ public class MetaFunctions {
     public static ConstantOperator inspectMvRelationships() {
         ConnectContext context = ConnectContext.get();
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE);
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -345,8 +340,12 @@ public class MetaFunctions {
         try {
             MaterializedView mv = (MaterializedView) table;
             String plans = "";
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+            boolean defaultUseCacheValue = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(useCache.getBoolean());
             List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
+                    CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv);
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(defaultUseCacheValue);
             int size = planContexts.size();
             for (int i = 0; i < size; i++) {
                 MvPlanContext context = planContexts.get(i);
@@ -422,7 +421,8 @@ public class MetaFunctions {
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
-        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableNameValue);
+        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), tableNameValue);
         maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
         if (!(maybeTable.get() instanceof OlapTable)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
@@ -439,7 +439,7 @@ public class MetaFunctions {
         String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
                 returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
         try {
-            List<TResultBatch> result = RepoExecutor.getInstance().executeDQL(sql);
+            List<TResultBatch> result = SimpleExecutor.getRepoExecutor().executeDQL(sql);
             return deserializeLookupResult(result);
         } catch (Throwable e) {
             final String notFoundMessage = "query failed if record not exist in dict table";

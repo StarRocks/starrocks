@@ -20,7 +20,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
@@ -200,7 +200,7 @@ public class CoordinatorPreprocessor {
         return jobSpec.getResourceGroup();
     }
 
-    public void prepareExec() throws Exception {
+    public void prepareExec() throws StarRocksException {
         resetExec();
         computeFragmentInstances();
         traceInstance();
@@ -244,7 +244,7 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
-    void computeFragmentInstances() throws UserException {
+    void computeFragmentInstances() throws StarRocksException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }
@@ -260,7 +260,8 @@ public class CoordinatorPreprocessor {
         executionDAG.finalizeDAG();
     }
 
-    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws UserException {
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws
+            StarRocksException {
         execFragment.getScanRangeAssignment().clear();
         for (FragmentInstance instance : execFragment.getInstances()) {
             instance.resetAllScanRanges();

@@ -35,7 +35,6 @@
 #pragma once
 
 #include "common/status.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/internal_service.h"
 
@@ -81,6 +80,9 @@ public:
 
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
+
+    void load_diagnose(google::protobuf::RpcController* controller, const PLoadDiagnoseRequest* request,
+                       PLoadDiagnoseResult* response, google::protobuf::Closure* done) override;
 
     void local_tablet_reader_open(google::protobuf::RpcController* controller, const PTabletReaderOpenRequest* request,
                                   PTabletReaderOpenResult* response, google::protobuf::Closure* done) override;

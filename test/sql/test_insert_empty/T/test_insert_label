@@ -1,0 +1,21 @@
+-- name: test_insert_label
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int, k2 varchar(100));
+
+insert into t1 (k1, k2) with label label0 values (1, "a");
+select * from t1;
+truncate table t1;
+
+-- error case
+insert into t1 (k1, k2) with label label0 values (1, "a");
+
+
+insert into t1 with label label1 (k1, k2) values (2, "b");
+select * from t1;
+truncate table t1;
+
+-- error case
+insert into t1 with label label1 (k1, k2) values (2, "b");

@@ -28,12 +28,12 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -57,7 +57,8 @@ import static org.junit.Assert.assertEquals;
 public class DistributionPrunerRuleTest {
 
     @Test
-    public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked MaterializedIndex index,
+    public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked PhysicalPartition physicalPartition,
+                          @Mocked MaterializedIndex index,
                           @Mocked HashDistributionInfo distributionInfo) {
         List<Long> tabletIds = Lists.newArrayListWithExpectedSize(300);
         for (long i = 0; i < 300; i++) {
@@ -169,9 +170,9 @@ public class DistributionPrunerRuleTest {
                 result = idToColumn;
 
                 partition.getSubPartitions();
-                result = Arrays.asList(partition);
+                result = Arrays.asList(physicalPartition);
 
-                partition.getIndex(anyLong);
+                physicalPartition.getIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();
@@ -195,7 +196,7 @@ public class DistributionPrunerRuleTest {
 
         assertEquals(0, operator.getSelectedTabletId().size());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()))
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(new ColumnRefFactory()))
                         .get(0);
 
         assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());

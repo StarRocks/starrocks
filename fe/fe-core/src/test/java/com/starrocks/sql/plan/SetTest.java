@@ -708,110 +708,16 @@ public class SetTest extends PlanTestBase {
     }
 
     @Test
-    public void testEliminateAgg() throws Exception {
+    public void testStruct() throws Exception {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
-        String sql = "SELECT \n" +
-                "    id, \n" +
-                "    SUM(big_value) AS sum_big_value\n" +
-                "FROM \n" +
-                "    test_agg_group_single_unique_key\n" +
-                "GROUP BY \n" +
-                "    id\n" +
-                "ORDER BY \n" +
-                "    id;";
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  6 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
-
-        sql = "SELECT \n" +
-                "    id, \n" +
-                "    COUNT(varchar_value) AS count_varchar_value\n" +
-                "FROM \n" +
-                "    test_agg_group_single_unique_key\n" +
-                "GROUP BY \n" +
-                "    id\n" +
-                "ORDER BY \n" +
-                "    id;";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); " +
-                "args: BOOLEAN,INT,INT; result: TINYINT; args nullable: false; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
-
-        sql = "SELECT\n" +
-                "    id,\n" +
-                "    big_value,\n" +
-                "    AVG(decimal_value) AS avg_decimal_value\n" +
-                "FROM\n" +
-                "    test_agg_group_multi_unique_key\n" +
-                "GROUP BY\n" +
-                "    id, big_value\n" +
-                "ORDER BY\n" +
-                "    id;";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  6 <-> cast([4: decimal_value, DECIMAL64(10,5), true] as DECIMAL128(38,11))\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
-
-        sql = "SELECT\n" +
-                "    id,\n" +
-                "    big_value,\n" +
-                "    COUNT(varchar_value) AS count_varchar_value\n" +
-                "FROM\n" +
-                "    test_agg_group_multi_unique_key\n" +
-                "GROUP BY\n" +
-                "    id, big_value\n" +
-                "ORDER BY\n" +
-                "    id;";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); args: BOOLEAN,INT,INT;" +
-                " result: TINYINT; args nullable: false; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
-        sql = "SELECT\n" +
-                "    id,\n" +
-                "    big_value,\n" +
-                "    COUNT(varchar_value) AS count_varchar_value\n" +
-                "FROM test_agg_group_multi_unique_key\n" +
-                "GROUP BY id, big_value\n" +
-                "HAVING COUNT(varchar_value) > 0;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "  PREDICATES: if(5: varchar_value IS NULL, 0, 1) > 0");
-        sql = "SELECT\n" +
-                "    id,\n" +
-                "    big_value,\n" +
-                "    COUNT(varchar_value) AS count_varchar_value\n" +
-                "FROM test_agg_group_multi_unique_key\n" +
-                "GROUP BY id, big_value\n" +
-                "HAVING SUM(varchar_value) > 0 and id + 2 > 5;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(5: varchar_value AS DOUBLE) > 0.0, 1: id > 3");
+        String sql = "with input as ("
+                + "select struct([1, 2, 3], [4, 5, 6]) as s "
+                + "union all "
+                + "select struct([5, 6, 7], [6, 7]) as s"
+                + ") select s, s.col1 from input;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "constant exprs: \n"
+                + "         row([1,2,3], [4,5,6]) | row([1,2,3], [4,5,6]).col1[true]\n"
+                + "         row([5,6,7], [6,7]) | row([5,6,7], [6,7]).col1[true]");
     }
 }

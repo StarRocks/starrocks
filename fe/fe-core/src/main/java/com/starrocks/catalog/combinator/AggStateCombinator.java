@@ -63,7 +63,6 @@ public final class AggStateCombinator extends ScalarFunction  {
             intermediateType.setAggStateDesc(aggStateDesc);
             // use agg state desc's nullable as `agg_state` function's nullable
             aggStateFunc.setIsNullable(aggStateDesc.getResultNullable());
-            LOG.info("Register agg state function: {}", aggStateFunc.functionName());
             return Optional.of(aggStateFunc);
         } catch (Exception e) {
             LOG.warn("Failed to create AggStateCombinator for function: {}", aggFunc.functionName(), e);

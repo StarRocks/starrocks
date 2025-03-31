@@ -231,6 +231,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
         REG_METHOD(GlobalEnv, update_mem_tracker);
         REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
+        REG_METHOD(GlobalEnv, passthrough_mem_tracker);
         REG_METHOD(GlobalEnv, clone_mem_tracker);
         REG_METHOD(GlobalEnv, consistency_mem_tracker);
         REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);

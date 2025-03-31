@@ -95,6 +95,8 @@ public class JobSpec {
 
     private boolean incrementalScanRanges = false;
 
+    private boolean isSyncStreamLoad = false;
+
     public static class Factory {
         private Factory() {
         }
@@ -106,13 +108,14 @@ public class JobSpec {
                                             TQueryType queryType) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             queryOptions.setQuery_type(queryType);
+            queryOptions.setQuery_timeout(context.getExecTimeout());
 
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
-            queryGlobals.setScan_node_number(scanNodes.size());
+            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -122,7 +125,7 @@ public class JobSpec {
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(context.getSessionVariable().isEnableProfile() ||
-                            context.getSessionVariable().isEnableBigQueryProfile())
+                            context.getSessionVariable().isEnableBigQueryProfile() || queryType == TQueryType.LOAD)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
@@ -142,7 +145,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
-            queryGlobals.setScan_node_number(scanNodes.size());
+            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -302,6 +305,7 @@ public class JobSpec {
                     .enablePipeline(false)
                     .resourceGroup(null)
                     .warehouseId(planner.getWarehouseId())
+                    .setSyncStreamLoad()
                     .build();
         }
 
@@ -398,6 +402,10 @@ public class JobSpec {
 
     public void setLoadJobId(long loadJobId) {
         this.loadJobId = loadJobId;
+    }
+
+    public TLoadJobType getLoadJobType() {
+        return queryOptions.getLoad_job_type();
     }
 
     public boolean isSetLoadJobId() {
@@ -518,7 +526,7 @@ public class JobSpec {
                 return true;
             }
         }
-        return false;
+        return isSyncStreamLoad;
     }
 
     public static class Builder {
@@ -613,6 +621,11 @@ public class JobSpec {
 
         private Builder setPlanProtocol(String planProtocol) {
             instance.planProtocol = StringUtils.lowerCase(planProtocol);
+            return this;
+        }
+
+        private Builder setSyncStreamLoad() {
+            instance.isSyncStreamLoad = true;
             return this;
         }
 

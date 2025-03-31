@@ -93,7 +93,13 @@ The following procedures are performed on an FE instance.
 
    A record of log like "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." suggests that the FE node is started properly.
 
-## Step 2: Start the BE service
+## Step 2: (For shared-nothing) Start the BE service
+
+:::note
+
+You can only add BE nodes to shared-nothing clusters. Adding BE nodes to shared-data clusters is not recommended and may lead to unknown behaviors.
+
+:::
 
 The following procedures are performed on the BE instances.
 
@@ -172,7 +178,13 @@ The following procedures are performed on the BE instances.
       default_replication_num = 1
       ```
 
-## Step 3: (Optional) Start the CN service
+## Step 2: (For shared-data) Start the CN service
+
+:::note
+
+You can only add CN nodes to shared-data clusters. Adding CN nodes to shared-nothing clusters is not recommended and may lead to unknown behaviors.
+
+:::
 
 A Compute Node (CN) is a stateless computing service that does not maintain data itself. You can optionally add CN nodes to your cluster to provide extra computing resources for queries. You can deploy CN nodes with the BE deployment files. Compute Nodes are supported since v2.4.
 
@@ -228,9 +240,9 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
 4. You can start new CN nodes by repeating the above procedures on other instances.
 
-## Step 4: Set up the cluster
+## Step 3: Set up the cluster
 
-After all FE, BE nodes, and CN nodes are started properly, you can set up the StarRocks cluster.
+After all FE and BE/CN nodes are started properly, you can set up the StarRocks cluster.
 
 The following procedures are performed on a MySQL client. You must have MySQL client 5.5.0 or later installed.
 
@@ -277,7 +289,9 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    - If the field `Role` is `FOLLOWER`, this FE node is eligible to be elected as the Leader FE node.
    - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
-3. Add the BE nodes to the cluster.
+3. Add the BE/CN nodes to the cluster.
+
+   - (For shared-nothing) Add BE nodes.
 
    ```SQL
    -- Replace <be_address> with the IP address (priority_networks) 
@@ -290,7 +304,22 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    >
    > You can use the preceding command to add multiple BE nodes at a time. Each `<be_address>:<heartbeat_service_port>` pair represents one BE node.
 
-4. Check the status of the BE nodes by executing the following SQL.
+   - (For shared-data) Add CN nodes.
+
+   ```SQL
+   -- Replace <cn_address> with the IP address (priority_networks) 
+   -- or FQDN of the CN node, and replace <heartbeat_service_port> 
+   -- with the heartbeat_service_port (Default: 9050) you specified in cn.conf.
+   ALTER SYSTEM ADD COMPUTE NODE "<cn_address>:<heartbeat_service_port>";
+   ```
+
+   > **NOTE**
+   >
+   > You can add multiple CN nodes with one SQL. Each `<cn_address>:<heartbeat_service_port>` pair represents one CN node.
+
+4. Check the status of the BE/CN nodes by executing the following SQL.
+
+   - (For shared-nothing) Check BE node status.
 
    ```SQL
    SHOW PROC '/backends'\G
@@ -331,20 +360,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
 
    If the field `Alive` is `true`, this BE node is properly started and added to the cluster.
 
-5. (Optional) Add a CN node to the cluster.
-
-   ```SQL
-   -- Replace <cn_address> with the IP address (priority_networks) 
-   -- or FQDN of the CN node, and replace <heartbeat_service_port> 
-   -- with the heartbeat_service_port (Default: 9050) you specified in cn.conf.
-   ALTER SYSTEM ADD COMPUTE NODE "<cn_address>:<heartbeat_service_port>";
-   ```
-
-   > **NOTE**
-   >
-   > You can add multiple CN nodes with one SQL. Each `<cn_address>:<heartbeat_service_port>` pair represents one CN node.
-
-6. (Optional) Check the status of the CN nodes by executing the following SQL.
+   - (For shared-data) Check CN node status.
 
    ```SQL
    SHOW PROC '/compute_nodes'\G
@@ -375,7 +391,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
 
    After CNs are properly started and you want to use CNs during queries, set the system variables `SET prefer_compute_node = true;` and `SET use_compute_nodes = -1;`. For more information, see [System variables](../sql-reference/System_variable.md#descriptions-of-variables).
 
-## Step 5: (Optional) Deploy a high-availability FE cluster
+## Step 4: (Optional) Deploy a high-availability FE cluster
 
 A high-availability FE cluster requires at least THREE Follower FE nodes in the StarRocks cluster. After the Leader FE node is started successfully, you can then start two new FE nodes to deploy a high-availability FE cluster.
 
@@ -532,7 +548,7 @@ You can stop the StarRocks cluster by running the following commands on the corr
 
 ## Troubleshooting
 
-Try the following steps to identify the errors that occur when you start the FE, BE, or CN nodes:
+Try the following steps to identify the errors that occur when you start the FE or BE nodes:
 
 - If an FE node is not started properly, you can identify the problem by checking its log in **fe/log/fe.warn.log**.
 
@@ -549,6 +565,7 @@ Try the following steps to identify the errors that occur when you start the FE,
   ```
 
   Having identified and resolved the problem, you must first terminate the existing BE process, delete the existing **storage** directory, create a new data storage directory, and then restart the BE node with the correct configuration.
+
 
 - If a CN node is not started properly, you can identify the problem by checking its log in **be/log/cn.WARNING**.
 

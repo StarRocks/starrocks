@@ -13,12 +13,16 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation.materialization.common;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -26,9 +30,12 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -37,6 +44,7 @@ import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
@@ -96,61 +104,36 @@ public class AggregatePushDownUtils {
 
         // TODO: use aggregate push down context to generate related push-down aggregation functions
         final Map<ColumnRefOperator, CallOperator> aggregations = origAggregate.getAggregations();
-        final ColumnRefFactory queryColumnRefFactory = mvRewriteContext.getMaterializationContext().getQueryRefFactory();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
             ColumnRefOperator origAggColRef = entry.getKey();
-            CallOperator aggCall = entry.getValue();
-            CallOperator newAggregate = getRollupFinalAggregate(mvRewriteContext, ctx, remapping, origAggColRef, aggCall);
-            if (newAggregate == null) {
-                return null;
-            }
-            // If rewritten function is not an aggregation function, it could be like ScalarFunc(AggregateFunc(...))
-            // We need to decompose it into Projection function and Aggregation function
-            // E.g. count(distinct x) => array_length(array_unique_agg(x))
-            // The array_length is a ScalarFunction and array_unique_agg is AggregateFunction
-            // So it's decomposed into 1: array_length(slot_2), 2: array_unique_agg(x)
-            CallOperator realAggregate = newAggregate;
-            int foundIndex = 0;
-            if (!newAggregate.isAggregate()) {
-                foundIndex = -1;
-                for (int i = 0; i < newAggregate.getChildren().size(); i++) {
-                    if (newAggregate.getChild(i) instanceof CallOperator) {
-                        CallOperator call = (CallOperator) newAggregate.getChild(i);
-                        if (call.isAggregate()) {
-                            foundIndex = i;
-                            realAggregate = call;
-                            break;
-                        }
-                    }
-                }
-                if (foundIndex == -1) {
-                    logMVRewrite(mvRewriteContext,
-                            "no aggregate functions found: " + newAggregate.getChildren());
+            CallOperator aggCall = (CallOperator) entry.getValue().clone();
+            if (ctx.avgToSumCountMapping.containsKey(aggCall)) {
+                // if it's an avg function, we need to rewrite it to sum and count function
+                Pair<ColumnRefOperator, ColumnRefOperator> newAggPair = ctx.avgToSumCountMapping.get(aggCall);
+                ColumnRefOperator sumColRef = newAggPair.first;
+                CallOperator sumAggCall = ctx.aggColRefToPushDownAggMap.get(sumColRef);
+                if (!getRollupFinalAggregate(mvRewriteContext, ctx, remapping, sumColRef, sumAggCall, newAggregations,
+                        aggColRefToAggMap)) {
                     return null;
                 }
-            }
-            // rewrite it with remapping and final aggregate should use the new input as its argument.
-            ScalarOperator newArg0 = remapping.get(origAggColRef);
-            realAggregate = replaceAggFuncArgument(mvRewriteContext, realAggregate, newArg0, foundIndex);
-
-            ColumnRefOperator newAggColRef = queryColumnRefFactory.create(realAggregate,
-                    realAggregate.getType(), realAggregate.isNullable());
-            newAggregations.put(newAggColRef, realAggregate);
-            if (!newAggregate.isAggregate()) {
-                CallOperator copyProject = (CallOperator) newAggregate.clone();
-                copyProject.setChild(foundIndex, newAggColRef);
-
-                ColumnRefOperator newProjColRef = queryColumnRefFactory
-                        .create(copyProject, copyProject.getType(), copyProject.isNullable());
-                // keeps original output column, otherwise upstream operators may be affected
-                aggProjection.put(newProjColRef, copyProject);
-                // replace original projection to newProjColRef.
-                aggColRefToAggMap.put(origAggColRef, copyProject);
+                ColumnRefOperator countColRef = newAggPair.second;
+                CallOperator countAggCall = ctx.aggColRefToPushDownAggMap.get(countColRef);
+                if (!getRollupFinalAggregate(mvRewriteContext, ctx, remapping, countColRef, countAggCall, newAggregations,
+                        aggColRefToAggMap)) {
+                    return null;
+                }
+                if (!aggColRefToAggMap.containsKey(sumColRef) || !aggColRefToAggMap.containsKey(countColRef)) {
+                    return null;
+                }
+                // after rewrite sum and count function(push-down), we need to rewrite avg function
+                ScalarOperator newAvg = createAvgBySumCount(aggCall, aggColRefToAggMap.get(sumColRef),
+                        aggColRefToAggMap.get(countColRef));
+                aggColRefToAggMap.put(origAggColRef, newAvg);
             } else {
-                // keeps original output column, otherwise upstream operators may be affected
-                aggProjection.put(newAggColRef, genRollupProject(aggCall, newAggColRef, true));
-                // replace original projection to newAggColRef or no need to change?
-                aggColRefToAggMap.put(origAggColRef, newAggColRef);
+                if (!getRollupFinalAggregate(mvRewriteContext, ctx, remapping, origAggColRef, aggCall, newAggregations,
+                        aggColRefToAggMap)) {
+                    return null;
+                }
             }
         }
 
@@ -186,6 +169,67 @@ public class AggregatePushDownUtils {
                 .build();
         OptExpression result = OptExpression.create(newAgg, newChildren);
         return result;
+    }
+
+    private static boolean getRollupFinalAggregate(MvRewriteContext mvRewriteContext,
+                                                   AggregatePushDownContext ctx,
+                                                   Map<ColumnRefOperator, ColumnRefOperator> remapping,
+                                                   ColumnRefOperator origAggColRef,
+                                                   CallOperator aggCall,
+                                                   Map<ColumnRefOperator, CallOperator> newAggregations,
+                                                   Map<ColumnRefOperator, ScalarOperator> aggColRefToAggMap) {
+        final ColumnRefFactory queryColumnRefFactory = mvRewriteContext.getMaterializationContext().getQueryRefFactory();
+        CallOperator newAggregate = getRollupFinalAggregate(mvRewriteContext, ctx, remapping, origAggColRef, aggCall);
+        if (newAggregate == null) {
+            return false;
+        }
+        // If rewritten function is not an aggregation function, it could be like ScalarFunc(AggregateFunc(...))
+        // We need to decompose it into Projection function and Aggregation function
+        // E.g. count(distinct x) => array_length(array_unique_agg(x))
+        // The array_length is a ScalarFunction and array_unique_agg is AggregateFunction
+        // So it's decomposed into 1: array_length(slot_2), 2: array_unique_agg(x)
+        CallOperator realAggregate = newAggregate;
+        // rewrite it with remapping and final aggregate should use the new input as its argument.
+        ScalarOperator newArg0 = remapping.get(origAggColRef);
+        Preconditions.checkArgument(newArg0 != null, "Aggregation's arg0 is null after " +
+                "remapping, aggColRef:{}, aggCall:{}", origAggColRef, aggCall);
+        if (!newAggregate.isAggregate()) {
+            int foundIndex = 0;
+            if (!newAggregate.isAggregate()) {
+                foundIndex = -1;
+                for (int i = 0; i < newAggregate.getChildren().size(); i++) {
+                    if (newAggregate.getChild(i) instanceof CallOperator) {
+                        CallOperator call = (CallOperator) newAggregate.getChild(i);
+                        if (call.isAggregate()) {
+                            foundIndex = i;
+                            realAggregate = call;
+                            break;
+                        }
+                    }
+                }
+                if (foundIndex == -1) {
+                    logMVRewrite(mvRewriteContext,
+                            "no aggregate functions found: " + newAggregate.getChildren());
+                    return false;
+                }
+            }
+            realAggregate = replaceAggFuncArgument(mvRewriteContext, realAggregate, newArg0, foundIndex);
+            ColumnRefOperator newAggColRef = queryColumnRefFactory.create(realAggregate,
+                    realAggregate.getType(), realAggregate.isNullable());
+            newAggregations.put(newAggColRef, realAggregate);
+            CallOperator copyProject = (CallOperator) newAggregate.clone();
+            copyProject.setChild(foundIndex, newAggColRef);
+            // replace original projection to newProjColRef.
+            aggColRefToAggMap.put(origAggColRef, copyProject);
+        } else {
+            realAggregate = replaceAggFuncArgument(mvRewriteContext, realAggregate, newArg0, 0);
+            ColumnRefOperator newAggColRef = queryColumnRefFactory.create(realAggregate,
+                    realAggregate.getType(), realAggregate.isNullable());
+            newAggregations.put(newAggColRef, realAggregate);
+            // replace original projection to newAggColRef or no need to change?
+            aggColRefToAggMap.put(origAggColRef, genRollupProject(aggCall, newAggColRef, true));
+        }
+        return true;
     }
 
     private static CallOperator getRollupFinalAggregate(MvRewriteContext mvRewriteContext,
@@ -228,12 +272,41 @@ public class AggregatePushDownUtils {
                 logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
                 return null;
             }
-            newAggregate = new CallOperator(rollupFuncName, newFunc.getReturnType(), newArgs, newFunc);
+            // ensure argument types are correct
+            // clone function to avoid changing the original function
+            Function cloned = newFunc.copy();
+            cloned.setArgsType(argTypes);
+            cloned.setRetType(aggCall.getType());
+            newAggregate = new CallOperator(rollupFuncName, aggCall.getType(), newArgs, cloned);
         }
         if (newAggregate == null) {
             logMVRewrite(mvRewriteContext, "realAggregate is null");
             return null;
         }
+        return newAggregate;
+    }
+
+    public static CallOperator getRollupPartialAggregate(MvRewriteContext mvRewriteContext,
+                                                         AggregatePushDownContext ctx,
+                                                         CallOperator aggCall) {
+        if (!ctx.isRewrittenByEquivalent(aggCall)) {
+            return aggCall;
+        }
+        int argIdx = 0;
+        ScalarOperator aggArg = null;
+        for (ScalarOperator child : aggCall.getArguments()) {
+            if (!child.isConstant()) {
+                aggArg = child;
+                break;
+            }
+            argIdx += 1;
+        }
+        CallOperator origAggCall = ctx.aggToOrigAggMap.get(aggCall);
+        if (origAggCall == null) {
+            logMVRewrite(mvRewriteContext, "newAggCall is null");
+            return null;
+        }
+        CallOperator newAggregate = replaceAggFuncArgument(mvRewriteContext, origAggCall, aggArg, argIdx);
         return newAggregate;
     }
 
@@ -255,5 +328,46 @@ public class AggregatePushDownUtils {
         }
         newAggCall.setChild(argIdx, newArg);
         return newAggCall;
+    }
+
+    /**
+     * Create new call operator with new function and arguments
+     */
+    public static Pair<ColumnRefOperator, CallOperator> createNewCallOperator(ColumnRefFactory columnRefFactory,
+                                                                              Map<ColumnRefOperator, CallOperator> aggregations,
+                                                                              Function newFn,
+                                                                              List<ScalarOperator> args) {
+        Preconditions.checkState(newFn != null);
+        CallOperator newCallOp = new CallOperator(newFn.functionName(), newFn.getReturnType(), args, newFn);
+        ColumnRefOperator newColRef =
+                columnRefFactory.create(newCallOp, newCallOp.getType(), newCallOp.isNullable());
+        // reuse old aggregation functions if it has existed
+        Optional<CallOperator> existedOpt = aggregations.values().stream().filter(newCallOp::equals).findFirst();
+        if (existedOpt.isPresent()) {
+            return Pair.create(newColRef, existedOpt.get());
+        } else {
+            return Pair.create(newColRef, newCallOp);
+        }
+    }
+
+    /**
+     * Create new avg function by sum and count function
+     */
+    public static CallOperator createAvgBySumCount(CallOperator avgFunc,
+                                                   ScalarOperator sumCallOp,
+                                                   ScalarOperator countCallOp) {
+        CallOperator newAvg = new CallOperator(FunctionSet.DIVIDE, avgFunc.getType(),
+                Lists.newArrayList(sumCallOp, countCallOp));
+        Type argType = avgFunc.getChild(0).getType();
+        if (argType.isDecimalV3()) {
+            // There is not need to apply ImplicitCastRule to divide operator of decimal types.
+            // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
+            ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+            newAvg.getChildren().set(1, new CastOperator(decimal128p38s0, newAvg.getChild(1), true));
+        } else {
+            final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            newAvg = (CallOperator) scalarRewriter.rewrite(newAvg, Lists.newArrayList(new ImplicitCastRule()));
+        }
+        return newAvg;
     }
 }

@@ -45,6 +45,7 @@ struct MetaReaderParams {
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;
     const DescriptorTbl* desc_tbl = nullptr;
+    int32_t low_card_threshold;
 
     int chunk_size = config::vector_chunk_size;
 
@@ -58,6 +59,7 @@ struct SegmentMetaCollecterParams {
     std::vector<LogicalType> field_type;
     bool use_page_cache;
     TabletSchemaCSPtr tablet_schema;
+    int32_t low_cardinality_threshold;
 };
 
 // MetaReader will implements
@@ -97,6 +99,13 @@ protected:
     Status _read(Chunk* chunk, size_t n);
 };
 
+static const std::string META_COUNT_ROWS = "rows";
+static const std::string META_MIN = "min";
+static const std::string META_MAX = "max";
+static const std::string META_DICT_MERGE = "dict_merge";
+static const std::string META_FLAT_JSON_META = "flat_json_meta";
+static const std::string META_COUNT_COL = "count";
+
 class SegmentMetaCollecter {
 public:
     SegmentMetaCollecter(SegmentSharedPtr segment);
@@ -118,7 +127,8 @@ private:
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
-    Status _collect_count(Column* column, LogicalType type);
+    Status _collect_count(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_rows(Column* column, LogicalType type);
     Status _collect_flat_json(ColumnId cid, Column* column);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);

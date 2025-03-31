@@ -14,7 +14,8 @@
 
 package com.starrocks.load.pipe.filelist;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
@@ -59,11 +60,11 @@ public class RepoCreator {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
     }
 
-    public static void createTable() throws UserException {
+    public static void createTable() throws StarRocksException {
         int expectedReplicationNum =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
         String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql(expectedReplicationNum);
-        RepoExecutor.getInstance().executeDDL(sql);
+        SimpleExecutor.getRepoExecutor().executeDDL(sql);
     }
 
     public static boolean correctTable() {

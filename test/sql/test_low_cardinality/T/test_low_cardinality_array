@@ -11,7 +11,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -27,7 +27,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -320,8 +320,8 @@ from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;
 select lower(upper(array_min(reverse(array_sort(a1)))))
 from s2 where a2[2] = 'GD' order by v1 limit 2;
 
-select * from s1 join s2 on s1.v1 = s2.v1 order by s2.v1 limit 2;
-select array_max(s1.a2), array_distinct(s2.a1) from s1 join s2 on s1.v1 = s2.v1 order by s2.v1 limit 2;
+select * from s1 join s2 on s1.v1 = s2.v1 and s1.v2 = s2.v2 order by s2.v1, s2.v2 limit 2;
+select array_max(s1.a2), array_distinct(s2.a1) from s1 join s2 on s1.v1 = s2.v1 and s1.v2 = s2.v2 order by s2.v1, s2.v2 limit 2;
 
 select * from 
 (select array_max(a1) x1 from s1) t1 join
@@ -349,7 +349,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -424,7 +424,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"

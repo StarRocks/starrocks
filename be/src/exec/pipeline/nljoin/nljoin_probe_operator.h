@@ -87,8 +87,8 @@ private:
     bool _skip_probe() const;
     void _check_post_probe() const;
     void _init_build_match() const;
-    void _permute_probe_row(const ChunkPtr& chunk);
-    ChunkPtr _permute_chunk_for_other_join(size_t chunk_size);
+    Status _permute_probe_row(const ChunkPtr& chunk);
+    StatusOr<ChunkPtr> _permute_chunk_for_other_join(size_t chunk_size);
     ChunkPtr _permute_chunk_for_inner_join(size_t chunk_size);
     void _permute_chunk_base_left(ChunkPtr* chunk);
     void _permute_chunk_base_right(ChunkPtr* chunk);

@@ -18,8 +18,8 @@
 
 #include "gtest/gtest.h"
 #include "gutil/port.h"
-#include "runtime/large_int_value.h"
 #include "types/constexpr.h"
+#include "types/large_int_value.h"
 
 namespace starrocks {
 

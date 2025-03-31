@@ -29,6 +29,7 @@ import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudCredential;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -44,8 +45,8 @@ import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
 
 public class PaimonConnector implements Connector {
-    private static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
-    private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
+    public static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
+    public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
     private final HdfsEnvironment hdfsEnvironment;
@@ -87,8 +88,20 @@ public class PaimonConnector implements Connector {
                 && !catalogType.equalsIgnoreCase("dlf")) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
-        paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+        if (!Strings.isNullOrEmpty(warehousePath)) {
+            paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+        }
         initFsOption(cloudConfiguration);
+
+        // cache expire time, set to 2h
+        this.paimonOptions.set("cache.expiration-interval", "7200s");
+        // max num of cached partitions of a Paimon catalog
+        this.paimonOptions.set("cache.partition.max-num", "1000");
+        // max size of cached manifest files, 10m means cache all since files usually no more than 8m
+        this.paimonOptions.set("cache.manifest.small-file-threshold", "10m");
+        // max size of memory manifest cache uses
+        this.paimonOptions.set("cache.manifest.small-file-memory", "1g");
+
         String keyPrefix = "paimon.option.";
         Set<String> optionKeys = properties.keySet().stream().filter(k -> k.startsWith(keyPrefix)).collect(Collectors.toSet());
         for (String k : optionKeys) {
@@ -137,6 +150,8 @@ public class PaimonConnector implements Connector {
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
             this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(), configuration));
+            GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                    .registerPaimonCatalog(catalogName, this.paimonNativeCatalog);
         }
         return paimonNativeCatalog;
     }
@@ -144,5 +159,10 @@ public class PaimonConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), connectorProperties);
+    }
+
+    @Override
+    public void shutdown() {
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterPaimonCatalog(catalogName);
     }
 }

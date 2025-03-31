@@ -26,6 +26,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_s3.h"
 #include "testutil/assert.h"
 
 namespace starrocks::io {
@@ -79,7 +80,7 @@ void S3InputStreamTest::TearDownTestCase() {
 }
 
 void init_s3client() {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
     const char* ak = config::object_storage_access_key_id.empty() ? getenv("STARROCKS_UT_S3_AK")
@@ -136,6 +137,15 @@ TEST_F(S3InputStreamTest, test_read) {
     ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
     ASSERT_EQ(0, r);
     ASSERT_EQ(10, *f->position());
+}
+
+TEST_F(S3InputStreamTest, test_not_found) {
+    auto f = std::make_unique<S3InputStream>(g_s3client, s_bucket_name, "key_not_found");
+    char buf[6];
+    auto r = f->read(buf, sizeof(buf));
+    EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
+    // ErrorCode 16 means RESOURCE_NOT_FOUND
+    EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
 }
 
 TEST_F(S3InputStreamTest, test_skip) {

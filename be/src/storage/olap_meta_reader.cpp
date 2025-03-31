@@ -79,17 +79,21 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         // get column id
         _collect_context.seg_collecter_params.cids.emplace_back(index);
 
+        // low cardinality threshold
+        _collect_context.seg_collecter_params.low_cardinality_threshold = read_params.low_card_threshold;
+
         // get result slot id
         _collect_context.result_slot_ids.emplace_back(it.first);
 
         // only collect the field of dict need read data page
         // others just depend on footer
-        if (collect_field == "dict_merge") {
+        if (collect_field == META_DICT_MERGE || collect_field == META_COUNT_COL) {
             _collect_context.seg_collecter_params.read_page.emplace_back(true);
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
         }
-        _has_count_agg |= (collect_field == "count");
+        _has_count_agg |= (collect_field == META_COUNT_ROWS);
+        _has_count_agg |= (collect_field == META_COUNT_COL);
     }
     _collect_context.seg_collecter_params.tablet_schema = read_params.tablet_schema;
     return Status::OK();

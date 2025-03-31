@@ -85,6 +85,14 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    void testForceSplitWithPartition() throws Exception {
+        connectContext.getSessionVariable().setSelectRatioThreshold(-1);
+        connectContext.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
+        String sql = "select * from pushdown_test where k1 >= 0 and (k3 > k4 or k3 = 1)";
+        assertContains(getFragmentPlan(sql), "UNION");
+    }
+
+    @Test
     void testForceUnion() throws Exception {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 10; i++) {
@@ -141,8 +149,8 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
                 "PREDICATES: 22: O_CUSTKEY IN (", "PREDICATES: 12: O_CUSTKEY IN"));
         list.add(arguments);
 
-
-        sql = "select * from orders where (O_ORDERKEY < 1 and O_CLERK = 'a') or (O_COMMENT = 'c' and O_CUSTKEY <=> null)";
+        sql =
+                "select * from orders where (O_ORDERKEY < 1 and O_CLERK = 'a') or (O_COMMENT = 'c' and O_CUSTKEY <=> null)";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
                 "PREDICATES: 19: O_COMMENT = 'c', 12: O_CUSTKEY <=> NULL",
                 "PREDICATES: 21: O_ORDERKEY < 1, 27: O_CLERK = 'a', NOT ((29: O_COMMENT = 'c') AND (22: O_CUSTKEY <=> NULL))"));
@@ -177,7 +185,6 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setScanOrToUnionThreshold(50000000);
         connectContext.getSessionVariable().setSelectRatioThreshold(0.15);
     }
-
 
     private static Stream<Arguments> testNotSplitUnionSqls() {
         List<String> list = Lists.newArrayList();

@@ -68,6 +68,8 @@ protected:
         config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
     }
 
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+
 private:
     bool _enable_size_tiered_compaction_strategy = config::enable_size_tiered_compaction_strategy;
     int64_t _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
@@ -107,7 +109,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -154,6 +156,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -245,7 +248,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -292,6 +295,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
@@ -404,7 +408,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -451,6 +455,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -527,7 +532,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -574,6 +579,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));

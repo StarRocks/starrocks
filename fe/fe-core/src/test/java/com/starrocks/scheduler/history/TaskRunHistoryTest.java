@@ -15,14 +15,17 @@
 package com.starrocks.scheduler.history;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -34,7 +37,9 @@ import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.text.MessageFormat;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +47,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TaskRunHistoryTest {
 
@@ -59,15 +63,15 @@ public class TaskRunHistoryTest {
                 "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\"," +
                 "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
                 "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"processStartTime\":0," +
-                "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true,\"isManual\":false,\"isSync\":false," +
-                "\"isReplay\":false},\"planBuilderMessage\":{}}}", json);
+                "\"executeOption\":{\"priority\":0,\"taskRunProperties\":{},\"isMergeRedundant\":false,\"isManual\":false," +
+                "\"isSync\":false,\"isReplay\":false},\"planBuilderMessage\":{}}}", json);
 
         TaskRunStatus b = TaskRunStatus.fromJson(json);
         assertEquals(status.toJSON(), b.toJSON());
     }
 
     @Test
-    public void testCRUD(@Mocked RepoExecutor repo) {
+    public void testCRUD(@Mocked SimpleExecutor repo) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId("aaa");
         status.setTaskName("t1");
@@ -149,7 +153,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testKeeper(@Mocked RepoExecutor repo) {
+    public void testKeeper(@Mocked SimpleExecutor repo) {
         TableKeeper keeper = TaskRunHistoryTable.createKeeper();
         assertEquals(StatsConstants.STATISTICS_DB_NAME, keeper.getDatabaseName());
         assertEquals(TaskRunHistoryTable.TABLE_NAME, keeper.getTableName());
@@ -163,10 +167,10 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
-        assertFalse(keeper.isDatabaseExisted());
+        assertFalse(keeper.checkTableExists());
 
         // create table
-        keeper.setDatabaseExisted(true);
+        new StatisticsMetaManager().createStatisticsTablesForTest();
         new Expectations() {
             {
                 repo.executeDDL("CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
@@ -179,7 +183,6 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
-        assertTrue(keeper.isTableExisted());
         assertFalse(keeper.isTableCorrected());
 
         new MockUp<SystemInfoService>() {
@@ -193,7 +196,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testHistoryVacuum(@Mocked RepoExecutor repo) {
+    public void testHistoryVacuum(@Mocked SimpleExecutor repo) {
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
@@ -321,5 +324,100 @@ public class TaskRunHistoryTest {
         String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
         System.out.println(res);
         Assert.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
+    }
+
+    private TaskRunStatus createTaskRunStatus(long createdTime) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setCreateTime(createdTime);
+        status.setExpireTime(createdTime + 10000);
+        status.setQueryId("q1");
+        status.setTaskName("t1");
+        status.setState(Constants.TaskRunState.SUCCESS);
+        return status;
+    }
+
+    @Test
+    public void testLookByTaskNamesOrder(@Mocked SimpleExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+        List<TaskRunStatus> taskRuns = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            TaskRunStatus status = createTaskRunStatus(i);
+            taskRuns.add(status);
+        }
+        // shuffle the taskRuns' order
+        Collections.shuffle(taskRuns);
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
+                record.data = taskRuns;
+                String json = GsonUtils.GSON.toJson(record);
+
+                TResultBatch resultBatch = new TResultBatch();
+                ByteBuffer buffer = ByteBuffer.wrap(json.getBytes());
+                resultBatch.setRows(Lists.newArrayList(buffer));
+                return Lists.newArrayList(resultBatch);
+            }
+        };
+        // lookup by task names
+        String dbName = "";
+        Set<String> taskNames = Set.of("t1", "t2");
+        List<TaskRunStatus> result = history.lookupByTaskNames(dbName, taskNames);
+        Assert.assertEquals(10, result.size());
+        // result always sorted by createTime desc
+        for (int i = 0; i < 10; i++) {
+            Assert.assertEquals(9 - i, result.get(i).getCreateTime());
+        }
+    }
+
+    @Test
+    public void testLookOrder(@Mocked SimpleExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+        List<TaskRunStatus> taskRuns = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            TaskRunStatus status = createTaskRunStatus(i);
+            taskRuns.add(status);
+        }
+
+        // shuffle the taskRuns' order
+        Collections.shuffle(taskRuns);
+
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
+                record.data = taskRuns;
+                String json = GsonUtils.GSON.toJson(record);
+                TResultBatch resultBatch = new TResultBatch();
+                ByteBuffer buffer = ByteBuffer.wrap(json.getBytes());
+                resultBatch.setRows(Lists.newArrayList(buffer));
+                return Lists.newArrayList(resultBatch);
+            }
+        };
+        // lookup by params
+        TGetTasksParams params = new TGetTasksParams();
+        params.setDb(null);
+        params.setState(null);
+        params.setTask_name("t1");
+        List<TaskRunStatus> result = history.lookup(params);
+        Assert.assertEquals(10, result.size());
+        // result always sorted by createTime desc
+        for (int i = 0; i < 10; i++) {
+            Assert.assertEquals(9 - i, result.get(i).getCreateTime());
+        }
     }
 }

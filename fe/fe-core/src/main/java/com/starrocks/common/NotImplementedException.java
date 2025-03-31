@@ -20,7 +20,7 @@ package com.starrocks.common;
 /**
  * Thrown for SQL statements that require as yet unimplemented functionality.
  */
-public class NotImplementedException extends UserException {
+public class NotImplementedException extends StarRocksException {
     public NotImplementedException(String msg) {
         super(msg);
     }

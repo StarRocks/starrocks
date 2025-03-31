@@ -63,7 +63,6 @@ import org.roaringbitmap.RoaringBitmap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedList;
@@ -72,7 +71,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -531,7 +529,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }
-            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
+            globalDict.setVersion(dictPair.second.getCollectedVersion());
             globalDict.setStrings(strings);
             globalDict.setIds(integers);
             result.add(globalDict);
@@ -552,7 +550,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (Pair<Integer, ColumnDict> dictPair : sortedDicts) {
             TGlobalDict globalDict = new TGlobalDict();
             globalDict.setColumnId(dictPair.first);
-            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
+            globalDict.setVersion(dictPair.second.getCollectedVersion());
             result.add(globalDict);
         }
         return result;
@@ -743,6 +741,18 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         nodes.add(root);
         if (!(root instanceof ExchangeNode)) {
             root.getChildren().forEach(child -> collectNodesImpl(child, nodes));
+        }
+        
+        if (root instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) root;
+            if (hashJoinNode.isSkewBroadJoin()) {
+                HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
+                for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
+                    int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
+                    // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
+                    description.setSkew_shuffle_filter_id(filterId);
+                }
+            }
         }
     }
 
@@ -950,7 +960,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             boolean hasGlobalRuntimeFilter = hashJoinNode.getBuildRuntimeFilters()
                     .stream().anyMatch(RuntimeFilterDescription::isHasRemoteTargets);
-            if (hashJoinNode.isBroadcast() && hasGlobalRuntimeFilter) {
+            if (hashJoinNode.isBroadcast() && hasGlobalRuntimeFilter && !localOffspringsPerChild.isEmpty()) {
                 localRightOffsprings.or(localOffspringsPerChild.get(1));
             }
         }

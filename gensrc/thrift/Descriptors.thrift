@@ -175,6 +175,15 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
     SCH_TEMP_TABLES,
+    
+    SCH_COLUMN_STATS_USAGE,
+    SCH_ANALYZE_STATUS,
+
+    SCH_CLUSTER_SNAPSHOTS,
+    SCH_CLUSTER_SNAPSHOT_JOBS,
+
+    SCH_KEYWORDS,
+    SCH_APPLICABLE_ROLES,
 }
 
 enum THdfsCompression {
@@ -288,6 +297,7 @@ struct TOlapTableIndexSchema {
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
     7: optional map<string, string> column_to_expr_value
+    8: optional bool is_shadow
 }
 
 struct TOlapTableSchemaParam {
@@ -567,6 +577,9 @@ struct TPaimonTable {
 
     // timezone
     3: optional string time_zone
+
+    // reuse iceberg schema here, used to support schema evolution
+    4: optional TIcebergSchema paimon_schema
 }
 
 struct TDeltaLakeTable {

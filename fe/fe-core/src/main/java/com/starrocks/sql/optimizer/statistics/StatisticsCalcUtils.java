@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -37,9 +38,13 @@ import org.jetbrains.annotations.Nullable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class StatisticsCalcUtils {
@@ -83,12 +88,67 @@ public class StatisticsCalcUtils {
         return builder;
     }
 
+    public static Statistics.Builder estimateMultiColumnCombinedStats(Table table,
+                                                                      Statistics.Builder builder,
+                                                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            return builder;
+        }
+
+        MultiColumnCombinedStatistics cachedMcStats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getMultiColumnCombinedStatistics(table.getId());
+        if (cachedMcStats == null || cachedMcStats == MultiColumnCombinedStatistics.EMPTY) {
+            return builder;
+        }
+
+        Map<String, ColumnRefOperator> columnNameToRefMap = colRefToColumnMetaMap.keySet().stream()
+                .collect(Collectors.toMap(ColumnRefOperator::getName, Function.identity()));
+
+        Map<Integer, String> uniqueIdToColumnNameMap = new HashMap<>(table.getBaseSchema().size());
+        table.getBaseSchema().forEach(column ->
+                uniqueIdToColumnNameMap.put(column.getUniqueId(), column.getName()));
+
+
+        Map<Set<Integer>, Long> distinctCounts = cachedMcStats.getDistinctCounts();
+        for (Map.Entry<Set<Integer>, Long> entry : distinctCounts.entrySet()) {
+            Set<Integer> uniqueColumnIds = entry.getKey();
+            Long ndv = entry.getValue();
+
+            Set<ColumnRefOperator> mcRefOperators = new HashSet<>(uniqueColumnIds.size());
+            boolean allColumnsFound = true;
+
+            for (Integer uniqueColumnId : uniqueColumnIds) {
+                String columnName = uniqueIdToColumnNameMap.get(uniqueColumnId);
+                if (columnName == null) {
+                    allColumnsFound = false;
+                    break;
+                }
+
+                ColumnRefOperator columnRef = columnNameToRefMap.get(columnName);
+                if (columnRef == null) {
+                    allColumnsFound = false;
+                    break;
+                }
+
+                mcRefOperators.add(columnRef);
+            }
+
+            // Add the multi-column statistic if all required columns are found
+            if (allColumnsFound) {
+                builder = builder.addMultiColumnStatistics(mcRefOperators, new MultiColumnCombinedStats(ndv));
+            }
+        }
+
+        return builder;
+    }
+
     /**
      * Return partition-level statistics if it exists.
      * Only return the statistics if all columns and all partitions have the required statistics, otherwise return null
      */
     public static Map<Long, Statistics> getPartitionStatistics(Operator node, OlapTable table,
-                                                               Map<ColumnRefOperator, Column> columns) {
+                                                               Map<ColumnRefOperator, Column> columns,
+                                                               Statistics.Builder statistics) {
 
         // 1. only FULL statistics has partition-level info
         BasicStatsMeta basicStatsMeta =
@@ -124,6 +184,16 @@ public class StatisticsCalcUtils {
                 String columnName = columnNames.get(i);
                 ColumnStatistic columnStatistic = entry.getValue().get(i);
                 ColumnRefOperator ref = columnNameMap.get(columnName);
+                if (ConnectContext.get().getSessionVariable().isCboUseHistogramEvaluateListPartition()) {
+                    // fill histogram if exists
+                    ColumnStatistic originColStats = statistics.getColumnStatistics(ref);
+                    if (originColStats != null) {
+                        Histogram histogram = originColStats.getHistogram();
+                        if (histogram != null) {
+                            columnStatistic = ColumnStatistic.buildFrom(columnStatistic).setHistogram(histogram).build();
+                        }
+                    }   
+                }
                 builder.addColumnStatistic(ref, columnStatistic);
             }
             long partitionRow = partitionRows.get(entry.getKey());
@@ -150,7 +220,7 @@ public class StatisticsCalcUtils {
         // For example, a large amount of data LOAD may cause the number of rows to change greatly.
         // This leads to very inaccurate row counts.
         LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
-        long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
+        long deltaRows = deltaRows(table, basicStatsMeta.getTotalRows());
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), selectedPartitions);
         Map<Long, Long> result = Maps.newHashMap();
@@ -208,7 +278,7 @@ public class StatisticsCalcUtils {
             // attempt use updateRows from basicStatsMeta to adjust estimated row counts
             if (StatsConstants.AnalyzeType.SAMPLE == analyzeType
                     && basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp)) {
-                long statsRowCount = Math.max(basicStatsMeta.getUpdateRows() / table.getPartitions().size(), 1)
+                long statsRowCount = Math.max(basicStatsMeta.getTotalRows() / table.getPartitions().size(), 1)
                         * selectedPartitions.size();
                 if (statsRowCount > rowCount) {
                     rowCount = statsRowCount;

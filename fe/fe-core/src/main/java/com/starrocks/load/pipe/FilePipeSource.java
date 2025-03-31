@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
@@ -98,7 +98,7 @@ public class FilePipeSource implements GsonPostProcessable {
                     // TODO: persist state
                     eos = true;
                 }
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.error("Failed to poll the source: ", e);
                 throw new RuntimeException(e);
             } catch (Throwable e) {

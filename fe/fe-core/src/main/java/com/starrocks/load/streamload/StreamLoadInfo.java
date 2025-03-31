@@ -19,7 +19,7 @@ import com.google.re2j.Pattern;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
@@ -47,6 +47,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Optional;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
 public class StreamLoadInfo {
 
@@ -100,7 +102,7 @@ public class StreamLoadInfo {
         this.stripOuterArray = false;
     }
 
-    public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, int timeout) {
+    public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, Optional<Integer> timeout) {
         this.id = id;
         this.txnId = txnId;
         this.fileType = fileType;
@@ -108,7 +110,7 @@ public class StreamLoadInfo {
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
-        this.timeout = timeout;
+        timeout.ifPresent(integer -> this.timeout = integer);
     }
 
     public String getConfluentSchemaRegistryUrl() {
@@ -271,17 +273,21 @@ public class StreamLoadInfo {
         return warehouseId;
     }
 
-    public static StreamLoadInfo fromHttpStreamLoadRequest(TUniqueId id, long txnId, int timeout, StreamLoadKvParams params)
-            throws UserException {
+    public static StreamLoadInfo fromHttpStreamLoadRequest(
+            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params)
+            throws StarRocksException {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
                 params.getFileType().orElse(TFileType.FILE_STREAM),
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
         streamLoadInfo.setOptionalFromStreamLoad(params);
+        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        streamLoadInfo.setWarehouseId(warehouse.getId());
         return streamLoadInfo;
     }
 
     public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
-            throws UserException {
+            throws StarRocksException {
         StreamLoadThriftParams streamLoadParams = new StreamLoadThriftParams(request);
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
                 streamLoadParams.getFileType().orElse(null), streamLoadParams.getFileFormatType().orElse(null));
@@ -301,7 +307,7 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
-    private void setOptionalFromStreamLoad(StreamLoadParams params) throws UserException {
+    private void setOptionalFromStreamLoad(StreamLoadParams params) throws StarRocksException {
         Optional<String> columns = params.getColumns();
         if (columns.isPresent()) {
             setColumnToColumnExpr(columns.get());
@@ -332,7 +338,7 @@ public class StreamLoadInfo {
             if (fileType == TFileType.FILE_STREAM) {
                 path = params.getFilePath().orElse(null);
             } else {
-                throw new UserException("Unsupported file type, type=" + fileType);
+                throw new StarRocksException("Unsupported file type, type=" + fileType);
             }
         }
 
@@ -366,12 +372,12 @@ public class StreamLoadInfo {
         if (compressionType.isPresent()) {
             payloadCompressionType = CompressionUtils.findTCompressionByName(compressionType.get());
             if (payloadCompressionType == null) {
-                throw new UserException("Unsupported compression type: " + compressionType.get());
+                throw new StarRocksException("Unsupported compression type: " + compressionType.get());
             }
         }
     }
 
-    public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
+    public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId dummyId = new TUniqueId();
         TFileFormatType fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
         if (routineLoadJob.getFormat().equals("json")) {
@@ -387,7 +393,7 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
-    private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
+    private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws StarRocksException {
         // copy the columnExprDescs, cause it may be changed when planning.
         // so we keep the columnExprDescs in routine load job as origin.
         if (routineLoadJob.getColumnDescs() != null) {
@@ -427,7 +433,7 @@ public class StreamLoadInfo {
     }
 
     // used for stream load
-    private void setColumnToColumnExpr(String columns) throws UserException {
+    private void setColumnToColumnExpr(String columns) throws StarRocksException {
         String columnsSQL = "COLUMNS (" + columns + ")";
         ImportColumnsStmt columnsStmt;
         try {
@@ -437,7 +443,7 @@ public class StreamLoadInfo {
             throw e;
         } catch (Exception e) {
             LOG.warn("failed to parse columns header, sql={}", columnsSQL, e);
-            throw new UserException("parse columns header failed", e);
+            throw new StarRocksException("parse columns header failed", e);
         }
 
         if (columnsStmt.getColumns() != null && !columnsStmt.getColumns().isEmpty()) {
@@ -445,7 +451,7 @@ public class StreamLoadInfo {
         }
     }
 
-    private void setWhereExpr(String whereString) throws UserException {
+    private void setWhereExpr(String whereString) throws StarRocksException {
         ImportWhereStmt whereStmt;
         try {
             whereStmt = new ImportWhereStmt(com.starrocks.sql.parser.SqlParser.parseSqlToExpr(whereString,
@@ -455,12 +461,12 @@ public class StreamLoadInfo {
             throw e;
         } catch (Exception e) {
             LOG.warn("failed to parse where header, sql={}", whereString, e);
-            throw new UserException("parse columns header failed", e);
+            throw new StarRocksException("parse columns header failed", e);
         }
         whereExpr = whereStmt.getExpr();
     }
 
-    private void setMergeConditionExpr(String mergeConditionStr) throws UserException {
+    private void setMergeConditionExpr(String mergeConditionStr) throws StarRocksException {
         this.mergeConditionStr = mergeConditionStr;
         // TODO:(caneGuy) use expr for update condition
     }

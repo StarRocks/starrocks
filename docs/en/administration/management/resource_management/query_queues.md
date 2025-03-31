@@ -60,9 +60,9 @@ You can set the thresholds that trigger query queues via the following global se
 
 | **Variable**                        | **Default** | **Description**                                              |
 | ----------------------------------- | ----------- | ------------------------------------------------------------ |
-| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. |
-| query_queue_mem_used_pct_limit      | 0           | The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Range: [0, 1] |
-| query_queue_cpu_used_permille_limit | 0           | The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Range: [0, 1000] |
+| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
+| query_queue_mem_used_pct_limit      | 0           | The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1] |
+| query_queue_cpu_used_permille_limit | 0           | The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1000] |
 
 > **NOTE**
 >

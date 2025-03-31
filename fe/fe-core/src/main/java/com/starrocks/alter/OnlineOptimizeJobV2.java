@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -45,7 +46,6 @@ import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -278,7 +278,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                         + " from " + ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(tableName)
                         + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
-            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
+            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName, warehouseId);
             rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
             rewriteTasks.add(rewriteTask);
@@ -291,13 +291,27 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.info("transfer optimize job {} state to {}", jobId, this.jobState);
     }
 
-    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tmpPartitionName) {
+    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tempPartitionName) {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
-            tbl.addDoubleWritePartition(sourcePartitionName, tmpPartitionName);
-            LOG.info("job {} add double write partition {} to {}", jobId, tmpPartitionName, sourcePartitionName);
+            Preconditions.checkState(tbl.getState() == OlapTableState.OPTIMIZE);
+            Partition temp = tbl.getPartition(tempPartitionName, true);
+            if (temp != null) {
+                Preconditions.checkState(temp.getSubPartitions().size() == 1);
+                Partition p = tbl.getPartition(sourcePartitionName);
+                if (p != null) {
+                    Preconditions.checkState(p.getSubPartitions().size() == 1);
+                    tbl.addDoubleWritePartition(p.getId(), temp.getId());
+
+                    LOG.info("job {} add double write partition: {}:{} -> {}:{}", jobId, sourcePartitionName,
+                                p.getId(), tempPartitionName, temp.getId());
+                } else {
+                    LOG.warn("job {} add double partition {} does not exist", jobId, sourcePartitionName);
+                }
+            } else {
+                LOG.warn("job {} add double partition {} does not exist", jobId, tempPartitionName);
+            }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
@@ -306,7 +320,6 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     private void disableDoubleWritePartition(Database db, OlapTable tbl) {
         try (AutoCloseableLock ignored =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
-            Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             tbl.clearDoubleWritePartition();
             LOG.info("job {} clear double write partitions", jobId);
         }
@@ -448,7 +461,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
             Set<Tablet> sourceTablets = Sets.newHashSet();
             Partition partition = targetTable.getPartition(sourcePartitionName);
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index
+                    : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 sourceTablets.addAll(index.getTablets());
             }
 
@@ -550,7 +564,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             // hash set is able to deduplicate the elements
                             tmpTablets.addAll(index.getTablets());
                         }
@@ -596,7 +611,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                 return;
             }
             // set table state
-            tbl.setState(OlapTableState.SCHEMA_CHANGE);
+            tbl.setState(OlapTableState.OPTIMIZE);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
@@ -654,7 +669,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         for (long id : replayedJob.getTmpPartitionIds()) {
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
                 targetTable.dropTempPartition(partition.getName(), true);
@@ -767,7 +783,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.info("execute sql : {}", sql);
         ConnectContext context = ConnectContext.get();
         if (context == null) {
-            context = new ConnectContext();
+            context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -778,13 +794,13 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (parsedStmt instanceof InsertStmt) {
             ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
         }
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
         // set default session variables for stats context
         SessionVariable sessionVariable = context.getSessionVariable();
         sessionVariable.setUsePageCache(false);
         sessionVariable.setEnableMaterializedViewRewrite(false);
-        sessionVariable.setQueryTimeoutS((int) timeoutMs / 2000);
+        sessionVariable.setInsertTimeoutS((int) timeoutMs / 2000);
 
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());

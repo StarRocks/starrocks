@@ -23,6 +23,7 @@
 #include "exec/pipeline/pipeline_driver_poller.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state.h"
 #include "util/factory_method.h"
@@ -33,6 +34,8 @@ namespace starrocks::pipeline {
 
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
+
+class PipelineExecutorMetrics;
 
 class DriverExecutor {
 public:
@@ -72,7 +75,7 @@ protected:
 class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
 public:
     GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group,
-                         const CpuUtil::CpuIds& cpuids);
+                         const CpuUtil::CpuIds& cpuids, PipelineExecutorMetrics* metrics);
     ~GlobalDriverExecutor() override = default;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
@@ -121,6 +124,7 @@ private:
     // metrics
     std::unique_ptr<UIntGauge> _driver_queue_len;
     std::unique_ptr<UIntGauge> _driver_poller_block_queue_len;
+    DriverExecutorMetrics* _metrics;
 };
 
 } // namespace starrocks::pipeline

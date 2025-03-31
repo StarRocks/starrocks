@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import mockit.Expectations;
@@ -325,7 +326,7 @@ public class AnalyzeCreateTableTest {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadata) {
             {
-                metadata.getDb("iceberg_catalog", "not_exist_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "not_exist_db");
                 result = null;
                 minTimes = 0;
             }
@@ -334,11 +335,11 @@ public class AnalyzeCreateTableTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb("iceberg_catalog", "iceberg_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
                 result = new Database();
                 minTimes = 0;
 
-                metadata.tableExists("iceberg_catalog", "iceberg_db", anyString);
+                metadata.tableExists((ConnectContext) any, "iceberg_catalog", "iceberg_db", anyString);
                 result = false;
             }
         };
@@ -364,7 +365,7 @@ public class AnalyzeCreateTableTest {
         AnalyzeTestUtil.getStarRocksAssert().withCatalog(createHiveCatalogStmt);
         new Expectations(metadata) {
             {
-                metadata.getDb("hive_catalog", "hive_db");
+                metadata.getDb((ConnectContext) any, "hive_catalog", "hive_db");
                 result = new Database();
                 minTimes = 0;
             }
@@ -376,18 +377,18 @@ public class AnalyzeCreateTableTest {
 
     @Test
     public void testGeneratedColumnWithExternalTable() throws Exception {
-        analyzeFail("create external table ex_hive_tbl0 (col_tinyint tinyint null comment \"column tinyint\"," + 
-                    "col_varchar varchar(5), col_boolean boolean null comment \"column boolean\", col_new int" + 
-                    "as col_tinyint+1) ENGINE=hive properties (\"resource\" = \"hive_resource\"," +
-                    "\"table\" = \"hive_hdfs_orc_nocompress\"," +
-                    "\"database\" = \"hive_extbl_test\");");
+        analyzeFail("create external table ex_hive_tbl0 (col_tinyint tinyint null comment \"column tinyint\"," +
+                "col_varchar varchar(5), col_boolean boolean null comment \"column boolean\", col_new int" +
+                "as col_tinyint+1) ENGINE=hive properties (\"resource\" = \"hive_resource\"," +
+                "\"table\" = \"hive_hdfs_orc_nocompress\"," +
+                "\"database\" = \"hive_extbl_test\");");
     }
 
     @Test
     public void testGeneratedColumnOnAGGTable() throws Exception {
         analyzeFail("CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, v1 BIGINT SUM as id)" +
-                    "AGGREGATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 " +
-                    "PROPERTIES(\"replication_num\" = \"1\", \"replicated_storage\"=\"true\");");
+                "AGGREGATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\", \"replicated_storage\"=\"true\");");
     }
 
     @Test

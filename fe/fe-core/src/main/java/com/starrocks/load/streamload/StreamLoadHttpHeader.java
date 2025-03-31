@@ -16,6 +16,8 @@ package com.starrocks.load.streamload;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.starrocks.http.rest.RestBaseAction.WAREHOUSE_KEY;
+
 /**
  * Http header names for stream load. They should be consistent
  * with those in http_common.h
@@ -41,6 +43,7 @@ public class StreamLoadHttpHeader {
     public static final String HTTP_MERGE_CONDITION = "merge_condition";
     public static final String HTTP_LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
     public static final String HTTP_COMPRESSION = "compression";
+    public static final String HTTP_WAREHOUSE = WAREHOUSE_KEY;
 
     // Headers for csv format ============================
     public static final String HTTP_COLUMN_SEPARATOR = "column_separator";
@@ -55,13 +58,20 @@ public class StreamLoadHttpHeader {
     public static final String HTTP_JSONROOT = "json_root";
     public static final String HTTP_STRIP_OUTER_ARRAY = "strip_outer_array";
 
+    // Headers for batch write ==========================
+    public static final String HTTP_ENABLE_BATCH_WRITE = "enable_merge_commit";
+    public static final String HTTP_BATCH_WRITE_ASYNC = "merge_commit_async";
+    public static final String HTTP_BATCH_WRITE_INTERVAL_MS = "merge_commit_interval_ms";
+    public static final String HTTP_BATCH_WRITE_PARALLEL = "merge_commit_parallel";
+
     // A list of all headers. If add a new header, should also add it to the list.
     public static final List<String> HTTP_HEADER_LIST = Arrays.asList(
-            HTTP_FORMAT, HTTP_COLUMNS, HTTP_WHERE, HTTP_COLUMN_SEPARATOR, HTTP_ROW_DELIMITER,
-            HTTP_SKIP_HEADER, HTTP_TRIM_SPACE, HTTP_ENCLOSE, HTTP_ESCAPE, HTTP_MAX_FILTER_RATIO,
-            HTTP_TIMEOUT, HTTP_PARTITIONS, HTTP_TEMP_PARTITIONS, HTTP_NEGATIVE, HTTP_STRICT_MODE,
-            HTTP_TIMEZONE, HTTP_LOAD_MEM_LIMIT, HTTP_JSONPATHS, HTTP_JSONROOT, HTTP_STRIP_OUTER_ARRAY,
-            HTTP_PARTIAL_UPDATE, HTTP_PARTIAL_UPDATE_MODE, HTTP_TRANSMISSION_COMPRESSION_TYPE, HTTP_LOAD_DOP,
-            HTTP_ENABLE_REPLICATED_STORAGE, HTTP_MERGE_CONDITION, HTTP_LOG_REJECTED_RECORD_NUM, HTTP_COMPRESSION
+            HTTP_FORMAT, HTTP_COLUMNS, HTTP_WHERE, HTTP_COLUMN_SEPARATOR, HTTP_ROW_DELIMITER, HTTP_SKIP_HEADER,
+            HTTP_TRIM_SPACE, HTTP_ENCLOSE, HTTP_ESCAPE, HTTP_MAX_FILTER_RATIO, HTTP_TIMEOUT, HTTP_PARTITIONS,
+            HTTP_TEMP_PARTITIONS, HTTP_NEGATIVE, HTTP_STRICT_MODE, HTTP_TIMEZONE, HTTP_LOAD_MEM_LIMIT,
+            HTTP_JSONPATHS, HTTP_JSONROOT, HTTP_STRIP_OUTER_ARRAY, HTTP_PARTIAL_UPDATE, HTTP_PARTIAL_UPDATE_MODE,
+            HTTP_TRANSMISSION_COMPRESSION_TYPE, HTTP_LOAD_DOP, HTTP_ENABLE_REPLICATED_STORAGE, HTTP_MERGE_CONDITION,
+            HTTP_LOG_REJECTED_RECORD_NUM, HTTP_COMPRESSION, HTTP_WAREHOUSE, HTTP_ENABLE_BATCH_WRITE,
+            HTTP_BATCH_WRITE_ASYNC, HTTP_BATCH_WRITE_INTERVAL_MS, HTTP_BATCH_WRITE_PARALLEL
     );
 }

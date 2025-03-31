@@ -15,7 +15,7 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
 #include "agent/master_info.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/string_value.h"
@@ -117,7 +117,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     }
 
     for (const auto& [slot_id, index] : (*chunk)->get_slot_id_to_index_map()) {
-        const ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
+        ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
         column->append_datum(row[slot_id - 1]);
     }
 

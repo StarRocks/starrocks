@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.information;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
@@ -26,7 +27,6 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -51,6 +51,7 @@ import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 import org.apache.thrift.protocol.TType;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -162,7 +163,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
         // From timestamp to DATETIME
         if (value.getType().isBigint() && schemaType.isDatetime()) {
-            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000));
+            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000, ZoneId.systemDefault()));
         }
         return value.castTo(schemaType)
                 .orElseThrow(() -> new NotImplementedException(String.format("unsupported type cast from %s to %s",
@@ -197,7 +198,10 @@ public class TaskRunsSystemTable extends SystemTable {
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         status.getDbName());
             } catch (AccessDeniedException e) {
                 continue;

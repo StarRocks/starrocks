@@ -17,8 +17,6 @@ package com.starrocks.sql.optimizer.task;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.Rule;
 
-import java.util.List;
-
 /**
  * Rewrite the whole tree by TopDown way.
  * If a node had been rewritten, we don't need process the children and just finish the task.
@@ -27,8 +25,8 @@ import java.util.List;
 public class RewriteAtMostOnceTask extends RewriteTreeTask {
 
     public RewriteAtMostOnceTask(TaskContext context, OptExpression root,
-                                 List<Rule> rules) {
-        super(context, root, rules, true);
+                                 Rule rule) {
+        super(context, root, rule, true);
     }
 
     @Override

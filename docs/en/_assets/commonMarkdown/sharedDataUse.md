@@ -1,3 +1,5 @@
+---
+---
 
 For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
 
@@ -87,4 +89,4 @@ Tables in a shared-data StarRocks cluster support all types of queries provided 
 
 > **NOTE**
 >
-> Shared-data StarRocks clusters do not support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md).
+> Shared-data StarRocks clusters support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) from v3.4.0.

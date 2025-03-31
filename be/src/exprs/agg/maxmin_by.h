@@ -590,6 +590,42 @@ public:
         }
     }
 
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        if constexpr (State::not_filter_nulls_flag) {
+            if (this->data(state).null_result) {
+                DCHECK(dst->is_nullable());
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
+            }
+        } else {
+            if (this->data(state).buffer_result.empty()) {
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
+            }
+        }
+    }
+
     std::string get_name() const override { return "maxmin_by"; }
 };
 
@@ -789,6 +825,42 @@ public:
                     down_cast<NullableColumn*>(to)->null_column()->append(DATUM_NOT_NULL);
                 }
                 ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
+            }
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        if constexpr (State::not_filter_nulls_flag) {
+            if (this->data(state).null_result) {
+                DCHECK(dst->is_nullable());
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
+            }
+        } else {
+            if (this->data(state).buffer_result.empty()) {
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
             }
         }
     }

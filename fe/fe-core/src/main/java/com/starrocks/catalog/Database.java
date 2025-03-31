@@ -48,10 +48,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.LockUtils.SlowLockLogStats;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -76,6 +75,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -127,6 +127,10 @@ public class Database extends MetaObject implements Writable {
 
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
     private String location;
+
+    // not realtime usedQuota value to make a fast check for database data and replica quota
+    public volatile AtomicLong usedDataQuotaBytes = new AtomicLong(0);
+    public volatile AtomicLong usedReplicaQuotaBytes = new AtomicLong(0);
 
     public Database() {
         this(0, null);
@@ -220,77 +224,6 @@ public class Database extends MetaObject implements Writable {
         return replicaQuotaSize;
     }
 
-    public long getUsedDataQuotaWithLock() {
-        long usedDataQuota = 0;
-        Locker locker = new Locker();
-        locker.lockDatabase(id, LockType.READ);
-        try {
-            for (Table table : this.idToTable.values()) {
-                if (!table.isOlapTableOrMaterializedView()) {
-                    continue;
-                }
-
-                OlapTable olapTable = (OlapTable) table;
-                usedDataQuota = usedDataQuota + olapTable.getDataSize();
-            }
-            return usedDataQuota;
-        } finally {
-            locker.unLockDatabase(id, LockType.READ);
-        }
-    }
-
-    public void checkDataSizeQuota() throws DdlException {
-        Pair<Double, String> quotaUnitPair = DebugUtil.getByteUint(dataQuotaBytes);
-        String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " "
-                + quotaUnitPair.second;
-        long usedDataQuota = getUsedDataQuotaWithLock();
-        long leftDataQuota = Math.max(dataQuotaBytes - usedDataQuota, 0);
-
-        Pair<Double, String> leftQuotaUnitPair = DebugUtil.getByteUint(leftDataQuota);
-        String readableLeftQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(leftQuotaUnitPair.first) + " "
-                + leftQuotaUnitPair.second;
-
-        LOG.info("database[{}] data quota: left bytes: {} / total: {}",
-                fullQualifiedName, readableLeftQuota, readableQuota);
-
-        if (leftDataQuota == 0L) {
-            throw new DdlException("Database[" + fullQualifiedName
-                    + "] data size exceeds quota[" + readableQuota + "]");
-        }
-    }
-
-    public void checkReplicaQuota() throws DdlException {
-        long usedReplicaQuota = 0;
-        Locker locker = new Locker();
-        locker.lockDatabase(id, LockType.READ);
-        try {
-            for (Table table : this.idToTable.values()) {
-                if (!table.isOlapTableOrMaterializedView()) {
-                    continue;
-                }
-
-                OlapTable olapTable = (OlapTable) table;
-                usedReplicaQuota = usedReplicaQuota + olapTable.getReplicaCount();
-            }
-        } finally {
-            locker.unLockDatabase(id, LockType.READ);
-        }
-
-        long leftReplicaQuota = Math.max(replicaQuotaSize - usedReplicaQuota, 0L);
-        LOG.info("database[{}] replica quota: left number: {} / total: {}",
-                fullQualifiedName, leftReplicaQuota, replicaQuotaSize);
-
-        if (leftReplicaQuota == 0L) {
-            throw new DdlException("Database[" + fullQualifiedName
-                    + "] replica number exceeds quota[" + replicaQuotaSize + "]");
-        }
-    }
-
-    public void checkQuota() throws DdlException {
-        checkDataSizeQuota();
-        checkReplicaQuota();
-    }
-
     public boolean registerTableUnlocked(Table table) {
         if (table == null) {
             return false;
@@ -310,6 +243,17 @@ public class Database extends MetaObject implements Writable {
             nameToTable.put(table.getName(), table);
         }
         return true;
+    }
+
+    public void unRegisterTableUnlocked(Table table) {
+        if (table == null) {
+            return;
+        }
+
+        idToTable.remove(table.getId());
+        if (!table.isTemporaryTable()) {
+            nameToTable.remove(table.getName());
+        }
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
@@ -367,7 +311,6 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-
     /**
      * Drop a table from this database.
      *
@@ -375,9 +318,9 @@ public class Database extends MetaObject implements Writable {
      * Note: Prefer to modify {@link Table#onDrop(Database, boolean, boolean)} and
      * {@link Table#delete(long, boolean)} rather than this function.
      *
-     * @param tableId the id of the table to be dropped
+     * @param tableId     the id of the table to be dropped
      * @param isForceDrop is this a force drop
-     * @param isReplay is this a log replay operation
+     * @param isReplay    is this a log replay operation
      * @return The dropped table
      */
     public Table unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {
@@ -595,11 +538,12 @@ public class Database extends MetaObject implements Writable {
         return catalogName;
     }
 
-    public synchronized void addFunction(Function function) throws UserException {
+    public synchronized void addFunction(Function function) throws StarRocksException {
         addFunction(function, false, false);
     }
 
-    public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws UserException {
+    public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws
+            StarRocksException {
         addFunctionImpl(function, false, allowExists, createIfNotExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);
     }
@@ -607,7 +551,7 @@ public class Database extends MetaObject implements Writable {
     public synchronized void replayAddFunction(Function function) {
         try {
             addFunctionImpl(function, true, false, false);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Preconditions.checkArgument(false);
         }
     }
@@ -622,12 +566,12 @@ public class Database extends MetaObject implements Writable {
     }
 
     private void addFunctionImpl(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
-            throws UserException {
+            throws StarRocksException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (allowExists && createIfNotExists) {
             // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
-            throw new UserException(
+            throw new StarRocksException(
                     "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
         }
         if (!isReplay) {
@@ -637,7 +581,7 @@ public class Database extends MetaObject implements Writable {
                         LOG.info("create function [{}] which already exists", functionName);
                         return;
                     } else if (!allowExists) {
-                        throw new UserException("function already exists");
+                        throw new StarRocksException("function already exists");
                     }
                 }
             }
@@ -646,15 +590,23 @@ public class Database extends MetaObject implements Writable {
         name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
     }
 
-    public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+    public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
         dropFunctionImpl(function, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
+    }
+
+    public synchronized void dropFunctionForRestore(Function function) {
+        FunctionSearchDesc fnDesc = new FunctionSearchDesc(function.getFunctionName(), function.getArgs(), function.hasVarArgs());
+        try {
+            dropFunctionImpl(fnDesc, true);
+        } catch (StarRocksException ignore) {
+        }
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
         try {
             dropFunctionImpl(functionSearchDesc, false);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             Preconditions.checkArgument(false);
         }
     }
@@ -684,7 +636,7 @@ public class Database extends MetaObject implements Writable {
         return func;
     }
 
-    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
@@ -692,7 +644,7 @@ public class Database extends MetaObject implements Writable {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
-            throw new UserException("Unknown function, function=" + function.toString());
+            throw new StarRocksException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
         List<Function> newFunctions = new ArrayList<>();
@@ -708,7 +660,7 @@ public class Database extends MetaObject implements Writable {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
-            throw new UserException("Unknown function, function=" + function.toString());
+            throw new StarRocksException("Unknown function, function=" + function.toString());
         }
         if (newFunctions.isEmpty()) {
             name2Function.remove(functionName);
@@ -733,6 +685,14 @@ public class Database extends MetaObject implements Writable {
         return functions;
     }
 
+    public synchronized Map<String, List<Function>> getNameToFunction() {
+        return Maps.newHashMap(name2Function);
+    }
+
+    public synchronized List<Function> getFunctionsByName(String functionName) {
+        return name2Function.getOrDefault(functionName, ImmutableList.of());
+    }
+
     public boolean isSystemDatabase() {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
                 fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
@@ -740,6 +700,19 @@ public class Database extends MetaObject implements Writable {
 
     public boolean isStatisticsDatabase() {
         return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
+    }
+
+    public static boolean isSystemDatabase(String fullQualifiedName) {
+        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
+    }
+
+    public static boolean isStatisticsDatabase(String fullQualifiedName) {
+        return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
+    }
+
+    public static boolean isSystemOrInternalDatabase(String dbName) {
+        return isSystemDatabase(dbName) || isStatisticsDatabase(dbName);
     }
 
     // the invoker should hold db's writeLock

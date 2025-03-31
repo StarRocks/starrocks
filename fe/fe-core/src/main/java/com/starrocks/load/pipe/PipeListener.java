@@ -15,7 +15,7 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,7 +46,7 @@ public class PipeListener extends FrontendDaemon {
         }
     }
 
-    private void process() throws UserException {
+    private void process() throws StarRocksException {
         List<Pipe> pipes = pipeManager.getRunnablePipes();
         for (Pipe pipe : pipes) {
             try {

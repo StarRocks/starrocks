@@ -16,14 +16,13 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class UserPrivilegeCollectionInfo implements Writable {
@@ -65,10 +64,7 @@ public class UserPrivilegeCollectionInfo implements Writable {
         return pluginVersion;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static UserPrivilegeCollectionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);

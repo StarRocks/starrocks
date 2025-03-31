@@ -1857,7 +1857,7 @@ public class SubqueryTest extends PlanTestBase {
                 "case when exists (select 1 from tmp) then (select type1 from tmp) " +
                 "else null end) end from tmp a;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "13:Project\n" +
+        assertContains(plan, "9:Project\n" +
                 "  |  <slot 25> : if(8 = abs(0), 'a', concat(',season', if(17: expr, 23: type1, NULL)))");
     }
 
@@ -1867,7 +1867,7 @@ public class SubqueryTest extends PlanTestBase {
                 "select case when id = abs(0) then 'a' else case when exists (select 1 from tmp) " +
                 "then (select type1 from tmp) > (select pretype from tmp) else null end end from tmp a;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 19:Project\n" +
+        assertContains(plan, " 15:Project\n" +
                 "  |  <slot 32> : if(8 = abs(0), 'a', CAST(if(17: expr, 24: type1 > 30: pretype, NULL) AS VARCHAR))");
     }
 

@@ -63,7 +63,7 @@ struct ColumnIteratorOptions {
     bool use_page_cache = false;
     // temporary data does not allow caching
     bool temporary_data = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -108,20 +108,14 @@ public:
 
     virtual Status next_batch(const SparseRange<>& range, Column* dst);
 
-    Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
-        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
-            sharedBufferStream == nullptr) {
-            return Status::OK();
-        }
-
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range) {
+        std::vector<std::pair<int64_t, int64_t>> res;
         auto reader = get_column_reader();
         if (reader == nullptr) {
             // should't happen
-            LOG(INFO) << "column reader nullptr, filename: " << _opts.read_file->filename();
-            return Status::OK();
+            return Status::InvalidArgument(fmt::format("column reader for {} is nullptr", _opts.read_file->filename()));
         }
 
-        std::vector<io::SharedBufferedInputStream::IORange> result;
         std::vector<std::pair<int, int>> page_index;
         int prev_page_index = -1;
         for (auto index = 0; index < range.size(); index++) {
@@ -149,7 +143,22 @@ public:
             RETURN_IF_ERROR(reader->seek_by_page_index(pair.second, &iter_end));
             auto offset = iter_start.page().offset;
             auto size = iter_end.page().offset - offset + iter_end.page().size;
-            io::SharedBufferedInputStream::IORange io_range(offset, size);
+            res.push_back({offset, size});
+        }
+
+        return res;
+    }
+
+    Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
+        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+            sharedBufferStream == nullptr) {
+            return Status::OK();
+        }
+
+        std::vector<io::SharedBufferedInputStream::IORange> result;
+        ASSIGN_OR_RETURN(auto vec, get_io_range_vec(range));
+        for (auto e : vec) {
+            io::SharedBufferedInputStream::IORange io_range(e.first, e.second);
             result.emplace_back(io_range);
         }
 
@@ -157,6 +166,8 @@ public:
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;
+
+    virtual bool has_zone_map() const { return false; }
 
     /// Store the row ranges that satisfy the given predicates into |row_ranges|.
     /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
@@ -257,9 +268,16 @@ public:
 
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
+    virtual Status null_count(size_t* count) { return Status::OK(); };
+
+    // RAW interface, should be used carefully
+    virtual ColumnReader* get_column_reader() {
+        CHECK(false) << "unreachable";
+        return nullptr;
+    }
+
 protected:
     ColumnIteratorOptions _opts;
-    virtual ColumnReader* get_column_reader() { return nullptr; };
 };
 
 } // namespace starrocks

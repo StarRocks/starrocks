@@ -43,18 +43,13 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -74,25 +69,11 @@ public class LoadMgrTest {
     public void testSerializationNormal(@Mocked GlobalStateMgr globalStateMgr,
                                         @Injectable Database database,
                                         @Injectable Table table) throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                minTimes = 0;
-                result = table;
-                table.getName();
-                minTimes = 0;
-                result = "tablename";
-            }
-        };
-
         loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
-        File file = serializeToFile(loadManager);
+        UtFrameUtils.PseudoImage file = serializeToFile(loadManager);
 
         LoadMgr newLoadManager = deserializeFromFile(file);
 
@@ -105,20 +86,6 @@ public class LoadMgrTest {
     public void testSerializationWithJobRemoved(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table) throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                minTimes = 0;
-                result = table;
-                table.getName();
-                minTimes = 0;
-                result = "tablename";
-            }
-        };
-
         loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
@@ -127,7 +94,7 @@ public class LoadMgrTest {
         Config.label_keep_max_second = 1;
         Thread.sleep(2000);
 
-        File file = serializeToFile(loadManager);
+        UtFrameUtils.PseudoImage  file = serializeToFile(loadManager);
 
         LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
@@ -139,27 +106,13 @@ public class LoadMgrTest {
     public void testDeserializationWithJobRemoved(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table) throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                minTimes = 0;
-                result = table;
-                table.getName();
-                minTimes = 0;
-                result = "tablename";
-            }
-        };
-
         Config.label_keep_max_second = 10;
 
         // 1. serialize 1 job to file
         loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
-        File file = serializeToFile(loadManager);
+        UtFrameUtils.PseudoImage  file = serializeToFile(loadManager);
 
         // 2. read it directly, expect 1 job
         LoadMgr newLoadManager = deserializeFromFile(file);
@@ -175,33 +128,22 @@ public class LoadMgrTest {
         Assert.assertEquals(0, newLoadJobs.size());
     }
 
-    private File serializeToFile(LoadMgr loadManager) throws Exception {
-        File file = new File("./loadManagerTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        loadManager.write(dos);
-        dos.flush();
-        dos.close();
-        return file;
+    private UtFrameUtils.PseudoImage serializeToFile(LoadMgr loadManager) throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        loadManager.saveLoadJobsV2JsonFormat(image.getImageWriter());
+        return image;
     }
 
-    private LoadMgr deserializeFromFile(File file) throws Exception {
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
+    private LoadMgr deserializeFromFile(UtFrameUtils.PseudoImage image) throws Exception {
         LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
-        loadManager.readFields(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        loadManager.loadLoadJobsV2JsonFormat(reader);
         return loadManager;
     }
 
     @Test
     public void testRemoveOldLoadJob(@Mocked GlobalStateMgr globalStateMgr,
                                      @Injectable Database db) throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                result = db;
-            }
-        };
-
         loadManager = new LoadMgr(new LoadJobScheduler());
         int origLabelKeepMaxSecond = Config.label_keep_max_second;
         int origLabelKeepMaxNum = Config.label_keep_max_num;
@@ -309,13 +251,6 @@ public class LoadMgrTest {
     @Test
     public void testLoadJsonImage(@Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Database db) throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                result = db;
-            }
-        };
-
         LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "", null);
         loadJob1.id = 1L;
@@ -350,5 +285,36 @@ public class LoadMgrTest {
         Deencapsulation.invoke(loadMgr, "addLoadJob", job1);
         Assert.assertTrue(loadMgr.getLoadJobsByDb(2L, "job1", true).isEmpty());
         Assert.assertEquals(1, loadMgr.getLoadJobsByDb(1L, "job1", true).size());
+    }
+
+    @Test
+    public void testGetRunningLoadCount() {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.setId(1);
+        brokerLoadJob.setLabel("label1");
+        brokerLoadJob.setState(JobState.LOADING);
+        brokerLoadJob.setWarehouseId(1);
+
+        InsertLoadJob insertLoadJob = new InsertLoadJob();
+        insertLoadJob.setId(2);
+        insertLoadJob.setLabel("label2");
+        insertLoadJob.setState(JobState.LOADING);
+        insertLoadJob.setWarehouseId(2);
+
+        SparkLoadJob sparkLoadJob = new SparkLoadJob();
+        sparkLoadJob.setId(3);
+        sparkLoadJob.setLabel("label3");
+        sparkLoadJob.setState(JobState.LOADING);
+        sparkLoadJob.setWarehouseId(3);
+
+        LoadMgr loadMgr = new LoadMgr(null);
+        loadMgr.addLoadJob(brokerLoadJob);
+        loadMgr.addLoadJob(insertLoadJob);
+        loadMgr.addLoadJob(sparkLoadJob);
+
+        Map<Long, Long> result = loadMgr.getRunningLoadCount();
+        Assert.assertEquals(2, result.size());
+        Assert.assertEquals(Long.valueOf(1), result.get(1L));
+        Assert.assertEquals(Long.valueOf(1), result.get(3L));
     }
 }

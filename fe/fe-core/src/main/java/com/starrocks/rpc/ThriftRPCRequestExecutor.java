@@ -77,10 +77,10 @@ public class ThriftRPCRequestExecutor {
                     if (i == tryTimes - 1 ||
                             !isConnValid ||
                             (te.getCause() instanceof SocketTimeoutException)) {
-                        LOG.warn("Call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
+                        LOG.warn("Call thrift rpc failed, addr: {}, retried: {}", address, i, te);
                         throw te;
                     } else {
-                        LOG.debug("Call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
+                        LOG.debug("Call thrift rpc failed, addr: {}, retried: {}", address, i, te);
                     }
                 }
             }

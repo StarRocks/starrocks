@@ -71,6 +71,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaArgument;
@@ -92,6 +93,7 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
@@ -99,6 +101,7 @@ import io.trino.sql.tree.ArithmeticBinaryExpression;
 import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
+import io.trino.sql.tree.AtTimeZone;
 import io.trino.sql.tree.BetweenPredicate;
 import io.trino.sql.tree.BinaryLiteral;
 import io.trino.sql.tree.BooleanLiteral;
@@ -134,6 +137,7 @@ import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
+import io.trino.sql.tree.Insert;
 import io.trino.sql.tree.Intersect;
 import io.trino.sql.tree.IntervalLiteral;
 import io.trino.sql.tree.IsNotNullPredicate;
@@ -194,7 +198,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.CURRENT_ROW;
@@ -234,6 +240,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     .put(ComparisonExpression.Operator.GREATER_THAN, BinaryType.GT)
                     .put(ComparisonExpression.Operator.GREATER_THAN_OR_EQUAL, BinaryType.GE)
                     .put(ComparisonExpression.Operator.NOT_EQUAL, BinaryType.NE)
+                    .put(ComparisonExpression.Operator.IS_DISTINCT_FROM, BinaryType.EQ_FOR_NULL)
                     .build();
 
     private static final ImmutableMap<ArithmeticBinaryExpression.Operator, ArithmeticExpr.Operator> BINARY_OPERATOR_MAP =
@@ -1006,6 +1013,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitAtTimeZone(AtTimeZone node, ParseTreeContext context) {
+        Expr dt = (Expr) visit(node.getValue(), context);
+        Expr tz = (Expr) visit(node.getTimeZone(), context);
+        return new FunctionCallExpr("convert_tz", List.of(dt, new VariableExpr("time_zone"), tz));
+    }
+
+    @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
         FunctionName fnName = FunctionName.createFnName("coalesce");
@@ -1015,9 +1029,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
-        String fieldString = node.getField().toString();
-        return new FunctionCallExpr(fieldString,
-                new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context))));
+        String fieldString = node.getField().toString().toLowerCase();
+        Expr expr = Trino2SRFunctionCallTransformer.convert(fieldString,
+                Lists.newArrayList((Expr) visit(node.getExpression(), context)));
+        return Objects.requireNonNullElseGet(expr, () -> new FunctionCallExpr(fieldString,
+                new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context)))));
     }
 
     @Override
@@ -1058,6 +1074,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (binaryOp == null) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support the comparison type %s",
                     node.getOperator()));
+        }
+        if (node.getOperator() == ComparisonExpression.Operator.IS_DISTINCT_FROM) {
+            return new CompoundPredicate(CompoundPredicate.Operator.NOT, new BinaryPredicate(binaryOp,
+                    (Expr) visit(node.getLeft(), context), (Expr) visit(node.getRight(), context)), null);
         }
         return new BinaryPredicate(binaryOp, (Expr) visit(node.getLeft(), context), (Expr) visit(node.getRight(),
                 context));
@@ -1237,6 +1257,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitCast(Cast node, ParseTreeContext context) {
         return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
+    }
+
+    @Override
+    protected ParseNode visitInsert(Insert node, ParseTreeContext context) {
+        List<String> parts  = node.getTarget().getParts();
+        String tableName = parts.get(parts.size() - 1);
+        List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
+                map(Identifier::getValue).collect(Collectors.toList()) : null;
+        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+                tableName.concat(UUID.randomUUID().toString()), columnAliases,
+        (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
     }
 
     @Override

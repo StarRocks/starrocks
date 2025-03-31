@@ -17,11 +17,6 @@
 #include <glog/logging.h>
 
 #include <algorithm>
-#include <boost/algorithm/string/case_conv.hpp>
-#include <boost/iterator/iterator_facade.hpp>
-#include <map>
-#include <ostream>
-#include <unordered_map>
 #include <utility>
 
 #include "column/chunk.h"
@@ -30,11 +25,8 @@
 #include "common/compiler_util.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
-#include "exprs/expr_context.h"
-#include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"
-#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/parquet_types.h"
 #include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
@@ -42,15 +34,27 @@
 
 namespace starrocks::parquet {
 
+void ColumnOffsetIndexCtx::collect_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                            int64_t* end_offset, bool active) {
+    for (size_t i = 0; i < page_selected.size(); i++) {
+        if (page_selected[i]) {
+            auto r = io::SharedBufferedInputStream::IORange(
+                    offset_index.page_locations[i].offset, offset_index.page_locations[i].compressed_page_size, active);
+            ranges->emplace_back(r);
+            *end_offset = std::max(*end_offset, r.offset + r.size);
+        }
+    }
+}
+
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
                                                                    bool* is_group_filtered) {
     // create dict value chunk for evaluation.
-    ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    MutableColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
     RETURN_IF_ERROR(reader->get_dict_values(dict_value_column.get()));
     // append a null value to check if null is ok or not.
     dict_value_column->append_default();
-
-    ColumnPtr result_column = dict_value_column;
+    size_t dict_size = dict_value_column->size();
+    ColumnPtr result_column = std::move(dict_value_column);
     for (int32_t i = sub_field_path.size() - 1; i >= 0; i--) {
         if (!result_column->is_nullable()) {
             result_column =
@@ -65,7 +69,7 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
 
     ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
     dict_value_chunk->append_column(result_column, slot_id);
-    Filter filter(dict_value_column->size(), 1);
+    Filter filter(dict_size, 1);
     int dict_values_after_filter = 0;
     ASSIGN_OR_RETURN(dict_values_after_filter,
                      ExecNode::eval_conjuncts_into_filter(conjunct_ctxs, dict_value_chunk.get(), &filter));
@@ -110,8 +114,8 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
         predicate = obj_pool.add(
                 new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
     } else {
-        predicate = obj_pool.add(new_dictionary_code_in_predicate(get_type_info(kDictCodeFieldType), slot_id,
-                                                                  dict_codes, dict_value_column->size()));
+        predicate = obj_pool.add(
+                new_dictionary_code_in_predicate(get_type_info(kDictCodeFieldType), slot_id, dict_codes, dict_size));
     }
 
     // deal with if NULL works or not.
@@ -135,261 +139,82 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     return Status::OK();
 }
 
-void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                     bool case_sensitive, std::vector<int32_t>& pos) {
-    DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
-    if (!col_type.field_ids.empty()) {
-        std::unordered_map<int32_t, size_t> field_id_2_pos;
-        for (size_t i = 0; i < field.children.size(); i++) {
-            field_id_2_pos.emplace(field.children[i].field_id, i);
+bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_type, const ParquetField& field) const {
+    bool appliable = false;
+    auto type = col_type.type;
+    auto parquet_type = field.physical_type;
+    if (type == LogicalType::TYPE_BOOLEAN) {
+        if (parquet_type == tparquet::Type::type::BOOLEAN) {
+            appliable = true;
         }
-
-        for (size_t i = 0; i < col_type.children.size(); i++) {
-            auto it = field_id_2_pos.find(col_type.field_ids[i]);
-            if (it == field_id_2_pos.end()) {
-                pos[i] = -1;
-                continue;
-            }
-            pos[i] = it->second;
+    } else if (type == LogicalType::TYPE_DATE) {
+        if (parquet_type == tparquet::Type::type::INT32) {
+            // appliable = true;
+            // TODO:
+            // sr._julian - date::UNIX_EPOCH_JULIAN == parquet INT32;
         }
+    } else if (type == LogicalType::TYPE_TINYINT || type == LogicalType::TYPE_SMALLINT ||
+               type == LogicalType::TYPE_INT) {
+        if (parquet_type == tparquet::Type::type::INT32) {
+            appliable = true;
+        }
+        //TODO: if parquet type is int64, convert the val;
+    } else if (type == LogicalType::TYPE_BIGINT) {
+        if (parquet_type == tparquet::Type::type::INT64) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_DOUBLE) {
+        if (parquet_type == tparquet::Type::type::DOUBLE) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_FLOAT) {
+        if (parquet_type == tparquet::Type::type::FLOAT) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_VARBINARY) {
+        if (parquet_type == tparquet::Type::type::BYTE_ARRAY) {
+            appliable = true;
+        }
+        //TODO: FLBA type should check the length and pad space.
+    } else if (type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_BINARY) {
+        //TODO: The char type will be padded with space
+        //      And we should care about if 'a' == 'a  ' is ture, in SR it is false.
+        //      Thus only the flba type can match the SR type char.
+        //      And the length of the flba should be the same as the type char.
+        //      And any convert should be disabled, because the length cannot change.
+    } else if (type == LogicalType::TYPE_DECIMAL32 || type == LogicalType::TYPE_DECIMAL64 ||
+               type == LogicalType::TYPE_DECIMAL128 || type == LogicalType::TYPE_DECIMALV2) {
+        //TODO: Decimal can be stored as INT32, INT64, BYTE_ARRAY, FLBA in parquet
+        //      SR stores the decimalxx as intxx with precision and scale,
+        //      First the int type should match the parquet's physical type
+        //      And the logical type of sr and parquet's scale and precision should also be the same
+        //      Ohterwise, we need to convert the value.
+        //      But we should notice that if the convert will cause precision loss, otherwise it should be disabled.
     } else {
-        std::unordered_map<std::string, size_t> field_name_2_pos;
-        for (size_t i = 0; i < field.children.size(); i++) {
-            const std::string& format_field_name = Utils::format_name(field.children[i].name, case_sensitive);
-            field_name_2_pos.emplace(format_field_name, i);
-        }
-
-        if (!col_type.field_physical_names.empty()) {
-            for (size_t i = 0; i < col_type.children.size(); i++) {
-                const std::string& formatted_physical_name =
-                        Utils::format_name(col_type.field_physical_names[i], case_sensitive);
-
-                auto it = field_name_2_pos.find(formatted_physical_name);
-                if (it == field_name_2_pos.end()) {
-                    pos[i] = -1;
-                    continue;
-                }
-                pos[i] = it->second;
-            }
-        } else {
-            for (size_t i = 0; i < col_type.children.size(); i++) {
-                const std::string formatted_subfield_name = Utils::format_name(col_type.field_names[i], case_sensitive);
-
-                auto it = field_name_2_pos.find(formatted_subfield_name);
-                if (it == field_name_2_pos.end()) {
-                    pos[i] = -1;
-                    continue;
-                }
-                pos[i] = it->second;
-            }
-        }
+        //TODO: Other types like TYPE_TIME, TYPE_DATE_V1, TYPE_DATETIME, TYPE_DATETIME_V1 is stored different with int type in sr
+        //    should be converted as int32_t or int64_t.
     }
+    //TODO: be/src/formats/parquet/level_builder.cpp have methods of the above data changing.
+    return appliable;
 }
 
-void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                     bool case_sensitive,
-                                                     const TIcebergSchemaField* iceberg_schema_field,
-                                                     std::vector<int32_t>& pos,
-                                                     std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield) {
-    // For Struct type with schema change, we need consider subfield not existed suitition.
-    // When Iceberg add a new struct subfield, the original parquet file do not contains newly added subfield,
-    std::unordered_map<std::string, const TIcebergSchemaField*> subfield_name_2_field_schema{};
-    for (const auto& each : iceberg_schema_field->children) {
-        std::string format_subfield_name = case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
-        subfield_name_2_field_schema.emplace(format_subfield_name, &each);
+StatusOr<bool> ColumnReader::adaptive_judge_if_apply_bloom_filter(int64_t span_size) const {
+    bool apply_bloom_filter = true;
+    if (!config::parquet_reader_enable_adpative_bloom_filter) {
+        return apply_bloom_filter = false;
+    } else if (get_chunk_metadata() == nullptr) {
+        return apply_bloom_filter = true;
     }
 
-    std::unordered_map<int32_t, size_t> field_id_2_pos{};
-    for (size_t i = 0; i < field.children.size(); i++) {
-        field_id_2_pos.emplace(field.children[i].field_id, i);
-    }
-    for (size_t i = 0; i < col_type.children.size(); i++) {
-        const auto& format_subfield_name =
-                case_sensitive ? col_type.field_names[i] : boost::algorithm::to_lower_copy(col_type.field_names[i]);
+    auto& column_metadata = get_chunk_metadata()->meta_data;
 
-        auto iceberg_it = subfield_name_2_field_schema.find(format_subfield_name);
-        if (iceberg_it == subfield_name_2_field_schema.end()) {
-            // This suitition should not be happened, means table's struct subfield not existed in iceberg schema
-            // Below code is defensive
-            DCHECK(false) << "Struct subfield name: " + format_subfield_name + " not found in iceberg schema.";
-            pos[i] = -1;
-            iceberg_schema_subfield[i] = nullptr;
-            continue;
-        }
-
-        int32_t field_id = iceberg_it->second->field_id;
-
-        auto parquet_field_it = field_id_2_pos.find(field_id);
-        if (parquet_field_it == field_id_2_pos.end()) {
-            // Means newly added struct subfield not existed in original parquet file, we put nullptr
-            // column reader in children_reader, we will append default value for this subfield later.
-            pos[i] = -1;
-            iceberg_schema_subfield[i] = nullptr;
-            continue;
-        }
-
-        pos[i] = parquet_field_it->second;
-        iceberg_schema_subfield[i] = iceberg_it->second;
-    }
-}
-
-bool ColumnReader::_has_valid_subfield_column_reader(
-        const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers) {
-    for (const auto& pair : children_readers) {
-        if (pair.second != nullptr) {
-            return true;
+    if (column_metadata.__isset.bloom_filter_length) {
+        if (1.0 * span_size / column_metadata.num_values * column_metadata.total_compressed_size <=
+            column_metadata.bloom_filter_length) {
+            return apply_bloom_filter = false;
         }
     }
-    return false;
-}
-
-Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                            std::unique_ptr<ColumnReader>* output) {
-    // We will only set a complex type in ParquetField
-    if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
-        return Status::InternalError(
-                strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
-                                    logical_type_to_string(field->type.type), logical_type_to_string(col_type.type)));
-    }
-    if (field->type.type == LogicalType::TYPE_ARRAY) {
-        std::unique_ptr<ColumnReader> child_reader;
-        RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
-        if (child_reader != nullptr) {
-            std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
-            RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
-            *output = std::move(reader);
-        } else {
-            *output = nullptr;
-        }
-    } else if (field->type.type == LogicalType::TYPE_MAP) {
-        std::unique_ptr<ColumnReader> key_reader = nullptr;
-        std::unique_ptr<ColumnReader> value_reader = nullptr;
-
-        if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], &key_reader));
-        }
-        if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], &value_reader));
-        }
-
-        if (key_reader != nullptr || value_reader != nullptr) {
-            std::unique_ptr<MapColumnReader> reader(new MapColumnReader());
-            RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
-            *output = std::move(reader);
-        } else {
-            *output = nullptr;
-        }
-    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
-        std::vector<int32_t> subfield_pos(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
-
-        std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
-        for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (subfield_pos[i] == -1) {
-                // -1 means subfield not existed, we need to emplace nullptr
-                children_readers.emplace(col_type.field_names[i], nullptr);
-                continue;
-            }
-            std::unique_ptr<ColumnReader> child_reader;
-
-            RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i], &child_reader));
-            children_readers.emplace(col_type.field_names[i], std::move(child_reader));
-        }
-
-        // maybe struct subfield ColumnReader is null
-        if (_has_valid_subfield_column_reader(children_readers)) {
-            std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
-            RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
-            *output = std::move(reader);
-        } else {
-            *output = nullptr;
-        }
-    } else {
-        std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(field, col_type, &opts.row_group_meta->columns[field->physical_column_index]));
-        *output = std::move(reader);
-    }
-    return Status::OK();
-}
-
-Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                            const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output) {
-    // We will only set a complex type in ParquetField
-    if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
-        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
-                                                         field->type.type, col_type.type));
-    }
-    DCHECK(iceberg_schema_field != nullptr);
-    if (field->type.type == LogicalType::TYPE_ARRAY) {
-        std::unique_ptr<ColumnReader> child_reader;
-        const TIcebergSchemaField* element_schema = &iceberg_schema_field->children[0];
-        RETURN_IF_ERROR(
-                ColumnReader::create(opts, &field->children[0], col_type.children[0], element_schema, &child_reader));
-        if (child_reader != nullptr) {
-            std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
-            RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
-            *output = std::move(reader);
-        } else {
-            *output = nullptr;
-        }
-    } else if (field->type.type == LogicalType::TYPE_MAP) {
-        std::unique_ptr<ColumnReader> key_reader = nullptr;
-        std::unique_ptr<ColumnReader> value_reader = nullptr;
-
-        const TIcebergSchemaField* key_iceberg_schema = &iceberg_schema_field->children[0];
-        const TIcebergSchemaField* value_iceberg_schema = &iceberg_schema_field->children[1];
-
-        if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], key_iceberg_schema,
-                                                 &key_reader));
-        }
-        if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1],
-                                                 value_iceberg_schema, &value_reader));
-        }
-
-        if (key_reader != nullptr || value_reader != nullptr) {
-            std::unique_ptr<MapColumnReader> reader(new MapColumnReader());
-            RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
-            *output = std::move(reader);
-        } else {
-            *output = nullptr;
-        }
-    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
-        std::vector<int32_t> subfield_pos(col_type.children.size());
-        std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
-                                          iceberg_schema_subfield);
-
-        std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
-        for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (subfield_pos[i] == -1) {
-                // -1 means subfield not existed, we need to emplace nullptr
-                children_readers.emplace(col_type.field_names[i], nullptr);
-                continue;
-            }
-
-            std::unique_ptr<ColumnReader> child_reader;
-            RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i],
-                                                 iceberg_schema_subfield[i], &child_reader));
-            children_readers.emplace(col_type.field_names[i], std::move(child_reader));
-        }
-
-        // maybe struct subfield ColumnReader is null
-        if (_has_valid_subfield_column_reader(children_readers)) {
-            std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
-            RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
-            *output = std::move(reader);
-        } else {
-            *output = nullptr;
-        }
-    } else {
-        std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(field, col_type, &opts.row_group_meta->columns[field->physical_column_index]));
-        *output = std::move(reader);
-    }
-    return Status::OK();
+    return apply_bloom_filter;
 }
 
 } // namespace starrocks::parquet

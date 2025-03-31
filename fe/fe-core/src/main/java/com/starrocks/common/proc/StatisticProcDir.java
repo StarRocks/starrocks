@@ -152,8 +152,8 @@ public class StatisticProcDir implements ProcDirInterface {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                         ++dbPartitionNum;
-                        for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
-                            for (MaterializedIndex materializedIndex : physicalParition
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex materializedIndex : physicalPartition
                                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                                 ++dbIndexNum;
                                 for (Tablet tablet : materializedIndex.getTablets()) {
@@ -170,7 +170,7 @@ public class StatisticProcDir implements ProcDirInterface {
                                     }
 
                                     Pair<TabletHealthStatus, Priority> res = TabletChecker.getTabletHealthStatusWithPriority(
-                                            localTablet, infoService, physicalParition.getVisibleVersion(),
+                                            localTablet, infoService, physicalPartition.getVisibleVersion(),
                                             replicationNum, aliveBeIdsInCluster, olapTable.getLocation());
 
                                     // here we treat REDUNDANT as HEALTHY, for user-friendly.

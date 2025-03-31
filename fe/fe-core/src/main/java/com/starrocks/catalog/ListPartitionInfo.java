@@ -56,6 +56,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
+import static com.starrocks.persist.gson.GsonUtils.GSON;
 
 public class ListPartitionInfo extends PartitionInfo {
 
@@ -313,6 +314,10 @@ public class ListPartitionInfo extends PartitionInfo {
         super.isMultiColumnPartition = this.partitionColumnIds.size() > 1;
     }
 
+    public boolean isDeFactoMultiItemPartition() {
+        return MapUtils.isNotEmpty(idToMultiValues) || MapUtils.isNotEmpty(idToMultiLiteralExprValues);
+    }
+
     public Map<Long, List<List<String>>> getIdToMultiValues() {
         return idToMultiValues;
     }
@@ -328,7 +333,7 @@ public class ListPartitionInfo extends PartitionInfo {
      * @param id
      * @return true if the partition can be pruned
      */
-    public boolean pruneById(long id) {
+    public boolean isSingleValuePartition(long id) {
         List<String> values = getIdToValues().get(id);
         if (values != null && values.size() == 1) {
             return true;
@@ -456,20 +461,32 @@ public class ListPartitionInfo extends PartitionInfo {
         return partitionColumnIds.size();
     }
 
+    /**
+     * Use json's format for latter use.
+     */
     public String getValuesFormat(long partitionId) {
         if (!idToLiteralExprValues.isEmpty()) {
             List<LiteralExpr> literalExprs = idToLiteralExprValues.get(partitionId);
-            if (literalExprs != null) {
-                return this.valuesToString(literalExprs);
+            if (CollectionUtils.isNotEmpty(literalExprs)) {
+                List<List<String>> jsonValues = literalExprs.stream()
+                        .map(literalExpr -> Lists.newArrayList(literalExpr.getStringValue()))
+                        .collect(Collectors.toList());
+                return GSON.toJson(jsonValues);
             }
         }
         if (!idToMultiLiteralExprValues.isEmpty()) {
             List<List<LiteralExpr>> lists = idToMultiLiteralExprValues.get(partitionId);
-            if (lists != null) {
-                return this.multiValuesToString(lists);
+            if (CollectionUtils.isNotEmpty(lists)) {
+                List<List<String>> jsonValues = lists.stream()
+                        .map(literalExprs -> literalExprs.stream()
+                                .map(LiteralExpr::getStringValue)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+                return GSON.toJson(jsonValues);
             }
         }
         return "";
+
     }
 
     public void handleNewListPartitionDescs(Map<ColumnId, Column> idToColumn,
@@ -611,6 +628,27 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     /**
+     * ListPartition would put the NULL value into a real NULL partition, whose partition value is NullLiteral
+     */
+    @Override
+    public Set<Long> getNullValuePartitions() {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return idToLiteralExprValues.entrySet().stream()
+                    .filter(x -> x.getValue().stream().anyMatch(LiteralExpr::isConstantNull))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+        } else if (MapUtils.isNotEmpty(idToMultiLiteralExprValues)) {
+            // only if all partition columns are NULL
+            return idToMultiLiteralExprValues.entrySet().stream()
+                    .filter(x -> x.getValue().stream().anyMatch(y -> y.stream().allMatch(LiteralExpr::isConstantNull)))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+        } else {
+            return Sets.newHashSet();
+        }
+    }
+
+    /**
      * Compare based on the max/min value in the list
      */
     private static int compareRow(List<LiteralExpr> lhs, List<LiteralExpr> rhs, boolean asc) {
@@ -651,6 +689,49 @@ public class ListPartitionInfo extends PartitionInfo {
         info.idToIsTempPartition = Maps.newHashMap(this.idToIsTempPartition);
         info.automaticPartition = this.automaticPartition;
         return info;
+    }
+
+    @Override
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        super.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        Map<Long, List<List<String>>> oldIdToMultiValues = this.idToMultiValues;
+        Map<Long, List<List<LiteralExpr>>> oldIdToMultiLiteralExprValues = this.idToMultiLiteralExprValues;
+        Map<Long, List<String>> oldIdToValues = this.idToValues;
+        Map<Long, List<LiteralExpr>> oldIdToLiteralExprValues = this.idToLiteralExprValues;
+        Map<Long, Boolean> oldIdToIsTempPartition = this.idToIsTempPartition;
+
+        this.idToMultiValues = new HashMap<>();
+        this.idToMultiLiteralExprValues = new HashMap<>();
+        this.idToValues = new HashMap<>();
+        this.idToLiteralExprValues = new HashMap<>();
+        this.idToIsTempPartition = new HashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            List<List<String>> multiValues = oldIdToMultiValues.get(oldId);
+            if (multiValues != null) {
+                this.idToMultiValues.put(newId, multiValues);
+            }
+            List<List<LiteralExpr>> multiLiteralExprValues = oldIdToMultiLiteralExprValues.get(oldId);
+            if (multiLiteralExprValues != null) {
+                this.idToMultiLiteralExprValues.put(newId, multiLiteralExprValues);
+            }
+            List<String> values = oldIdToValues.get(oldId);
+            if (values != null) {
+                this.idToValues.put(newId, values);
+            }
+            List<LiteralExpr> literalExprValues = oldIdToLiteralExprValues.get(oldId);
+            if (literalExprValues != null) {
+                this.idToLiteralExprValues.put(newId, literalExprValues);
+            }
+            Boolean isTempPartition = oldIdToIsTempPartition.get(oldId);
+            if (isTempPartition != null) {
+                this.idToIsTempPartition.put(newId, isTempPartition);
+            }
+        }
     }
 
     @Override

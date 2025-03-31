@@ -24,7 +24,7 @@ CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [partition_desc]
 [distribution_desc]
 [rollup_index]
-[ORDER BY (column_definition1,...)]
+[ORDER BY (column_name1,...)]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
@@ -157,9 +157,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 可选值：`mysql`、`elasticsearch`、`hive`、`jdbc` (2.3 及以后)、`iceberg`、`hudi`（2.2 及以后）。如果指定了可选值，则创建的是对应类型的外部表 (external table)，在建表时需要使用 CREATE EXTERNAL TABLE。更多信息，参见[外部表](../../../data_source/External_table.md)。
 
-**从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
+**从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
 
-**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
+**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg/iceberg_catalog.md#创建-iceberg-表)。**
 
 **从 3.2 版本起，支持直接在 Hive Catalog 内创建 Parquet 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Parquet 格式的 Hive 表中。从 3.3 版本起，支持直接在 Hive Catalog 中创建 ORC 及 Textfile 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 ORC 及 Textfile 格式的 Hive 表中。参见[创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)和[向 Hive 表中插入数据](../../../data_source/catalog/hive_catalog.md#向-hive-表中插入数据)。**
 
@@ -777,8 +777,71 @@ PROPERTIES (
 
 > **NOTE**
 >
-> - 仅 StarRocks 存算一体集群支持该参数，支持自 v3.2.0 版本起。
-> - 如果您需要为存算分离表开启 fast schema evolution，则必须在集群范围内设置启用。需要通过 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution) 设置。
+> - 存算一体集群自 v3.2.0 起支持 fast schema evolution。
+> - 存算分离集群自 v3.3.0 起支持 fast schema evolution，默认启用。在存算分离集群中创建云原生表时无需指定此属性，由 FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
+
+#### 禁止 Base Compaction
+
+`base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置该属性后，系统将仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。该属性 v3.2.13 起支持。
+
+> **说明**
+>
+> 请确保在禁止 Base Compaction 期间，对于该表的导入次数不超过 500 次。
+
+`base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，且只支持以下字段： `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>` ，其中 `<minute>` 必须为 `*`。
+
+```Plain
+crontab_param_value ::= [ "" | crontab ]
+
+crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
+```
+
+- 如果未设置此属性或设置为 `""`（空字符串），则在任何时候都不禁止 Base Compaction。
+- 当此属性设置为 `* * * * *` 时，Base Compaction 始终被禁止。
+- 其他值遵循 Quartz cron 语法。
+  - 独立数值表示字段的单位时间。例如，`<hour>` 字段中的 `8` 表示 8:00-8:59。
+  - 数值范围表示字段的时间范围。例如，`<hour>` 字段中的 `8-9` 表示 8:00-9:59。
+  - 用逗号分隔的多个数值范围表示字段的多个时间范围。
+  - `<day-of-the-week>` 的起始值为 `1` 表示周日，`7` 表示周六。
+
+示例：
+
+```SQL
+-- 每天 8AM～9PM 禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
+
+-- 每天 0-5，21-23 点禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
+
+-- 每周一到周五禁止执行 Base Compaction（也即是在每周六/周日的全天允许执行）。
+'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
+
+-- 每个工作日（周一到周五）的 8AM～9PM 禁止执行 Base Compaction。
+'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
+```
+
+#### 指定通用分区表达式 TTL
+
+从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+
+`partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
+- 表达式只能包含分区列和常量。不支持非分区列。
+- 通用分区表达式处理 List 分区和 Range 分区的方式不同：
+  - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+  - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+示例：
+
+```SQL
+-- 保留最近三个月的数据。dt 列为分区列。
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+如需禁用此功能，可以使用 ALTER TABLE 语句将此属性设置为空字符串：
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
+```
 
 ## 示例
 

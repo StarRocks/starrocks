@@ -28,9 +28,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 
 public class AnalyzeTestUtil {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-    private static String DB_NAME = "test";
+    protected static ConnectContext connectContext;
+    protected static StarRocksAssert starRocksAssert;
+    protected static String DB_NAME = "test";
 
     public static void init() throws Exception {
         Config.enable_experimental_rowstore = true;
@@ -314,6 +314,17 @@ public class AnalyzeTestUtil {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_type\" = \"column_with_row\"" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE test.auto_tbl1 (\n" +
+                "  col1 varchar(100),\n" +
+                "  col2 varchar(100),\n" +
+                "  col3 bigint\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY (col1)\n" +
+                "PARTITION BY (col1)\n" +
+                "DISTRIBUTED BY HASH(col1) BUCKETS 5\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ");");
     }
 

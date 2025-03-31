@@ -15,20 +15,22 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-
-import java.util.List;
 
 public class PhysicalIcebergEqualityDeleteScanOperator extends PhysicalScanOperator {
 
     private ScalarOperator originPredicate;
-    private List<Integer> equalityIds;
-    private boolean hitMutableIdentifierColumns;
+
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
+    private IcebergMORParams morParams;
 
     public PhysicalIcebergEqualityDeleteScanOperator(LogicalIcebergEqualityDeleteScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN, scanOperator);
@@ -42,20 +44,25 @@ public class PhysicalIcebergEqualityDeleteScanOperator extends PhysicalScanOpera
         this.originPredicate = originPredicate;
     }
 
-    public List<Integer> getEqualityIds() {
-        return equalityIds;
+    public IcebergTableMORParams getTableFullMORParams() {
+        return tableFullMORParams;
     }
 
-    public void setEqualityIds(List<Integer> equalityIds) {
-        this.equalityIds = equalityIds;
+    public void setTableFullMORParams(IcebergTableMORParams tableFullMORParams) {
+        this.tableFullMORParams = tableFullMORParams;
     }
 
-    public boolean isHitMutableIdentifierColumns() {
-        return hitMutableIdentifierColumns;
+    public IcebergMORParams getMORParams() {
+        return morParams;
     }
 
-    public void setHitMutableIdentifierColumns(boolean hitMutableIdentifierColumns) {
-        this.hitMutableIdentifierColumns = hitMutableIdentifierColumns;
+    public void setMORParams(IcebergMORParams morParams) {
+        this.morParams = morParams;
+    }
+
+    @Override
+    public ScanOperatorPredicates getScanOperatorPredicates() {
+        return new ScanOperatorPredicates();
     }
 
     @Override

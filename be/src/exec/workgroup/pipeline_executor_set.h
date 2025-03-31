@@ -19,12 +19,16 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/cpu_util.h"
 
+namespace starrocks::pipeline {
+class PipelineExecutorMetrics;
+}
 namespace starrocks::workgroup {
 
 struct PipelineExecutorSetConfig {
     PipelineExecutorSetConfig(uint32_t num_total_cores, uint32_t num_total_driver_threads,
                               uint32_t num_total_scan_threads, uint32_t num_total_connector_scan_threads,
-                              CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus, bool enable_cpu_borrowing);
+                              CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus, bool enable_cpu_borrowing,
+                              pipeline::PipelineExecutorMetrics* metrics);
 
     std::string to_string() const;
 
@@ -37,6 +41,8 @@ struct PipelineExecutorSetConfig {
 
     const bool enable_bind_cpus;
     bool enable_cpu_borrowing;
+
+    pipeline::PipelineExecutorMetrics* metrics;
 };
 
 class PipelineExecutorSet {

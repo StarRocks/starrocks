@@ -18,11 +18,15 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -73,8 +77,9 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
-        partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
-                .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
+        partition.getDefaultPhysicalPartition()
+                .updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
+                        .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
     }
 
@@ -154,7 +159,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         };
 
         ConnectContext context = StatisticUtils.buildConnectContext();
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db",
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db",
                 "t1");
         String tableUUID = table.getUUID();
         StatisticExecutor statisticExecutor = new StatisticExecutor();
@@ -200,8 +205,9 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
 
-        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, pendingStatus, db, table);
         Assert.assertTrue(stmt.isExternal());
@@ -216,6 +222,50 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, pendingStatus, db, table);
         Assert.assertTrue(stmt.isExternal());
         Assert.assertFalse(stmt.getAnalyzeTypeDesc().isHistogram());
+    }
+
+    @Test
+    public void testCollectStatistics() {
+        ExternalAnalyzeStatus status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+
+        Database database = new Database(1, "test_db");
+        Table table = HiveTable.builder().setTableName("test_table").build();
+        StatisticsCollectJob statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(Type.INT, Type.INT),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+
+        ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 2);
+        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col1"));
+        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col2"));
+
+        status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col3"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+        statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col3"),
+                Lists.newArrayList(Type.INT, Type.STRING),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+        externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assert.assertEquals(externalBasicStatsMeta.getColumns(), Lists.newArrayList("col1", "col3"));
+        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
     }
 
     @Test
@@ -248,5 +298,25 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         ConnectContext statsContext = StatisticUtils.buildConnectContext();
         Assert.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
+    }
+
+    @Test
+    public void testSpecifyStatisticsCollectWarehouse() {
+        String sql = "analyze table test.t0_stats";
+        Config.statistics_collect_warehouse = "xxx";
+        FeConstants.enableUnitStatistics = false;
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, 2, 3, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+
+        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "default_catalog", "test");
+        Table table =
+                connectContext.getGlobalStateMgr().getLocalMetastore().getTable(connectContext, "test", "t0_stats");
+
+        Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
+        Assert.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+        Config.statistics_collect_warehouse = "default_warehouse";
+        FeConstants.enableUnitStatistics = true;
     }
 }

@@ -15,7 +15,7 @@
 package com.starrocks.datacache;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -55,7 +55,7 @@ public class DataCacheSelectExecutor {
         connectContext.setSessionVariable(tmpSessionVariable);
 
         InsertStmt insertStmt = statement.getInsertStmt();
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, insertStmt);
+        StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(connectContext, insertStmt);
         // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
         // If DataCacheSelect is forward to leader, connectContext's Executor is null
         if (connectContext.getExecutor() != null) {
@@ -70,13 +70,13 @@ public class DataCacheSelectExecutor {
 
         if (connectContext.getState().isError()) {
             // throw exception if StmtExecutor execute failed
-            throw new UserException(connectContext.getState().getErrorMessage());
+            throw new StarRocksException(connectContext.getState().getErrorMessage());
         }
 
         DataCacheSelectMetrics metrics = null;
         Coordinator coordinator = stmtExecutor.getCoordinator();
         Preconditions.checkNotNull(coordinator, "Coordinator can't be null");
-        coordinator.join(connectContext.getSessionVariable().getQueryTimeoutS());
+        coordinator.join(stmtExecutor.getExecTimeout());
         if (coordinator.isDone()) {
             metrics = stmtExecutor.getCoordinator().getDataCacheSelectMetrics();
         }

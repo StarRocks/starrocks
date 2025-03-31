@@ -1,0 +1,45 @@
+-- name: test_security_integration
+create security integration oidc properties("oidc_jwks_url"="jwks.json", "oidc_principal_field"="sub");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: missing required property: type.')
+-- !result
+create security integration oidc properties("type"="authentication_openid_connect", "oidc_principal_field"="sub");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: missing required property: oidc_jwks_url.')
+-- !result
+create security integration oidc properties("type"="authentication_openid_connect", "oidc_jwks_url"="jwks.json");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: missing required property: oidc_principal_field.')
+-- !result
+create security integration oidc properties("type"="authentication_openid_connect", "oidc_jwks_url"="jwks.json", "oidc_principal_field"="sub");
+-- result:
+-- !result
+show security integrations;
+-- result:
+oidc	authentication_openid_connect	None
+-- !result
+show create security integration oidc;
+-- result:
+oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
+"oidc_jwks_url" = "jwks.json",
+"oidc_principal_field" = "sub",
+"type" = "authentication_openid_connect"
+)
+-- !result
+alter security integration oidc set ("oidc_principal_field"="preferred_name");
+-- result:
+-- !result
+show create security integration oidc;
+-- result:
+oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
+"oidc_jwks_url" = "jwks.json",
+"oidc_principal_field" = "preferred_name",
+"type" = "authentication_openid_connect"
+)
+-- !result
+drop security integration oidc;
+-- result:
+-- !result
+show security integrations;
+-- result:
+-- !result

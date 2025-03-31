@@ -37,7 +37,10 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "common/tracer.h"
 #include "fmt/format.h"
+#include "runtime/diagnose_daemon.h"
+#include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
@@ -83,6 +86,13 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
     ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
     _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
+    _deserialize_chunk_count = ADD_COUNTER(_profile, "DeserializeChunkCount", TUnit::UNIT);
+    _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
+    _profile_report_count = ADD_COUNTER(_profile, "ProfileReportCount", TUnit::UNIT);
+    _profile_report_timer = ADD_TIMER(_profile, "ProfileReportTime");
+    _profile_serialized_size = ADD_COUNTER(_profile, "ProfileSerializedSize", TUnit::BYTES);
+    _open_request_count = ADD_COUNTER(_profile, "OpenRequestCount", TUnit::UNIT);
+    _open_request_pending_timer = ADD_TIMER(_profile, "OpenRequestPendingTime");
 }
 
 LoadChannel::~LoadChannel() {
@@ -104,11 +114,15 @@ void LoadChannel::set_profile_config(const PLoadChannelProfileConfig& config) {
     }
 }
 
-void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
-                       PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+void LoadChannel::open(const LoadChannelOpenContext& open_context) {
+    int64_t start_time_ns = MonotonicNanos();
+    COUNTER_UPDATE(_open_request_count, 1);
+    COUNTER_UPDATE(_open_request_pending_timer, (start_time_ns - open_context.receive_rpc_time_ns));
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
-    ClosureGuard done_guard(done);
+    ClosureGuard done_guard(open_context.done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
@@ -149,9 +163,11 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
     }
+    int64_t cost_ms = (MonotonicNanos() - start_time_ns) / 1000000;
+    _check_and_log_timeout_rpc("tablet writer open", cost_ms, request.timeout_ms());
 }
 
-void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+void LoadChannel::_add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
                              PTabletWriterAddBatchResult* response) {
     _num_chunk++;
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
@@ -164,7 +180,15 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
                 fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
-    channel->add_chunk(chunk, request, response);
+    bool close_channel;
+    channel->add_chunk(chunk, request, response, &close_channel);
+    if (close_channel &&
+        (_should_enable_profile() || (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
+        // If close_channel is true, the channel has been removed from _tablets_channels
+        // in TabletsChannel::add_chunk, so there will be no chance to get the channel to
+        // update the profile later. So update the profile here
+        channel->update_profile();
+    }
 }
 
 void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
@@ -174,9 +198,9 @@ void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTablet
         auto& pchunk = request.chunk();
         RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
         RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, chunk, &uncompressed_buffer), response);
-        _add_chunk(&chunk, request, response);
+        _add_chunk(&chunk, nullptr, request, response);
     } else {
-        _add_chunk(nullptr, request, response);
+        _add_chunk(nullptr, nullptr, request, response);
     }
     report_profile(response, config::pipeline_print_profile);
 }
@@ -192,10 +216,20 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     watch.start();
     faststring uncompressed_buffer;
     std::unique_ptr<Chunk> chunk;
+    int eos_count = 0;
+    int64_t timeout_ms = -1;
     for (int i = 0; i < req.requests_size(); i++) {
         auto& request = req.requests(i);
         VLOG_RPC << "tablet writer add chunk, id=" << print_id(request.id()) << ", index_id=" << request.index_id()
                  << ", sender_id=" << request.sender_id() << " request_index=" << i << " eos=" << request.eos();
+
+        if (request.eos()) {
+            eos_count = 1;
+        }
+
+        if (timeout_ms == -1) {
+            timeout_ms = request.timeout_ms();
+        }
 
         if (i == 0 && request.has_chunk()) {
             chunk = std::make_unique<Chunk>();
@@ -203,19 +237,24 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
             RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
             RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, *chunk, &uncompressed_buffer), response);
         }
-        _add_chunk(chunk.get(), request, response);
+        _add_chunk(chunk.get(), &watch, request, response);
 
         if (response->status().status_code() != TStatusCode::OK) {
             LOG(WARNING) << "tablet writer add chunk, id=" << print_id(request.id())
                          << ", index_id=" << request.index_id() << ", sender_id=" << request.sender_id()
                          << " request_index=" << i << " eos=" << request.eos()
                          << " err=" << response->status().error_msgs(0);
-            return;
+            break;
         }
     }
+
+    int64_t total_time_us = watch.elapsed_time() / 1000;
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
-    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
+    StarRocksMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
+    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
+
     report_profile(response, config::pipeline_print_profile);
+    _check_and_log_timeout_rpc("tablet writer add chunk", total_time_us / 1000, timeout_ms);
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -306,6 +345,8 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 }
 
 Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer) {
+    COUNTER_UPDATE(_deserialize_chunk_count, 1);
+    SCOPED_TIMER(_deserialize_chunk_timer);
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta);
@@ -337,19 +378,39 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
     return Status::OK();
 }
 
+std::vector<std::shared_ptr<TabletsChannel>> LoadChannel::_get_all_channels() {
+    std::vector<std::shared_ptr<TabletsChannel>> channels;
+    std::lock_guard l(_lock);
+    channels.reserve(_tablets_channels.size());
+    for (auto& it : _tablets_channels) {
+        channels.push_back(it.second);
+    }
+    return channels;
+}
+
+bool LoadChannel::_should_enable_profile() {
+    if (_enable_profile) {
+        return true;
+    }
+    if (_big_query_profile_threshold_ns <= 0) {
+        return false;
+    }
+    int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
+    return query_run_duration > _big_query_profile_threshold_ns;
+}
+
 void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print_profile) {
-    // report profile if enable profile or the query has run for a long time
-    if (!_enable_profile) {
-        if (_big_query_profile_threshold_ns <= 0) {
-            return;
-        }
-        int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
-        if (query_run_duration <= _big_query_profile_threshold_ns) {
-            return;
-        }
+    if (!_should_enable_profile()) {
+        return;
     }
 
-    int64_t last_report_tims_ns = _last_report_time_ns.load();
+    bool expect = false;
+    if (!_is_reporting_profile.compare_exchange_strong(expect, true)) {
+        // skip concurrent report
+        return;
+    }
+    DeferOp defer([this]() { _is_reporting_profile.store(false); });
+
     int64_t now = MonotonicNanos();
     bool should_report;
     if (_closed) {
@@ -357,15 +418,56 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
         bool old = false;
         should_report = _final_report.compare_exchange_strong(old, true);
     } else {
-        // runtime profile report
-        bool time_to_report = now - last_report_tims_ns >= _runtime_profile_report_interval_ns;
-        should_report = time_to_report && _last_report_time_ns.compare_exchange_strong(last_report_tims_ns, now);
+        // runtime profile report periodically
+        should_report = now - _last_report_time_ns >= _runtime_profile_report_interval_ns;
     }
     if (!should_report) {
         return;
     }
+    _last_report_time_ns.store(now);
+    Status status = _update_and_serialize_profile(result->mutable_load_channel_profile(), print_profile);
+    if (!status.ok()) {
+        result->clear_load_channel_profile();
+    }
+}
+
+void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request,
+                           PLoadDiagnoseResult* result) {
+    if (request->has_profile() && request->profile()) {
+        Status st = _update_and_serialize_profile(result->mutable_profile_data(), config::pipeline_print_profile);
+        result->mutable_profile_status()->set_status_code(st.code());
+        result->mutable_profile_status()->add_error_msgs(st.to_string());
+        if (!st.ok()) {
+            result->clear_profile_data();
+        }
+        VLOG(2) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                << ", status: " << st;
+    }
+    if (request->has_stack_trace() && request->stack_trace()) {
+        DiagnoseRequest stack_trace_request;
+        stack_trace_request.type = DiagnoseType::STACK_TRACE;
+        stack_trace_request.context =
+                fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
+        Status st = ExecEnv::GetInstance()->diagnose_daemon()->diagnose(stack_trace_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                         << ", status: " << st;
+        }
+        result->mutable_stack_trace_status()->set_status_code(st.code());
+        result->mutable_stack_trace_status()->add_error_msgs(st.to_string());
+        VLOG(2) << "load channel diagnose stack trace, " << stack_trace_request.context << ", status: " << st;
+    }
+}
+
+Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {
+    COUNTER_UPDATE(_profile_report_count, 1);
+    SCOPED_TIMER(_profile_report_timer);
 
     COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
+    auto channels = _get_all_channels();
+    for (auto& channel : channels) {
+        channel->update_profile();
+    }
     _profile->inc_version();
 
     if (print_profile) {
@@ -383,8 +485,33 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     if (!st.ok()) {
         LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
                    << ", status: " << st;
+        return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
+    }
+    COUNTER_UPDATE(_profile_serialized_size, len);
+    result->append((char*)buf, len);
+    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    return Status::OK();
+}
+
+void LoadChannel::_check_and_log_timeout_rpc(const std::string& rpc_name, int64_t cost_ms, int64_t timeout_ms) {
+    if (cost_ms <= timeout_ms) {
         return;
     }
-    result->set_load_channel_profile((char*)buf, len);
+    // update profile
+    auto channels = _get_all_channels();
+    for (auto& channel : channels) {
+        channel->update_profile();
+    }
+
+    std::stringstream ss;
+    _root_profile->pretty_print(&ss);
+    if (timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds * 1000) {
+        LOG(WARNING) << rpc_name << " timeout. txn_id=" << _txn_id << ", cost=" << cost_ms
+                     << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+    } else {
+        // reduce slow log print frequency if the log job is small batch and high frequency
+        LOG_EVERY_N(WARNING, 10) << rpc_name << " timeout. txn_id=" << _txn_id << ", cost=" << cost_ms
+                                 << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+    }
 }
 } // namespace starrocks

@@ -36,9 +36,16 @@ package com.starrocks.common;
 
 import java.util.MissingFormatArgumentException;
 
-// Error code used to indicate what error happened.
+/**
+ * 1、ErrorCode: The most granular error message, recording the error cause at the bottom of the call stack
+ * <p>
+ * 2、SqlState: Coarse-grained error information is also recorded in ErrorCode
+ * Main references: <a href="https://www.postgresql.org/docs/15/errcodes-appendix.html">...</a>
+ * <p>
+ * 3、ErrorType: The most coarse-grained error message, which determines the error category
+ * based on the first two digits of SQLSTATE. For example, Internal Error, Syntax Error
+ */
 public enum ErrorCode {
-    // Try our best to compatible with MySQL's
     ERR_CANT_CREATE_TABLE(1005, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create table '%s' (errno: %s)"),
     ERR_DB_CREATE_EXISTS(1007, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create database '%s'; database exists"),
     ERR_DB_DROP_EXISTS(1008, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -144,9 +151,7 @@ public enum ErrorCode {
     ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
-    ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
-            "Query timeout. %s"),
-    ERR_FAILED_WHEN_INSERT(5025, new byte[] {'H', 'Y', '0', '0', '0'}, "Failed when INSERT execute"),
+    ERR_TIMEOUT(5024, new byte[] {'5', '3', '4', '0', '0'}, "%s reached its timeout of %d seconds, %s"),
     ERR_UNSUPPORTED_TYPE_IN_CTAS(5026, new byte[] {'H', 'Y', '0', '0', '0'},
             "Unsupported type '%s' in create table as select statement"),
     ERR_MISSING_PARAM(5027, new byte[] {'H', 'Y', '0', '0', '0'}, "Missing param: %s "),
@@ -200,9 +205,7 @@ public enum ErrorCode {
             "refresh external table failed: %s"),
     ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW(5075, new byte[] {'4', '2', '0', '0', '0'},
             "Create table like does not support create view."),
-    ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
-            "set config failed: %s"),
-    ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
+    ERR_QUERY_CANCELLED_BY_CRASH(5077, new byte[] {'X', 'X', '0', '0', '0'},
             "Query cancelled by crash of backends."),
     ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog '%s'"),
@@ -224,31 +227,20 @@ public enum ErrorCode {
             "Export job [%s] not found when checking privilege"),
     ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic history partition num must greater than 0"),
-    ERR_CATALOG_EXISTED_ERROR(5700, new byte[] {'4', '2', '0', '0', '0'},
-            "Catalog '%s' already exists"),
-    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
-            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
-    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
-
-    ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown warehouse '%s'"),
-
-    ERR_BAD_PIPE_STATEMENT(6010, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
-    ERR_UNKNOWN_PIPE(6011, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
-    ERR_PIPE_EXISTS(6012, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
-    ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
-    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
-
-    ERR_MISSING_KEY_COLUMNS(6014, new byte[] {'4', '2', '0', '0', '0'},
-            "missing key columns:%s for primary key table"),
-    ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
-            "missing dependency column for generated column %s"),
 
     /*
-     * The following ErrorCode has been reviewed.
-     * If you want to add an error code, please add it in the specific
-     * number segment according to the number segment of your own module.
+      !!!!!!!!!!!!!!!!!!!!!!     IMPORTANT   !!!!!!!!!!!!!!!!!!!!!!
+      <p>
+      The following ErrorCode has been reviewed.
+      If you want to add an error code, please add it in the specific
+      number segment according to the number segment of your own module.
      */
+
+    /**
+     * 5100 - 5199: Configuration
+     */
+    ERROR_SET_CONFIG_FAILED(5101, new byte[] {'F', '0', '0', '0', '0'}, "Set config failed: %s"),
+    ERROR_CONFIG_NOT_EXIST(5102, new byte[] {'F', '0', '0', '0', '0'}, "Config '%s' does not exist or is not mutable"),
 
     /**
      * 5200 - 5299: Authentication and Authorization
@@ -262,12 +254,21 @@ public enum ErrorCode {
                     ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
+    ERR_SECURE_TRANSPORT_REQUIRED(5205, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Connections using insecure transport are prohibited"),
+    ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
 
     /**
      * 5300 - 5399: Lock and Transaction
      */
     ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to acquire lock: %s"),
     ERR_BEGIN_TXN_FAILED(5301, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to begin transaction: %s"),
+    ERR_TXN_NOT_EXIST(5302, new byte[] {'2', '5', 'P', '0', '1'}, "Transaction %s does not exist"),
+    ERR_TXN_IMPORT_SAME_TABLE(5303, new byte[] {'2', '5', 'P', '0', '1'},
+            "NOT allowed to read or write tables that have been subjected to DML operations before"),
+    ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
+            "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
 
     /**
      * 5400 - 5499: Internal error
@@ -307,20 +308,23 @@ public enum ErrorCode {
             "Can not rename column in internal database: %s"),
     ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
             "Can not rename column of table in %s state"),
+    ERR_CATALOG_EXISTED_ERROR(5514, new byte[] {'4', '2', '0', '0', '0'}, "Catalog '%s' already exists"),
 
     /**
      * 5600 - 5699: DML operation failure
      */
     ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
-            "No files were found matching the pattern(s) or path(s): '%s'"),
+            "No files were found matching the pattern(s) or path(s): '%s'. You should check whether there are " +
+                    "files under the path, and make sure the process has the permission to access the path"),
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
-    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'},
+            "Expr '%s' analyze error: %s, derived column is '%s'"),
     ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
             "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
                     "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
                     "to ensure such load jobs can succeed"),
-    ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
+    ERR_INSERT_COLUMN_COUNT_MISMATCH(5604, new byte[] {'4', '2', '6', '0', '1'},
             "Inserted target column count: %d doesn't match select/value column count: %d"),
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
@@ -328,7 +332,13 @@ public enum ErrorCode {
                     "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
-            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+                    "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'},
+            "%s column: %s has no matching %s column"),
+    ERR_FAILED_WHEN_INSERT(5609, new byte[] {'2', '2', '0', '0', '0'}, "Failed when executing INSERT : '%s'"),
+    ERR_LOAD_HAS_FILTERED_DATA(5610, new byte[] {'2', '2', '0', '0', '0'}, "Insert has filtered data : %s"),
+    ERR_LOAD_DATA_PARSE_ERROR(5611, new byte[] {'2', '2', '0', '0', '0'},
+            "%s. Check the 'TrackingSQL' field for detailed information."),
 
     /**
      * 5700 - 5799: Partition
@@ -339,25 +349,48 @@ public enum ErrorCode {
     ERR_ADD_PARTITION_WITH_ERROR_STEP_LENGTH(5701, new byte[] {'4', '2', '0', '0', '0'},
             "Step length [%d] in the operation is not equal to the partition step length [%d] stored in the table"),
 
-    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702,  new byte[] {'4', '2', '0', '0', '0'},
+    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702, new byte[] {'4', '2', '0', '0', '0'},
             "Can't add multi range partition to multi partition column table"),
 
     ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
             "The interval of the Multi-Range Partition must be greater than 0"),
 
     /**
-     * 10000 - 10099: warehouse
+     * 5800 - 5899: Pipe
      */
-    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s not exist."),
-    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s already exists."),
-    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s has been suspended."),
-    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s is not available."),
-    ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
-            "No alive backend or compute node in warehouse %s."),
-    ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+    ERR_BAD_PIPE_STATEMENT(5800, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
+    ERR_UNKNOWN_PIPE(5801, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
+    ERR_PIPE_EXISTS(5802, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
+    ERR_UNKNOWN_PROPERTY(5803, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
 
-    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
-            "unsupported statement in shared_nothing mode");
+    /**
+     * 5900 - 5999: warehouse
+     */
+    ERR_UNKNOWN_WAREHOUSE(5901, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s not exist."),
+    ERR_WAREHOUSE_EXISTS(5902, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s already exists."),
+    ERR_WAREHOUSE_SUSPENDED(5903, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(5904, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s is not available."),
+    ERR_NO_NODES_IN_WAREHOUSE(5905, new byte[] {'4', '2', '0', '0', '0'},
+            "No alive backend or compute node in warehouse %s."),
+    ERR_INVALID_WAREHOUSE_NAME(5906, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(5907, new byte[] {'4', '2', '0', '0', '0'},
+            "unsupported statement in shared_nothing mode"),
+
+    /**
+     * 6000 - 6100: Planner
+     */
+    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
+            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
+
+    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
+
+    ERR_MISSING_KEY_COLUMNS(6014, new byte[] {'4', '2', '0', '0', '0'},
+            "missing key columns:%s for primary key table"),
+
+    ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
+            "missing dependency column for generated column %s"),
+    ;
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";

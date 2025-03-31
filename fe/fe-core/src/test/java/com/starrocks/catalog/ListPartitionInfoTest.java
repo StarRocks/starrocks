@@ -22,7 +22,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -105,7 +105,7 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testMultiListPartition(@Injectable OlapTable dstTable) throws UserException {
+    public void testMultiListPartition(@Injectable OlapTable dstTable) throws StarRocksException {
 
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
@@ -138,7 +138,7 @@ public class ListPartitionInfoTest {
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 3, Lists.newArrayList(new Column("id", Type.BIGINT)));
-        Partition partition = new Partition(1, "p1", index, distInfo);
+        Partition partition = new Partition(1, 11, "p1", index, distInfo);
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         idToColumn.put(ColumnId.create("dt"), new Column("dt", Type.STRING));
@@ -207,8 +207,8 @@ public class ListPartitionInfoTest {
         HashDistributionInfo distributionInfo =
                 new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
 
-        Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
-        Partition p2 = new Partition(10002L, "p2", materializedIndex, distributionInfo);
+        Partition p1 = new Partition(10001L, 10003L, "p1", materializedIndex, distributionInfo);
+        Partition p2 = new Partition(10002L, 10004L, "p2", materializedIndex, distributionInfo);
         table.addPartition(p1);
         table.addPartition(p2);
         return table;
@@ -233,8 +233,8 @@ public class ListPartitionInfoTest {
         HashDistributionInfo distributionInfo =
                 new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
 
-        Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
-        Partition p2 = new Partition(10002L, "p2", materializedIndex, distributionInfo);
+        Partition p1 = new Partition(10001L, 10003L, "p1", materializedIndex, distributionInfo);
+        Partition p2 = new Partition(10002L, 10004L, "p2", materializedIndex, distributionInfo);
         table.addPartition(p1);
         table.addPartition(p2);
         return table;

@@ -15,8 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Dictionary;
-import com.starrocks.catalog.DictionaryMgr;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.server.GlobalStateMgr;

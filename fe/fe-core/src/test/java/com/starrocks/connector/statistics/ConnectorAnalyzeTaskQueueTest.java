@@ -39,10 +39,10 @@ public class ConnectorAnalyzeTaskQueueTest {
 
     @Test
     public void testAddPendingTaskWithMerge() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "partitioned_db", "orders");
         String tableUUID = table.getUUID();
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
 
         ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
@@ -54,13 +54,12 @@ public class ConnectorAnalyzeTaskQueueTest {
         Assert.assertEquals(1, queue.getPendingTaskSize());
     }
 
-
     @Test
     public void testAddPendingTaskExceedLimit() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "partitioned_db", "orders");
         String tableUUID = table.getUUID();
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
 
         Config.connector_table_query_trigger_analyze_max_pending_task_num = 1;
@@ -75,27 +74,27 @@ public class ConnectorAnalyzeTaskQueueTest {
 
     @Test
     public void testScheduledPendingTask() {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
                 "partitioned_db", "orders");
         String tableUUID = table.getUUID();
-        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
 
         ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
         queue.addPendingTask(tableUUID, task1);
         Assert.assertEquals(1, queue.getPendingTaskSize());
 
-        queue.scheduledPendingTask();
+        queue.schedulePendingTask();
         Assert.assertEquals(0, queue.getPendingTaskSize());
 
         ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_custkey", "o_orderstatus"));
         queue.addPendingTask(tableUUID, task2);
 
         Config.connector_table_query_trigger_analyze_max_running_task_num = 0;
-        queue.scheduledPendingTask();
+        queue.schedulePendingTask();
         Assert.assertEquals(1, queue.getPendingTaskSize());
         Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
-        queue.scheduledPendingTask();
+        queue.schedulePendingTask();
         Assert.assertEquals(0, queue.getPendingTaskSize());
     }
 }

@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Rules
+# Thrift Guides
 
 ## Never use required
 

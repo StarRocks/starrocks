@@ -19,26 +19,29 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperator {
     // Origin query predicate may have some filters that don't belong to delete scan table.
     // Therefore, we cannot use origin predicate as delete table predicate because it does not conform to semantics.
     // Because we need to use the origin predicate to get iceberg scan task in the query level cache, we record it in here.
+    // At the same time, this is also the reason why there is no to reuse LogicalIcebergScanOperator.
     private ScalarOperator originPredicate;
 
-    // for filtering delete schema when query hit mutable delete schemas.
-    private List<Integer> equalityIds;
+    // Mainly used for table with iceberg equality delete files. Record full iceberg mor params in the table,
+    // used for the first build to associate multiple scan nodes RemoteFileInfoSource.
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
 
-    // Getting equalityIds from delete file takes some time when there are many delete files.
-    // So we set a flat to avoid getting it when only one delete schema is hit.
-    private boolean hitMutableIdentifierColumns;
+    // Mainly used for table with iceberg equality delete files.
+    // Marking this split scan node type after IcebergEqualityDeleteRewriteRule rewriting.
+    private IcebergMORParams morParams;
 
     public LogicalIcebergEqualityDeleteScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -72,20 +75,21 @@ public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperato
         this.originPredicate = originPredicate;
     }
 
-    public List<Integer> getEqualityIds() {
-        return equalityIds;
+
+    public IcebergTableMORParams getTableFullMORParams() {
+        return tableFullMORParams;
     }
 
-    public void setEqualityIds(List<Integer> equalityIds) {
-        this.equalityIds = equalityIds;
+    public void setTableFullMORParams(IcebergTableMORParams tableFullMORParams) {
+        this.tableFullMORParams = tableFullMORParams;
     }
 
-    public boolean isHitMutableIdentifierColumns() {
-        return hitMutableIdentifierColumns;
+    public IcebergMORParams getMORParams() {
+        return morParams;
     }
 
-    public void setHitMutableIdentifierColumns(boolean hitMutableIdentifierColumns) {
-        this.hitMutableIdentifierColumns = hitMutableIdentifierColumns;
+    public void setMORParams(IcebergMORParams morParams) {
+        this.morParams = morParams;
     }
 
     private LogicalIcebergEqualityDeleteScanOperator() {
@@ -111,8 +115,8 @@ public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperato
                 LogicalIcebergEqualityDeleteScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.originPredicate = scanOperator.originPredicate;
-            builder.equalityIds = scanOperator.equalityIds;
-            builder.hitMutableIdentifierColumns = scanOperator.hitMutableIdentifierColumns;
+            builder.tableFullMORParams = scanOperator.tableFullMORParams;
+            builder.morParams = scanOperator.morParams;
             return this;
         }
     }

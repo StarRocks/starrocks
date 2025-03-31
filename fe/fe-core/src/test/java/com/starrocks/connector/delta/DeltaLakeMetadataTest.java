@@ -18,15 +18,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.qe.ConnectContext;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.ColumnVector;
@@ -80,7 +82,7 @@ public class DeltaLakeMetadataTest {
 
     @Test
     public void testListDbNames() {
-        List<String> dbNames = deltaLakeMetadata.listDbNames();
+        List<String> dbNames = deltaLakeMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(2, dbNames.size());
         Assert.assertEquals("db1", dbNames.get(0));
         Assert.assertEquals("db2", dbNames.get(1));
@@ -88,7 +90,7 @@ public class DeltaLakeMetadataTest {
 
     @Test
     public void testListTableNames() {
-        List<String> tableNames = deltaLakeMetadata.listTableNames("db1");
+        List<String> tableNames = deltaLakeMetadata.listTableNames(new ConnectContext(), "db1");
         Assert.assertEquals(2, tableNames.size());
         Assert.assertEquals("table1", tableNames.get(0));
         Assert.assertEquals("table2", tableNames.get(1));
@@ -97,10 +99,17 @@ public class DeltaLakeMetadataTest {
     @Test
     public void testListPartitionNames(@Mocked SnapshotImpl snapshot, @Mocked ScanBuilder scanBuilder,
                                        @Mocked Scan scan) {
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot deltaLakeSnapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
                         "s3://bucket/path/to/table", null, 0);
@@ -170,8 +179,8 @@ public class DeltaLakeMetadataTest {
                 minTimes = 0;
             }
         };
-        List<String> partitionNames = deltaLakeMetadata.listPartitionNames("db1", "table1",
-                TableVersionRange.empty());
+        List<String> partitionNames =
+                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadatRequestContext.DEFAULT);
         Assert.assertEquals(3, partitionNames.size());
         Assert.assertEquals("ts=1999", partitionNames.get(0));
         Assert.assertEquals("ts=2000", partitionNames.get(1));
@@ -180,20 +189,27 @@ public class DeltaLakeMetadataTest {
 
     @Test
     public void testTableExists() {
-        Assert.assertTrue(deltaLakeMetadata.tableExists("db1", "table1"));
+        Assert.assertTrue(deltaLakeMetadata.tableExists(new ConnectContext(), "db1", "table1"));
     }
 
     @Test
     public void testGetTable() {
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
                         Lists.newArrayList("col1"), null, "path/to/table", null, 0);
             }
         };
-        DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable("db1", "table1");
+        DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");
         Assert.assertNotNull(deltaTable);
         Assert.assertEquals("table1", deltaTable.getName());
         Assert.assertEquals(Table.TableType.DELTALAKE, deltaTable.getType());

@@ -298,7 +298,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     }
     case TYPE_DATETIME: {
         return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MICROS),
+                name, rep_type,
+                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     case TYPE_DECIMAL32: {
@@ -315,8 +316,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     case TYPE_DECIMAL128: {
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, decimal_precision_to_byte_count(type_desc.precision),
-                file_column_id.field_id);
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
@@ -354,6 +355,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
+    }
+    case TYPE_JSON: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::JSON(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
     }
     default: {
         return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));

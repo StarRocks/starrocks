@@ -113,10 +113,10 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         options.use_adaptor = _enable_cache_io_adaptor;
         SCOPED_RAW_TIMER(&read_cache_ns);
         if (_enable_block_buffer) {
-            res = _cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
+            res = _cache->read(_cache_key, block_offset, load_size, &block.buffer, &options);
             read_size = load_size;
         } else {
-            StatusOr<size_t> r = _cache->read_buffer(_cache_key, offset, size, out, &options);
+            StatusOr<size_t> r = _cache->read(_cache_key, offset, size, out, &options);
             res = r.status();
             read_size = size;
         }
@@ -144,11 +144,6 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
     } else if (res.is_resource_busy()) {
         _stats.skip_read_cache_count += 1;
         _stats.skip_read_cache_bytes += read_size;
-    }
-
-    if (res.ok() && sb) {
-        // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
-        _deduplicate_shared_buffer(sb);
     }
 
     return res;
@@ -189,6 +184,11 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
                 RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
                 src = _buffer.data();
             }
+        }
+
+        if (sb) {
+            // Duplicate the block ranges to avoid saving the same data both in block_map and shared buffer.
+            _deduplicate_shared_buffer(sb);
         }
 
         if (_enable_cache_io_adaptor) {
@@ -394,6 +394,7 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
         options.evict_probability = _datacache_evict_probability;
         options.priority = _priority;
         options.ttl_seconds = _ttl_seconds;
+        options.frequency = _frequency;
         if (options.async && sb) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer
@@ -402,7 +403,7 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
             options.callback = cb;
             options.allow_zero_copy = true;
         }
-        Status r = _cache->write_buffer(_cache_key, off, size, buf, &options);
+        Status r = _cache->write(_cache_key, off, size, buf, &options);
         if (r.ok() || r.is_already_exist()) {
             _already_populated_blocks.emplace(off / _block_size);
         }

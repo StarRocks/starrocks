@@ -149,7 +149,7 @@ REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_ide
 ```SQL
 REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
+    ON { FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]
        ｜ ALL FUNCTIONS } IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
@@ -158,7 +158,7 @@ REVOKE
 注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `db.function` 的方式来表示。
 
 ```SQL
-REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+REVOKE <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) FROM {ROLE <role_name> | USER <user_identity>}
 ```
 
 #### Storage volume 相关

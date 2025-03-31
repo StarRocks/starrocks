@@ -19,18 +19,16 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
-import com.starrocks.planner.IcebergEqualityDeleteScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.thrift.THdfsScanRange;
-import com.starrocks.thrift.TIcebergFileContent;
-import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -65,7 +63,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         starRocksAssert.withCatalog(createCatalog);
         new MockUp<IcebergMetadata>() {
             @Mock
-            public Database getDb(String dbName) {
+            public Database getDb(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
         };
@@ -78,8 +76,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
     public IcebergEqualityDeletePlanTest() throws IOException {
     }
-
-    @Test
+    
     public void testNormalPlan() throws Exception {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableB.refresh();
@@ -117,46 +114,71 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
         String sql = "select data from iceberg_catalog.db.tbl";
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        assertContains(plan, "4:Project\n" +
+        assertContains(plan, "9:Project\n" +
                 "  |  <slot 2> : 2: data\n" +
                 "  |  \n" +
-                "  3:HASH JOIN\n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 08\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  7:Project\n" +
+                "  |  <slot 3> : 3: id\n" +
+                "  |  <slot 4> : 4: data\n" +
+                "  |  \n" +
+                "  6:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: id = 4: id\n" +
-                "  |  other join predicates: 3: $data_sequence_number < 5: $data_sequence_number\n" +
+                "  |  equal join conjunct: 3: id = 6: id\n" +
+                "  |  other join predicates: 5: $data_sequence_number < 7: $data_sequence_number\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n" +
+                "  |----5:EXCHANGE\n" +
                 "  |    \n" +
-                "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
-                "     cardinality=200000\n" +
+                "  3:IcebergScanNode\n" +
+                "     TABLE: db.tbl_with_delete_file\n" +
+                "     cardinality=1\n" +
                 "     avgRowSize=3.0");
 
         // check iceberg scan node
+        List<IcebergMORParams> morParamsList = Lists.newArrayList(
+                IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE,
+                IcebergMORParams.DATA_FILE_WITH_EQ_DELETE,
+                IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, Lists.newArrayList(1))
+        );
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql);
-        ScanNode scanNode = pair.second.getFragments().get(1).collectScanNodes().get(new PlanNodeId(0));
+        ScanNode scanNode = pair.second.getFragments().get(4).collectScanNodes().get(new PlanNodeId(1));
         Assert.assertTrue(scanNode instanceof IcebergScanNode);
-        List<TScanRangeLocations> scanRangeLocations = scanNode.getScanRangeLocations(100);
-        THdfsScanRange scanRange = scanRangeLocations.get(0).getScan_range().getHdfs_scan_range();
-        Assert.assertNotNull(scanRange);
-        Assert.assertEquals(1, scanRange.getDelete_files().size());
-        Assert.assertEquals(TIcebergFileContent.POSITION_DELETES, scanRange.getDelete_files().get(0).file_content);
+        IcebergScanNode icebergScanNode = (IcebergScanNode) scanNode;
+        Assert.assertEquals(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, icebergScanNode.getMORParams());
+        Assert.assertEquals(morParamsList, icebergScanNode.getTableFullMORParams().getMorParamsList());
+        Assert.assertTrue(icebergScanNode.getExtendedColumnSlotIds().isEmpty());
+
+        scanNode = pair.second.getFragments().get(2).collectScanNodes().get(new PlanNodeId(3));
+        Assert.assertTrue(scanNode instanceof IcebergScanNode);
+        icebergScanNode = (IcebergScanNode) scanNode;
+        Assert.assertEquals(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE, icebergScanNode.getMORParams());
+        Assert.assertEquals(morParamsList, icebergScanNode.getTableFullMORParams().getMorParamsList());
+        Assert.assertFalse(icebergScanNode.getExtendedColumnSlotIds().isEmpty());
 
         // check iceberg equality scan node
-        scanNode = pair.second.getFragments().get(2).collectScanNodes().get(new PlanNodeId(1));
-        Assert.assertTrue(scanNode instanceof IcebergEqualityDeleteScanNode);
-        IcebergEqualityDeleteScanNode eqScanNode = (IcebergEqualityDeleteScanNode) scanNode;
-        Assert.assertTrue(eqScanNode.getExplainString().contains("TABLE: tbl_eq_delete_id\n" +
+        scanNode = pair.second.getFragments().get(3).collectScanNodes().get(new PlanNodeId(4));
+        Assert.assertTrue(scanNode instanceof IcebergScanNode);
+        IcebergScanNode eqScanNode = (IcebergScanNode) scanNode;
+        Assert.assertTrue(eqScanNode.getExplainString().contains("TABLE: db.tbl_eq_delete_id\n" +
                 "   cardinality=1\n" +
                 "   avgRowSize=2.0\n" +
                 "   dataCacheOptions={populate: false}\n" +
                 "   partitions=1/1\n" +
                 "   Iceberg identifier columns: [id]"));
-        scanRangeLocations = scanNode.getScanRangeLocations(100);
-        scanRange = scanRangeLocations.get(0).getScan_range().getHdfs_scan_range();
-        Assert.assertNotNull(scanRange);
-        Assert.assertFalse(scanRange.isSetDelete_files());
     }
 
     @Test
@@ -201,86 +223,92 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
         String sql = "select k1, k2 from iceberg_catalog.db.tbl where k1 = 1 limit 1";
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        assertContains(plan, "5:Project\n" +
-                "  |  <slot 1> : 1: k1\n" +
-                "  |  <slot 2> : 2: k2\n" +
+        assertContains(plan, "0:UNION\n" +
                 "  |  limit: 1\n" +
                 "  |  \n" +
-                "  4:HASH JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: k1 = 4: k1\n" +
-                "  |  equal join conjunct: 2: k2 = 5: k2\n" +
-                "  |  other join predicates: 3: $data_sequence_number < 6: $data_sequence_number\n" +
-                "  |  limit: 1\n" +
-                "  |  \n" +
-                "  |----3:EXCHANGE\n" +
+                "  |----8:EXCHANGE\n" +
+                "  |       limit: 1\n" +
                 "  |    \n" +
-                "  1:EXCHANGE\n" +
+                "  2:EXCHANGE\n" +
+                "     limit: 1\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 03\n" +
-                "    HASH_PARTITIONED: 4: k1, 5: k2\n" +
+                "    EXCHANGE ID: 08\n" +
+                "    RANDOM\n" +
                 "\n" +
-                "  2:IcebergEqualityDeleteScanNode\n" +
-                "     TABLE: tbl_eq_delete_k1_k2\n" +
-                "     PREDICATES: 4: k1 = 1\n" +
-                "     cardinality=100000\n" +
+                "  7:Project\n" +
+                "  |  <slot 3> : 3: k1\n" +
+                "  |  <slot 4> : 4: k2\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  6:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: k1 = 6: k1\n" +
+                "  |  equal join conjunct: 4: k2 = 7: k2\n" +
+                "  |  other join predicates: 5: $data_sequence_number < 8: $data_sequence_number\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:IcebergScanNode\n" +
+                "     TABLE: db.tbl_with_delete_file\n" +
+                "     PREDICATES: 3: k1 = 1\n" +
+                "     MIN/MAX PREDICATES: 3: k1 <= 1, 3: k1 >= 1\n" +
+                "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     Iceberg identifier columns: [k1, k2]\n" +
-                "\n" +
                 "\n" +
                 "PLAN FRAGMENT 3\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 01\n" +
-                "    HASH_PARTITIONED: 1: k1, 2: k2\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    UNPARTITIONED\n" +
                 "\n" +
-                "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
-                "     PREDICATES: 1: k1 = 1\n" +
-                "     MIN/MAX PREDICATES: 1: k1 <= 1, 1: k1 >= 1\n" +
-                "     cardinality=100000\n" +
-                "     avgRowSize=3.0");
+                "  4:IcebergEqualityDeleteScanNode\n" +
+                "     TABLE: db.tbl_eq_delete_k1_k2\n" +
+                "     PREDICATES: 6: k1 = 1\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     Iceberg identifier columns: [k1, k2]");
 
-
-        // check iceberg scan node
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql);
         List<ScanNode> scanNodes = pair.second.getScanNodes();
-        IcebergScanNode left = (IcebergScanNode) scanNodes.get(0);
-        IcebergEqualityDeleteScanNode right = (IcebergEqualityDeleteScanNode) scanNodes.get(1);
-        Assert.assertTrue(right.getExplainString().contains("TABLE: tbl_eq_delete_k1_k2\n" +
-                "   PREDICATES: 4: k1 = 1\n" +
-                "   cardinality=100000\n" +
+        Assert.assertEquals(3, scanNodes.size());
+        // check without eq-delete files scan node
+        IcebergScanNode withoutDeleteFileScanNode = (IcebergScanNode) scanNodes.get(0);
+        Assert.assertEquals(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, withoutDeleteFileScanNode.getMORParams());
+        Assert.assertTrue(withoutDeleteFileScanNode.getExtendedColumnSlotIds().isEmpty());
+
+        // check with eq-delete scan node
+        IcebergScanNode left = (IcebergScanNode) scanNodes.get(1);
+        Assert.assertEquals(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE, left.getMORParams());
+        IcebergScanNode right = (IcebergScanNode) scanNodes.get(2);
+        Assert.assertEquals(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, List.of(1, 2)), right.getMORParams());
+
+        Assert.assertTrue(right.getExplainString().contains("4:IcebergEqualityDeleteScanNode\n" +
+                "   TABLE: db.tbl_eq_delete_k1_k2\n" +
+                "   PREDICATES: 6: k1 = 1\n" +
+                "   cardinality=1\n" +
                 "   avgRowSize=3.0\n" +
                 "   dataCacheOptions={populate: false}\n" +
                 "   partitions=1/1\n" +
-                "   Iceberg identifier columns: [k1, k2]"));
+                "   Iceberg identifier columns: [k1, k2]\n" +
+                "   tuple ids: 5 \n"));
 
         Assert.assertNotNull(right.getConjuncts());
-        Assert.assertEquals(Lists.newArrayList(1, 2), right.getEqualityIds());
-        Assert.assertEquals(1, right.getSeenFiles().size());
-        Assert.assertFalse(right.isNeedCheckEqualityIds());
         Assert.assertEquals(1, right.getConjuncts().size());
-        Assert.assertEquals(left.getIcebergJobPlanningPredicate(), right.getIcebergJobPlanningPredicate());
+        Assert.assertEquals(1, right.getSeenEqualityDeleteFiles().size());
+        Assert.assertTrue(left.getIcebergJobPlanningPredicate().equivalent(right.getIcebergJobPlanningPredicate()));
         Assert.assertEquals(-1, left.getLimit());
         Assert.assertEquals(-1, right.getLimit());
         Assert.assertEquals(1, left.getExtendedColumnSlotIds().size());
         Assert.assertEquals(1, right.getExtendedColumnSlotIds().size());
-
-
-        THdfsScanRange leftScanRange = left.getScanRangeLocations(100).get(0).getScan_range().getHdfs_scan_range();
-        THdfsScanRange rightScanRange = right.getScanRangeLocations(100).get(0).getScan_range().getHdfs_scan_range();
-        Assert.assertEquals(1, leftScanRange.getIdentity_partition_slot_ids().size());
-        Assert.assertEquals(1, rightScanRange.getIdentity_partition_slot_ids().size());
-        Assert.assertEquals(1, leftScanRange.getExtended_columns().size());
-        Assert.assertEquals(1, rightScanRange.getExtended_columns().size());
     }
 
     @Test
@@ -358,48 +386,94 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
         String sql = "select k2 from iceberg_catalog.db.tbl where k1 = 1 limit 1";
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        assertContains(plan, "8:Project\n" +
+        assertContains(plan, "12:Project\n" +
                 "  |  <slot 2> : 2: k2\n" +
                 "  |  limit: 1\n" +
                 "  |  \n" +
-                "  7:HASH JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: k2 = 4: k2\n" +
-                "  |  other join predicates: 3: $data_sequence_number < 5: $data_sequence_number\n" +
+                "  0:UNION\n" +
                 "  |  limit: 1\n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----11:EXCHANGE\n" +
+                "  |       limit: 1\n" +
                 "  |    \n" +
-                "  4:Project\n" +
-                "  |  <slot 2> : 2: k2\n" +
-                "  |  <slot 3> : 3: $data_sequence_number\n" +
+                "  2:EXCHANGE\n" +
+                "     limit: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 11\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  10:Project\n" +
+                "  |  <slot 3> : 3: k1\n" +
+                "  |  <slot 4> : 4: k2\n" +
+                "  |  limit: 1\n" +
                 "  |  \n" +
-                "  3:HASH JOIN\n" +
+                "  9:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: k1 = 6: k1\n" +
-                "  |  other join predicates: 3: $data_sequence_number < 7: $data_sequence_number\n" +
+                "  |  equal join conjunct: 3: k1 = 8: k1\n" +
+                "  |  other join predicates: 5: $data_sequence_number < 9: $data_sequence_number\n" +
+                "  |  limit: 1\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n" +
+                "  |----8:EXCHANGE\n" +
                 "  |    \n" +
-                "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
-                "     PREDICATES: 1: k1 = 1\n" +
-                "     MIN/MAX PREDICATES: 1: k1 <= 1, 1: k1 >= 1\n" +
-                "     cardinality=105000\n" +
-                "     avgRowSize=3.0");
+                "  6:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: k2 = 6: k2\n" +
+                "  |  other join predicates: 5: $data_sequence_number < 7: $data_sequence_number\n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:IcebergScanNode\n" +
+                "     TABLE: db.tbl_with_delete_file\n" +
+                "     PREDICATES: 3: k1 = 1\n" +
+                "     MIN/MAX PREDICATES: 3: k1 <= 1, 3: k1 >= 1\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "\n" +
+                "PLAN FRAGMENT 3\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 08\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  7:IcebergEqualityDeleteScanNode\n" +
+                "     TABLE: db.tbl_eq_delete_k1\n" +
+                "     PREDICATES: 8: k1 = 1\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     Iceberg identifier columns: [k1]\n" +
+                "\n" +
+                "PLAN FRAGMENT 4\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  4:IcebergEqualityDeleteScanNode\n" +
+                "     TABLE: db.tbl_eq_delete_k2\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     Iceberg identifier columns: [k2]");
 
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql);
         List<ScanNode> scanNodes = pair.second.getScanNodes();
-        IcebergEqualityDeleteScanNode eqK1 = (IcebergEqualityDeleteScanNode) scanNodes.get(1);
-        IcebergEqualityDeleteScanNode eqK2 = (IcebergEqualityDeleteScanNode) scanNodes.get(2);
-        Assert.assertEquals(Lists.newArrayList(1), eqK1.getEqualityIds());
-        Assert.assertEquals(Lists.newArrayList(2), eqK2.getEqualityIds());
-        Assert.assertTrue(eqK1.isNeedCheckEqualityIds());
-        Assert.assertTrue(eqK2.isNeedCheckEqualityIds());
-        Assert.assertEquals(1, eqK1.getScanRangeLocations(100).size());
-        Assert.assertEquals(1, eqK2.getScanRangeLocations(100).size());
+        Assert.assertEquals(4, scanNodes.size());
+        IcebergScanNode eqK1 = (IcebergScanNode) scanNodes.get(3);
+        IcebergScanNode eqK2 = (IcebergScanNode) scanNodes.get(2);
+        Assert.assertEquals(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE,
+                Lists.newArrayList(1)), eqK1.getMORParams());
+        Assert.assertEquals(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE,
+                Lists.newArrayList(2)), eqK2.getMORParams());
     }
 
     @Test
@@ -489,65 +563,90 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
         starRocksAssert.getCtx().getSessionVariable().setEnableReadIcebergEqDeleteWithPartitionEvolution(true);
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        assertContains(plan, "4:Project\n" +
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:2: k2\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  10:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 10\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  9:Project\n" +
                 "  |  <slot 2> : 2: k2\n" +
                 "  |  \n" +
-                "  3:HASH JOIN\n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 08\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  7:Project\n" +
+                "  |  <slot 3> : 3: k1\n" +
+                "  |  <slot 4> : 4: k2\n" +
+                "  |  \n" +
+                "  6:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: k2 = 5: k2\n" +
-                "  |  equal join conjunct: 4: $spec_id = 7: $spec_id\n" +
-                "  |  other join predicates: 3: $data_sequence_number < 6: $data_sequence_number\n" +
+                "  |  equal join conjunct: 4: k2 = 7: k2\n" +
+                "  |  equal join conjunct: 6: $spec_id = 9: $spec_id\n" +
+                "  |  other join predicates: 5: $data_sequence_number < 8: $data_sequence_number\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n" +
+                "  |----5:EXCHANGE\n" +
                 "  |    \n" +
-                "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
+                "  3:IcebergScanNode\n" +
+                "     TABLE: db.tbl_with_delete_file\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=4.0\n" +
+                "\n" +
+                "PLAN FRAGMENT 3\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  4:IcebergEqualityDeleteScanNode\n" +
+                "     TABLE: db.tbl_eq_delete_k2\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     Iceberg identifier columns: [k2]\n" +
+                "\n" +
+                "PLAN FRAGMENT 4\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:IcebergScanNode\n" +
+                "     TABLE: db.tbl\n" +
                 "     cardinality=400000\n" +
-                "     avgRowSize=4.0");
+                "     avgRowSize=2.0\n");
 
         // check iceberg scan node
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql);
         List<ScanNode> scanNodes = pair.second.getScanNodes();
-        IcebergScanNode left = (IcebergScanNode) scanNodes.get(0);
-        IcebergEqualityDeleteScanNode right = (IcebergEqualityDeleteScanNode) scanNodes.get(1);
+        IcebergScanNode left = (IcebergScanNode) scanNodes.get(1);
+        IcebergScanNode right = (IcebergScanNode) scanNodes.get(2);
         Assert.assertEquals(2, left.getExtendedColumnSlotIds().size());
         Assert.assertEquals(2, right.getExtendedColumnSlotIds().size());
-
-        List<TScanRangeLocations> dataScanRanges = left.getScanRangeLocations(100);
-        Assert.assertEquals(2, dataScanRanges.size());
-        Integer specSlotId = left.getExtendedColumnSlotIds().get(1);
-
-        for (TScanRangeLocations scanRangeLocations : dataScanRanges) {
-            THdfsScanRange scanRange = scanRangeLocations.getScan_range().getHdfs_scan_range();
-            Assert.assertEquals(2, scanRange.getExtended_columns().size());
-            if (scanRange.getFull_path().contains("bucket")) {
-                Assert.assertNull(scanRange.getIdentity_partition_slot_ids());
-                Assert.assertEquals(1, scanRange.getExtended_columns().get(specSlotId)
-                        .getNodes().get(0).getInt_literal().getValue());
-            } else {
-                Assert.assertNotNull(scanRange.getIdentity_partition_slot_ids());
-                Assert.assertEquals(0, scanRange.getExtended_columns().get(specSlotId)
-                        .getNodes().get(0).getInt_literal().getValue());
-            }
-        }
-
-        List<TScanRangeLocations> eqScanRange = right.getScanRangeLocations(100);
-        Assert.assertEquals(2, dataScanRanges.size());
-        specSlotId = right.getExtendedColumnSlotIds().get(1);
-
-        for (TScanRangeLocations scanRangeLocations : eqScanRange) {
-            THdfsScanRange scanRange = scanRangeLocations.getScan_range().getHdfs_scan_range();
-            Assert.assertEquals(2, scanRange.getExtended_columns().size());
-            if (scanRange.getFull_path().contains("bucket")) {
-                Assert.assertNull(scanRange.getIdentity_partition_slot_ids());
-                Assert.assertEquals(1, scanRange.getExtended_columns().get(specSlotId)
-                        .getNodes().get(0).getInt_literal().getValue());
-            } else {
-                Assert.assertNotNull(scanRange.getIdentity_partition_slot_ids());
-                Assert.assertEquals(0, scanRange.getExtended_columns().get(specSlotId)
-                        .getNodes().get(0).getInt_literal().getValue());
-            }
-        }
     }
 }

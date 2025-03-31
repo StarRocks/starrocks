@@ -18,7 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
@@ -63,6 +63,8 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     private Coordinator coordinator;
     private Deployer deployer;
     private ExecutionDAG dag;
+
+    private volatile boolean cancelled = false;
 
     public PhasedExecutionSchedule(ConnectContext context) {
         this.connectContext = context;
@@ -200,7 +202,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     // schedule next
-    public void schedule() throws RpcException, UserException {
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
         buildDeployStates();
         final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
         if (oldTaskCnt == 0) {
@@ -212,7 +214,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
-    private void doDeploy() throws RpcException, UserException {
+    public void cancel() {
+        cancelled = true;
+    }
+
+    private void doDeploy() throws RpcException, StarRocksException {
         if (deployStates.isEmpty()) {
             return;
         }
@@ -233,14 +239,17 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
-    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException {
+    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
+        if (cancelled) {
+            return;
+        }
         final FragmentInstance instance = dag.getInstanceByInstanceId(fragmentInstanceId);
         final PlanFragmentId fragmentId = instance.getFragmentId();
         final AtomicInteger countDowns = schedulingFragmentInstances.get(fragmentId);
         if (countDowns.decrementAndGet() != 0) {
             return;
         }
-        try (var guard = ConnectContext.ScopeGuard.setIfNotExists(connectContext)) {
+        try (var guard = connectContext.bindScope()) {
             final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
             if (oldTaskCnt == 0) {
                 int dec = 0;

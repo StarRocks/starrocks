@@ -20,11 +20,13 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaUtils;
@@ -102,7 +104,7 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
-            throws UserException {
+            throws StarRocksException {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
         Engine engine = deltaLakeTable.getDeltaEngine();
@@ -165,7 +167,8 @@ public class DeltaLakeScanNode extends ScanNode {
             }
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+                    deltaLakeTable.getCatalogName(), deltaLakeTable.getCatalogDBName(), deltaLakeTable.getCatalogTableName(),
+                    ConnectorMetadatRequestContext.DEFAULT);
 
             if (selectedPartitionCount == -1) {
                 if (scanRangeSource != null) {
@@ -209,5 +212,10 @@ public class DeltaLakeScanNode extends ScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    @Override
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+        scanRangeSource.setSampleStrategy(strategy);
     }
 }

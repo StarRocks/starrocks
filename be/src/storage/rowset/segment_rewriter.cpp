@@ -24,11 +24,12 @@ SegmentRewriter::SegmentRewriter() = default;
 
 Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                                const std::shared_ptr<const TabletSchema>& tschema,
-                                               std::vector<uint32_t>& column_ids,
-                                               std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
-                                               const FooterPointerPB& partial_rowset_footer) {
+                                               std::vector<uint32_t>& column_ids, MutableColumns& columns,
+                                               uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
+        // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
+        dest->size = src.size.value_or(0);
         return fs::copy_file(src.path, dest->path, kBufferSize);
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
@@ -71,7 +72,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     auto schema = ChunkHelper::convert_schema(tschema, column_ids);
     auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
-        chunk->get_column_by_index(i).reset(columns[i].release());
+        chunk->get_column_by_index(i).reset(std::move(columns[i]));
     }
     uint64_t index_size = 0;
     uint64_t segment_file_size;
@@ -90,8 +91,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                                const TabletSchemaCSPtr& tschema,
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                               std::vector<uint32_t>& column_ids,
-                                               std::vector<std::unique_ptr<Column>>* columns) {
+                                               std::vector<uint32_t>& column_ids, MutableColumns* columns) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -152,9 +152,9 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     size_t read_columns_index = 0;
     for (int i = 0; i < tschema->num_columns(); ++i) {
         if (i == auto_increment_column_id) {
-            chunk->get_column_by_index(i).reset(auto_increment_partial_update_state.write_column.release());
+            chunk->get_column_by_index(i).reset(std::move(auto_increment_partial_update_state.write_column));
         } else if (update_columns_set.find(i) != update_columns_set.end()) {
-            chunk->get_column_by_index(i).reset((*columns)[update_columns_index].release());
+            chunk->get_column_by_index(i).reset(std::move((*columns)[update_columns_index]));
             ++update_columns_index;
         } else {
             chunk->get_column_by_index(i).swap(read_chunk->get_column_by_index(read_columns_index));
@@ -182,8 +182,8 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
 Status SegmentRewriter::rewrite_auto_increment_lake(
         const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-        const std::vector<uint32_t>& unmodified_column_ids,
-        std::vector<std::unique_ptr<Column>>* unmodified_column_data, const starrocks::lake::Tablet* tablet) {
+        const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
+        const starrocks::lake::Tablet* tablet) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
@@ -213,7 +213,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     auto tablet_mgr = tablet->tablet_mgr();
     // not fill data and meta cache
     auto fill_cache = false;
-    LakeIOOptions lake_io_opts{fill_cache, -1};
+    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .buffer_size = -1};
     ASSIGN_OR_RETURN(auto segment,
                      tablet_mgr->load_segment(src, segment_id, &footer_sine_hint, lake_io_opts, fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();
@@ -252,9 +252,9 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     size_t modified_column_index = 0;
     for (ColumnId i = 0, sz = tschema->num_columns(); i < sz; ++i) {
         if (i == auto_increment_column_id) {
-            chunk->get_column_by_index(i).reset(auto_increment_partial_update_state.write_column.release());
+            chunk->get_column_by_index(i).reset(std::move(auto_increment_partial_update_state.write_column));
         } else if (unmodified_column_id_set.count(i) > 0) {
-            chunk->get_column_by_index(i).reset(unmodified_column_data->at(unmodified_column_index).release());
+            chunk->get_column_by_index(i).reset(std::move(unmodified_column_data->at(unmodified_column_index)));
             ++unmodified_column_index;
         } else {
             chunk->get_column_by_index(i).swap(read_chunk->get_column_by_index(modified_column_index));

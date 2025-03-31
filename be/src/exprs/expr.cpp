@@ -891,6 +891,12 @@ bool Expr::is_index_only_filter() const {
     return is_index_only_filter;
 }
 
+SlotId Expr::max_used_slot_id() const {
+    SlotId max_slot_id = 0;
+    for_each_slot_id([&max_slot_id](SlotId slot_id) { max_slot_id = std::max(max_slot_id, slot_id); });
+    return max_slot_id;
+}
+
 } // namespace starrocks
 
 #pragma clang diagnostic pop

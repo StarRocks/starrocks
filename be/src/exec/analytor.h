@@ -19,18 +19,17 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/memory/mem_hook_allocator.h"
 #include "runtime/types.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
-
-class ManagedFunctionStates;
-using ManagedFunctionStatesPtr = std::unique_ptr<ManagedFunctionStates>;
 
 struct FunctionTypes {
     TypeDescriptor result_type;
@@ -42,10 +41,16 @@ class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
 using Analytors = std::vector<AnalytorPtr>;
 
+template <typename T>
+class ManagedFunctionStates;
+
+template <typename T>
+using ManagedFunctionStatesPtr = std::unique_ptr<ManagedFunctionStates<T>>;
+
 // Component used to do analytic processing
 // it contains common data struct and algorithm of analysis
 class Analytor final : public pipeline::ContextWithDependency {
-    friend class ManagedFunctionStates;
+    friend class ManagedFunctionStates<Analytor>;
 
     // [start, end)
     struct FrameRange {
@@ -122,7 +127,20 @@ public:
     }
     bool is_chunk_buffer_full() { return _buffer.size() >= config::pipeline_analytic_max_buffer_size; }
     bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
+
+    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_sink_observer(state, observer);
+    }
+
+    void attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_source_observer(state, observer);
+    }
+
+    auto defer_notify_source() { return _pip_observable.defer_notify_source(); }
+    auto defer_notify_sink() { return _pip_observable.defer_notify_sink(); }
+
     ChunkPtr poll_chunk_buffer() {
+        auto notify = defer_notify_sink();
         std::lock_guard<std::mutex> l(_buffer_mutex);
         if (_buffer.empty()) {
             return nullptr;
@@ -132,6 +150,7 @@ public:
         return chunk;
     }
     void offer_chunk_to_buffer(const ChunkPtr& chunk) {
+        auto notify = defer_notify_source();
         std::lock_guard<std::mutex> l(_buffer_mutex);
         _buffer.push(chunk);
     }
@@ -268,9 +287,9 @@ private:
     std::vector<bool> _is_lead_lag_functions;
     std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const AggregateFunction*> _agg_functions;
-    std::vector<ManagedFunctionStatesPtr> _managed_fn_states;
+    std::vector<ManagedFunctionStatesPtr<Analytor>> _managed_fn_states;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_intput_columns;
+    std::vector<Columns> _agg_intput_columns;
     std::vector<FunctionTypes> _agg_fn_types;
 
     std::vector<ExprContext*> _partition_ctxs;
@@ -337,21 +356,26 @@ private:
     SegmentStatistics _peer_group_statistics;
     std::queue<int64_t> _candidate_peer_group_ends;
     std::unique_ptr<Allocator> _allocator = std::make_unique<MemHookAllocator>();
+
+    bool _is_merge_funcs;
+
+    pipeline::PipeObservable _pip_observable;
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.
+template <typename T>
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, AggDataPtr __restrict agg_states, Analytor* agg_node)
-            : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
-        for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
+    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, AggDataPtr __restrict agg_states, T* context)
+            : _ctxs(ctxs), _agg_states(agg_states), _context(context) {
+        for (int i = 0; i < _context->_agg_functions.size(); i++) {
+            _context->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _context->_agg_states_offsets[i]);
         }
     }
 
     ~ManagedFunctionStates() {
-        for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
+        for (int i = 0; i < _context->_agg_functions.size(); i++) {
+            _context->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _context->_agg_states_offsets[i]);
         }
     }
 
@@ -361,7 +385,7 @@ public:
 private:
     std::vector<FunctionContext*>* _ctxs;
     AggDataPtr _agg_states;
-    Analytor* _agg_node;
+    T* _context;
 };
 
 class AnalytorFactory;

@@ -182,7 +182,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 
     // init column information
     for (auto& slot_desc : slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         column->reserve(fill_sz);
         (*chunk)->append_column(std::move(column), slot_desc->id());
     }

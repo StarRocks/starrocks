@@ -12,6 +12,7 @@ jobs:
   sonarcloud-fe:
     runs-on: ubuntu-latest
     if: github.repository == 'StarRocks/starrocks'
+    timeout-minutes: 60
     steps:
       - name: clean
         run: |
@@ -71,4 +72,8 @@ jobs:
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
-          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+          export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
+          export MAVEN_OPTS="-Xms3072m -Xmx12288m"
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
+            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
+            -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}

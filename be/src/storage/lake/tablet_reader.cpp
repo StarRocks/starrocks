@@ -60,6 +60,19 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _could_split_physically(could_split_physically) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                           bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets)
+        : ChunkIterator(std::move(schema)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
+          _need_split(need_split),
+          _could_split_physically(could_split_physically) {
+    if (!rowsets.empty()) {
+        _rowsets_inited = true;
+        _rowsets = std::move(rowsets);
+    }
+}
+
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                            std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
@@ -154,6 +167,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
         split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
                                            read_params.end_key);
+        split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
             auto split = split_morsel_queue->try_get().value();
@@ -380,7 +394,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("tablet schema is null. forget or fail to call prepare()");
     }
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     for (int index = 0, size = _tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = _tablet_metadata->rowsets(index);

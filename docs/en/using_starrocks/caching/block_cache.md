@@ -17,45 +17,24 @@ Compared to File Cache, Data Cache has the following advantages:
 
 ## Enable Data Cache
 
-From v3.2.3 onwards, Data Cache is enabled by default. If you want to use Data Cache in a v3.1 cluster, or you have manually disabled this feature previously, you need to perform the following procedures to enable it.
-
-To dynamically enable Data Cache at runtime, execute the following statement:
-
-```SQL
-UPDATE information_schema.be_configs SET VALUE = 1 
-WHERE name = "starlet_use_star_cache";
-```
-
-Dynamic configurations will become invalid after the CN nodes are restarted.
-
-To permanently enable Data Cache, you need to add the following configuration to the CN configuration file **cn.conf**, and restart the CN nodes:
-
-```Properties
-starlet_use_star_cache = true
-```
+From v3.4.0 onwards, StarRocks uses a unified Data Cache instance for queries against external catalogs and cloud-native tables (in shared-data clusters).
 
 ## Configure Data Cache
 
 You can configure Data Cache using the following CN(BE) configuration items:
 
+### Cache directory
+
 - [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
-- [starlet_use_star_cache](../../administration/management/BE_configuration.md#starlet_use_star_cache)
+
+### Cache disk size
+
+- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
 - [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
 
-:::note
-
-If you have enabled File Cache before upgrading your StarRocks cluster to v3.1.7, v3.2.3, or later versions, please check whether you have modified the configuration item `starlet_cache_evict_high_water`. The default value of this item is `0.2`, indicating that File Cache will use 80% of the storage space to store the cached data files. If you have modified this item, you must configure `starlet_star_cache_disk_size_percent` accordingly during upgrading. Suppose you have previously set `starlet_cache_evict_high_water` to `0.3`. When upgrading your StarRocks cluster, you need to set `starlet_star_cache_disk_size_percent` to `70` to ensure that Data Cache will use the same percentage of disk capacity as you set for File Cache.
-
-:::
+The disk size of the cache in a shared-data cluster takes the greater value between `datacache_disk_size` and `starlet_star_cache_disk_size_percent`.
 
 ## View Data Cache status
-
-- Execute the following statement to check whether Data Cache is enabled:
-
-  ```SQL
-  SELECT * FROM information_schema.be_configs 
-  WHERE NAME LIKE "%starlet_use_star_cache%";
-  ```
 
 - Execute the following statement to view the root path that stores the cached data:
 
@@ -64,13 +43,13 @@ If you have enabled File Cache before upgrading your StarRocks cluster to v3.1.7
   WHERE NAME LIKE "%storage_root_path%";
   ```
 
-  The cached data is stored under the sub-path `starlet_cache/star_cache` of your `storage_root_path`.
+  Usually, the cached data is stored under the sub-path `datacache/` of your `storage_root_path`.
 
 - Execute the following statement to view the maximum percentage of storage that Data Cache can use:
 
   ```SQL
   SELECT * FROM information_schema.be_configs 
-  WHERE NAME LIKE "%starlet_star_cache_disk_size_percent%";
+  WHERE NAME LIKE "%starlet_star_cache_disk_size_percent% or %datacache_disk_size%";
   ```
 
 ## Monitor Data Cache
@@ -104,19 +83,11 @@ Records the actual disk usage of Data Cache.
 
 ## Disable Data Cache
 
-To dynamically disable Data Cache at runtime, execute the following statement:
-
-```SQL
-UPDATE information_schema.be_configs SET VALUE = 0 
-WHERE name = "starlet_use_star_cache";
-```
-
-Dynamic configurations will become invalid after the CN nodes are restarted.
-
-To permanently disable Data Cache, you need to add the following configuration to the CN configuration file **cn.conf**, and restart the CN nodes:
+To disable Data Cache, you need to add the following configuration to the CN configuration file **cn.conf**, and restart the CN nodes:
 
 ```Properties
-starlet_use_star_cache = false
+datacache_enable = false
+storage_root_path =
 ```
 
 ## Clear cached data
@@ -125,14 +96,14 @@ You can clear the cached data in case of emergencies. This will not affect the o
 
 Follow these steps to clear the cached data on a CN node:
 
-1. Remove the sub-directory that stores the data, that is, `${storage_root_path}/starlet_cache`.
+1. Remove the sub-directory that stores the data.
 
    Example:
 
    ```Bash
    # Suppose `storage_root_path = /data/disk1;/data/disk2`
-   rm -rf /data/disk1/starlet_cache/
-   rm -rf /data/disk2/starlet_cache/
+   rm -rf /data/disk1/datacache/
+   rm -rf /data/disk2/datacache/
    ```
 
 2. Restart the CN node.
@@ -195,7 +166,6 @@ The disk usage by Data Cache is accurate and will not exceed the configured limi
 - Core files generated by CN crashes.
 - Persistent indexes of Primary Key tables (stored under `${storage_root_path}/persist/`).
 - Mixed deployments of BE/CN/FE instances sharing the same disk.
-- External table caches (stored under `${STARROCKS_HOME}/block_cache/`).
 - Disk issues, for example, the ext3 file system is used.
 
 You can execute `du -h . -d 1` in the disk root directory or sub-directories to check the specific space-occupying directories, and then delete the unexpected portions. You can also reduce the disk capacity limit of Data Cache by configuring `starlet_star_cache_disk_size_percent`.

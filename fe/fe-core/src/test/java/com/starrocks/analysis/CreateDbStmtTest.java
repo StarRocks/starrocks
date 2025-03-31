@@ -16,9 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateDbStmt;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Rule;

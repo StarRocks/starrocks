@@ -29,7 +29,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
@@ -189,7 +189,7 @@ public class LakeDeleteJob extends DeleteJob {
     }
 
     @Override
-    public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .commitAndPublishTransaction(db, getTransactionId(), getTabletCommitInfos(), getTabletFailInfos(),
                         timeoutMs);

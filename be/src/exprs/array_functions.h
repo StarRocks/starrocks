@@ -23,8 +23,6 @@ class ArrayFunctions {
 public:
     DEFINE_VECTORIZED_FN(array_length);
 
-    DEFINE_VECTORIZED_FN(array_ndims);
-
     DEFINE_VECTORIZED_FN(array_append);
 
     DEFINE_VECTORIZED_FN(array_remove);
@@ -151,12 +149,44 @@ public:
     DEFINE_VECTORIZED_FN(array_cum_sum_double);
 
     DEFINE_VECTORIZED_FN(array_contains_any);
+
     DEFINE_VECTORIZED_FN(array_contains_all);
+
+    template <LogicalType LT>
+    static StatusOr<ColumnPtr> array_contains_all_specific(FunctionContext* context, const Columns& columns) {
+        return ArrayContainsAll<LT, false>::process(context, columns);
+    }
+    template <LogicalType LT>
+    static Status array_contains_all_specific_prepare(FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
+        return ArrayContainsAll<LT, false>::prepare(context, scope);
+    }
+    template <LogicalType LT>
+    static Status array_contains_all_specific_close(FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
+        return ArrayContainsAll<LT, false>::close(context, scope);
+    }
+
     DEFINE_VECTORIZED_FN(array_map);
     DEFINE_VECTORIZED_FN(array_filter);
     DEFINE_VECTORIZED_FN(all_match);
     DEFINE_VECTORIZED_FN(any_match);
+
     DEFINE_VECTORIZED_FN(array_contains_seq);
+    template <LogicalType LT>
+    static StatusOr<ColumnPtr> array_contains_seq_specific(FunctionContext* context, const Columns& columns) {
+        return ArrayContainsAll<LT, true>::process(context, columns);
+    }
+    template <LogicalType LT>
+    static Status array_contains_seq_specific_prepare(FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
+        return ArrayContainsAll<LT, true>::prepare(context, scope);
+    }
+    template <LogicalType LT>
+    static Status array_contains_seq_specific_close(FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
+        return ArrayContainsAll<LT, true>::close(context, scope);
+    }
 
     // array function for nested type(Array/Map/Struct)
     DEFINE_VECTORIZED_FN(array_distinct_any_type);
@@ -164,6 +194,8 @@ public:
     DEFINE_VECTORIZED_FN(array_intersect_any_type);
 
     DEFINE_VECTORIZED_FN(array_sortby_multi);
+
+    DEFINE_VECTORIZED_FN(array_flatten);
 };
 
 } // namespace starrocks

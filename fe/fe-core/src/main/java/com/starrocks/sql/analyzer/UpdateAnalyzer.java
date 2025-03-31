@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -65,15 +66,15 @@ public class UpdateAnalyzer {
         properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
                 String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
     }
 
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         analyzeProperties(updateStmt, session);
 
         TableName tableName = updateStmt.getTableName();
-        tableName.normalization(session);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(tableName.getCatalog(), tableName.getDb());
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -90,8 +91,10 @@ public class UpdateAnalyzer {
         }
 
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
-        Map<String, ColumnAssignment> assignmentByColName =
-                assignmentList.stream().collect(Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
+        Map<String, ColumnAssignment> assignmentByColName = new HashMap<>();
+        for (ColumnAssignment col : assignmentList) {
+            assignmentByColName.put(col.getColumn().toLowerCase(), col);
+        }
         for (String colName : assignmentByColName.keySet()) {
             if (table.getColumn(colName) == null) {
                 throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);

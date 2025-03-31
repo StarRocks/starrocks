@@ -28,7 +28,7 @@ namespace starrocks {
 VariableResultWriter::VariableResultWriter(BufferControlBlock* sinker,
                                            const std::vector<ExprContext*>& output_expr_ctxs,
                                            starrocks::RuntimeProfile* parent_profile)
-        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
+        : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs) {}
 
 VariableResultWriter::~VariableResultWriter() = default;
 
@@ -40,14 +40,8 @@ Status VariableResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void VariableResultWriter::_init_profile() {
-    _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
-    _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
-    _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
-}
-
 Status VariableResultWriter::append_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
+    SCOPED_TIMER(_append_chunk_timer);
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
         return process_status.status();
@@ -66,7 +60,7 @@ Status VariableResultWriter::append_chunk(Chunk* chunk) {
 }
 
 StatusOr<TFetchDataResultPtrs> VariableResultWriter::process_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
+    SCOPED_TIMER(_append_chunk_timer);
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok()) {
@@ -76,25 +70,6 @@ StatusOr<TFetchDataResultPtrs> VariableResultWriter::process_chunk(Chunk* chunk)
         results.push_back(std::move(process_status.value()));
     }
     return results;
-}
-
-StatusOr<bool> VariableResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
-    size_t num_rows = 0;
-    for (auto& result : results) {
-        num_rows += result->result_batch.rows.size();
-    }
-
-    auto status = _sinker->try_add_batch(results);
-    if (status.ok()) {
-        if (status.value()) {
-            _written_rows += num_rows;
-            results.clear();
-        }
-    } else {
-        results.clear();
-        LOG(WARNING) << "Append user variable result to sink failed";
-    }
-    return status;
 }
 
 StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(Chunk* chunk) {
@@ -115,7 +90,7 @@ StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(Chunk* chunk)
         return Status::MemoryAllocFailed("memory allocate failed");
     }
 
-    auto* variable = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(result_columns[0].get()));
+    auto* variable = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(result_columns[0].get()));
     std::vector<TVariableData> var_list;
 
     int num_rows = chunk->num_rows();
@@ -133,11 +108,6 @@ StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(Chunk* chunk)
         RETURN_IF_ERROR(serializer.serialize(&var_list[i], &result->result_batch.rows[i]));
     }
     return result;
-}
-
-Status VariableResultWriter::close() {
-    COUNTER_SET(_sent_rows_counter, _written_rows);
-    return Status::OK();
 }
 
 } // namespace starrocks

@@ -1,0 +1,47 @@
+-- name: test_parallel_merge_lazy_materialize
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT "",
+  `c4` int(11) NULL COMMENT "",
+  `c5` int(11) NULL COMMENT "",
+  `c6` int(11) NULL COMMENT "",
+  `c7` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series, generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+
+select count(*) from t0;
+-- auto
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(c2) OVER(ORDER BY c5) AS wv FROM t0) a;
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(c2) OVER(PARTITION BY c1 ORDER BY c5) AS wv FROM t0) a;
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv), SUM(c1), SUM(c2), SUM(c3), SUM(c4), SUM(c5), SUM(c6) FROM (SELECT c1,c2,c3,c4,c5,c6, COUNT(c2) OVER(PARTITION BY c1 ORDER BY c5) AS wv FROM t0) a;
+select * from t0 order by 1,2,3,4,5,6 limit 10;
+select * from t0 order by 1,2,3,4,5,6 desc limit 10;
+
+set parallel_merge_late_materialization_mode="always";
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(c2) OVER(ORDER BY c5) AS wv FROM t0) a;
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(c2) OVER(PARTITION BY c1 ORDER BY c5) AS wv FROM t0) a;
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv), SUM(c1), SUM(c2), SUM(c3), SUM(c4), SUM(c5), SUM(c6) FROM (SELECT c1,c2,c3,c4,c5,c6, COUNT(c2) OVER(PARTITION BY c1 ORDER BY c5) AS wv FROM t0) a;
+select * from t0 order by 1,2,3,4,5,6 limit 10;
+select * from t0 order by 1,2,3,4,5,6 desc limit 10;
+
+set parallel_merge_late_materialization_mode="never";
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(c2) OVER(ORDER BY c5) AS wv FROM t0) a;
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(c2) OVER(PARTITION BY c1 ORDER BY c5) AS wv FROM t0) a;
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv), SUM(c1), SUM(c2), SUM(c3), SUM(c4), SUM(c5), SUM(c6) FROM (SELECT c1,c2,c3,c4,c5,c6, COUNT(c2) OVER(PARTITION BY c1 ORDER BY c5) AS wv FROM t0) a;
+select * from t0 order by 1,2,3,4,5,6 limit 10;
+select * from t0 order by 1,2,3,4,5,6 desc limit 10;

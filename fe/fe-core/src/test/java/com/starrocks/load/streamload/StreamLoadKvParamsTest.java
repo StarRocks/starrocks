@@ -24,9 +24,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.http.rest.RestBaseAction.WAREHOUSE_KEY;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COLUMNS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COLUMN_SEPARATOR;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COMPRESSION;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REPLICATED_STORAGE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
@@ -298,6 +302,30 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
             return new StreamLoadKvParams(Collections.emptyMap());
         }
         return new StreamLoadKvParams(Collections.singletonMap(key, value));
+    }
+
+    @Test
+    public void testBatchWrite() {
+        {
+            StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>());
+            assertFalse(params.getEnableBatchWrite().isPresent());
+            assertFalse(params.getBatchWriteAsync().isPresent());
+            assertFalse(params.getBatchWriteIntervalMs().isPresent());
+            assertFalse(params.getBatchWriteParallel().isPresent());
+        }
+
+        {
+            Map<String, String> map = new HashMap<>();
+            map.put(HTTP_ENABLE_BATCH_WRITE, "true");
+            map.put(HTTP_BATCH_WRITE_ASYNC, "true");
+            map.put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+            map.put(HTTP_BATCH_WRITE_PARALLEL, "4");
+            StreamLoadKvParams params = new StreamLoadKvParams(map);
+            assertEquals(true, params.getEnableBatchWrite().orElse(null));
+            assertEquals(true, params.getBatchWriteAsync().orElse(null));
+            assertEquals(Integer.valueOf(1000), params.getBatchWriteIntervalMs().orElse(null));
+            assertEquals(Integer.valueOf(4), params.getBatchWriteParallel().orElse(null));
+        }
     }
 
     @Test

@@ -1,0 +1,19 @@
+-- name: test_partition_first_load_collect_stat @sequential
+
+admin set frontend config('enable_statistic_collect_on_first_load'='true');
+DROP DATABASE IF EXISTS test_partition_first_load_collect_stats;
+CREATE DATABASE test_partition_first_load_collect_stats;
+USE test_partition_first_load_collect_stats;
+
+CREATE TABLE test_first_load (
+    event_day datetime,
+    k1 int
+) PARTITION BY date_trunc('day', event_day)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into test_first_load select '2020-01-01', generate_series from table(generate_series(1,3000000));
+select column_name, partition_name, row_count, max, min from _statistics_.column_statistics where table_name = "test_partition_first_load_collect_stats.test_first_load" order by column_name;
+drop stats test_first_load;
+

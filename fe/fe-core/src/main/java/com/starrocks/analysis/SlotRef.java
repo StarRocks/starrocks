@@ -310,6 +310,10 @@ public class SlotRef extends Expr {
         }
     }
 
+    public boolean isColumnRef() {
+        return tblName != null && !isFromLambda();
+    }
+
     @Override
     public String explainImpl() {
         if (label != null) {
@@ -398,11 +402,8 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         SlotRef other = (SlotRef) obj;

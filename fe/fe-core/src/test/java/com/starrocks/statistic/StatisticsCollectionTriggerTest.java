@@ -33,8 +33,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 public class StatisticsCollectionTriggerTest extends PlanTestBase {
 
@@ -73,7 +71,7 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
 
         TransactionState transactionState = new TransactionState();
         TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
-        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(partition.getId(), 2, 1));
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(partition.getDefaultPhysicalPartition().getId(), 2, 1));
         transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
 
         setPartitionStatistics((OlapTable) table, "p1", 1000);
@@ -128,11 +126,19 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
         {
             InsertOverwriteJobStats stats = new InsertOverwriteJobStats(
                     List.of(sourceId), List.of(targetId), 1000, 1001);
-            StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
-            Partition targetPartition = new Partition(targetId, "p1", null, null);
-            Map<Long, Optional<Long>> tableStats =
-                    storage.getTableStatistics(table.getId(), List.of(targetPartition));
-            Assert.assertEquals(Map.of(targetId, Optional.of(1000L)), tableStats);
+
+            List<String> insertOverwriteSQLs = FullStatisticsCollectJob.buildOverwritePartitionSQL(
+                    table.getId(), sourceId, targetId);
+
+            Assert.assertTrue(insertOverwriteSQLs.get(0).contains(String.format("SELECT    table_id, %d, column_name",
+                    targetId)));
+            Assert.assertTrue(insertOverwriteSQLs.get(0).contains(String.format("`partition_id`=%d", sourceId)));
+            Assert.assertTrue(insertOverwriteSQLs.get(1).contains(String.format("DELETE FROM column_statistics\n" +
+                    "WHERE `table_id`=%d AND `partition_id`=%d", table.getId(), sourceId)));
+
+            StatisticsCollectionTrigger trigger =
+                    StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
+            Assert.assertNull(trigger.getAnalyzeType());
         }
 
         // case: overwrite a lot of data, need to re-collect statistics

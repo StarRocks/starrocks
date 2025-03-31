@@ -18,14 +18,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -44,23 +47,20 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.load.EtlStatus;
-import com.starrocks.load.loadv2.LoadJobFinalOperation;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
-import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
-import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -71,12 +71,17 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.collect.Maps.immutableEntry;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
-import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
 public class StatisticUtils {
     private static final Logger LOG = LogManager.getLogger(StatisticUtils.class);
@@ -87,7 +92,24 @@ public class StatisticUtils {
             .add("information_schema").build();
 
     public static ConnectContext buildConnectContext() {
-        ConnectContext context = new ConnectContext();
+        return buildConnectContext(TResultSinkType.MYSQL_PROTOCAL);
+    }
+
+    public static ConnectContext buildConnectContext(TResultSinkType connectType) {
+        ConnectContext context;
+        switch (connectType) {
+            case MYSQL_PROTOCAL:
+                context = ConnectContext.buildInner();
+                break;
+            case HTTP_PROTOCAL:
+                context = new HttpConnectContext();
+                break;
+            case ARROW_FLIGHT_PROTOCAL:
+                context = new ArrowFlightSqlConnectContext();
+                break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + connectType);
+        }
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
@@ -95,6 +117,7 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
+        context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
@@ -114,23 +137,6 @@ public class StatisticUtils {
         context.setStartTime();
 
         return context;
-    }
-
-    private static StatsConstants.AnalyzeType parseAnalyzeType(TransactionState txnState, Table table) {
-        Long loadRows = null;
-        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
-        if (attachment instanceof LoadJobFinalOperation) {
-            EtlStatus loadingStatus = ((LoadJobFinalOperation) attachment).getLoadingStatus();
-            loadRows = loadingStatus.getLoadedRows(table.getId());
-        } else if (attachment instanceof InsertTxnCommitAttachment) {
-            loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
-        } else if (attachment instanceof StreamLoadTxnCommitAttachment) {
-            loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
-        }
-        if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
-            return SAMPLE;
-        }
-        return StatsConstants.AnalyzeType.FULL;
     }
 
     public static void triggerCollectionOnInsertOverwrite(InsertOverwriteJobStats stats,
@@ -200,7 +206,7 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                     return false;
                 }
@@ -212,7 +218,7 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
+            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
@@ -225,9 +231,54 @@ public class StatisticUtils {
         }
     }
 
+    public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
+        // get updated partitions
+        Set<String> updatedPartitions = null;
+        try {
+            updatedPartitions = ConnectorPartitionTraits.build(table).getUpdatedPartitionNames(checkTime, 60);
+        } catch (Exception e) {
+            // ConnectorPartitionTraits do not support all type of table, ignore exception
+        }
+        return updatedPartitions;
+    }
+
+    // Don't use PartitionVisibleTime for data update checks as it's ineffective for ShareData architecture
+    @Deprecated
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
-        long time = partition.getVisibleVersionTime();
+        long time = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
+    }
+
+    /**
+     * In V2: use relative changed row count to decide if a partition is healthy
+     * In V1: use VISIBLE_VERSION, which doesn't work for shared-data
+     */
+    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats) {
+        long statsRowCount = 0;
+        if (Config.statistic_partition_healthy_v2) {
+            Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getTableStatistics(table.getId(), Lists.newArrayList(partition));
+            statsRowCount = tableStatistics.getOrDefault(partition.getId(), Optional.empty()).orElse(0L);
+        }
+
+        return isPartitionStatsHealthy(partition, stats, statsRowCount);
+    }
+
+    public static boolean isPartitionStatsHealthy(Partition partition, BasicStatsMeta stats, long statsRowCount) {
+        if (stats == null) {
+            return false;
+        }
+        if (!partition.hasData()) {
+            return true;
+        }
+        if (Config.statistic_partition_healthy_v2) {
+            long currentRowCount = partition.getRowCount();
+            double relativeError = 1.0 * Math.abs(statsRowCount - currentRowCount) /
+                    (double) (currentRowCount > 0 ? currentRowCount : 1);
+            return relativeError <= 1 - Config.statistic_partition_health__v2_threshold;
+        } else {
+            return stats.isUpdatedAfterLoad(getPartitionLastUpdateTime(partition));
+        }
     }
 
     public static boolean isEmptyTable(Table table) {
@@ -279,7 +330,9 @@ public class StatisticUtils {
                     new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
+                    new ColumnDef("collection_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)), false, null,
+                            null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), "")
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
@@ -311,7 +364,7 @@ public class StatisticUtils {
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_uuid",  new TypeDef(tableUUIDType)),
+                    new ColumnDef("table_uuid", new TypeDef(tableUUIDType)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
@@ -320,6 +373,16 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else if (tableName.equals(StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("column_ids", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("column_names", new TypeDef(columnNameType)),
+                    new ColumnDef("ndv",  new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
         } else {
@@ -370,6 +433,10 @@ public class StatisticUtils {
         }
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
+            // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
+            if (column.isGeneratedColumn() && column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                continue;
+            }
             if (!column.isAggregated()) {
                 columns.add(column.getName());
             } else if (isPrimaryEngine && column.getAggregationType().equals(AggregateType.REPLACE)) {
@@ -457,17 +524,16 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
         if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
                     table.getType().name());
@@ -494,7 +560,7 @@ public class StatisticUtils {
             String sql = String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
                     StatsConstants.STATISTICS_DB_NAME, tableName, expectedReplicationNum);
             if (StringUtils.isNotEmpty(sql)) {
-                RepoExecutor.getInstance().executeDDL(sql);
+                SimpleExecutor.getRepoExecutor().executeDDL(sql);
             }
             LOG.info("changed replication_number of table {} from {} to {}",
                     tableName, replica, expectedReplicationNum);
@@ -535,5 +601,86 @@ public class StatisticUtils {
             }
         }
         return baseColumnType;
+    }
+
+    // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
+    // and return an ordered list of partitionNames.
+    // In order to ensure more accurate sampling, put min and max in the sampled result.
+    public static List<String> getRandomPartitionsSample(List<String> partitions, int sampleSize) {
+        checkArgument(sampleSize > 0, "sampleSize is expected to be greater than zero");
+
+        if (partitions.size() <= sampleSize) {
+            return partitions;
+        }
+
+        List<String> result = new ArrayList<>();
+        int left = sampleSize;
+        String min = partitions.get(0);
+        String max = partitions.get(0);
+        for (String partition : partitions) {
+            if (partition.compareTo(min) < 0) {
+                min = partition;
+            } else if (partition.compareTo(max) > 0) {
+                max = partition;
+            }
+        }
+
+        result.add(min);
+        left--;
+        if (left > 0) {
+            result.add(max);
+            left--;
+        }
+
+        if (left > 0) {
+            HashFunction hashFunction = Hashing.murmur3_128();
+            Comparator<Map.Entry<String, Long>> hashComparator = Map.Entry.<String, Long>comparingByValue()
+                    .thenComparing(Map.Entry::getKey);
+
+            partitions.stream()
+                    .filter(partition -> !result.contains(partition))
+                    .map(partition -> immutableEntry(partition, hashFunction.hashUnencodedChars(partition).asLong()))
+                    .sorted(hashComparator)
+                    .limit(left)
+                    .forEachOrdered(entry -> result.add(entry.getKey()));
+        }
+        return Lists.newArrayList(result);
+    }
+
+    public static List<String> getLatestPartitionsSample(List<String> partitions, int sampleSize) {
+        checkArgument(sampleSize > 0, "sampleSize is expected to be greater than zero");
+
+        if (partitions.size() <= sampleSize) {
+            return partitions;
+        }
+
+        LinkedHashSet<String> sortedSet = new LinkedHashSet<>();
+        int left = sampleSize;
+        String min = partitions.get(0);
+        String max = partitions.get(0);
+        for (String partition : partitions) {
+            if (partition.compareTo(min) < 0) {
+                min = partition;
+            } else if (partition.compareTo(max) > 0) {
+                max = partition;
+            }
+        }
+
+        sortedSet.add(max);
+        left--;
+        if (left > 0) {
+            sortedSet.add(min);
+            left--;
+        }
+
+        if (left > 0) {
+            partitions.stream()
+                    .filter(partition -> !sortedSet.contains(partition))
+                    .sorted(Comparator.reverseOrder())
+                    .limit(left)
+                    .forEachOrdered(sortedSet::add);
+        }
+
+        return new ArrayList<>(sortedSet);
     }
 }

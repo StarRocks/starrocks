@@ -106,6 +106,11 @@ Usage: $0 <options>
      --with-source-file-relative-path {ON|OFF}
                         build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
      --without-avx2     build Backend without avx2(instruction)    
+     --with-maven-batch-mode {ON|OFF}
+                        build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
+     --output           specify the output directory (default: $STARROCKS_HOME/output)
+     --disable-java-check-style
+                        disable Java checkstyle checks during build (default: $DISABLE_JAVA_CHECK_STYLE)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
@@ -115,7 +120,9 @@ Usage: $0 <options>
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
     $0 --hive-udf                                build Hive UDF
+    $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
+    DISABLE_JAVA_CHECK_STYLE=ON ./build.sh       build with Java checkstyle disabled
   "
   exit 1
 }
@@ -143,7 +150,10 @@ OPTS=$(getopt \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
+  -l 'with-maven-batch-mode:' \
+  -l 'output:' \
   -l 'help' \
+  -l 'disable-java-check-style' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -169,6 +179,16 @@ BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
 WITH_RELATIVE_SRC_PATH=ON
+
+# Default to OFF, turn it ON if current shell is non-interactive
+WITH_MAVEN_BATCH_MODE=OFF
+if [ -x "$(command -v tty)" ] ; then
+    # has `tty` and `tty` cmd indicates a non-interactive shell.
+    if ! tty -s >/dev/null 2>&1; then
+        WITH_MAVEN_BATCH_MODE=ON
+    fi
+fi
+
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -192,6 +212,9 @@ if [[ -z ${JEMALLOC_DEBUG} ]]; then
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
     ENABLE_JIT=ON
+fi
+if [[ -z ${DISABLE_JAVA_CHECK_STYLE} ]]; then
+    DISABLE_JAVA_CHECK_STYLE=OFF
 fi
 
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
@@ -271,9 +294,12 @@ else
             --without-avx2) USE_AVX2=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
+            --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
+            --output) STARROCKS_OUTPUT=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
+            --disable-java-check-style) DISABLE_JAVA_CHECK_STYLE=ON; shift ;;
             --) shift ;  break ;;
             *) echo "Internal error" ; exit 1 ;;
         esac
@@ -294,7 +320,7 @@ if [ ${BUILD_BE} -eq 1 ] && [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     exit 1
 fi
 if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
-    echo "do not build java extendsions when build format-lib."
+    echo "do not build java extensions when build format-lib."
     BUILD_JAVA_EXT=OFF
 fi
 
@@ -326,6 +352,8 @@ echo "Get params:
     OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
     WITH_TENANN                 -- $WITH_TENANN
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
+    WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
+    DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
 "
 
 check_tool()
@@ -367,15 +395,28 @@ else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
 
+addon_mvn_opts=""
+if [ "x$WITH_MAVEN_BATCH_MODE" = "xON" ] ; then
+    # this option is only available with mvn >= 3.6
+    addon_mvn_opts="--batch-mode"
+fi
+
+if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
+    # Add checkstyle.skip parameter to disable Java checkstyle
+    addon_mvn_opts="${addon_mvn_opts} -Dcheckstyle.skip=true"
+fi
+
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if ! ${CMAKE_CMD} --version; then
         echo "Error: cmake is not found"
         exit 1
     fi
+
     # When build starrocks format lib, USE_STAROS must be ON
     if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         USE_STAROS=ON
+        WITH_TENANN=OFF
     fi
 
     CMAKE_BUILD_TYPE=$BUILD_TYPE
@@ -456,7 +497,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
-        ${MVN_CMD} package -DskipTests
+        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -486,15 +527,16 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
-    ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}
 fi
 
 
 # Clean and prepare output dir
-STARROCKS_OUTPUT=${STARROCKS_HOME}/output/
+STARROCKS_OUTPUT=${STARROCKS_OUTPUT:="${STARROCKS_HOME}/output/"}
+echo "OUTPUT DIR=${STARROCKS_OUTPUT}"
 mkdir -p ${STARROCKS_OUTPUT}
 
 # Copy Frontend and Backend
@@ -511,6 +553,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/udf_security.policy ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -519,7 +562,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -558,7 +601,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
-               ${STARROCKS_OUTPUT}/be/lib/hadoop \
+               ${STARROCKS_OUTPUT}/be/lib/hadoop-lib \
                ${STARROCKS_OUTPUT}/be/www  \
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
@@ -593,6 +636,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
 
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop-lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop-lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -618,19 +663,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     fi
-
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
-
-    # remove zookeeper
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
 
     cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
 

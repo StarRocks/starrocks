@@ -38,7 +38,7 @@ import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
@@ -79,6 +79,8 @@ public abstract class ConnectorPartitionTraits {
 
     protected Table table;
 
+    protected boolean queryMVRewrite = false;
+
     public static boolean isSupported(Table.TableType tableType) {
         return TRAITS_TABLE.containsKey(tableType);
     }
@@ -101,12 +103,15 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
-    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
+    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, MaterializedView mv, Table table) {
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
         if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
-            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
+            if (cache == null || queryMVContext.getQueryCacheStats() == null) {
+                return delegate;
+            }
+            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats(), mv);
         } else {
             return delegate;
         }
@@ -117,9 +122,14 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, mv, table);
+    }
+
     public static ConnectorPartitionTraits build(Table table) {
         ConnectContext ctx = ConnectContext.get();
-        return buildWithCache(ctx, table);
+        return buildWithCache(ctx, null, table);
     }
 
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
@@ -146,8 +156,15 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract PartitionKey createEmptyKey();
 
-    public abstract String getDbName();
+    public String getCatalogDBName() {
+        return table.getCatalogDBName();
+    }
 
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
@@ -175,7 +192,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
@@ -212,4 +229,12 @@ public abstract class ConnectorPartitionTraits {
      * inconsistency between the two systems, so we add extraSeconds
      */
     public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
+
+    public void setQueryMVRewrite(boolean value) {
+        queryMVRewrite = value;
+    }
+
+    public boolean isQueryMVRewrite() {
+        return queryMVRewrite;
+    }
 }

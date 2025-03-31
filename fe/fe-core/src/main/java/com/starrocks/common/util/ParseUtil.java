@@ -97,6 +97,14 @@ public class ParseUtil {
         return replicaNumber;
     }
 
+    public static long analyzeLongValue(String value) throws AnalysisException {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("invalid number: " + value);
+        }
+    }
+
     public static boolean parseBooleanValue(String value, String name) {
         if (value.equalsIgnoreCase("ON")
                 || value.equalsIgnoreCase("TRUE")

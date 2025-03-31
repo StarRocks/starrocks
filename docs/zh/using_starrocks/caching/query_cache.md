@@ -7,7 +7,7 @@ sidebar_position: 10
 
 StarRocks 提供的 Query Cache 特性，可以帮助您极大地提升聚合查询的性能。开启 Query Cache 后，每次处理聚合查询时，StarRocks 都会将本地聚合的中间结果缓存于内存中。这样，后续收到相同或类似的聚合查询时，StarRocks 就能够直接从 Query Cache 获取匹配的聚合结果，而无需从磁盘读取数据并进行计算，大大节省查询的时间和资源成本，并提升查询的可扩展性。在大量用户同时对复杂的大数据集执行相同或类似查询的高并发场景下，Query Cache 的优势尤为明显。
 
-该特性从 2.5 版本开始支持。
+该特性从 2.5 版本开始在存算一体集群中支持，并从 3.4 版本开始在存算分离集群中支持。
 
 在 2.5 版本，Query Cache 仅支持宽表模型下的单表聚合查询。自 3.0 版本起，除宽表模型下的单表聚合查询外，Query Cache 还支持星型模型下简单多表 JOIN 的聚合查询。
 
@@ -274,7 +274,7 @@ PROPERTIES
     "replication_num" = "3",
     "colocate_with" = "groupxx1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "compression" = "LZ4"
 );
 ```
@@ -573,7 +573,7 @@ Query Cache 支持多版本 Cache 机制。
    (
        "replication_num" = "3",
        "storage_format" = "DEFAULT",
-       "enable_persistent_index" = "false"
+       "enable_persistent_index" = "true"
    );
    ```
 

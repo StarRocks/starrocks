@@ -103,11 +103,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             if (tabletMeta.getTableId() != table.getId()) {
                 continue;
             }
-            if (table.getPhysicalPartition(tabletMeta.getPartitionId()) == null) {
+            if (table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId()) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
                 continue;
             }
-            dirtyPartitionSet.add(tabletMeta.getPartitionId());
+            dirtyPartitionSet.add(tabletMeta.getPhysicalPartitionId());
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(finishedTablets.get(i).getInvalidDictCacheColumns());
@@ -137,7 +137,12 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         if (enableIngestSlowdown()) {
             long currentTimeMs = System.currentTimeMillis();
-            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(dirtyPartitionSet, currentTimeMs);
+            Set<Long> partitionIds = Sets.newHashSet();
+            for (Long partitionId : dirtyPartitionSet) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                partitionIds.add(partition.getParentId());
+            }
+            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(partitionIds, currentTimeMs);
         }
 
         List<Long> unfinishedTablets = null;

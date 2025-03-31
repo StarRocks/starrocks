@@ -487,7 +487,7 @@ public class Backend extends ComputeNode {
     @Override
     public String toString() {
         return "Backend [id=" + getId() + ", host=" + getHost() + ", heartbeatPort=" + getHeartbeatPort()
-                + ", alive=" + getIsAlive().get() + "]";
+                + ", alive=" + getIsAlive().get() + ", status=" + getStatus() + "]";
     }
 
     public void setTabletMaxCompactionScore(long compactionScore) {

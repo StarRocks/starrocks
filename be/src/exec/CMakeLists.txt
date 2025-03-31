@@ -112,14 +112,17 @@ set(EXEC_FILES
     schema_scanner.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
+    arrow_flight_batch_reader.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
+    schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
     schema_scanner/schema_variables_scanner.cpp
     schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_statistics_scanner.cpp
@@ -159,8 +162,13 @@ set(EXEC_FILES
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
     schema_scanner/schema_temp_tables_scanner.cpp
+    schema_scanner/schema_cluster_snapshots_scanner.cpp
+    schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
+    schema_scanner/schema_applicable_roles_scanner.cpp
+    schema_scanner/schema_keywords_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
+    sorting/merge.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
     sorting/merge_cascade.cpp
@@ -180,6 +188,7 @@ set(EXEC_FILES
     pipeline/exchange/spillable_multi_cast_local_exchange.cpp
     pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
     pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
+    pipeline/exchange/split_local_exchange.cpp
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
@@ -209,9 +218,7 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/connector_sink_operator.cpp
-    pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
-    pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
@@ -235,6 +242,7 @@ set(EXEC_FILES
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
     pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
+    pipeline/pipeline_metrics.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -283,6 +291,12 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    pipeline/schedule/timeout_tasks.cpp
+    pipeline/schedule/event_scheduler.cpp
+    pipeline/schedule/observer.cpp
+    pipeline/schedule/pipeline_timer.cpp
+    pipeline/wait_operator.cpp
+    pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp

@@ -22,10 +22,11 @@ import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
@@ -168,24 +169,27 @@ public class WindowTransformer {
 
             // Also flip first_value()/last_value(). For other analytic functions there is no
             // need to also change the function.
-            FunctionName reversedFnName = null;
+            String reversedFnName = null;
 
             if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
-                reversedFnName = new FunctionName(AnalyticExpr.LASTVALUE);
+                reversedFnName = AnalyticExpr.LASTVALUE;
             } else if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
-                reversedFnName = new FunctionName(AnalyticExpr.FIRSTVALUE);
+                reversedFnName = AnalyticExpr.FIRSTVALUE;
             }
 
             if (reversedFnName != null) {
-                callExpr = new FunctionCallExpr(reversedFnName, callExpr.getParams());
-                callExpr.setIsAnalyticFnCall(true);
+                callExpr.resetFnName("", reversedFnName);
+                Function reversedFn = Expr.getBuiltinFunction(reversedFnName,
+                        callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
+                callExpr.setFn(reversedFn);
             }
         }
 
         if (windowFrame != null
                 && windowFrame.getLeftBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING
                 && windowFrame.getRightBoundary().getType() != AnalyticWindow.BoundaryType.PRECEDING
-                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
+                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
+                !callExpr.getIgnoreNulls()) {
             windowFrame.setRightBoundary(new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
         }
 
@@ -400,11 +404,18 @@ public class WindowTransformer {
 
         /*
          * Step 2.
-         * Put the nodes with more partition columns at the top of the query plan
+         * For Each Sort Group, Put the nodes with more partition columns at the top of the query plan
          * to ensure that the Enforce operation can meet the conditions, and only one ExchangeNode will be generated
+         * If two window ops in the same sort group and same partition size, put rank-related window operator upper
+         * which help PushDownLimitRankingWindowRule and PushDownPredicateRankingWindowRule rule to check plan's shape
          */
         sortedGroups.forEach(sortGroup -> sortGroup.getWindowOperators()
-                .sort(Comparator.comparingInt(w -> w.getPartitionExpressions().size())));
+                .sort(Comparator
+                        .<LogicalWindowOperator>comparingInt(w -> w.getPartitionExpressions().size())
+                        .thenComparing(w -> {
+                            String fnName = w.getWindowCall().values().iterator().next().getFnName();
+                            return FunctionSet.RANK_RALATED_FUNCTIONS.contains(fnName) ? 1 : 0;
+                        })));
 
         /*
          * Step 3.

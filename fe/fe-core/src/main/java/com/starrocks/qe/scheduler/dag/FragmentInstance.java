@@ -324,6 +324,7 @@ public class FragmentInstance {
 
     public void resetAllScanRanges() {
         node2ScanRanges.clear();
+        node2DriverSeqToScanRanges.clear();
     }
 
     public void addScanRanges(Integer scanId, List<TScanRangeParams> scanRanges) {
@@ -332,6 +333,7 @@ public class FragmentInstance {
     }
 
     public void addScanRanges(Integer scanId, Integer driverSeq, List<TScanRangeParams> scanRanges) {
+        removeDuplicatedPartitionValues(scanId, scanRanges);
         node2DriverSeqToScanRanges.computeIfAbsent(scanId, k -> new HashMap<>())
                 .computeIfAbsent(driverSeq, k -> new ArrayList<>()).addAll(scanRanges);
     }

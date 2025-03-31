@@ -386,6 +386,18 @@ public class RangePartitionInfo extends PartitionInfo {
         return sortedList.stream().map(Map.Entry::getKey).collect(Collectors.toList());
     }
 
+    /**
+     * For RangePartition, NULL value would be put in the MIN_VALUE partition but not a real NULL.
+     * It's a little bit tricky, as that partition might contain NULL, or might not.
+     */
+    @Override
+    public Set<Long> getNullValuePartitions() {
+        return idToRange.entrySet().stream()
+                .filter(x -> x.getValue().lowerEndpoint().isMinValue())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+    }
+
     // get a sorted range list, exclude partitions which ids are in 'excludePartitionIds'
     public List<Range<PartitionKey>> getRangeList(Set<Long> excludePartitionIds, boolean isTemp) {
         Map<Long, Range<PartitionKey>> tmpMap = idToRange;
@@ -568,5 +580,30 @@ public class RangePartitionInfo extends PartitionInfo {
         info.idToTempRange = new ConcurrentHashMap<>(this.idToTempRange);
         info.isMultiColumnPartition = partitionColumnIds.size() > 1;
         return info;
+    }
+
+    @Override
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        super.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        Map<Long, Range<PartitionKey>> oldIdToRange = this.idToRange;
+        Map<Long, Range<PartitionKey>> oldIdToTempRange = this.idToTempRange;
+
+        this.idToRange = new ConcurrentHashMap<>();
+        this.idToTempRange = new ConcurrentHashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            Range<PartitionKey> range = oldIdToRange.get(oldId);
+            if (range != null) {
+                this.idToRange.put(newId, range);
+            }
+            Range<PartitionKey> tempRange = oldIdToTempRange.get(oldId);
+            if (tempRange != null) {
+                this.idToTempRange.put(newId, tempRange);
+            }
+        }
     }
 }

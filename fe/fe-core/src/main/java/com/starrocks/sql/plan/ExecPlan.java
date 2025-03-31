@@ -22,6 +22,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.planner.ExecGroup;
+import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
@@ -32,6 +33,7 @@ import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
@@ -51,6 +53,11 @@ public class ExecPlan {
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
     private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
+    // splitProduceFragments and joinNodeMap is used for skew join
+    private final Map<Integer, PlanFragment> splitProduceFragments = Maps.newHashMap();
+
+    private final Map<PhysicalHashJoinOperator, HashJoinNode> joinNodeMap = new HashMap<>();
+
     private int planCount = 0;
 
     private final OptExpression physicalPlan;
@@ -67,6 +74,8 @@ public class ExecPlan {
 
     private List<Integer> collectExecStatsIds;
 
+    private final boolean isShortCircuit;
+
     @VisibleForTesting
     public ExecPlan() {
         connectContext = new ConnectContext();
@@ -74,14 +83,16 @@ public class ExecPlan {
         colNames = new ArrayList<>();
         physicalPlan = null;
         outputColumns = new ArrayList<>();
+        isShortCircuit = false;
     }
 
     public ExecPlan(ConnectContext connectContext, List<String> colNames,
-                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {
+                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns, boolean isShortCircuit) {
         this.connectContext = connectContext;
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
         this.outputColumns = outputColumns;
+        this.isShortCircuit = isShortCircuit;
     }
 
     // for broker load plan
@@ -91,6 +102,7 @@ public class ExecPlan {
         this.physicalPlan = null;
         this.outputColumns = new ArrayList<>();
         this.fragments.addAll(fragments);
+        this.isShortCircuit = false;
     }
 
     public ConnectContext getConnectContext() {
@@ -143,6 +155,14 @@ public class ExecPlan {
 
     public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
+    }
+    
+    public Map<Integer, PlanFragment> getSplitProduceFragments() {
+        return splitProduceFragments;
+    }
+
+    public Map<PhysicalHashJoinOperator, HashJoinNode> getJoinNodeMap() {
+        return joinNodeMap;
     }
 
     public OptExpression getPhysicalPlan() {
@@ -270,5 +290,9 @@ public class ExecPlan {
 
     public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
         this.collectExecStatsIds = collectExecStatsIds;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
     }
 }

@@ -22,6 +22,7 @@ select count(array_map(x->array_length(array_concat(arr_str,[])), arr_largeint))
 
 set @arr=array_repeat("12345",1000000);
 select array_length(array_map((x,y)->x > y, @arr,@arr)) from table(generate_series(1,10,1));
+select count(*) from array_map_test where array_map((a1) -> concat(split(id, 'd'), split(id, 'd')), arr_str) is not null;
 
 -- name: test_array_map_3
 CREATE TABLE `t` (
@@ -45,8 +46,10 @@ select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t order by k;
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1,2]) from t order by k;
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1]) from t order by k;
 select array_map((x)->x*x, arr_0) from t order by k;
-
-
+select k from t where coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1))=2 order by k;
+select k from t where coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1))>0 and coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1)) < 10  order by k;
+select k, coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1)) as col1 from t order by k;
+select k, coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1)) as col1, coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1)) as col2 from t order by k;
 select array_map(x->x, arr_0) from t order by k;
 -- independent expr
 select array_map((x,y,z)->10, arr_0, arr_1, arr_2) from t;
@@ -63,3 +66,11 @@ select array_map((x,y,z)->x+y+z, [1,2],[2,null],null) from t;
 select array_map(x->array_map(x->x+100,x), [[1,2,3]]);
 select array_map(x->array_map(x->x+100,x), [[1,2,3], [null]]);
 select array_map(x->array_map(x->array_map(x->x+100,x),x), [[[1,2,3]]]);
+
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg1) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg0) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg2) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_map(arg4->array_length(arg2) + arg4, arg3), arg2), arg1), arg0), [[[[[1,2]]]]] );
+
+set @arr=array_generate(1,10000);
+select /*+ SET_VAR(query_mem_limit=104857600)*/array_sum(array_map(x->array_contains(@arr,x), array_generate(1,100000)));

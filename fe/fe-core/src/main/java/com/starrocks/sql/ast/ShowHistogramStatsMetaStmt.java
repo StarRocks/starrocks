@@ -15,15 +15,17 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -37,13 +39,12 @@ import java.util.List;
 
 public class ShowHistogramStatsMetaStmt extends ShowStmt {
 
-    public ShowHistogramStatsMetaStmt(Predicate predicate) {
-        this(predicate, NodePosition.ZERO);
-    }
-
-    public ShowHistogramStatsMetaStmt(Predicate predicate, NodePosition pos) {
+    public ShowHistogramStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
+                                      LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
+        this.limitElement = limitElement;
+        this.orderByElements = orderByElements;
     }
 
     private static final ShowResultSetMetaData META_DATA =
@@ -73,8 +74,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), db.getFullName(), table);
+            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
         } catch (AccessDeniedException e) {
             return null;
         }
@@ -96,19 +96,18 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         String dbName = histogramStatsMeta.getDbName();
         String tableName = histogramStatsMeta.getTableName();
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
         }
         row.set(0, catalogName + "." + dbName);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), new TableName(catalogName, db.getFullName(), table.getName()));
+            Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getFullName(), table.getName()));
         } catch (AccessDeniedException e) {
             return null;
         }

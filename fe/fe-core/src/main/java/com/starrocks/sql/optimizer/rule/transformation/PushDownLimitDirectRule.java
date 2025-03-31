@@ -22,21 +22,24 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+import java.util.Set;
 
 public class PushDownLimitDirectRule extends TransformationRule {
-    public static final PushDownLimitDirectRule PROJECT = new PushDownLimitDirectRule(OperatorType.LOGICAL_PROJECT);
-    public static final PushDownLimitDirectRule ASSERT_ONE_ROW =
-            new PushDownLimitDirectRule(OperatorType.LOGICAL_ASSERT_ONE_ROW);
-    public static final PushDownLimitDirectRule CTE_CONSUME =
-            new PushDownLimitDirectRule(OperatorType.LOGICAL_CTE_CONSUME);
+    private static final Set<OperatorType> SUPPORTED_OPERATOR = Set.of(
+            OperatorType.LOGICAL_PROJECT,
+            OperatorType.LOGICAL_ASSERT_ONE_ROW,
+            OperatorType.LOGICAL_CTE_CONSUME
+    );
 
-    public PushDownLimitDirectRule(OperatorType logicalOperatorType) {
+    public PushDownLimitDirectRule() {
         super(RuleType.TF_PUSH_DOWN_LIMIT, Pattern.create(OperatorType.LOGICAL_LIMIT)
-                .addChildren(Pattern.create(logicalOperatorType, OperatorType.PATTERN_LEAF)));
+                .addChildren(MultiOpPattern.of(SUPPORTED_OPERATOR)
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))));
     }
 
     @Override

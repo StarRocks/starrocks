@@ -49,7 +49,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
         super(ruleType, Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF));
     }
 
-    protected Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
+    public Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
                                                                    Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
@@ -89,7 +89,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
     // We should pass '20191111' to update and merge phase aggregator in BE both.
     protected static void appendConstantColumns(List<ScalarOperator> arguments, CallOperator aggregation) {
         if (aggregation.getChildren().size() > 1) {
-            aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
+            aggregation.getChildren().stream().filter(ScalarOperator::isConstant).forEach(arguments::add);
         }
     }
 

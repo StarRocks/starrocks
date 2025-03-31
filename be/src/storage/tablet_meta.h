@@ -165,7 +165,7 @@ public:
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
     void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
-                            DataDir* data_dir);
+                            DataDir* data_dir, bool is_primary_key);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
     const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
@@ -236,6 +236,9 @@ public:
     void set_source_schema(const TabletSchemaCSPtr& source_schema) { _source_schema = source_schema; }
 
     const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
+
+    // for test
+    void TEST_set_table_id(int64_t table_id);
 
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
@@ -310,6 +313,10 @@ inline TabletUid TabletMeta::tablet_uid() const {
 
 inline int64_t TabletMeta::table_id() const {
     return _table_id;
+}
+
+inline void TabletMeta::TEST_set_table_id(int64_t table_id) {
+    _table_id = table_id;
 }
 
 inline int64_t TabletMeta::partition_id() const {

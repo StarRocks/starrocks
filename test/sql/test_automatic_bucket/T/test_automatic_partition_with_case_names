@@ -1,0 +1,45 @@
+-- name: test_automatic_partition_with_case_names
+create database test_db_${uuid0};
+use test_db_${uuid0};
+
+CREATE TABLE `t1` (
+  col1 varchar(100),
+  col2 varchar(100),
+  col3 bigint
+) ENGINE=OLAP
+PRIMARY KEY (col1)
+PARTITION BY (col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 5
+ORDER BY (col2);
+
+-- insert partition name with different case
+insert into t1 values ('a.com', 'val1', 100), ('A.com', 'val1', 200), ('A.Com', 'val1', 300);
+insert into t1 values ('a.com', 'val1', 100), ('A.com', 'val1', 200), ('A.Com', 'val1', 300);
+insert into t1 values ('a.cOm', 'val1', 100), ('A.coM', 'val1', 200), ('A.COm', 'val1', 300);
+insert into t1 values ('a.cOM', 'val1', 100), ('A.COM', 'val1', 200), ('a.COM', 'val1', 300);
+insert into t1 values ('a.com', 'val1', 100), ('A.com', 'val1', 200), ('A.Com', 'val1', 300);
+insert into t1 values ('a.cOm', 'val1', 100), ('A.coM', 'val1', 200), ('A.COm', 'val1', 300);
+insert into t1 values ('b.cOm', 'val1', 100), ('A.coM', 'val1', 200), ('A.COm', 'val1', 300);
+
+SELECT count(1) FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't1' ;
+
+select * from t1 order by col1, col2, col3;
+select * from t1 where col1 = 'a.com' order by col1, col2, col3;
+select * from t1 where col1 = 'A.com' order by col1, col2, col3;
+select * from t1 where col1 in ('A.com', 'a.com') order by col1, col2, col3;
+
+CREATE MATERIALIZED VIEW `test_async_mv`
+PARTITION BY (col1)
+DISTRIBUTED BY HASH(col1)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+  "query_rewrite_consistency" = "LOOSE"
+)
+AS SELECT col1, sum(col3) from t1 group by col1;
+refresh materialized view test_async_mv with sync mode;
+
+select * from test_async_mv order by col1;
+select * from test_async_mv where col1 = 'a.com' order by col1;
+select * from test_async_mv where col1 = 'A.com' order by col1;
+
+drop database test_db_${uuid0};

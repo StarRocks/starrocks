@@ -598,49 +598,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### upload_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点上传任务的最大线程数，用于备份作业。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。
 - 引入版本：-
--->
 
-<!--
 ##### download_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点下载任务的最大线程数，用于恢复作业。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。
 - 引入版本：-
--->
 
-<!--
 ##### make_snapshot_worker_count
 
 - 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：
+- 描述：BE 节点快照任务的最大线程数。
 - 引入版本：-
--->
 
-<!--
 ##### release_snapshot_worker_count
 
 - 默认值：5
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点释放快照任务的最大线程数。
 - 引入版本：-
--->
 
 ##### max_download_speed_kbps
 
@@ -716,27 +708,50 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：磁盘健康状态检测的间隔。
 - 引入版本：-
 
-<!--
 ##### replication_threads
 
 - 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：用于同步的最大线程数。0 表示将线程数设置为 BE CPU 内核数的四倍。
+- 引入版本：v3.3.5
 
-<!--
-##### clear_expired_replcation_snapshots_interval_seconds
+##### replication_max_speed_limit_kbps
+
+- 默认值：50000
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最大速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- 默认值：50
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最小速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_time_seconds
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：同步线程低于最低速度所允许的持续时间。如果实际速度低于 `replication_min_speed_limit_kbps` 的时间超过此值，同步将失败。
+- 引入版本：v3.3.5
+
+##### clear_expired_replication_snapshots_interval_seconds
 
 - 默认值：3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：系统清除异常同步遗留的过期快照的时间间隔。
+- 引入版本：v3.3.5
 
 ##### unused_rowset_monitor_interval
 
@@ -1104,7 +1119,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 `-1` 代表没有限制。`0` 表示禁用 Compaction。
+- 描述：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 `-1` 代表没有限制。`0` 表示禁用 Compaction。开启 Event-based Compaction Framework 时，该参数才支持动态设置。
 - 引入版本：-
 
 ##### compaction_trace_threshold
@@ -1774,7 +1789,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
-- 描述：Transaction Commit RPC 超时的时长。该参数自 v3.1.0 起弃用。
+- 描述：Transaction Commit RPC 超时的时长。该参数自 v3.2.0 起弃用。
 - 引入版本：-
 
 ##### max_consumer_num_per_group
@@ -3301,7 +3316,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）低于此配置项中指定的值，将会触发缓存淘汰。
 - 引入版本：v3.0
 -->
-  
+
 <!--  
 ##### starlet_cache_evict_high_water
 
@@ -3312,7 +3327,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）高于此配置项中指定的值，将会停止缓存淘汰。
 - 引入版本：v3.0
 -->
-  
+
 <!--
 ##### starlet_cache_dir_allocate_policy
 
@@ -3518,6 +3533,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+##### starlet_fslib_s3client_request_timeout_ms
+
+- 默认值：-1
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 配置项描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
+- 引入版本: v3.3.9
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
@@ -3712,16 +3736,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### loop_count_wait_fragments_finish
 
-- 默认值：0
+- 默认值: 2
 - 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
+- 单位：-
+- 是否动态： 是
+- 描述：BE/CN 退出时需要等待正在执行的查询完成的轮次，一轮次固定 10 秒。设置为 `0` 表示禁用轮询等待，立即退出。自 v3.4 起，该参数变为动态参数，且默认值由 `0` 变为 `2`。
+- 引入版本：v2.5
 
 ### 数据湖
 
@@ -3864,11 +3886,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_enable
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否启用 Data Cache。`true` 表示启用，`false` 表示不启用。
+- 描述：是否启用 Data Cache。`true` 表示启用，`false` 表示不启用。自 v3.3 起，默认值变为 `true`。
 - 引入版本：-
 
 ##### datacache_mem_size
@@ -3886,25 +3908,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
-- 引入版本：-
-
-##### datacache_disk_path
-
-- 默认值：`${STARROCKS_HOME}/datacache/`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。
-- 引入版本：-
-
-##### datacache_meta_path
-
-- 默认值：`${STARROCKS_HOME}/datacache/`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：Block 的元数据存储目录，可自定义。推荐创建在 `$STARROCKS_HOME` 路径下。
+- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
 - 引入版本：-
 
 ##### datacache_auto_adjust_enable
@@ -3918,20 +3922,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_disk_high_level
 
-- 默认值：80
+- 默认值：90
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Data Cache 磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。
+- 描述：Data Cache 磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。自 v3.4.0 起，该参数默认值由 `80` 变更为 `90`。
 - 引入版本：v3.3.0
 
 ##### datacache_disk_safe_level
 
-- 默认值：70
+- 默认值：80
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Data Cache 磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。
+- 描述：Data Cache 磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。自 v3.4.0 起，该参数默认值由 `70` 变更为 `80`。
 - 引入版本：v3.3.0
 
 ##### datacache_disk_low_level
@@ -3981,12 +3985,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_tiered_cache_enable
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
 - 描述：是否为 Data Cache 启用分层模式。当启用分层模式时，Data Cache 配置的的内存和磁盘构成两级缓存，磁盘数据变为热数据时会自动载入到内存缓存，内存缓存中的数据变冷时自动落至磁盘。当不启用分层模式时，为 Data Cache 配置的内存和磁盘构成两个独立的缓存空间，并分别缓存不同类型数据，两者之间不进行数据流动。
 - 引入版本：v3.2.5
+
+##### datacache_eviction_policy
+
+- 默认值：slru
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：缓存淘汰策略。有效值：`lru` (least recently used) 和 `slru` (Segmented LRU)。
+- 引入版本：v3.4.0
+
+##### datacache_inline_item_count_limit
+
+- 默认值：130172
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Data Cache 内联对象数量上限。当缓存的 Block 对象特别小时，Data Cache 会选择使用内联方式将 Block 数据和元数据一起缓存在内存中。
+- 引入版本：v3.4.0
+
+<!--
+##### datacache_unified_instance_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：在存算分离集群中，是否为存算分离内表和数据湖查询使用同一个 Data Cache 实例。
+- 引入版本：v3.4.0
+-->
 
 ##### query_max_memory_limit_percent
 

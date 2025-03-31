@@ -19,8 +19,9 @@
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
-#include "runtime/large_int_value.h"
+#include "simd/gather.h"
 #include "storage/decimal12.h"
+#include "types/large_int_value.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/value_generator.h"
@@ -42,12 +43,14 @@ void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t c
 template <typename T>
 void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from,
                                                 uint32_t size) {
+    indexes += from;
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
-    size_t orig_size = _data.size();
+
+    const size_t orig_size = _data.size();
     _data.resize(orig_size + size);
-    for (size_t i = 0; i < size; ++i) {
-        _data[orig_size + i] = src_data[indexes[from + i]];
-    }
+    auto* dest_data = _data.data() + orig_size;
+
+    SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 
 template <typename T>
@@ -62,7 +65,7 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-ColumnPtr FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<ColumnPtr> FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
     dest_data._data.resize(offsets.back());
@@ -128,13 +131,13 @@ int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column
 }
 
 template <typename T>
-uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
+uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) const {
     memcpy(pos, &_data[idx], sizeof(T));
     return sizeof(T);
 }
 
 template <typename T>
-uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) {
+uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) const {
     ValueType value{};
     memcpy(pos, &value, sizeof(T));
     return sizeof(T);
@@ -142,9 +145,9 @@ uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) {
 
 template <typename T>
 void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
-                                               size_t chunk_size, uint32_t max_one_row_size) {
+                                               size_t chunk_size, uint32_t max_one_row_size) const {
     uint32_t* sizes = slice_sizes.data();
-    T* __restrict__ src = _data.data();
+    const T* __restrict__ src = _data.data();
 
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(dst + i * max_one_row_size + sizes[i], src + i, sizeof(T));
@@ -158,9 +161,9 @@ void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer
 template <typename T>
 void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
                                                                size_t chunk_size, uint32_t max_one_row_size,
-                                                               uint8_t* null_masks, bool has_null) {
+                                                               const uint8_t* null_masks, bool has_null) const {
     uint32_t* sizes = slice_sizes.data();
-    T* __restrict__ src = _data.data();
+    const T* __restrict__ src = _data.data();
 
     if (!has_null) {
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -187,7 +190,7 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
 
 template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                             size_t start, size_t count) {
+                                                             size_t start, size_t count) const {
     const size_t value_size = sizeof(T);
     const auto& key_data = get_data();
     uint8_t* buf = dst + byte_offset;
@@ -221,6 +224,21 @@ void FixedLengthColumnBase<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t 
         hash[i] = HashUtil::fnv_hash(&_data[i], sizeof(ValueType), hash[i]);
     }
 }
+template <typename T>
+void FixedLengthColumnBase<T>::fnv_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from,
+                                                       uint16_t to) const {
+    for (uint16_t i = from; i < to; i++) {
+        if (selection[i]) {
+            hash[i] = HashUtil::fnv_hash(&_data[i], sizeof(ValueType), hash[i]);
+        }
+    }
+}
+template <typename T>
+void FixedLengthColumnBase<T>::fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        hash[sel[i]] = HashUtil::fnv_hash(&_data[sel[i]], sizeof(ValueType), hash[sel[i]]);
+    }
+}
 
 // Must same with RawValue::zlib_crc32
 template <typename T>
@@ -236,6 +254,43 @@ void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_
             hash[i] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
         } else {
             hash[i] = HashUtil::zlib_crc_hash(&_data[i], sizeof(ValueType), hash[i]);
+        }
+    }
+}
+template <typename T>
+void FixedLengthColumnBase<T>::crc32_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from,
+                                                         uint16_t to) const {
+    for (uint16_t i = from; i < to; i++) {
+        if (!selection[i]) {
+            continue;
+        }
+        if constexpr (IsDate<T> || IsTimestamp<T>) {
+            std::string str = _data[i].to_string();
+            hash[i] = HashUtil::zlib_crc_hash(str.data(), static_cast<int32_t>(str.size()), hash[i]);
+        } else if constexpr (IsDecimal<T>) {
+            int64_t int_val = _data[i].int_value();
+            int32_t frac_val = _data[i].frac_value();
+            uint32_t seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), hash[i]);
+            hash[i] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
+        } else {
+            hash[i] = HashUtil::zlib_crc_hash(&_data[i], sizeof(ValueType), hash[i]);
+        }
+    }
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        if constexpr (IsDate<T> || IsTimestamp<T>) {
+            std::string str = _data[sel[i]].to_string();
+            hash[sel[i]] = HashUtil::zlib_crc_hash(str.data(), static_cast<int32_t>(str.size()), hash[sel[i]]);
+        } else if constexpr (IsDecimal<T>) {
+            int64_t int_val = _data[sel[i]].int_value();
+            int32_t frac_val = _data[sel[i]].frac_value();
+            uint32_t seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), hash[sel[i]]);
+            hash[sel[i]] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
+        } else {
+            hash[sel[i]] = HashUtil::zlib_crc_hash(&_data[sel[i]], sizeof(ValueType), hash[sel[i]]);
         }
     }
 }

@@ -76,8 +76,8 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -187,8 +187,8 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -324,8 +324,8 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -455,7 +455,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
 
     VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     {
@@ -573,8 +573,8 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
 
@@ -771,8 +771,8 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 

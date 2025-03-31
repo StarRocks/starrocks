@@ -25,7 +25,7 @@ DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );

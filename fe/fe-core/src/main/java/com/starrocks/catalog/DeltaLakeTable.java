@@ -71,6 +71,7 @@ public class DeltaLakeTable extends Table {
         return true;
     }
 
+    @Override
     public String getTableLocation() {
         return tableLocation;
     }
@@ -92,11 +93,13 @@ public class DeltaLakeTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return dbName;
     }
 
-    public String getTableName() {
+    @Override
+    public String getCatalogTableName() {
         return tableName;
     }
 
@@ -109,6 +112,7 @@ public class DeltaLakeTable extends Table {
         }
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
                 .map(name -> nameToColumn.get(name))

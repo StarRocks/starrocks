@@ -147,3 +147,52 @@ select arrays_overlap([row(1,2,3), row(3,4,5), row(4,5,6)], [row(3,4,5)]);
 
 select arrays_overlap([1, null], [4, 3]);
 select arrays_overlap([4, 3], [1, null]);
+
+
+-- name: test_arrays_overlap_constant_columns
+
+CREATE TABLE `t1` (
+  `k1` int(11) NULL,
+  `a1` array<String> NULL,
+  `a2` array<String> NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t1 values
+    (1, null, ['a', 'c', 'b', null]),
+    (2, null, ['a', 'c', 'b']),
+    (3, null, ['a', 'c']),
+    (4, null, ['a']);
+
+-- one static constant column, one runtime constant column.
+select k1, a1, a2, arrays_overlap(ifnull(a1, []), ['a', 'c', 'b', null]) from t1 order by k1;
+select k1, a1, a2, arrays_overlap(['a', 'c', 'b', null], ifnull(a1, [])) from t1 order by k1;
+
+select k1, a1, a2, arrays_overlap(ifnull(a1, [null]), ['a', 'c', 'b', null]) from t1 order by k1;
+select k1, a1, a2, arrays_overlap(['a', 'c', 'b', null], ifnull(a1, [null])) from t1 order by k1;
+
+select k1, a1, a2, arrays_overlap(ifnull(a1, null), ['a', 'c', 'b', null]) from t1 order by k1;
+select k1, a1, a2, arrays_overlap(['a', 'c', 'b', null], ifnull(a1, null)) from t1 order by k1;
+
+-- one none-constant column, one runtime constant column.
+select k1, a1, a2, arrays_overlap(ifnull(a1, []), a2) from t1 order by k1;
+select k1, a1, a2, arrays_overlap(a2, ifnull(a1, [])) from t1 order by k1;
+
+select k1, a1, a2, arrays_overlap(ifnull(a1, null), a2) from t1 order by k1;
+select k1, a1, a2, arrays_overlap(a2, ifnull(a1, null)) from t1 order by k1;
+
+select k1, a1, a2, arrays_overlap(ifnull(a1, [null]), a2) from t1 order by k1;
+select k1, a1, a2, arrays_overlap(a2, ifnull(a1, [null])) from t1 order by k1;
+
+-- two runtime constant columns.
+select k1, a1, a2, arrays_overlap(ifnull(a1, ['a']), ifnull(a1, ['a', 'b'])) from t1 order by k1;
+
+select k1, a1, a2, arrays_overlap(ifnull(a1, null), ifnull(a1, ['a', 'b'])) from t1 order by k1;
+
+select k1, a1, a2, arrays_overlap(ifnull(a1, ['a', null]), ifnull(a1, ['a', 'b'])) from t1 order by k1;
+
+select k1, a1, a2, arrays_overlap(ifnull(a1, ['a', null]), ifnull(a1, ['a', 'b', null])) from t1 order by k1;

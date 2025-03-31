@@ -100,6 +100,7 @@ public class LocalTabletsProcDirTest {
         long tablet1Id = 5L;
         long tablet2Id = 6L;
         long replicaId = 10L;
+        long physicalPartitionId = 11L;
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
@@ -135,7 +136,7 @@ public class LocalTabletsProcDirTest {
         index.addTablet(tablet2, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -149,11 +150,13 @@ public class LocalTabletsProcDirTest {
 
         // Check
         LocalTabletsProcDir tabletsProcDir = new LocalTabletsProcDir(db, table, index);
-        List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null, false);
+        List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null, null, false);
         System.out.println(result);
         Assert.assertEquals(3, result.size());
         Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
         Assert.assertEquals(result.get(0).get(21), "/home/disk1");
+        Assert.assertEquals(result.get(0).get(22), true);
+        Assert.assertEquals((long) result.get(0).get(23), -1);
         Assert.assertEquals((long) result.get(1).get(0), tablet1Id);
         if ((long) result.get(0).get(1) == replicaId) {
             Assert.assertEquals((long) result.get(0).get(2), backendId);

@@ -15,6 +15,7 @@
 #include "exec/pipeline/operator.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "common/logging.h"
@@ -23,6 +24,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "util/failpoint/fail_point.h"
@@ -39,7 +41,8 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
           _name(std::move(name)),
           _plan_node_id(plan_node_id),
           _is_subordinate(is_subordinate),
-          _driver_sequence(driver_sequence) {
+          _driver_sequence(driver_sequence),
+          _runtime_filter_probe_sequence(driver_sequence) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
@@ -68,14 +71,14 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-    _mem_tracker = state->query_ctx()->operator_mem_tracker(_plan_node_id);
+    _mem_tracker = std::make_shared<MemTracker>();
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
-    _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
-    _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
-    _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
-    _prepare_timer = ADD_TIMER(_common_metrics, "PrepareTime");
+    _finishing_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishingTime", 1_ms);
+    _finished_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishedTime", 1_ms);
+    _close_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "CloseTime", 1_ms);
+    _prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "PrepareTime", 1_ms);
 
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
@@ -120,24 +123,20 @@ void Operator::close(RuntimeState* state) {
         _init_rf_counters(false);
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
         _runtime_bloom_filter_num_counter->set((int64_t)rf_bloom_filters->size());
-    }
 
-    if (!_is_subordinate) {
-        _common_metrics
-                ->add_counter("OperatorPeakMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->peak_consumption());
-        _common_metrics
-                ->add_counter("OperatorAllocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->allocation());
-        _common_metrics
-                ->add_counter("OperatorDeallocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->deallocation());
+        if (!rf_bloom_filters->descriptors().empty()) {
+            std::string rf_desc = "";
+            for (const auto& [filter_id, desc] : rf_bloom_filters->descriptors()) {
+                rf_desc += "<" + std::to_string(filter_id) + ": ";
+                if (desc != nullptr && desc->runtime_filter(0) != nullptr) {
+                    rf_desc += to_string(desc->runtime_filter(0)->type());
+                } else {
+                    rf_desc += "NULL";
+                }
+                rf_desc += "> ";
+            }
+            _common_metrics->add_info_string("RuntimeFilterDesc", rf_desc);
+        }
     }
 
     // Pipeline do not need the built in total time counter
@@ -266,8 +265,8 @@ void Operator::_init_rf_counters(bool init_bloom) {
     if (_runtime_in_filter_num_counter == nullptr) {
         _runtime_in_filter_num_counter =
                 ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-        _runtime_bloom_filter_num_counter = ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeBloomFilterNum",
-                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        _runtime_bloom_filter_num_counter =
+                ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeFilterNum", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
@@ -279,7 +278,7 @@ void Operator::_init_rf_counters(bool init_bloom) {
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
-        _bloom_filter_eval_context.driver_sequence = _driver_sequence;
+        _bloom_filter_eval_context.driver_sequence = _runtime_filter_probe_sequence;
     }
 }
 
@@ -324,22 +323,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
-        auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
-        for (auto& [filter_id, desc] : descriptors) {
-            if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
-                continue;
-            }
-            auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
-            ExecEnv::GetInstance()->add_rf_event({_state->query_id(), filter_id, BackendOptions::get_localhost(),
-                                                  strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
-                                                                      this->_plan_node_id, grf != nullptr)});
-
-            if (grf == nullptr) {
-                continue;
-            }
-
-            desc->set_shared_runtime_filter(grf);
-        }
+        acquire_runtime_filter(state);
     }
     return Status::OK();
 }
@@ -400,6 +384,28 @@ bool OperatorFactory::has_topn_filter() const {
     }
     auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
     return global_rf_collector != nullptr && global_rf_collector->has_topn_filter();
+}
+
+void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
+    if (_runtime_filter_collector == nullptr) {
+        return;
+    }
+    auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
+    for (auto& [filter_id, desc] : descriptors) {
+        if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
+            continue;
+        }
+        auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+        ExecEnv::GetInstance()->add_rf_event({state->query_id(), filter_id, BackendOptions::get_localhost(),
+                                              strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
+                                                                  this->_plan_node_id, grf != nullptr)});
+
+        if (grf == nullptr) {
+            continue;
+        }
+
+        desc->set_shared_runtime_filter(grf);
+    }
 }
 
 } // namespace starrocks::pipeline

@@ -47,13 +47,13 @@ using Roaring = roaring::Roaring;
 class BitmapRangeIterator {
 public:
     explicit BitmapRangeIterator(const Roaring& bitmap) {
-        roaring_init_iterator(&bitmap.roaring, &_iter);
+        roaring_iterator_init(&bitmap.roaring, &_iter);
         _read_next_batch();
     }
 
     BitmapRangeIterator(const Roaring& bitmap, uint32_t start) {
-        roaring_init_iterator(&bitmap.roaring, &_iter);
-        roaring_move_uint32_iterator_equalorlarger(&_iter, start);
+        roaring_iterator_init(&bitmap.roaring, &_iter);
+        roaring_uint32_iterator_move_equalorlarger(&_iter, start);
         _read_next_batch();
     }
 
@@ -104,7 +104,7 @@ public:
 
 private:
     void _read_next_batch() {
-        uint32_t n = roaring::api::roaring_read_uint32_iterator(&_iter, _buf, kBatchSize);
+        uint32_t n = roaring::api::roaring_uint32_iterator_read(&_iter, _buf, kBatchSize);
         _buf_pos = 0;
         _buf_size = n;
         _eof = n == 0;

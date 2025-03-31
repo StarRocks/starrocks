@@ -15,6 +15,8 @@
 package com.starrocks.statistic.sample;
 
 import com.starrocks.common.Config;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 
 import java.util.List;
@@ -25,11 +27,6 @@ import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAM
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class SampleInfo {
-
-    private final String dbName;
-
-    private final String tableName;
-
     private final double tabletSampleRatio;
 
     private final long sampleRowCount;
@@ -46,14 +43,23 @@ public class SampleInfo {
 
     private final List<TabletStats> lowWeightTablets;
 
-    public SampleInfo(String dbName, String tableName, double tabletSampleRatio,
+    public SampleInfo() {
+        this.tabletSampleRatio = 1;
+        this.sampleRowCount = 1;
+        this.totalRowCount = 1;
+        this.rowSampleRatio = 1;
+        this.highWeightTablets = null;
+        this.mediumHighWeightTablets = null;
+        this.mediumLowWeightTablets = null;
+        this.lowWeightTablets = null;
+    }
+
+    public SampleInfo(double tabletSampleRatio,
                       long sampleRowCount, long totalRowCount,
                       List<TabletStats> highWeightTablets,
                       List<TabletStats> mediumHighWeightTablets,
                       List<TabletStats> mediumLowWeightTablets,
                       List<TabletStats> lowWeightTablets) {
-        this.dbName = dbName;
-        this.tableName = tableName;
         this.tabletSampleRatio = tabletSampleRatio;
         this.sampleRowCount = sampleRowCount;
         this.totalRowCount = totalRowCount;
@@ -64,34 +70,55 @@ public class SampleInfo {
         this.lowWeightTablets = lowWeightTablets;
     }
 
-    public double getTabletSampleRatio() {
-        return tabletSampleRatio;
+    public long getTotalRowCount() {
+        return totalRowCount;
     }
 
     public double getRowSampleRatio() {
         return rowSampleRatio;
     }
 
+    public List<TabletStats> getHighWeightTablets() {
+        return highWeightTablets;
+    }
+
+    public List<TabletStats> getMediumHighWeightTablets() {
+        return mediumHighWeightTablets;
+    }
+
+    public List<TabletStats> getMediumLowWeightTablets() {
+        return mediumLowWeightTablets;
+    }
+
+    public List<TabletStats> getLowWeightTablets() {
+        return lowWeightTablets;
+    }
+
+    public double getTabletSampleRatio() {
+        return tabletSampleRatio;
+    }
+
     public long getSampleRowCount() {
         return sampleRowCount;
     }
 
-    public long getTotalRowCount() {
-        return totalRowCount;
-    }
-
     public int getMaxSampleTabletNum() {
-        int max = highWeightTablets.size();
-        max = Math.max(max, mediumHighWeightTablets.size());
-        max = Math.max(max, mediumLowWeightTablets.size());
-        max = Math.max(max, lowWeightTablets.size());
+        int max = getHighWeightTablets().size();
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getLowWeightTablets().size());
         return max;
     }
 
     public String generateComplexTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                 List<ColumnStats> complexTypeStats) {
         String sep = ", ";
-        String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME + " VALUES ";
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+
+        String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME + columnNames + " VALUES ";
         StringJoiner joiner = new StringJoiner(sep, prefix, ";");
 
         for (ColumnStats columnStats : complexTypeStats) {
@@ -116,14 +143,16 @@ public class SampleInfo {
         return joiner.toString();
     }
 
-
-
     public String generatePrimitiveTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                   List<ColumnStats> primitiveTypeStats,
                                                   TabletSampleManager manager) {
         String prefix = "INSERT INTO " + STATISTICS_DB_NAME + "." + SAMPLE_STATISTICS_TABLE_NAME;
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
         StringBuilder builder = new StringBuilder();
-        builder.append(prefix).append(" ");
+        builder.append(prefix).append(columnNames).append(" ");
         builder.append("WITH base_cte_table as (");
         String queryDataSql = generateQueryDataSql(tableName, dbName, primitiveTypeStats, manager);
         builder.append(queryDataSql).append(") ");
@@ -211,8 +240,14 @@ public class SampleInfo {
         hint.append(tabletStats.stream()
                 .map(e -> String.valueOf(e.getTabletId()))
                 .collect(Collectors.joining(", ", "(", ")")));
-        hint.append(" WHERE rand() <= ").append(readRatio);
-        hint.append(" LIMIT ").append(sampleRowsLimit);
+
+        if (Config.enable_use_table_sample_collect_statistics) {
+            int percent = Math.max(1, Math.min(100, (int) (readRatio * 100)));
+            hint.append(String.format(" SAMPLE('percent'='%d') LIMIT %d ", percent, sampleRowsLimit));
+        } else {
+            hint.append(" WHERE rand() <= ").append(readRatio);
+            hint.append(" LIMIT ").append(sampleRowsLimit);
+        }
         return hint.toString();
     }
 

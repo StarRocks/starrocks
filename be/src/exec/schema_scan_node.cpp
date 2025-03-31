@@ -182,7 +182,7 @@ Status SchemaScanNode::open(RuntimeState* state) {
 }
 
 Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    VLOG(1) << "SchemaScanNode::GetNext";
+    VLOG(2) << "SchemaScanNode::GetNext";
 
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     DCHECK(_is_init);
@@ -211,7 +211,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         DCHECK(dest_slot_descs[i]->is_materialized());
         int j = _index_map[i];
         SlotDescriptor* src_slot = src_slot_descs[j];
-        ColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
         column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), src_slot->id());
     }
@@ -223,7 +223,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     }
 
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 

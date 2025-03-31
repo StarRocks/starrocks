@@ -43,7 +43,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -52,8 +52,12 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "runtime/batch_write/batch_write_mgr.h"
+#include "runtime/batch_write/txn_state_cache.h"
+#include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -79,16 +83,18 @@ std::atomic<UpdateConfigAction*> UpdateConfigAction::_instance(nullptr);
 
 Status UpdateConfigAction::update_config(const std::string& name, const std::string& value) {
     std::call_once(_once_flag, [&]() {
-        _config_callback.emplace("scanner_thread_pool_thread_num", [&]() {
+        _config_callback.emplace("scanner_thread_pool_thread_num", [&]() -> Status {
             LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
+            return Status::OK();
         });
-        _config_callback.emplace("storage_page_cache_limit", [&]() {
+        _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
             int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
             cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
+            return Status::OK();
         });
-        _config_callback.emplace("disable_storage_page_cache", [&]() {
+        _config_callback.emplace("disable_storage_page_cache", [&]() -> Status {
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
@@ -96,166 +102,249 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
+            return Status::OK();
         });
-        _config_callback.emplace("datacache_mem_size", [&]() {
+        _config_callback.emplace("datacache_mem_size", [&]() -> Status {
             int64_t mem_limit = MemInfo::physical_mem();
             if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
                 mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
             }
+
             size_t mem_size = 0;
             Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit, &mem_size);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to update datacache mem size";
-                return;
+                return st;
             }
-            (void)BlockCache::instance()->update_mem_quota(mem_size, true);
+            return BlockCache::instance()->update_mem_quota(mem_size, true);
         });
-        _config_callback.emplace("datacache_disk_size", [&]() {
+        _config_callback.emplace("datacache_disk_size", [&]() -> Status {
             std::vector<DirSpace> spaces;
-            Status st = DataCacheUtils::parse_conf_datacache_disk_spaces(
-                    config::datacache_disk_path, config::datacache_disk_size, config::ignore_broken_disk, &spaces);
-            if (!st.ok()) {
-                LOG(WARNING) << "Failed to update datacache disk spaces";
-                return;
+            BlockCache::instance()->disk_spaces(&spaces);
+            for (auto& space : spaces) {
+                int64_t disk_size =
+                        DataCacheUtils::parse_conf_datacache_disk_size(space.path, config::datacache_disk_size, -1);
+                if (disk_size < 0) {
+                    LOG(WARNING) << "Failed to update datacache disk spaces for the invalid disk_size: " << disk_size;
+                    return Status::InternalError("Fail to update datacache disk spaces");
+                }
+                space.size = disk_size;
             }
-            (void)BlockCache::instance()->adjust_disk_spaces(spaces);
+            return BlockCache::instance()->update_disk_spaces(spaces);
         });
-        _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
-        _config_callback.emplace("max_compaction_concurrency", [&]() {
-            (void)StorageEngine::instance()->compaction_manager()->update_max_threads(
+        _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
+            if (!config::enable_event_based_compaction_framework) {
+                return Status::InvalidArgument(
+                        "This parameter is mutable when the Event-based Compaction Framework is enabled.");
+            }
+            return StorageEngine::instance()->compaction_manager()->update_max_threads(
                     config::max_compaction_concurrency);
         });
-        _config_callback.emplace("flush_thread_num_per_store", [&]() {
+        _config_callback.emplace("flush_thread_num_per_store", [&]() -> Status {
             const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
-            (void)StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
+            Status st1 = StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
-            (void)StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
+            Status st2 = StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
-            (void)StorageEngine::instance()->segment_flush_executor()->update_max_threads(
+            Status st3 = StorageEngine::instance()->segment_flush_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
+            if (!st1.ok() || !st2.ok() || !st3.ok()) {
+                return Status::InvalidArgument("Failed to update flush_thread_num_per_store.");
+            }
+            return st1;
         });
-        _config_callback.emplace("lake_flush_thread_num_per_store", [&]() {
-            (void)StorageEngine::instance()->lake_memtable_flush_executor()->update_max_threads(
+        _config_callback.emplace("lake_flush_thread_num_per_store", [&]() -> Status {
+            return StorageEngine::instance()->lake_memtable_flush_executor()->update_max_threads(
                     MemTableFlushExecutor::calc_max_threads_for_lake_table(StorageEngine::instance()->get_stores()));
         });
-        _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
+        _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() -> Status {
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
+            return Status::OK();
         });
-        _config_callback.emplace("pindex_major_compaction_num_threads", [&]() {
+        _config_callback.emplace("pindex_major_compaction_num_threads", [&]() -> Status {
             PersistentIndexCompactionManager* mgr =
                     StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
             if (mgr != nullptr) {
                 const int max_pk_index_compaction_thread_cnt = std::max(1, config::pindex_major_compaction_num_threads);
-                (void)mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
+                return mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
             }
+            return Status::OK();
         });
-        _config_callback.emplace("update_memory_limit_percent", [&]() {
-            (void)StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
+        _config_callback.emplace("update_memory_limit_percent", [&]() -> Status {
+            Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-            (void)_exec_env->lake_update_manager()->update_primary_index_memory_limit(
+            st = _exec_env->lake_update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
 #endif
+            return st;
         });
-        _config_callback.emplace("dictionary_cache_refresh_threadpool_size", [&]() {
+        _config_callback.emplace("dictionary_cache_refresh_threadpool_size", [&]() -> Status {
             if (_exec_env->dictionary_cache_pool() != nullptr) {
-                (void)_exec_env->dictionary_cache_pool()->update_max_threads(
+                return _exec_env->dictionary_cache_pool()->update_max_threads(
                         config::dictionary_cache_refresh_threadpool_size);
             }
+            return Status::OK();
         });
-        _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
+        _config_callback.emplace("transaction_publish_version_worker_count", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            (void)thread_pool->update_max_threads(
+            return thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
-        _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() {
+        _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            (void)thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
-                                                           config::transaction_publish_version_thread_pool_num_min));
+            return thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                            config::transaction_publish_version_thread_pool_num_min));
         });
-        _config_callback.emplace("parallel_clone_task_per_path", [&]() {
+        _config_callback.emplace("parallel_clone_task_per_path", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
+            return Status::OK();
         });
-        _config_callback.emplace("replication_threads", [&]() {
+        _config_callback.emplace("make_snapshot_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MAKE_SNAPSHOT,
+                                                                 config::make_snapshot_worker_count);
+            return Status::OK();
+        });
+        _config_callback.emplace("release_snapshot_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::RELEASE_SNAPSHOT,
+                                                                 config::release_snapshot_worker_count);
+            return Status::OK();
+        });
+        _config_callback.emplace("upload_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::UPLOAD, config::upload_worker_count);
+            return Status::OK();
+        });
+        _config_callback.emplace("download_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::DOWNLOAD, config::download_worker_count);
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MOVE, config::download_worker_count);
+            return Status::OK();
+        });
+        _config_callback.emplace("replication_threads", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REMOTE_SNAPSHOT,
                                                                  config::replication_threads);
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REPLICATE_SNAPSHOT,
                                                                  config::replication_threads);
+            return Status::OK();
         });
-        _config_callback.emplace("alter_tablet_worker_count", [&]() {
+        _config_callback.emplace("alter_tablet_worker_count", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
+            return Status::OK();
         });
-        _config_callback.emplace("lake_metadata_cache_limit", [&]() {
+        _config_callback.emplace("lake_metadata_cache_limit", [&]() -> Status {
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+            return Status::OK();
         });
 #ifdef USE_STAROS
-        _config_callback.emplace("starlet_use_star_cache", [&]() { update_staros_starcache(); });
-        _config_callback.emplace("starlet_star_cache_mem_size_percent", [&]() { update_staros_starcache(); });
-        _config_callback.emplace("starlet_star_cache_mem_size_bytes", [&]() { update_staros_starcache(); });
+        _config_callback.emplace("starlet_use_star_cache", [&]() -> Status {
+            update_staros_starcache();
+            return Status::OK();
+        });
+        _config_callback.emplace("starlet_star_cache_mem_size_percent", [&]() -> Status {
+            update_staros_starcache();
+            return Status::OK();
+        });
+        _config_callback.emplace("starlet_star_cache_mem_size_bytes", [&]() -> Status {
+            update_staros_starcache();
+            return Status::OK();
+        });
 #endif
-        _config_callback.emplace("transaction_apply_worker_count", [&]() {
+        _config_callback.emplace("transaction_apply_worker_count", [&]() -> Status {
             int max_thread_cnt = CpuInfo::num_cores();
             if (config::transaction_apply_worker_count > 0) {
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
-            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+            return StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
         });
-        _config_callback.emplace("transaction_apply_thread_pool_num_min", [&]() {
+        _config_callback.emplace("transaction_apply_thread_pool_num_min", [&]() -> Status {
             int min_thread_cnt = config::transaction_apply_thread_pool_num_min;
-            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
+            return StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
         });
-        _config_callback.emplace("get_pindex_worker_count", [&]() {
+        _config_callback.emplace("get_pindex_worker_count", [&]() -> Status {
             int max_thread_cnt = CpuInfo::num_cores();
             if (config::get_pindex_worker_count > 0) {
                 max_thread_cnt = config::get_pindex_worker_count;
             }
-            (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
+            return StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
                     max_thread_cnt);
         });
-        _config_callback.emplace("drop_tablet_worker_count", [&]() {
+        _config_callback.emplace("drop_tablet_worker_count", [&]() -> Status {
+            int max_thread_cnt = std::max((int)CpuInfo::num_cores() / 2, (int)1);
+            if (config::drop_tablet_worker_count > 0) {
+                max_thread_cnt = config::drop_tablet_worker_count;
+            }
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
-            (void)thread_pool->update_max_threads(config::drop_tablet_worker_count);
+            return thread_pool->update_max_threads(max_thread_cnt);
         });
-        _config_callback.emplace("make_snapshot_worker_count", [&]() {
+        _config_callback.emplace("make_snapshot_worker_count", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
-            (void)thread_pool->update_max_threads(config::make_snapshot_worker_count);
+            return thread_pool->update_max_threads(config::make_snapshot_worker_count);
         });
-        _config_callback.emplace("release_snapshot_worker_count", [&]() {
+        _config_callback.emplace("release_snapshot_worker_count", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
-            (void)thread_pool->update_max_threads(config::release_snapshot_worker_count);
+            return thread_pool->update_max_threads(config::release_snapshot_worker_count);
         });
-        _config_callback.emplace("pipeline_connector_scan_thread_num_per_cpu", [&]() {
+        _config_callback.emplace("pipeline_connector_scan_thread_num_per_cpu", [&]() -> Status {
             LOG(INFO) << "set pipeline_connector_scan_thread_num_per_cpu:"
                       << config::pipeline_connector_scan_thread_num_per_cpu;
             if (config::pipeline_connector_scan_thread_num_per_cpu > 0) {
                 ExecEnv::GetInstance()->workgroup_manager()->change_num_connector_scan_threads(
                         config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
             }
+            return Status::OK();
         });
-        _config_callback.emplace("enable_resource_group_cpu_borrowing", [&]() {
+        _config_callback.emplace("enable_resource_group_cpu_borrowing", [&]() -> Status {
             LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;
             ExecEnv::GetInstance()->workgroup_manager()->change_enable_resource_group_cpu_borrowing(
                     config::enable_resource_group_cpu_borrowing);
+            return Status::OK();
         });
-        _config_callback.emplace("create_tablet_worker_count", [&]() {
+        _config_callback.emplace("create_tablet_worker_count", [&]() -> Status {
             LOG(INFO) << "set create_tablet_worker_count:" << config::create_tablet_worker_count;
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CREATE);
-            (void)thread_pool->update_max_threads(config::create_tablet_worker_count);
+            return thread_pool->update_max_threads(config::create_tablet_worker_count);
         });
-        _config_callback.emplace("number_tablet_writer_threads", [&]() {
+        _config_callback.emplace("check_consistency_worker_count", [&]() -> Status {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CHECK_CONSISTENCY);
+            return thread_pool->update_max_threads(std::max(1, config::check_consistency_worker_count));
+        });
+        _config_callback.emplace("load_channel_rpc_thread_pool_num", [&]() -> Status {
+            LOG(INFO) << "set load_channel_rpc_thread_pool_num:" << config::load_channel_rpc_thread_pool_num;
+            return ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(
+                    config::load_channel_rpc_thread_pool_num);
+        });
+        _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
             LOG(INFO) << "set number_tablet_writer_threads:" << config::number_tablet_writer_threads;
             bthreads::ThreadPoolExecutor* executor = static_cast<bthreads::ThreadPoolExecutor*>(
                     StorageEngine::instance()->async_delta_writer_executor());
-            (void)executor->get_thread_pool()->update_max_threads(config::number_tablet_writer_threads);
+            return executor->get_thread_pool()->update_max_threads(config::number_tablet_writer_threads);
         });
-        _config_callback.emplace("compact_threads", [&]() {
+        _config_callback.emplace("compact_threads", [&]() -> Status {
             auto tablet_manager = _exec_env->lake_tablet_manager();
             if (tablet_manager != nullptr) {
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
+            return Status::OK();
+        });
+        _config_callback.emplace("load_spill_merge_memory_limit_percent", [&]() -> Status {
+            // The change of load spill merge memory will be reflected in the max thread cnt of load spill merge pool.
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
+        _config_callback.emplace("load_spill_merge_max_thread", [&]() -> Status {
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
+        _config_callback.emplace("load_spill_max_merge_bytes", [&]() -> Status {
+            return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+        });
+        _config_callback.emplace("merge_commit_txn_state_cache_capacity", [&]() -> Status {
+            LOG(INFO) << "set merge_commit_txn_state_cache_capacity: " << config::merge_commit_txn_state_cache_capacity;
+            auto batch_write_mgr = _exec_env->batch_write_mgr();
+            if (batch_write_mgr) {
+                batch_write_mgr->txn_state_cache()->set_capacity(config::merge_commit_txn_state_cache_capacity);
+            }
+            return Status::OK();
         });
 
 #ifdef USE_STAROS
@@ -263,7 +352,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
     _config_callback.emplace(#BE_CONFIG, [value]() {                                                 \
         if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
             LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
+            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");     \
         }                                                                                            \
+        return Status::OK();                                                                         \
     });
 
         UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
@@ -279,17 +370,40 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
                               fslib_s3client_nonread_retry_scale_factor);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
+        if (config::object_storage_request_timeout_ms >= 0 &&
+            config::object_storage_request_timeout_ms <= std::numeric_limits<int32_t>::max()) {
+            UPDATE_STARLET_CONFIG(object_storage_request_timeout_ms, fslib_s3client_request_timeout_ms);
+        }
         UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG
+
+#ifndef BUILD_FORMAT_LIB
+        _config_callback.emplace("starlet_filesystem_instance_cache_capacity", [&]() -> Status {
+            LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
+                      << config::starlet_filesystem_instance_cache_capacity;
+            if (g_worker) {
+                g_worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
+            }
+            return Status::OK();
+        });
+#endif
+
 #endif // USE_STAROS
     });
 
     Status s = config::set_config(name, value);
     if (s.ok()) {
-        LOG(INFO) << "set_config " << name << "=" << value << " success";
         if (_config_callback.count(name)) {
-            _config_callback[name]();
+            s = _config_callback[name]();
+            if (!s.ok()) {
+                Status rollback_status = config::rollback_config(name);
+                if (!rollback_status.ok()) {
+                    LOG(WARNING) << strings::Substitute("Failed to rollback config: $0.", name);
+                }
+            } else {
+                LOG(INFO) << "set_config " << name << "=" << value << " success";
+            }
         }
     }
     return s;

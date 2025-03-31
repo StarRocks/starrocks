@@ -25,11 +25,12 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -37,6 +38,7 @@ import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
@@ -65,6 +67,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class SetStmtAnalyzer {
     public static void analyze(SetStmt setStmt, ConnectContext session) {
@@ -147,7 +150,7 @@ public class SetStmtAnalyzer {
                 checkRangeLongVariable(resolvedExpression, SessionVariable.EXEC_MEM_LIMIT,
                         SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new SemanticException(e.getMessage());
         }
 
@@ -157,6 +160,11 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.QUERY_TIMEOUT,
+                    1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.INSERT_TIMEOUT,
                     1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
         }
 
@@ -315,6 +323,35 @@ public class SetStmtAnalyzer {
         // check populate datacache mode
         if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
             DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // count_distinct_implementation
+        if (variable.equalsIgnoreCase(SessionVariable.COUNT_DISTINCT_IMPLEMENTATION)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariableConstants.CountDistinctImplMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariableConstants.CountDistinctImplMode.class), ",");
+                throw new SemanticException(String.format("Unsupported count distinct implementation mode: %s, " +
+                        "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.ANN_PARAMS)) {
+            String annParams = resolvedExpression.getStringValue();
+            if (!Strings.isNullOrEmpty(annParams)) {
+                Map<String, String> annParamMap = null;
+                try {
+                    java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {}.getType();
+                    annParamMap = GsonUtils.GSON.fromJson(annParams, type);
+                } catch (Exception e) {
+                    throw new SemanticException(String.format("Unsupported ann_params: %s, " +
+                            "It should be a Dict JSON string, each key and value of which is string", annParams));
+                }
+
+                for (Map.Entry<String, String> entry : annParamMap.entrySet()) {
+                    IndexParams.getInstance().checkParams(entry.getKey().toUpperCase(), entry.getValue());
+                }
+            }
         }
 
         var.setResolvedExpression(resolvedExpression);

@@ -17,7 +17,7 @@ package com.starrocks.qe;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.ast.StatementBase;
@@ -80,7 +80,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         ExecuteExceptionHandler.RetryContext retryContext =
                 new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
         try {
-            ExecuteExceptionHandler.handle(new UserException("invalid field name"), retryContext);
+            ExecuteExceptionHandler.handle(new StarRocksException("invalid field name"), retryContext);
             Assert.assertTrue(retryContext.getExecPlan() != execPlan);
         } catch (Exception e) {
             fail("should not throw any exception");
@@ -94,8 +94,8 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         ExecuteExceptionHandler.RetryContext retryContext =
                 new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
-        Assert.assertThrows(UserException.class,
-                () -> ExecuteExceptionHandler.handle(new UserException("other exception"), retryContext));
+        Assert.assertThrows(StarRocksException.class,
+                () -> ExecuteExceptionHandler.handle(new StarRocksException("other exception"), retryContext));
     }
 
     @Test
@@ -108,7 +108,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
                 new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
         Assert.assertEquals(retryContext.getExecPlan(), execPlan);
 
-        ExceptionChecker.expectThrowsNoException(() -> ExecuteExceptionHandler.handle(new UserException(
+        ExceptionChecker.expectThrowsNoException(() -> ExecuteExceptionHandler.handle(new StarRocksException(
                 InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR, FeConstants.BACKEND_NODE_NOT_FOUND_ERROR), retryContext));
 
         Assert.assertNotEquals(retryContext.getExecPlan(), execPlan);

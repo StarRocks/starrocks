@@ -47,36 +47,6 @@ StarRocks 跨集群数据迁移工具是社区提供的 StarRocks 数据迁移�
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
 ```
 
-### 关闭 Compaction
-
-如果数据迁移的目标集群为存算分离集群，在数据迁移之前，您需要手动关闭 Compaction，并在数据迁移完成后重新开启。
-
-1. 您可以通过以下语句查看当前集群是否开启 Compaction：
-
-   ```SQL
-   ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks';
-   ```
-
-   如果返回值为 `0` 则表示 Compaction 关闭。
-
-2. 动态关闭 Compaction：
-
-   ```SQL
-   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="0");
-   ```
-
-3. 为防止数据迁移过程中集群重启后 Compaction 自动开启，您还需要在 FE 配置文件 **fe.conf** 中添加以下配置项：
-
-   ```Properties
-   lake_compaction_max_tasks = 0
-   ```
-
-数据迁移完成后，您需要删除配置文件中的 `lake_compaction_max_tasks = 0`，并通过以下语句动态开启 Compaction：
-
-```SQL
-ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
-```
-
 ### 配置数据迁移（可选）
 
 您可以通过以下 FE 和 BE 参数配置数据迁移操作。通常情况下，默认配置即可满足需求。如果您想保留默认配置，可以选择跳过该步骤。
@@ -100,7 +70,7 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 #### BE 参数
 
-以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md#配置-be-动态参数)。
+以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md)。
 
 | **参数名**          | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |
@@ -372,7 +342,7 @@ ORDER BY TABLE_NAME;
 
 ## Q&A
 
-### Q1：为什么只能同步表结构？
+### Q1：集群间需要开通哪些端口？
 
 如果您开启了防火墙，则需要开通以下端口：
 

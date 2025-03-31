@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -60,14 +61,17 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.load.Load;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -89,11 +93,14 @@ import mockit.Mocked;
 import okhttp3.Credentials;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -102,6 +109,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+import static org.junit.Assert.assertNotNull;
 
 public abstract class StarRocksHttpTestCase {
 
@@ -129,6 +138,7 @@ public abstract class StarRocksHttpTestCase {
     protected static long testDbId = 100L;
     protected static long testTableId = 200L;
     protected static long testPartitionId = 201L;
+    protected static long testPhysicalPartitionId = 202L;
     public static long testIndexId = testTableId; // the base indexid == tableid
     protected static long tabletId = 400L;
 
@@ -171,9 +181,10 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
-        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
-        partition.updateVisibleVersion(testStartVersion);
-        partition.setNextVersion(testStartVersion + 1);
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -228,9 +239,10 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
-        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
-        partition.updateVisibleVersion(testStartVersion);
-        partition.setNextVersion(testStartVersion + 1);
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -372,15 +384,15 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb("default_catalog", "testDb");
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "testDb");
                 minTimes = 0;
                 result = db;
 
-                metadataMgr.getTable("default_catalog", "testDb", "testTbl");
+                metadataMgr.getTable((ConnectContext) any, "default_catalog", "testDb", "testTbl");
                 minTimes = 0;
                 result = table;
 
-                metadataMgr.getTable("default_catalog", "testDb", "test_empty_table");
+                metadataMgr.getTable((ConnectContext) any, "default_catalog", "testDb", "test_empty_table");
                 minTimes = 0;
                 result = newEmptyTable;
             }
@@ -526,14 +538,21 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "", 0);
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
+
+                nodeMgr.getMySelf();
+                minTimes = 0;
+                result = frontend;
             }
         };
 
+        // init default warehouse
+        globalStateMgr.getWarehouseMgr().initDefaultWarehouse();
         assignBackends();
         doSetUp();
     }
@@ -605,5 +624,13 @@ public abstract class StarRocksHttpTestCase {
         }
 
         request.getContext().write(responseObj).addListener(ChannelFutureListener.CLOSE);
+    }
+
+    protected static Map<String, Object> parseResponseBody(Response response) throws IOException {
+        assertNotNull(response);
+        ResponseBody body = response.body();
+        assertNotNull(body);
+        String bodyStr = body.string();
+        return objectMapper.readValue(bodyStr, new TypeReference<>() {});
     }
 }

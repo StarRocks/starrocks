@@ -23,9 +23,11 @@ struct IcebergColumnMeta;
 
 class IcebergDeleteBuilder {
 public:
-    IcebergDeleteBuilder(std::set<int64_t>* need_skip_rowids, RuntimeState* state,
-                         const HdfsScannerParams& scanner_params)
-            : _need_skip_rowids(need_skip_rowids), _params(scanner_params), _runtime_state(state) {}
+    IcebergDeleteBuilder(SkipRowsContextPtr skip_rows_ctx, RuntimeState* state, const HdfsScannerParams& scanner_params)
+            : _skip_rows_ctx(std::move(skip_rows_ctx)),
+              _params(scanner_params),
+              _runtime_state(state),
+              _deletion_bitmap(std::make_shared<DeletionBitmap>(roaring64_bitmap_create())) {}
 
     ~IcebergDeleteBuilder() = default;
 
@@ -45,9 +47,10 @@ private:
             const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
     Status fill_skip_rowids(const ChunkPtr& chunk) const;
 
-    std::set<int64_t>* _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx;
     const HdfsScannerParams& _params;
     RuntimeState* _runtime_state;
+    DeletionBitmapPtr _deletion_bitmap;
 };
 
 class IcebergDeleteFileMeta {

@@ -20,7 +20,9 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <fmt/format.h>
 
+#include "io/io_profiler.h"
 #include "io/s3_zero_copy_iostream.h"
+#include "util/stopwatch.hpp"
 
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"
@@ -42,6 +44,8 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     if (_offset >= _size) {
         return 0;
     }
+    MonotonicStopWatch watch;
+    watch.start();
     count = std::min(count, _size - _offset);
 
     // prefetch case:
@@ -70,6 +74,7 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
                 return Status::InternalError("The response length is different from request length for io stream!");
             }
             _offset += real_length;
+            IOProfiler::add_read(count, watch.elapsed_time());
             return real_length;
         } else {
             return make_error_status(outcome.GetError());
@@ -114,6 +119,7 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
             copy_length += remain_to_read_length;
         }
         _offset += copy_length;
+        IOProfiler::add_read(count, watch.elapsed_time());
         return copy_length;
     }
 }
@@ -148,12 +154,15 @@ void S3InputStream::set_size(int64_t value) {
 }
 
 StatusOr<std::string> S3InputStream::read_all() {
+    MonotonicStopWatch watch;
+    watch.start();
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(_bucket);
     request.SetKey(_object);
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
+        IOProfiler::add_read(body.gcount(), watch.elapsed_time());
         return std::string(std::istreambuf_iterator<char>(body), {});
     } else {
         return make_error_status(outcome.GetError());

@@ -67,7 +67,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     // seek to the first page
     RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
-    auto compress_type = convert_compression_codec(metadata().codec);
+    auto compress_type = ParquetUtils::convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
     _chunk_size = chunk_size;
@@ -120,10 +120,16 @@ Status ColumnChunkReader::_parse_page_header() {
     size_t now = _page_reader->get_offset();
     _opts.stats->request_bytes_read += (now - off);
     _opts.stats->request_bytes_read_uncompressed += (now - off);
+    _page_parse_state = PAGE_HEADER_PARSED;
 
     // The page num values will be used for late materialization before parsing page data,
     // so we set _num_values when parsing header.
-    if (_page_reader->current_header()->type == tparquet::PageType::DATA_PAGE) {
+    auto& page_type = _page_reader->current_header()->type;
+    // TODO: support DATA_PAGE_V2, now common writer use DATA_PAGE as default
+    if (UNLIKELY(page_type != tparquet::PageType::DICTIONARY_PAGE && page_type != tparquet::PageType::DATA_PAGE)) {
+        return Status::NotSupported(strings::Substitute("Not supported page type: $0", page_type));
+    }
+    if (page_type == tparquet::PageType::DATA_PAGE) {
         const auto& header = *_page_reader->current_header();
         _num_values = header.data_page_header.num_values;
         _opts.stats->has_page_statistics |=
@@ -136,7 +142,6 @@ Status ColumnChunkReader::_parse_page_header() {
                         : false;
     }
 
-    _page_parse_state = PAGE_HEADER_PARSED;
     return Status::OK();
 }
 

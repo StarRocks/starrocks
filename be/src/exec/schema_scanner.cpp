@@ -19,6 +19,8 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/schema_scanner/schema_analyze_status.h"
+#include "exec/schema_scanner/schema_applicable_roles_scanner.h"
 #include "exec/schema_scanner/schema_be_bvars_scanner.h"
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
@@ -30,11 +32,15 @@
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
 #include "exec/schema_scanner/schema_charsets_scanner.h"
+#include "exec/schema_scanner/schema_cluster_snapshot_jobs_scanner.h"
+#include "exec/schema_scanner/schema_cluster_snapshots_scanner.h"
 #include "exec/schema_scanner/schema_collations_scanner.h"
+#include "exec/schema_scanner/schema_column_stats_usage_scanner.h"
 #include "exec/schema_scanner/schema_columns_scanner.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
 #include "exec/schema_scanner/schema_fe_metrics_scanner.h"
 #include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
+#include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
@@ -104,7 +110,7 @@ Status SchemaScanner::init_schema_scanner_state(RuntimeState* state) {
     _ss_state.ip = *(_param->ip);
     _ss_state.port = _param->port;
     _ss_state.timeout_ms = state->query_options().query_timeout * 1000;
-    VLOG(1) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
+    VLOG(2) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
     _ss_state.param = _param;
     return Status::OK();
 }
@@ -213,6 +219,18 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+    case TSchemaTableType::SCH_COLUMN_STATS_USAGE:
+        return std::make_unique<SchemaColumnStatsUsageScanner>();
+    case TSchemaTableType::SCH_ANALYZE_STATUS:
+        return std::make_unique<SchemaAnalyzeStatus>();
+    case TSchemaTableType::SCH_CLUSTER_SNAPSHOTS:
+        return std::make_unique<SchemaClusterSnapshotsScanner>();
+    case TSchemaTableType::SCH_CLUSTER_SNAPSHOT_JOBS:
+        return std::make_unique<SchemaClusterSnapshotJobsScanner>();
+    case TSchemaTableType::SCH_APPLICABLE_ROLES:
+        return std::make_unique<SchemaApplicableRolesScanner>();
+    case TSchemaTableType::SCH_KEYWORDS:
+        return std::make_unique<SchemaKeywordsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
@@ -345,7 +363,7 @@ bool SchemaScanner::_parse_expr_predicate(Expr* conjunct, const std::string& col
     auto literal_col = literal_col_status.value();
     Slice padded_value(literal_col->get(0).get_slice());
     result = padded_value.to_string();
-    VLOG(1) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
+    VLOG(2) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
             << ", result_child_idx=" << result_child_idx;
     return true;
 }

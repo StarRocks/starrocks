@@ -43,7 +43,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
@@ -90,7 +90,7 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         super.init(analyzer);
 
         assignNodes();
@@ -106,7 +106,7 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
     }
 
     /**
@@ -165,7 +165,7 @@ public class EsScanNode extends ScanNode {
         msg.es_scan_node = esScanNode;
     }
 
-    public void assignNodes() throws UserException {
+    public void assignNodes() throws StarRocksException {
         nodeMap = HashMultimap.create();
         nodeList = Lists.newArrayList();
 
@@ -190,7 +190,7 @@ public class EsScanNode extends ScanNode {
             }
         }
         if (nodeMap.isEmpty()) {
-            throw new UserException("No Alive backends or compute nodes");
+            throw new StarRocksException("No Alive backends or compute nodes");
         }
     }
 

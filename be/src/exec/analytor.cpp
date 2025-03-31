@@ -123,6 +123,17 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     if (_tnode.analytic_node.__isset.sql_aggregate_functions) {
         _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
     }
+
+    _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
+    if (_is_merge_funcs) {
+        for (size_t i = 1; i < _tnode.analytic_node.analytic_functions.size(); i++) {
+            DCHECK(_tnode.analytic_node.analytic_functions[i].nodes[0].agg_expr.is_merge_agg);
+        }
+    }
+    if (_is_merge_funcs) {
+        _runtime_profile->add_info_string("isMerge", "true");
+    }
+
     _mem_pool = std::make_unique<MemPool>();
 
     const TAnalyticNode& analytic_node = _tnode.analytic_node;
@@ -166,7 +177,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
-        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count")) {
+        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count" ||
+              fn.name.function_name == "max" || fn.name.function_name == "min")) {
             _use_removable_cumulative_process = false;
         }
 
@@ -180,6 +192,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 return_type = TYPE_DOUBLE;
             }
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
+            if (_is_merge_funcs && fn.name.function_name == "count") {
+                is_input_nullable = false;
+            }
             auto* func = get_window_function(fn.name.function_name, TYPE_BIGINT, return_type, is_input_nullable,
                                              fn.binary_type, state->func_version());
             _agg_functions[i] = func;
@@ -339,7 +354,8 @@ Status Analytor::open(RuntimeState* state) {
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
-        _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+        _managed_fn_states.emplace_back(
+                std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
         return Status::OK();
     };
 
@@ -490,7 +506,7 @@ Status Analytor::_evaluate_const_columns(int i) {
         // Only agg fn has this context.
         return Status::OK();
     }
-    std::vector<ColumnPtr> const_columns;
+    Columns const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
     for (auto& j : _agg_expr_ctxs[i]) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
@@ -949,9 +965,16 @@ void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_e
             // instead of _partition.end to refer to the current right boundary.
             frame_end = std::min<int64_t>(frame_end, _partition.end);
         }
-        _agg_functions[i]->update_batch_single_state_with_frame(
-                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
-                partition_start, partition_end, frame_start, frame_end);
+        if (_is_merge_funcs) {
+            for (size_t j = frame_start; j < frame_end; j++) {
+                _agg_functions[i]->merge(_agg_fn_ctxs[i], data_columns[0],
+                                         _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], j);
+            }
+        } else {
+            _agg_functions[i]->update_batch_single_state_with_frame(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
+                    partition_start, partition_end, frame_start, frame_end);
+        }
     }
 }
 
@@ -962,7 +985,7 @@ void Analytor::_update_window_batch_removable_cumulatively() {
         _agg_functions[i]->update_state_removable_cumulatively(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 _current_row_position, _partition.start, _partition.end, _rows_start_offset, _rows_end_offset, false,
-                false);
+                false, false);
     }
 }
 

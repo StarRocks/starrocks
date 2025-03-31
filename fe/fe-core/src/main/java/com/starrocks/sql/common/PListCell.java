@@ -16,9 +16,16 @@ package com.starrocks.sql.common;
 
 import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
@@ -30,6 +37,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.ast.PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
+
 
 /**
  * {@code PListCell} means a list partition's multiple values.
@@ -52,17 +62,37 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
 
     public PListCell(List<List<String>> items) {
         Objects.requireNonNull(items);
-        this.partitionItems = items;
+        this.partitionItems = items.stream()
+                .map(item -> item.stream().map(this::adjustPartitionNullValue).collect(Collectors.toList()))
+                .collect(Collectors.toList());
     }
 
     // single value with single partition column cell
     public PListCell(String item) {
         Objects.requireNonNull(item);
-        this.partitionItems = ImmutableList.of(ImmutableList.of(item));
+        this.partitionItems = ImmutableList.of(ImmutableList.of(adjustPartitionNullValue(item)));
     }
 
     public List<List<String>> getPartitionItems() {
         return partitionItems;
+    }
+
+    // If the partition value is null, we should use STARROCKS_DEFAULT_PARTITION_VALUE instead of null.
+    private String adjustPartitionNullValue(String val) {
+        if (val == null || val.equalsIgnoreCase("null")) {
+            return STARROCKS_DEFAULT_PARTITION_VALUE;
+        } else {
+            return val;
+        }
+    }
+
+    @Override
+    public boolean isIntersected(PCell o) {
+        if (!(o instanceof PListCell)) {
+            return false;
+        }
+        PListCell other = (PListCell) o;
+        return CollectionUtils.containsAny(partitionItems, other.partitionItems);
     }
 
     public int getItemSize() {
@@ -90,27 +120,28 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
                 .collect(Collectors.toSet());
     }
 
+    public List<PartitionKey> toPartitionKeys(List<Column> columns) throws AnalysisException {
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        List<PrimitiveType> types = columns.stream()
+                .map(Column::getType).map(Type::getPrimitiveType).collect(Collectors.toList());
+        for (List<String> item : partitionItems) {
+            Preconditions.checkArgument(item.size() == columns.size(),
+                    String.format("item size %s is not equal to columns size %s", item.size(), columns.size()));
+            List<LiteralExpr> literalExprs = Lists.newArrayList();
+            for (int i = 0; i < item.size(); i++) {
+                literalExprs.add(LiteralExpr.create(item.get(i), columns.get(i).getType()));
+            }
+            partitionKeys.add(new PartitionKey(literalExprs, types));
+        }
+        return partitionKeys;
+    }
+
     /**
      * Add a list of partition items as the partition values
      * @param items new partition items
      */
     public void addItems(List<List<String>> items) {
         partitionItems.addAll(items);
-    }
-
-    /**
-     * Construct a new partition cell by using selected idx
-     */
-    public PListCell toPListCell(List<Integer> selectColIds) {
-        List<List<String>> partitionItems = Lists.newArrayList();
-        for (List<String> partitionKey : this.partitionItems) {
-            List<String> selectedPartitionKey = Lists.newArrayList();
-            for (Integer i : selectColIds) {
-                selectedPartitionKey.add(partitionKey.get(i));
-            }
-            partitionItems.add(selectedPartitionKey);
-        }
-        return new PListCell(partitionItems);
     }
 
     @Override

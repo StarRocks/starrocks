@@ -47,36 +47,6 @@ After the data migration is completed, you need to remove the configuration `ena
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
 ```
 
-### Disable Compaction
-
-If the target cluster for data migration is a shared-data cluster, you need to manually disable Compaction before starting the data migration and re-enable it after the data migration is completed.
-
-1. You can check whether Compaction is enabled by using the following statement:
-
-   ```SQL
-   ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks';
-   ```
-
-   If `0` is returned, it indicates that Compaction is disabled.
-
-2. Dynamically disable Compaction:
-
-   ```SQL
-   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="0");
-   ```
-
-3. To prevent Compaction from automatically enabling during the data migration process in case of cluster restart, you also need to add the following configuration item in the FE configuration file **fe.conf**:
-
-   ```Properties
-   lake_compaction_max_tasks = 0
-   ```
-
-After the data migration is completed, you need to remove the configuration `lake_compaction_max_tasks = 0` from the configuration file, and dynamically enable Compaction using the following statement:
-
-```SQL
-ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
-```
-
 ### Configure Data Migration (Optional)
 
 You can configure data migration operations using the following FE and BE parameters. In most cases, the default configuration can meet your needs. If you wish to use the default configuration, you can skip this step.
@@ -100,7 +70,7 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -372,7 +342,7 @@ The list of objects that support synchronization currently is as follows (those 
 
 ## Q&A
 
-### Q1: Why did only the table schemas get synchronized?
+### Q1: Which ports need to be opened between clusters?
 
 If you have enabled the firewall, you must open these ports:
 

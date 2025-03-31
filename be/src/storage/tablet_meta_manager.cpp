@@ -1746,6 +1746,14 @@ Status TabletMetaManager::remove_tablet_persistent_index_meta(DataDir* store, TT
     return meta->write_batch(&batch);
 }
 
+Status TabletMetaManager::put_pending_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                                  int64_t version, const RowsetMetaPB& rowset) {
+    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    auto k = encode_meta_pending_rowset_key(tablet_id, version);
+    auto v = rowset.SerializeAsString();
+    return to_status(batch->Put(h, k, v));
+}
+
 // methods for operating pending commits
 Status TabletMetaManager::pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                                 const RowsetMetaPB& rowset, const string& rowset_meta_key) {

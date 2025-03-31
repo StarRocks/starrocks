@@ -157,6 +157,12 @@ public class ReorderJoinRule extends Rule {
             if (copyIntoMemo) {
                 context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
             } else {
+                joinExpr.deriveLogicalPropertyItself();
+                ExpressionContext expressionContext = new ExpressionContext(joinExpr);
+                StatisticsCalculator statisticsCalculator =
+                        new StatisticsCalculator(expressionContext, context.getColumnRefFactory(), context);
+                statisticsCalculator.estimatorStats();
+                joinExpr.setStatistics(expressionContext.getStatistics());
                 return Optional.of(joinExpr);
             }
         }
@@ -184,8 +190,22 @@ public class ReorderJoinRule extends Rule {
                 if (!multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
-                Optional<OptExpression> newChild =
-                        enumerate(joinReorderFactory.create(context), context, child, multiJoinNode, false);
+
+                List<JoinOrder> orderAlgorithms = joinReorderFactory.create(context, multiJoinNode);
+                Optional<OptExpression> newChild = Optional.empty();
+                for (JoinOrder orderAlgorithm : orderAlgorithms) {
+                    newChild = enumerate(orderAlgorithm, context, child, multiJoinNode, false);
+                    if (newChild.isEmpty()) {
+                        break;
+                    }
+                    // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
+                    // and the query plan degenerates to the left deep tree
+                    if (Utils.hasUnknownColumnsStats(innerJoinRoot.first) &&
+                            (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
+                        break;
+                    }
+                }
+
                 if (newChild.isPresent()) {
                     int prevNumCrossJoins =
                             Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));
@@ -235,7 +255,8 @@ public class ReorderJoinRule extends Rule {
                     enumerate(new JoinReorderDP(context), context, innerJoinRoot, multiJoinNode, true);
                 }
 
-                if (context.getSessionVariable().isCboEnableGreedyJoinReorder()) {
+                if (context.getSessionVariable().isCboEnableGreedyJoinReorder() &&
+                        multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseGreedy()) {
                     enumerate(new JoinReorderGreedy(context), context, innerJoinRoot, multiJoinNode, true);
                 }
             }

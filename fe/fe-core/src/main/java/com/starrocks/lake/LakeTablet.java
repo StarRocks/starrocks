@@ -27,9 +27,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -59,6 +59,10 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    private volatile long minVersion = 0L;
+
+    public long rebuildPindexVersion = 0L;
+
     public LakeTablet(long id) {
         super(id);
     }
@@ -83,6 +87,14 @@ public class LakeTablet extends Tablet {
 
     public long getDataSizeUpdateTime() {
         return dataSizeUpdateTime;
+    }
+
+    public long getMinVersion() {
+        return minVersion;
+    }
+
+    public void setMinVersion(long minVersion) {
+        this.minVersion = minVersion;
     }
 
     // version is not used
@@ -111,10 +123,15 @@ public class LakeTablet extends Tablet {
             return Collections.emptySet();
         }
         try {
-            return GlobalStateMgr.getCurrentState().getWarehouseMgr()
+            List<Long> ids = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+            if (ids == null) {
+                return Sets.newHashSet();
+            } else {
+                return new HashSet<Long>(ids);
+            }
         } catch (Exception e) {
-            LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
+            LOG.warn("Failed to get backends by shard id: {}", getId(), e);
             return Sets.newHashSet();
         }
     }
@@ -138,8 +155,11 @@ public class LakeTablet extends Tablet {
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
-        Set<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+        List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+        if (computeNodeIds == null) {
+            return;
+        }
         for (long backendId : computeNodeIds) {
             Replica replica = new Replica(getId(), backendId, visibleVersion, schemaHash, getDataSize(true),
                     getRowCount(visibleVersion), NORMAL, -1, visibleVersion);
@@ -150,11 +170,7 @@ public class LakeTablet extends Tablet {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static LakeTablet read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -177,5 +193,15 @@ public class LakeTablet extends Tablet {
 
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
+    }
+
+    public void setRebuildPindexVersion(long rebuildPindexVersion) {
+        if (rebuildPindexVersion > this.rebuildPindexVersion) {
+            this.rebuildPindexVersion = rebuildPindexVersion;
+        }
+    }
+
+    public long rebuildPindexVersion() {
+        return rebuildPindexVersion;
     }
 }

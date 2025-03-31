@@ -37,6 +37,8 @@ package com.starrocks.http.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -47,8 +49,7 @@ import com.starrocks.http.BaseAction;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -92,18 +93,20 @@ public class RestBaseAction extends BaseAction {
     @Override
     public void handleRequest(BaseRequest request) {
         BaseResponse response = new BaseResponse();
+        String url = request.getRequest().uri();
         try {
+            url = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
             execute(request, response);
         } catch (AccessDeniedException accessDeniedException) {
-            LOG.warn("failed to process url: {}", request.getRequest().uri(), accessDeniedException);
+            LOG.warn("failed to process url: {}", url, accessDeniedException);
             response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
             response.appendContent(new RestBaseResult(getErrorRespWhenUnauthorized(accessDeniedException)).toJson());
             writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
         } catch (DdlException e) {
-            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            LOG.warn("fail to process url: {}", url, e);
             sendResult(request, response, new RestBaseResult(e.getMessage()));
         } catch (Exception e) {
-            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            LOG.warn("fail to process url: {}", url, e);
             String msg = e.getMessage();
             if (msg == null) {
                 msg = e.toString();

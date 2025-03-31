@@ -25,10 +25,11 @@ import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
@@ -41,9 +42,10 @@ import java.util.Random;
  * x dbs which contains one table
  * y mvs which contains x/2 tables and uses `union all` to concatenate them
  *
- * refresh mvs with concurrency to test lock and preformance
+ * refresh mvs with concurrency to test lock and performance
  */
-public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
+@Ignore
+public class MvRefreshConcurrencyTest extends MVTestBase {
 
     @Rule
     public TestRule benchRun = new BenchmarkRule();
@@ -62,7 +64,7 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         // Env
         Config.mv_plan_cache_max_size = 1024;

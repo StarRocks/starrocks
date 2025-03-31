@@ -68,7 +68,7 @@ Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
     const ColumnPtr& pos = chunk->get_column_by_slot_id(k_delete_file_pos.id);
     for (int i = 0; i < chunk->num_rows(); i++) {
         if (file_path->get(i).get_slice() == _params.path) {
-            _need_skip_rowids->emplace(pos->get(i).get_int64());
+            _deletion_bitmap->add_value(pos->get(i).get_int64());
         }
     }
     return Status::OK();
@@ -130,7 +130,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     std::atomic<int32_t> lazy_column_coalesce_counter = 0;
     scanner_ctx->timezone = timezone;
     scanner_ctx->slot_descs = slot_descriptors;
-    scanner_ctx->iceberg_schema = &iceberg_schema;
+    scanner_ctx->lake_schema = &iceberg_schema;
     scanner_ctx->materialized_columns = std::move(columns);
     scanner_ctx->scan_range = &scan_range;
     scanner_ctx->lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
@@ -147,6 +147,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
         RETURN_IF_ERROR(status);
         RETURN_IF_ERROR(fill_skip_rowids(chunk));
     }
+    _skip_rows_ctx->deletion_bitmap = _deletion_bitmap;
     update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
     return Status::OK();
@@ -199,6 +200,7 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
         }
         RETURN_IF_ERROR(fill_skip_rowids(ret.value()));
     }
+    _skip_rows_ctx->deletion_bitmap = _deletion_bitmap;
     update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
                                   shared_buffered_input_stream);
     return Status::OK();

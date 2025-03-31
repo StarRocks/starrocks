@@ -61,7 +61,17 @@ public abstract class DmlStmt extends StatementBase {
                 // ignore
             }
         }
-
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    public int getTimeout() {
+        if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+            try {
+                return Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
     }
 }

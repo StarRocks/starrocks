@@ -25,7 +25,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PhysicalPartitionImpl;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.system.SystemId;
@@ -72,7 +72,7 @@ public class LocalMetaStoreTest {
         Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -176,14 +176,14 @@ public class LocalMetaStoreTest {
     public void testReplayAddSubPartition() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
-        Partition p = table.getPartitions().stream().findFirst().get();
+        PhysicalPartition p = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
         int schemaHash = table.getSchemaHashByIndexId(p.getBaseIndex().getId());
         MaterializedIndex index = new MaterializedIndex();
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), p.getId(),
-                    index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getId()).getStorageMedium());
+                    index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getParentId()).getStorageMedium());
         index.addTablet(new LocalTablet(0), tabletMeta);
         PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
-                    db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, "", p.getId(), 0, index));
+                    db.getId(), table.getId(), p.getParentId(), new PhysicalPartition(123, "", p.getId(), index));
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.replayAddSubPartition(info);
@@ -309,6 +309,20 @@ public class LocalMetaStoreTest {
         } catch (ErrorReportException e) {
             Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
         }
+    }
+
+    @Test
+    public void testCreateTableSerializeException() {
+        final long tableId = 1000010L;
+        final String tableName = "test";
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        SerializeFailedTable table = new SerializeFailedTable(1000010L, "serialize_test");
+
+        Assert.assertThrows(DdlException.class, () -> localMetastore.onCreate(db, table, "", true));
+
+        Assert.assertNull(db.getTable(tableId));
+        Assert.assertNull(db.getTable(tableName));
     }
 
 }

@@ -23,7 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -52,7 +52,7 @@ public class CompactionHandler  {
 
     // add synchronized to avoid process 2 or more stmts at same time
     public static synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db,
-                                                     OlapTable olapTable) throws UserException {
+                                                     OlapTable olapTable) throws StarRocksException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         Preconditions.checkState(alterClause instanceof CompactionClause);
@@ -95,7 +95,7 @@ public class CompactionHandler  {
                     }
                 }
             } catch (Exception e) {
-                throw new UserException(e.getMessage());
+                throw new StarRocksException(e.getMessage());
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }

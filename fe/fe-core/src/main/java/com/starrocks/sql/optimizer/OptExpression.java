@@ -63,8 +63,6 @@ public class OptExpression {
 
     private UKFKConstraints constraints;
 
-    private Boolean isShortCircuit = false;
-
     // the flag if its parent has required data distribution property for this expression
     private boolean existRequiredDistribution = true;
 
@@ -79,13 +77,6 @@ public class OptExpression {
     public static OptExpression create(Operator op, OptExpression... inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = Lists.newArrayList(inputs);
-        return expr;
-    }
-
-    public static OptExpression createForShortCircuit(Operator op, OptExpression input, boolean isShortCircuit) {
-        OptExpression expr = new OptExpression(op);
-        expr.inputs = Lists.newArrayList(input);
-        expr.setShortCircuit(isShortCircuit);
         return expr;
     }
 
@@ -231,14 +222,6 @@ public class OptExpression {
         this.cost = cost;
     }
 
-    public Boolean getShortCircuit() {
-        return isShortCircuit;
-    }
-
-    public void setShortCircuit(Boolean shortCircuit) {
-        isShortCircuit = shortCircuit;
-    }
-
     @Override
     public String toString() {
         return op + " child size " + inputs.size();
@@ -264,11 +247,9 @@ public class OptExpression {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
-        sb.append('\n');
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
-
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {

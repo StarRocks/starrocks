@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -191,6 +192,13 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class MapAggDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return new MapType(types[0], types[1]);
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
@@ -215,6 +223,7 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.getAggStateName(FunctionSet.ARRAY_AGG), new ArrayAggStateDeduce())
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
+            .put(FunctionSet.MAP_AGG, new MapAggDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -224,7 +233,16 @@ public class PolymorphicFunctionAnalyzer {
         }
 
         Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
-        Type newRetType = deduce.apply(resolvedArgTypes);
+        Type newRetType;
+        try {
+            newRetType = deduce.apply(resolvedArgTypes);
+        } catch (SemanticException e) {
+            String errMsg = e.getMessage();
+            if (!Strings.isNullOrEmpty(fn.functionName())) {
+                errMsg = errMsg.substring(0, errMsg.length() - 1) + " in the function [" + fn.functionName() + "]";
+            }
+            throw  new SemanticException(errMsg);
+        }
 
         // change null type into boolean type
         resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);

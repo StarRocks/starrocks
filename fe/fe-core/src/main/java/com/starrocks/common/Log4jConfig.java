@@ -129,6 +129,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+
             "    <RollingFile name=\"ProfileFile\" fileName=\"${profile_log_dir}/fe.profile.log\" filePattern=\"${profile_log_dir}/fe.profile.log.${profile_file_pattern}-%i\">\n" +
             "      ${syslog_profile_layout}\n" +
             "      <Policies>\n" +
@@ -142,6 +143,22 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+
+            "    <RollingFile name=\"FeaturesFile\" fileName=\"${profile_log_dir}/fe.features.log\" " +
+            "       filePattern=\"${profile_log_dir}/fe.features.log.${feature_file_pattern}-%i\">\n" +
+            "      ${syslog_profile_layout}\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${feature_log_roll_size_mb}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${feature_log_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${feature_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.features.log.*\" />\n" +
+            "          <IfLastModified age=\"${feature_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
+
             "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
             "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
@@ -175,8 +192,8 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"profile\" level=\"INFO\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"ProfileFile\"/>\n" +
             "    </Logger>\n" +
-            "    <Logger name=\"org.apache.kafka\" level=\"WARN\"> \n" +
-            "      <AppenderRef ref=\"SysWF\"/>\n" +
+            "    <Logger name=\"features\" level=\"INFO\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"FeaturesFile\"/>\n" +
             "    </Logger>\n" +
             "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
@@ -199,6 +216,12 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] internalModules;
     private static boolean compressSysLog;
     private static boolean compressAuditLog;
+    private static String[] warnModules;
+    private static String[] builtinWarnModules = {
+            "org.apache.kafka",
+            "org.apache.hudi",
+            "org.apache.hadoop.io.compress",
+    };
 
     @VisibleForTesting
     static String generateActiveLog4jXmlConfig() throws IOException {
@@ -248,6 +271,14 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("profile_log_delete_age", String.valueOf(Config.profile_log_delete_age));
         properties.put("profile_file_pattern",
                 getIntervalPattern("profile_log_roll_interval", Config.profile_log_roll_interval));
+
+        // feature log config
+        properties.put("feature_log_dir", Config.feature_log_dir);
+        properties.put("feature_log_roll_size_mb", String.valueOf(Config.feature_log_roll_size_mb));
+        properties.put("feature_log_roll_num", String.valueOf(Config.feature_log_roll_num));
+        properties.put("feature_log_delete_age", String.valueOf(Config.feature_log_delete_age));
+        properties.put("feature_file_pattern",
+                getIntervalPattern("feature_log_roll_interval", Config.feature_log_roll_interval));
 
         // internal log config
         properties.put("internal_log_dir", Config.internal_log_dir);
@@ -348,6 +379,12 @@ public class Log4jConfig extends XmlConfiguration {
         for (String s : bigQueryModules) {
             sb.append("    <Logger name='big_query.").append(s).append("' level='INFO'/>\n");
         }
+        for (String s : builtinWarnModules) {
+            sb.append("    <Logger name='").append(s).append("' level='WARN'><AppenderRef ref='SysWF'/></Logger>\n");
+        }
+        for (String s : warnModules) {
+            sb.append("    <Logger name='").append(s).append("' level='WARN'><AppenderRef ref='SysWF'/></Logger>\n");
+        }
 
         String newXmlConfTemplate = APPENDER_TEMPLATE;
         newXmlConfTemplate += log2Console ? CONSOLE_LOGGER_TEMPLATE : FILE_LOGGER_TEMPLATE;
@@ -384,6 +421,7 @@ public class Log4jConfig extends XmlConfiguration {
         internalModules = Config.internal_log_modules;
         compressSysLog = Config.sys_log_enable_compress;
         compressAuditLog = Config.audit_log_enable_compress;
+        warnModules = Config.sys_log_warn_modules;
         reconfig();
     }
 

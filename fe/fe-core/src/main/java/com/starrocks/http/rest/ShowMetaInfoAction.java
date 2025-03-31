@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -51,6 +52,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -93,6 +95,12 @@ public class ShowMetaInfoAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String action = request.getSingleParameter("action");
+        // check param empty
+        if (Strings.isNullOrEmpty(action)) {
+            response.appendContent("Missing parameter");
+            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+            return;
+        }
         Gson gson = new Gson();
         response.setContentType("application/json");
 
@@ -107,7 +115,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
                 response.getContent().append(gson.toJson(getHaInfo()));
                 break;
             default:
-                break;
+                // clear content type set above
+                response.setContentType(null);
+                response.appendContent("Invalid parameter");
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
         }
         sendResult(request, response);
     }
@@ -130,7 +142,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
             try {
                 master = haProtocol.getLeader();
             } catch (Exception e) {
-                // this may happen when majority of FOLLOWERS are down and no MASTER right now.
+                // this may happen when the majority of FOLLOWERS are down and no MASTER right now.
                 LOG.warn("failed to get leader: {}", e.getMessage());
             }
             if (master != null) {
@@ -173,11 +185,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
     public Map<String, Long> getDataSize(boolean singleReplica) {
         Map<String, Long> result = new HashMap<String, Long>();
-        List<String> dbNames = GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames();
 
-        for (int i = 0; i < dbNames.size(); i++) {
-            String dbName = dbNames.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        for (Map.Entry<String, Database> dbs : GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb()
+                .entrySet()) {
+            String dbName = dbs.getKey();
+            Database db = dbs.getValue();
 
             long totalSize = 0;
             List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());

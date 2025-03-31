@@ -83,13 +83,15 @@ public class MaterializedIndexTest {
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(10));
 
-        index = new MaterializedIndex(10, IndexState.NORMAL, 10);
+        index = new MaterializedIndex(10, IndexState.NORMAL, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));
         Assert.assertTrue(index.visibleForTransaction(11));
 
-        index = new MaterializedIndex(10, IndexState.SHADOW, 10);
+        index = new MaterializedIndex(10, IndexState.SHADOW, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
         Assert.assertFalse(index.visibleForTransaction(0));
         Assert.assertFalse(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));

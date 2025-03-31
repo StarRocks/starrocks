@@ -91,11 +91,11 @@ void ExecutorsManager::reclaim_cpuids_from_worgroup(WorkGroup* wg) {
               << "[cpuids=" << CpuUtil::to_string(cpuids) << "] ";
 
     std::ranges::copy(cpuids, std::back_inserter(_wg_to_cpuids[COMMON_WORKGROUP]));
-    _wg_to_cpuids.erase(wg);
-
     for (auto cpuid : cpuids) {
         _cpu_owners[cpuid].set_wg(COMMON_WORKGROUP);
     }
+
+    _wg_to_cpuids.erase(wg);
 }
 
 const CpuUtil::CpuIds& ExecutorsManager::get_cpuids_of_workgroup(WorkGroup* wg) const {

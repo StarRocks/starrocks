@@ -36,7 +36,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -53,7 +54,6 @@ import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
-import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
@@ -68,18 +68,17 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
-import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -108,7 +107,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
-import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
@@ -119,10 +118,6 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
-import org.apache.iceberg.rest.RESTCatalog;
-import org.apache.iceberg.types.Types;
-import org.apache.iceberg.view.BaseView;
-import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -139,7 +134,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
-import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.DATE;
 import static com.starrocks.catalog.Type.DATETIME;
 import static com.starrocks.catalog.Type.INT;
@@ -151,6 +145,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+import static com.starrocks.connector.iceberg.IcebergTableOperation.REMOVE_ORPHAN_FILES;
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "iceberg_catalog";
@@ -178,7 +173,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
-        Assert.assertEquals(expectResult, metadata.listDbNames());
+        Assert.assertEquals(expectResult, metadata.listDbNames(new ConnectContext()));
     }
 
     @Test
@@ -196,7 +191,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         Database expectResult = new Database(0, db);
-        Assert.assertEquals(expectResult, metadata.getDb(db));
+        Assert.assertEquals(expectResult, metadata.getDb(new ConnectContext(), db));
     }
 
     @Test
@@ -213,7 +208,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertNull(metadata.getDb(db));
+        Assert.assertNull(metadata.getDb(new ConnectContext(), db));
     }
 
     @Test
@@ -233,7 +228,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
-        Assert.assertEquals(expectResult, metadata.listTableNames(db1));
+        Assert.assertEquals(expectResult, metadata.listTableNames(new ConnectContext(), db1));
     }
 
     @Test
@@ -250,7 +245,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Table actual = metadata.getTable("db", "tbl");
+        Table actual = metadata.getTable(new ConnectContext(), "db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
     }
@@ -272,11 +267,11 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Table actual = metadata.getTable("DB", "TBL");
+        Table actual = metadata.getTable(new ConnectContext(), "DB", "TBL");
         Assert.assertTrue(actual instanceof IcebergTable);
         IcebergTable icebergTable = (IcebergTable) actual;
-        Assert.assertEquals("db", icebergTable.getRemoteDbName());
-        Assert.assertEquals("tbl", icebergTable.getRemoteTableName());
+        Assert.assertEquals("db", icebergTable.getCatalogDBName());
+        Assert.assertEquals("tbl", icebergTable.getCatalogTableName());
         Assert.assertEquals(ICEBERG, icebergTable.getType());
     }
 
@@ -291,7 +286,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertTrue(metadata.tableExists("db", "tbl"));
+        Assert.assertTrue(metadata.tableExists(new ConnectContext(), "db", "tbl"));
     }
 
     @Test
@@ -323,7 +318,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertNull(metadata.getTable("db", "tbl2"));
+        Assert.assertNull(metadata.getTable(new ConnectContext(), "db", "tbl2"));
     }
 
     @Test(expected = AlreadyExistsException.class)
@@ -423,7 +418,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
@@ -471,7 +466,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergMetadata>() {
             @Mock
-            Table getTable(String dbName, String tblName) {
+            Table getTable(ConnectContext context, String dbName, String tblName) {
                 return new IcebergTable(1, "table1", CATALOG_NAME,
                         CATALOG_NAME, "iceberg_db",
                         "table1", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
@@ -526,7 +521,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -542,7 +537,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -558,7 +553,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb("iceberg_db", true);
+            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -591,7 +586,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        metadata.dropDb("iceberg_db", true);
+        metadata.dropDb(new ConnectContext(), "iceberg_db", true);
     }
 
     @Test
@@ -605,7 +600,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString);
                 result = icebergTable;
                 minTimes = 0;
             }
@@ -701,7 +696,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString);
                 result = icebergTable;
                 minTimes = 0;
 
@@ -756,9 +751,9 @@ public class IcebergMetadataTest extends TableTestBase {
         List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
-        IcebergRemoteFileDesc fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
-        Assert.assertEquals(7, fileDesc.getIcebergScanTasks().stream()
-                .map(x -> x.file().recordCount()).reduce(0L, Long::sum), 0.001);
+        Assert.assertEquals(7, res.stream()
+                .map(f -> (IcebergRemoteFileInfo) f)
+                .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.getCtx().getSessionVariable().setEnablePruneIcebergManifest(true);
@@ -769,9 +764,8 @@ public class IcebergMetadataTest extends TableTestBase {
         res = metadata.getRemoteFiles(icebergTable,
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
-        fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
-        Assert.assertEquals(1, fileDesc.getIcebergScanTasks().size());
-        Assert.assertEquals(3, fileDesc.getIcebergScanTasks().get(0).file().recordCount());
+        Assert.assertEquals(1, res.size());
+        Assert.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
         Assert.assertEquals("Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
@@ -794,7 +788,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
-        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         Assert.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
         Assert.assertTrue(context.getSessionVariable().enableReadIcebergPuffinNdv());
         TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
@@ -830,7 +824,7 @@ public class IcebergMetadataTest extends TableTestBase {
         TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
                 mockedNativeTableB.currentSnapshot().snapshotId()));
         Statistics statistics = metadata.getTableStatistics(
-                new OptimizerContext(null, null, ConnectContext.get()),
+                OptimizerFactory.mockContext(ConnectContext.get(), null),
                 icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
         Assert.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
@@ -940,7 +934,7 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableA.refresh();
 
         new ConnectContext().setThreadLocalInfo();
-        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory(), ConnectContext.get());
+        OptimizerContext context = OptimizerFactory.mockContext(ConnectContext.get(), new ColumnRefFactory());
         context.getSessionVariable().setEnableIcebergColumnStatistics(true);
 
         TableVersionRange version = TableVersionRange.withEnd(Optional.of(
@@ -1055,6 +1049,11 @@ public class IcebergMetadataTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableB;
             }
+
+            @Mock
+            Database getDB(String dbName) {
+                return new Database(0, dbName);
+            }
         };
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1063,7 +1062,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         TableVersionRange version = TableVersionRange.withEnd(Optional.of(
                 mockedNativeTableB.currentSnapshot().snapshotId()));
-        List<String> partitionNames = metadata.listPartitionNames("db", "table", version);
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setTableVersionRange(version);
+        List<String> partitionNames = metadata.listPartitionNames("db", "table", requestContext);
         Assert.assertEquals(2, partitionNames.size());
         Assert.assertTrue(partitionNames.contains("k2=2"));
         Assert.assertTrue(partitionNames.contains("k2=3"));
@@ -1072,6 +1073,12 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test
     public void testGetPartitions1() {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1090,6 +1097,13 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test
     public void testGetPartitions2() {
         mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableG;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1113,6 +1127,13 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableB.refresh();
         mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
         mockedNativeTableB.refresh();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
@@ -1146,7 +1167,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws UserException {
+    public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws StarRocksException {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 
@@ -1275,6 +1296,11 @@ public class IcebergMetadataTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableG;
             }
+
+            @Mock
+            Database getDB(String dbName) {
+                return new Database(0, dbName);
+            }
         };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
@@ -1313,6 +1339,11 @@ public class IcebergMetadataTest extends TableTestBase {
             @Mock
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableA;
+            }
+
+            @Mock
+            Database getDB(String dbName) {
+                return new Database(0, dbName);
             }
         };
 
@@ -1353,7 +1384,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergMetadata>() {
             @Mock
-            public Database getDb(String dbName) {
+            public Database getDb(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
         };
@@ -1429,73 +1460,6 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testCreateView(@Mocked RESTCatalog restCatalog, @Mocked BaseView baseView,
-                               @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        AnalyzeTestUtil.init();
-        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
-                CATALOG_NAME, icebergRESTCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
-
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
-                new IcebergCatalogProperties(DEFAULT_CONFIG));
-
-        new Expectations() {
-            {
-                restCatalog.loadNamespaceMetadata(Namespace.of("db"));
-                result = ImmutableMap.of("location", "xxxxx");
-                minTimes = 1;
-
-                restCatalog.name();
-                result = "rest_catalog";
-                minTimes = 1;
-            }
-        };
-
-        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
-                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", null, NodePosition.ZERO);
-        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
-        metadata.createView(stmt);
-
-        new Expectations() {
-            {
-                representation.sql();
-                result = "select * from table";
-                minTimes = 1;
-
-                baseView.sqlFor("starrocks");
-                result = representation;
-                minTimes = 1;
-
-                baseView.properties();
-                result = ImmutableMap.of("comment", "mocked");
-                minTimes = 1;
-
-                baseView.schema();
-                result = new Schema(Types.NestedField.optional(1, "k1", Types.IntegerType.get()));
-                minTimes = 1;
-
-                baseView.name();
-                result = "view";
-                minTimes = 1;
-
-                baseView.location();
-                result = "xxx";
-                minTimes = 1;
-
-                restCatalog.loadView(TableIdentifier.of("db", "view"));
-                result = baseView;
-                minTimes = 1;
-            }
-        };
-
-        Table table = metadata.getView("db", "view");
-        Assert.assertEquals(ICEBERG_VIEW, table.getType());
-        Assert.assertEquals("xxx", table.getTableLocation());
-    }
-
-    @Test
     public void testVersionRange() {
         TableVersionRange versionRange = TableVersionRange.empty();
         Assert.assertTrue(versionRange.isEmpty());
@@ -1557,5 +1521,103 @@ public class IcebergMetadataTest extends TableTestBase {
         };
         Assert.assertEquals(1, icebergTable.getTableIdentifier().split(":").length);
         Assert.assertEquals(3, icebergTable.getUUID().split("\\.").length);
+    }
+
+    @Test
+    public void testAlterTableExecuteRemoveOrphanFiles(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                                       @Mocked Snapshot snapshot) throws Exception {
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableA;
+            }
+
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
+
+        // Normalize Date
+        TableName tableName = new TableName(CATALOG_NAME, "db", "table");
+        AlterTableOperationClause clause = new AlterTableOperationClause(NodePosition.ZERO,
+                REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("2024-01-01 00:00:00")));
+
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        executor.execute();
+
+        // Illegal date
+        tableName = new TableName(CATALOG_NAME, "db", "table");
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("illegal date")));
+
+        executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        IcebergAlterTableExecutor finalExecutor = executor;
+        Assert.assertThrows(DdlException.class, finalExecutor::execute);
+
+        // Default retention interval
+        tableName = new TableName(CATALOG_NAME, "db", "table");
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("")));
+
+        executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        finalExecutor = executor;
+        Assert.assertThrows(DdlException.class, finalExecutor::execute);
+
+        // Mock snapshot behavior
+        new Expectations() {{
+                snapshot.snapshotId();
+                result = 1L;
+                minTimes = 0;
+
+                snapshot.timestampMillis();
+                result = System.currentTimeMillis();
+                minTimes = 0;
+
+                snapshot.parentId();
+                result = 0L;
+                minTimes = 0;
+            }};
+
+        new MockUp<org.apache.iceberg.BaseTable>() {
+            @Mock
+            public org.apache.iceberg.Snapshot currentSnapshot() {
+                return snapshot;
+            }
+
+            @Mock
+            public Iterable<org.apache.iceberg.Snapshot> snapshots() {
+                return List.of(snapshot, snapshot, snapshot);
+            }
+        };
+
+        // inject snapshot
+        tableName = new TableName(CATALOG_NAME, "db", "table");
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("2024-01-01 00:00:00")));
+
+        executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        executor.execute();
     }
 }

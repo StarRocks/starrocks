@@ -174,6 +174,7 @@ Schema Change 遵循以下原则：
 - `partition_ttl_number`：要保留的最近分区的数量。
 - `excluded_trigger_tables`：为避免触发自动刷新而需要忽略的表。
 - `auto_refresh_partitions_limit`：每次自动刷新操作中要刷新的分区数。
+- `excluded_refresh_tables`: 物化视图刷新时排除需要刷新的表，通常和 `excluded_trigger_tables` 搭配使用。
 
 详细说明，参见 [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
 

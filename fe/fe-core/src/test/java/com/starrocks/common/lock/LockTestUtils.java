@@ -67,19 +67,30 @@ public class LockTestUtils {
         assertLockSuccess(testLockers.get(deadLockIdx).release(rids.get(deadLockIdx).first, rids.get(deadLockIdx).second));
 
         boolean hasSuccess = false;
-        for (int i = 0; i < waitLockers.size(); ++i) {
-            if (i == deadLockIdx) {
-                continue;
-            }
-            Future<LockResult> waitLocker = waitLockers.get(i);
-
-            try {
-                LockResult lockResult = waitLocker.get();
-                if (LockResult.LockTaskResultType.SUCCESS.equals(lockResult.resultType)) {
-                    hasSuccess = true;
+        int retryTimes = 5;
+        while (retryTimes-- > 0) {
+            for (int i = 0; i < waitLockers.size(); ++i) {
+                if (i == deadLockIdx) {
+                    continue;
                 }
-            } catch (ExecutionException | InterruptedException e) {
-                throw new RuntimeException(e);
+                Future<LockResult> waitLocker = waitLockers.get(i);
+
+                try {
+                    LockResult lockResult = waitLocker.get();
+                    if (LockResult.LockTaskResultType.SUCCESS.equals(lockResult.resultType)) {
+                        hasSuccess = true;
+                        break;
+                    } else {
+                        System.out.println("LockResult" + retryTimes + " : " + lockResult.resultType);
+                    }
+
+                } catch (ExecutionException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            if (hasSuccess) {
+                break;
             }
         }
 

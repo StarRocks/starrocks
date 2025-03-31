@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "agent/master_info.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
@@ -30,20 +31,19 @@
 namespace starrocks::pipeline {
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
-                                           bool enable_resource_group, const CpuUtil::CpuIds& cpuids)
+                                           bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
+                                           PipelineExecutorMetrics* metrics)
         : Base("pip_exec_" + name),
-          _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
-                                              : std::make_unique<QuerySharedDriverQueue>()),
+          _driver_queue(enable_resource_group
+                                ? std::unique_ptr<DriverQueue>(
+                                          std::make_unique<WorkGroupDriverQueue>(metrics->get_driver_queue_metrics()))
+                                : std::make_unique<QuerySharedDriverQueue>(metrics->get_driver_queue_metrics())),
           _thread_pool(std::move(thread_pool)),
-          _blocked_driver_poller(new PipelineDriverPoller(name, _driver_queue.get(), cpuids)),
+          _blocked_driver_poller(
+                  new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
-          _audit_statistics_reporter(new AuditStatisticsReporter()) {
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
-                                    [this] { return _blocked_driver_poller->num_drivers(); });
-}
+          _audit_statistics_reporter(new AuditStatisticsReporter()),
+          _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
     _driver_queue->close();
@@ -73,7 +73,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
 
 void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
-    driver->finalize(runtime_state, state, _schedule_count, _driver_execution_ns);
+    driver->finalize(runtime_state, state);
 }
 
 void GlobalDriverExecutor::_worker_thread() {
@@ -101,6 +101,8 @@ void GlobalDriverExecutor::_worker_thread() {
         if (driver == nullptr) {
             continue;
         }
+        DCHECK(!driver->is_in_ready());
+        DCHECK(!driver->is_in_blocked());
 
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
@@ -109,7 +111,7 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* fragment_ctx = driver->fragment_ctx();
 
         driver->increment_schedule_times();
-        _schedule_count++;
+        _metrics->driver_schedule_count.increment(1);
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
 
@@ -149,6 +151,7 @@ void GlobalDriverExecutor::_worker_thread() {
 
             StatusOr<DriverState> maybe_state;
             int64_t start_time = driver->get_active_time();
+            _metrics->exec_running_tasks.increment(1);
 #ifdef NDEBUG
             TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
 #else
@@ -160,7 +163,9 @@ void GlobalDriverExecutor::_worker_thread() {
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
             int64_t end_time = driver->get_active_time();
-            _driver_execution_ns += end_time - start_time;
+            _metrics->driver_execution_time.increment(end_time - start_time);
+            _metrics->exec_running_tasks.increment(-1);
+            _metrics->exec_finished_tasks.increment(1);
 
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
@@ -175,7 +180,7 @@ void GlobalDriverExecutor::_worker_thread() {
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
-                query_ctx->cancel(status);
+                query_ctx->cancel(status, false);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
@@ -256,6 +261,9 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
     driver->start_timers();
+    if (driver->fragment_ctx()->enable_event_scheduler()) {
+        driver->fragment_ctx()->event_scheduler()->attach_queue(_driver_queue.get());
+    }
 
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
@@ -284,7 +292,7 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
 void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
     // if driver is already in ready queue, we should cancel it
     // otherwise, just ignore it and wait for the poller to schedule
-    if (driver->is_in_ready_queue()) {
+    if (driver->is_in_ready()) {
         this->_driver_queue->cancel(driver);
     }
 }
@@ -346,8 +354,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
             auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
             if (!status.ok()) {
                 if (status.is_not_found()) {
-                    LOG(INFO) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
-                              << print_id(fragment_id);
+                    VLOG(1) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
+                            << print_id(fragment_id);
                 } else {
                     LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
                                  << ", status: " << status.to_string() << ", retry_times=" << retry_times;
@@ -357,8 +365,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                     }
                 }
             } else {
-                LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                          << ", is_done=" << params->done;
+                VLOG(1) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                        << ", is_done=" << params->done;
             }
             break;
         }
@@ -368,7 +376,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     // and is retried as much as possible to ensure success.
     // Otherwise, it may result in the query or ingestion status getting stuck.
     this->_exec_state_reporter->submit(std::move(report_task), done);
-    VLOG(1) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
+    VLOG(2) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
             << ", is_done=" << done;
 }
 
@@ -402,7 +410,7 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
                              << print_id(fragment_id) << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+            VLOG(1) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
         }
     };
     auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
@@ -444,7 +452,7 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
                              << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+            VLOG(1) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
         }
     };
 

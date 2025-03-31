@@ -37,7 +37,7 @@ package com.starrocks.load.routineload;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.streamload.StreamLoadTask;
@@ -220,9 +220,9 @@ public abstract class RoutineLoadTaskInfo {
         return false;
     }
 
-    abstract TRoutineLoadTask createRoutineLoadTask() throws UserException;
+    abstract TRoutineLoadTask createRoutineLoadTask() throws StarRocksException;
 
-    abstract boolean readyToExecute() throws UserException;
+    abstract boolean readyToExecute() throws StarRocksException;
 
     public abstract boolean isProgressKeepUp(RoutineLoadProgress progress);
 
@@ -242,21 +242,22 @@ public abstract class RoutineLoadTaskInfo {
                 timeoutMs / 1000, warehouseId);
     }
 
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterCommitted(txnState, txnOperated);
         }
     }
 
-    public void afterVisible(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterVisible(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterVisible(txnState, txnOperated);
         }
     }
 
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws UserException {
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws
+            StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReason);
@@ -295,7 +296,7 @@ public abstract class RoutineLoadTaskInfo {
 
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             // add warehouse in task info
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
             if (warehouse == null) {
                 row.add("NULL");
             } else {

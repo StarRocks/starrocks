@@ -144,8 +144,8 @@ public class RuntimeProfile {
         if (pair != null) {
             return pair.first;
         } else {
-            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
-                    || this.counterMap.containsKey(parentName));
+            Preconditions.checkState(parentName.equals(ROOT_COUNTER) || this.counterMap.containsKey(parentName),
+                    String.format("dangling counter %s->%s", parentName, name));
             Counter newCounter = new Counter(type, strategy, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
@@ -226,6 +226,12 @@ public class RuntimeProfile {
                 Counter srcCounter = srcProfile.counterMap.get(name).first;
                 Counter newCounter = addCounter(name, srcCounter.getType(), srcCounter.getStrategy(), parentName);
                 newCounter.setValue(srcCounter.getValue());
+                if (srcCounter.getMinValue().isPresent()) {
+                    newCounter.setMinValue(srcCounter.getMinValue().get());
+                }
+                if (srcCounter.getMaxValue().isPresent()) {
+                    newCounter.setMaxValue(srcCounter.getMaxValue().get());
+                }
             }
 
             Set<String> childNames = srcProfile.childCounterMap.get(name);
@@ -296,6 +302,12 @@ public class RuntimeProfile {
                                 addCounter(topName, tcounter.type, tcounter.strategy, parentName);
                         counter.setValue(tcounter.value);
                         counter.setStrategy(tcounter.strategy);
+                        if (tcounter.isSetMin_value()) {
+                            counter.setMinValue(tcounter.getMin_value());
+                        }
+                        if (tcounter.isSetMax_value()) {
+                            counter.setMaxValue(tcounter.getMax_value());
+                        }
                         tCounterMap.remove(topName);
                     } else if (pair != null && tcounter != null) {
                         if (pair.first.getType() != tcounter.type) {
@@ -324,6 +336,12 @@ public class RuntimeProfile {
                     Counter counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
                     counter.setValue(tcounter.value);
                     counter.setStrategy(tcounter.strategy);
+                    if (tcounter.isSetMin_value()) {
+                        counter.setMinValue(tcounter.getMin_value());
+                    }
+                    if (tcounter.isSetMax_value()) {
+                        counter.setMaxValue(tcounter.getMax_value());
+                    }
                 } else {
                     if (pair.first.getType() != tcounter.type) {
                         LOG.error("Cannot update counters with the same name but different types"
@@ -613,6 +631,8 @@ public class RuntimeProfile {
             tCounter.setValue(counter.getValue());
             tCounter.setType(counter.getType());
             tCounter.setStrategy(counter.getStrategy());
+            counter.getMinValue().ifPresent(tCounter::setMin_value);
+            counter.getMaxValue().ifPresent(tCounter::setMax_value);
             node.addToCounters(tCounter);
         }
 
@@ -687,7 +707,8 @@ public class RuntimeProfile {
                     TUnit existType = levelCounters.get(name).first;
                     if (!existType.equals(counter.getType())) {
                         LOG.warn(
-                                "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
+                                "find non-isomorphic counter, profileName={}, counterName={}, existType={}, " +
+                                        "anotherType={}",
                                 mergedProfile.name, name, existType.name(), counter.getType().name());
                         continue;
                     }
@@ -745,20 +766,33 @@ public class RuntimeProfile {
                 }
 
                 if (!counter.isSkipMinMax()) {
-                    Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
-                    if (minCounter != null) {
+                    if (counter.getMinValue().isPresent()) {
                         alreadyMerged = true;
-                        if (minCounter.getValue() < minValue) {
-                            minValue = minCounter.getValue();
+                        minValue = Math.min(counter.getMinValue().get(), minValue);
+                    } else {
+                        // TODO: keep compatible with older version backend, can be removed in next version
+                        Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
+                        if (minCounter != null) {
+                            alreadyMerged = true;
+                            if (minCounter.getValue() < minValue) {
+                                minValue = minCounter.getValue();
+                            }
                         }
                     }
-                    Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
-                    if (maxCounter != null) {
+                    if (counter.getMaxValue().isPresent()) {
                         alreadyMerged = true;
-                        if (maxCounter.getValue() > maxValue) {
-                            maxValue = maxCounter.getValue();
+                        maxValue = Math.max(counter.getMaxValue().get(), maxValue);
+                    } else {
+                        // TODO: keep compatible with older version backend, can be removed in next version
+                        Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
+                        if (maxCounter != null) {
+                            alreadyMerged = true;
+                            if (maxCounter.getValue() > maxValue) {
+                                maxValue = maxCounter.getValue();
+                            }
                         }
                     }
+
                 }
 
                 counters.add(counter);
@@ -791,8 +825,14 @@ public class RuntimeProfile {
                     Counter maxCounter =
                             mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
                                     name);
-                    minCounter.setValue(minValue);
-                    maxCounter.setValue(maxValue);
+                    if (minValue != Integer.MAX_VALUE) {
+                        mergedCounter.setMinValue(minValue);
+                        minCounter.setValue(minValue);
+                    }
+                    if (maxValue != Integer.MIN_VALUE) {
+                        mergedCounter.setMaxValue(maxValue);
+                        maxCounter.setValue(maxValue);
+                    }
                 }
             }
 
@@ -817,7 +857,7 @@ public class RuntimeProfile {
                     RuntimeProfile child = profile.getChild(childName);
                     if (child == null) {
                         identical = false;
-                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                        LOG.debug("find non-isomorphic children, profileName={}, requiredChildName={}",
                                 profile.name, childName);
                         continue;
                     }
@@ -954,8 +994,9 @@ public class RuntimeProfile {
             reorderedChildNames.addAll(minMaxChildNames);
             reorderedChildNames.addAll(otherChildNames);
 
+            Map<String, Counter> counterMap1 = profile.getCounterMap();
             for (String childName : reorderedChildNames) {
-                Counter childCounter = profile.getCounterMap().get(childName);
+                Counter childCounter = counterMap1.get(childName);
                 Preconditions.checkState(childCounter != null);
                 builder.append(prefix).append("   - ").append(childName).append(": ")
                         .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");

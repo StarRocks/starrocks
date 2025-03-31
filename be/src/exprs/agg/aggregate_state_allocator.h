@@ -44,7 +44,7 @@ public:
 
     T* allocate(size_t n) {
         DCHECK(tls_agg_state_allocator != nullptr);
-        return static_cast<T*>(tls_agg_state_allocator->alloc(n * sizeof(T)));
+        return static_cast<T*>(tls_agg_state_allocator->checked_alloc(n * sizeof(T)));
     }
 
     void deallocate(T* ptr, size_t n) {
@@ -90,6 +90,9 @@ using HashSetWithAggStateAllocator =
 
 using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
                                                                AggregateStateAllocator<SliceWithHash>>;
+using SliceTwoLevelHashSetWithAggStateAllocator =
+        phmap::parallel_flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
+                                      AggregateStateAllocator<SliceWithHash>>;
 
 template <typename T>
 using VectorWithAggStateAllocator = std::vector<T, AggregateStateAllocator<T>>;

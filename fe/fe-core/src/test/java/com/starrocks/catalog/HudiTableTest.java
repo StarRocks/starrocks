@@ -102,8 +102,8 @@ public class HudiTableTest {
                 .setHudiProperties(properties);
         HudiTable oTable = tableBuilder.build();
 
-        Assert.assertEquals("db0", oTable.getDbName());
-        Assert.assertEquals("table0", oTable.getTableName());
+        Assert.assertEquals("db0", oTable.getCatalogDBName());
+        Assert.assertEquals("table0", oTable.getCatalogTableName());
         Assert.assertEquals(new Column("col1", Type.INT, true), oTable.getColumn("col1"));
         Assert.assertEquals("table0:" + createTime, oTable.getTableIdentifier());
         Assert.assertTrue(oTable.toString().contains("HudiTable{resourceName='catalog', catalogName='catalog', " +
@@ -115,7 +115,7 @@ public class HudiTableTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getTable(anyString, anyString, anyString);
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = oTable;
             }
         };

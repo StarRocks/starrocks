@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.validation.constraints.NotNull;
 
 /*
@@ -254,6 +255,14 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         throw new NotImplementedException("not reachable");
     }
 
+    /**
+     * Return the partitions that contains NULL partition values
+     * e.g. PARTITION p_null VALUES IN (NULL)
+     */
+    public Set<Long> getNullValuePartitions() {
+        throw new NotImplementedException("not reachable");
+    }
+
     @Override
     public void gsonPreProcess() throws IOException {
     }
@@ -309,6 +318,46 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
             return p;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        Map<Long, DataProperty> oldIdToDataProperty = this.idToDataProperty;
+        Map<Long, Short> oldIdToReplicationNum = this.idToReplicationNum;
+        Map<Long, Boolean> oldIdToInMemory = this.idToInMemory;
+        Map<Long, TTabletType> oldIdToTabletType = this.idToTabletType;
+        Map<Long, DataCacheInfo> oldIdToStorageCacheInfo = this.idToStorageCacheInfo;
+
+        this.idToDataProperty = new HashMap<>();
+        this.idToReplicationNum = new HashMap<>();
+        this.idToInMemory = new HashMap<>();
+        this.idToTabletType = new HashMap<>();
+        this.idToStorageCacheInfo = new HashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            DataProperty dataProperty = oldIdToDataProperty.get(oldId);
+            if (dataProperty != null) {
+                this.idToDataProperty.put(newId, dataProperty);
+            }
+            Short replicationNum = oldIdToReplicationNum.get(oldId);
+            if (replicationNum != null) {
+                this.idToReplicationNum.put(newId, replicationNum);
+            }
+            Boolean inMemory = oldIdToInMemory.get(oldId);
+            if (inMemory != null) {
+                this.idToInMemory.put(newId, inMemory);
+            }
+            TTabletType tabletType = oldIdToTabletType.get(oldId);
+            if (tabletType != null) {
+                this.idToTabletType.put(newId, tabletType);
+            }
+            DataCacheInfo dataCacheInfo = oldIdToStorageCacheInfo.get(oldId);
+            if (dataCacheInfo != null) {
+                this.idToStorageCacheInfo.put(newId, dataCacheInfo);
+            }
         }
     }
 }

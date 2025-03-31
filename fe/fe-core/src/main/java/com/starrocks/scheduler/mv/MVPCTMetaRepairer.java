@@ -57,7 +57,7 @@ public class MVPCTMetaRepairer {
     public void repairTableIfNeeded(Table table,
                                     BaseTableInfo baseTableInfo) throws DmlException {
         if (baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())) {
-            LOG.info("base table:{} identifier has not changed, no need to repair",
+            LOG.debug("base table:{} identifier has not changed, no need to repair",
                     baseTableInfo.getTableInfoStr());
             return;
         }

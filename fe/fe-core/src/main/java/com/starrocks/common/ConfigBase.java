@@ -36,13 +36,35 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.Util;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,7 +81,7 @@ public class ConfigBase {
     public static final String AUTHENTICATION_CHAIN_MECHANISM_NATIVE = "native";
 
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface ConfField {
+    public @interface ConfField {
         boolean mutable() default false;
 
         String comment() default "";
@@ -76,26 +98,29 @@ public class ConfigBase {
     }
 
     protected Properties props;
+    private static boolean isPersisted = false;
+    private static String configPath;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
 
     public void init(String propFile) throws Exception {
+        configPath = propFile;
         configFields = this.getClass().getFields();
         initAllMutableConfigs();
         props = new Properties();
-        FileReader reader = null;
-        try {
-            reader = new FileReader(propFile);
+        try (FileReader reader = new FileReader(propFile)) {
             props.load(reader);
-        } catch (Exception e) {
-            throw e;
-        } finally {
-            if (reader != null) {
-                reader.close();
-            }
         }
+        if (Files.isWritable(Path.of(propFile)) && !Util.isRunningInContainer()) {
+            isPersisted = true;
+        }
+
         replacedByEnv();
         setFields();
+    }
+
+    public static boolean isIsPersisted() {
+        return isPersisted;
     }
 
     public static void initAllMutableConfigs() {
@@ -295,10 +320,25 @@ public class ConfigBase {
         }
     }
 
-    public static synchronized void setMutableConfig(String key, String value) throws InvalidConfException {
+    public static synchronized void setMutableConfig(String key, String value,
+                                                     boolean isPersisted, String userIdentity) throws InvalidConfException {
+        if (isPersisted) {
+            if (!ConfigBase.isIsPersisted()) {
+                String errMsg = "set persisted config failed, because current running mode is not persisted";
+                LOG.warn(errMsg);
+                throw new InvalidConfException(errMsg);
+            }
+
+            try {
+                appendPersistedProperties(key, value, userIdentity);
+            } catch (IOException e) {
+                throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
+            }
+        }
+
         Field field = allMutableConfigs.get(key);
         if (field == null) {
-            throw new InvalidConfException("Config '" + key + "' does not exist or is not mutable");
+            throw new InvalidConfException(ErrorCode.ERROR_CONFIG_NOT_EXIST, key);
         }
 
         try {
@@ -308,6 +348,54 @@ public class ConfigBase {
         }
 
         LOG.info("set config {} to {}", key, value);
+    }
+
+    private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
+        Properties props = new Properties();
+        Path path = Paths.get(configPath);
+        List<String> lines = Files.readAllLines(path);
+        try (BufferedReader reader = new BufferedReader(new FileReader(configPath))) {
+            props.load(reader);
+        }
+
+        String oldValue = props.getProperty(key);
+        String comment;
+        if (StringUtils.isEmpty(oldValue)) {
+            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, value,
+                    LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
+        } else {
+            comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
+                    LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
+        }
+
+        boolean keyExists = false;
+        // Keep the original configuration file format
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(configPath))) {
+            for (String s : lines) {
+                String line = s.trim();
+
+                // Compatible with key=value & key = value
+                if (line.matches("^" + key + "\\s*=\\s*.*$")) {
+                    keyExists = true;
+                    writer.write(comment);
+                    writer.newLine();
+                    writer.write(key + " = " + value);
+                    writer.newLine();
+                    continue;
+                }
+
+                writer.write(s);
+                writer.newLine();
+            }
+
+            if (!keyExists) {
+                writer.newLine();
+                writer.write(comment);
+                writer.newLine();
+                writer.write(key + " = " + value);
+                writer.newLine();
+            }
+        }
     }
 
     private static boolean isAliasesMatch(PatternMatcher matcher, String[] aliases) {
@@ -381,5 +469,57 @@ public class ConfigBase {
         }
 
         return configs;
+    }
+
+    public static synchronized void setConfig(AdminSetConfigStmt stmt) throws DdlException {
+        String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+        setFrontendConfig(stmt.getConfig().getMap(), stmt.isPersistent(), user);
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+        int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+        StringBuilder errMsg = new StringBuilder();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+                continue;
+            }
+            errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
+        }
+        if (!errMsg.isEmpty()) {
+            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+        }
+    }
+
+    private static synchronized StringBuilder callFrontNodeSetConfig(AdminSetConfigStmt stmt, Frontend fe, int timeout,
+                                                                     StringBuilder errMsg) {
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
+        request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
+        request.setIs_persistent(stmt.isPersistent());
+        request.setUser_identity(ConnectContext.get().getCurrentUserIdentity().getUser());
+        try {
+            TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                    timeout,
+                    client -> client.setConfig(request));
+            TStatus status = response.getStatus();
+            if (status.getStatus_code() != TStatusCode.OK) {
+                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
+                if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
+                    errMsg.append(String.join(",", status.getError_msgs()));
+                }
+                errMsg.append(";");
+            }
+        } catch (Exception e) {
+            LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
+            errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+        }
+        return errMsg;
+    }
+
+    public static synchronized void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity)
+            throws InvalidConfException {
+        for (Map.Entry<String, String> entry : configs.entrySet()) {
+            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
+        }
     }
 }

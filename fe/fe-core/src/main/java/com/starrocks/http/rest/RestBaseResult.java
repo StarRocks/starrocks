@@ -84,6 +84,13 @@ public class RestBaseResult {
         this.message = msg;
     }
 
+    public RestBaseResult(String code, ActionStatus status, String msg) {
+        this.code = code;
+        this.status = status;
+        this.msg = msg;
+        this.message = msg;
+    }
+
     public static RestBaseResult getOk() {
         return OK;
     }
@@ -99,5 +106,9 @@ public class RestBaseResult {
 
     public String getMessage() {
         return message;
+    }
+
+    public ActionStatus getStatus() {
+        return status;
     }
 }

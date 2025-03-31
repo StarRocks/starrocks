@@ -23,6 +23,7 @@
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel_mgr.h"
+#include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -35,6 +36,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/await.h"
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
@@ -1297,6 +1299,25 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
     }
 }
 
+TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
+    // Publish EMPTY_TXN_LOG
+    {
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(-1);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
+    ASSERT_EQ(2, metadata->version());
+    ASSERT_EQ(_tablet_id, metadata->id());
+}
+
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     // write 1 rowset when schema change
     {
@@ -1563,6 +1584,39 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+
+    // Write some data into the tablet, num_rows = 1024, data_size=65536
+    size_t expected_num_rows = 1024;
+    size_t expected_data_size = 65536;
+    auto txn_log = generate_write_txn_log(2, expected_num_rows, expected_data_size);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version request
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(3);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(txn_log.txn_id());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        // Publish txn batch
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    { // get the tablet stat again
+        TabletStatRequest request;
+        TabletStatResponse response;
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(_tablet_id);
+        info->set_version(3);
+        _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+        EXPECT_EQ(1, response.tablet_stats_size());
+        EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+        EXPECT_EQ(expected_num_rows, response.tablet_stats(0).num_rows());
+        EXPECT_EQ(expected_data_size, response.tablet_stats(0).data_size());
+    }
+
     // get_tablet_stats() should not fill metadata cache
     auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
     ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
@@ -1838,7 +1892,9 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         ptablet->set_partition_id(partition_id);
         ptablet->set_tablet_id(metadata->id());
 
-        load_mgr->open(nullptr, request, &response, nullptr);
+        MockClosure closure;
+        load_mgr->open(nullptr, request, &response, &closure);
+        ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
         ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 
@@ -1853,7 +1909,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        Chunk chunk({c0, c1}, schema);
+        Chunk chunk({std::move(c0), std::move(c1)}, schema);
         chunk.set_slot_id_to_index(0, 0);
         chunk.set_slot_id_to_index(1, 1);
         return chunk;
@@ -2209,6 +2265,20 @@ TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
         }
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
     }
+}
+
+TEST_F(LakeServiceTest, test_delete_data_ok) {
+    // delete the data from a tablet, but the tablet is not found from TabletManager
+    DeleteDataRequest request;
+    request.add_tablet_ids(_tablet_id);
+    request.set_txn_id(12345);
+    request.mutable_delete_predicate()->set_version(1);
+
+    DeleteDataResponse response;
+    _tablet_mgr->prune_metacache();
+    _lake_service.delete_data(nullptr, &request, &response, nullptr);
+
+    EXPECT_EQ(0L, response.failed_tablets().size());
 }
 
 } // namespace starrocks

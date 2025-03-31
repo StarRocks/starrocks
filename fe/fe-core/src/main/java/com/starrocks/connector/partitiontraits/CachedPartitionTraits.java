@@ -29,7 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 
 import java.util.List;
@@ -51,10 +51,12 @@ public class CachedPartitionTraits extends DefaultTraits {
     private final Cache<Object, Object> cache;
     private final ConnectorPartitionTraits delegate;
     private final QueryMaterializationContext.QueryCacheStats stats;
+    private final MaterializedView mv;
 
     public CachedPartitionTraits(Cache<Object, Object> cache,
                                  ConnectorPartitionTraits delegate,
-                                 QueryMaterializationContext.QueryCacheStats stats) {
+                                 QueryMaterializationContext.QueryCacheStats stats,
+                                 MaterializedView mv) {
         Objects.requireNonNull(cache);
         Objects.requireNonNull(delegate);
         Objects.requireNonNull(stats);
@@ -62,6 +64,7 @@ public class CachedPartitionTraits extends DefaultTraits {
         this.delegate = delegate;
         this.table = delegate.getTable();
         this.stats = stats;
+        this.mv = mv;
     }
 
     /**
@@ -70,7 +73,7 @@ public class CachedPartitionTraits extends DefaultTraits {
      * @return the cache key
      */
     private String buildCacheKey(String prefix) {
-        return String.format("cache_%s_%s", prefix, table.getId());
+        return String.format("cache_%s_%s_%s", prefix, (mv == null) ? "0" : mv.getId(), table.getId());
     }
 
     /**
@@ -110,8 +113,8 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public String getDbName() {
-        return delegate.getDbName();
+    public String getCatalogDBName() {
+        return delegate.getCatalogDBName();
     }
 
     @Override
@@ -153,9 +156,9 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
         return getCacheWithException("getPartitionList",
-                () -> delegate.getPartitionList(partitionColumn), () -> Maps.newHashMap());
+                () -> delegate.getPartitionCells(partitionColumns), () -> Maps.newHashMap());
     }
 
     @Override

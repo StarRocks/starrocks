@@ -21,7 +21,7 @@ Shows the execution information of load tasks within a Routine Load job.
 ```SQL
 SHOW ROUTINE LOAD TASK
 [  FROM <db_name>]
-[  WHERE JobName = <job_name> ]
+WHERE JobName = <job_name>
 ```
 
 :::note
@@ -35,7 +35,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD TASK WH
 | **Parameter** | **Required** | **Description**                                             |
 | ------------- | ------------ | ----------------------------------------------------------- |
 | db_name       | No           | The name of the database to which the Routine Load job belongs. |
-| JobName       | No           | The name of the Routine Load job.                               |
+| JobName       | Yes          | The name of the Routine Load job.                               |
 
 ## Output
 
@@ -48,7 +48,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD TASK WH
 | CreateTime           | The date and time when the load task was created.            |
 | LastScheduledTime    | The date and time when the load task was last scheduled.     |
 | ExecuteStartTime     | The date and time when the load task was executed.           |
-| Timeout              | The timeout period for the load task, controlled by the FE parameter [`routine_load_task_timeout_second`](../../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) and the `task_timeout_second` parameter in [job_properties](./CREATE_ROUTINE_LO../../data-manipulation/CREATE_ROUTINE_LOAD.mdr the Routine Load job. |
+| Timeout              | The timeout period for the load task, controlled by the FE parameter [`routine_load_task_timeout_second`](../../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) and the `task_timeout_second` parameter in [job_properties](./CREATE_ROUTINE_LOAD.md) the Routine Load job. |
 | BeId                 | The ID of the BE that executes the load task.                    |
 | DataSourceProperties | The load task's progress (measured in the offset) of consuming messages in partitions of the topic. |
 | Message              | The information returned for the load task, including task error information. |

@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -46,9 +47,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getQuerySplitPredicate;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedMVUnionRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule implements IMaterializedViewRewriteRule {
 
@@ -78,7 +79,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (isAppliedMVUnionRewrite(input)) {
+        if (Utils.isOptHasAppliedRule(input, OP_MV_UNION_REWRITE)) {
             return false;
         }
         return !context.getCandidateMvs().isEmpty() && checkOlapScanWithoutTabletOrPartitionHints(input);
@@ -151,6 +152,11 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             logMVRewrite(context, this, "too many MV candidates, truncate them to " + numCandidates);
             mvCandidateContexts = mvCandidateContexts.subList(0, numCandidates);
         }
+        if (mvCandidateContexts.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        logMVRewrite(context, this, "MV Candidates: {}",
+                mvCandidateContexts.stream().map(x -> x.getMv().getName()).collect(Collectors.toList()));
 
         // 3. do rewrite with associated mvs
         return doTransform(mvCandidateContexts, queryExpression, context);
@@ -197,20 +203,20 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
             IMaterializedViewRewriter mvRewriter = createRewriter(context, mvRewriteContext);
             if (mvRewriter == null) {
-                logMVRewrite(context, this, "create materialized view rewriter failed");
+                logMVRewrite(mvRewriteContext, "create materialized view rewriter failed");
                 continue;
             }
 
             // rewrite query
             OptExpression candidate = mvRewriter.doRewrite(mvRewriteContext);
             if (candidate == null) {
-                logMVRewrite(context, this, "doRewrite phase failed");
+                logMVRewrite(mvRewriteContext, "doRewrite phase failed");
                 continue;
             }
 
             candidate = mvRewriter.postRewrite(context, mvRewriteContext, candidate);
             if (candidate == null) {
-                logMVRewrite(context, this, "doPostAfterRewrite phase failed");
+                logMVRewrite(mvRewriteContext, "doPostAfterRewrite phase failed");
                 continue;
             }
 
@@ -228,14 +234,19 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
             mvEntity.increaseQueryMatchedCount(1L);
             // mark: query has been rewritten by mv success.
-            context.getQueryMaterializationContext().markRewriteSuccess(true);
+            context.getQueryMaterializationContext().addRewrittenSuccessMVContext(mvContext);
 
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();
             if (limit > 0 && results.size() >= limit) {
-                logMVRewrite(context, this, "too many MV rewrite results generated, but limit to {}", limit);
+                logMVRewrite(mvRewriteContext, "too many MV rewrite results generated, but limit to {}", limit);
                 break;
             }
+
+            // mark this mv has applied this query
+            MvUtils.getScanOperator(candidate)
+                    .stream()
+                    .forEach(op -> op.setOpAppliedMV(mvContext.getMv().getId()));
 
             // Give up rewrite if it exceeds the optimizer timeout
             context.checkTimeout();

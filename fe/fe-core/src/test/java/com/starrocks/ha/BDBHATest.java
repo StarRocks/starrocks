@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.ha;
 
 import com.starrocks.journal.bdbje.BDBEnvironment;
@@ -77,7 +76,7 @@ public class BDBHATest {
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "192.168.2.4", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
-                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1"),
+                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f),
                         false);
         Assert.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());

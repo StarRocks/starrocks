@@ -202,6 +202,16 @@ void BackendInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcCo
 }
 
 template <typename T>
+void BackendInternalServiceImpl<T>::load_diagnose(google::protobuf::RpcController* controller,
+                                                  const starrocks::PLoadDiagnoseRequest* request,
+                                                  starrocks::PLoadDiagnoseResult* response,
+                                                  google::protobuf::Closure* done) {
+    VLOG_RPC << "load diagnose, id=" << print_id(request->id()) << ", txn_id=" << request->txn_id();
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->load_diagnose(
+            static_cast<brpc::Controller*>(controller), request, response, done);
+}
+
+template <typename T>
 void BackendInternalServiceImpl<T>::local_tablet_reader_open(google::protobuf::RpcController* controller,
                                                              const PTabletReaderOpenRequest* request,
                                                              PTabletReaderOpenResult* response,
@@ -254,5 +264,4 @@ void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::pr
 }
 
 template class BackendInternalServiceImpl<PInternalService>;
-template class BackendInternalServiceImpl<doris::PBackendService>;
 } // namespace starrocks

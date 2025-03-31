@@ -34,8 +34,8 @@
 
 namespace starrocks {
 
-std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"flat_json_meta", "dict_merge", "max", "min",
-                                                                         "count"};
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -72,7 +72,7 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 
     std::vector<Column*> columns;
     for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
-        const ColumnPtr& col = chunk->get_column_by_index(i);
+        ColumnPtr& col = chunk->get_column_by_index(i);
         columns.emplace_back(col.get());
     }
 
@@ -116,32 +116,32 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
         auto s_id = _collect_context.result_slot_ids[i];
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
         const auto& field = _collect_context.seg_collecter_params.fields[i];
-        if (field == "dict_merge") {
+        if (field == META_DICT_MERGE) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
-        } else if (field == "count") {
+        } else if (field == META_COUNT_COL || field == META_COUNT_ROWS) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_BIGINT;
             TypeDescriptor desc;
             desc.type = TYPE_BIGINT;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
             chunk->append_column(std::move(column), slot->id());
-        } else if (field == "flat_json_meta") {
+        } else if (field == META_FLAT_JSON_META) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), _has_count_agg);
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -224,16 +224,18 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
 }
 
 Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Column* column, LogicalType type) {
-    if (name == "dict_merge") {
+    if (name == META_DICT_MERGE) {
         return _collect_dict(cid, column, type);
-    } else if (name == "max") {
+    } else if (name == META_MAX) {
         return _collect_max(cid, column, type);
-    } else if (name == "min") {
+    } else if (name == META_MIN) {
         return _collect_min(cid, column, type);
-    } else if (name == "count") {
-        return _collect_count(column, type);
-    } else if (name == "flat_json_meta") {
+    } else if (name == META_COUNT_ROWS) {
+        return _collect_rows(column, type);
+    } else if (name == META_FLAT_JSON_META) {
         return _collect_flat_json(cid, column);
+    } else if (name == META_COUNT_COL) {
+        return _collect_count(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
@@ -308,9 +310,9 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
 
-    if (words.size() > DICT_DECODE_MAX_SIZE) {
-        return Status::GlobalDictError(fmt::format("global dict size:{} greater than DICT_DECODE_MAX_SIZE:{}",
-                                                   words.size(), DICT_DECODE_MAX_SIZE));
+    if (words.size() > _params->low_cardinality_threshold) {
+        return Status::GlobalDictError(fmt::format("global dict size:{} greater than low_cardinality_threshold:{}",
+                                                   words.size(), _params->low_cardinality_threshold));
     }
 
     // array<string> has none dict, return directly
@@ -367,25 +369,43 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     }
     const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
-    if constexpr (!is_max) {
+    if constexpr (!is_max) { // min
         Datum min;
         if (!segment_zone_map_pb->has_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
             column->append_datum(min);
+        } else {
+            column->append_nulls(1);
         }
     } else if constexpr (is_max) {
         Datum max;
         if (segment_zone_map_pb->has_not_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
             column->append_datum(max);
+        } else {
+            column->append_nulls(1);
         }
     }
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect_count(Column* column, LogicalType type) {
+Status SegmentMetaCollecter::_collect_rows(Column* column, LogicalType type) {
     uint32_t num_rows = _segment->num_rows();
     column->append_datum(int64_t(num_rows));
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, LogicalType type) {
+    if (!_column_iterators[cid]) {
+        return Status::InvalidArgument("Invalid Collect Params.");
+    }
+
+    uint32_t num_rows = _segment->num_rows();
+    size_t nulls = 0;
+    RETURN_IF_ERROR(_column_iterators[cid]->seek_to_first());
+    RETURN_IF_ERROR(_column_iterators[cid]->null_count(&nulls));
+    column->append_datum(int64_t(num_rows - nulls));
+
     return Status::OK();
 }
 

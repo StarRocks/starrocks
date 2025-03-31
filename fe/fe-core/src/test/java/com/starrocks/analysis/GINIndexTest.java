@@ -14,30 +14,19 @@
 
 package com.starrocks.analysis;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
-
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ColumnId;
-import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.InvertedIndexParams;
-import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
@@ -46,6 +35,13 @@ import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+
+import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
 public class GINIndexTest extends PlanTestBase {
 

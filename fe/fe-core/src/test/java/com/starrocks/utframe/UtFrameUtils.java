@@ -48,6 +48,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -70,6 +71,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -81,12 +83,13 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -96,6 +99,7 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -116,12 +120,18 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -276,11 +286,20 @@ public class UtFrameUtils {
             feConfMap.put("aws_s3_access_key", "dummy_access_key");
             feConfMap.put("aws_s3_secret_key", "dummy_secret_key");
             // turn on mock starletAgent inside StarOS
-            StarletAgentFactory.forTest = true;
+            StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
         }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
         frontend.start(startBDB, runMode, new String[0]);
+    }
+
+    public static void mockInitWarehouseEnv() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return new MockedWarehouseManager();
+            }
+        };
     }
 
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
@@ -302,6 +321,7 @@ public class UtFrameUtils {
                         retry++ < 600) {
                 Thread.sleep(100);
             }
+            FeConstants.enableUnitStatistics = true;
             CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
@@ -580,7 +600,7 @@ public class UtFrameUtils {
                     (context, statementBase, execPlan) -> {
                         DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                        scheduler.startScheduling();
+                        scheduler.exec();
 
                         return scheduler;
                     });
@@ -592,7 +612,7 @@ public class UtFrameUtils {
                     (context, statementBase, execPlan) -> {
                         DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                        scheduler.startSchedulingWithoutDeploy();
+                        scheduler.execWithoutDeploy();
                         String plan = scheduler.getSchedulerExplain();
 
                         return Pair.create(plan, scheduler);
@@ -839,21 +859,19 @@ public class UtFrameUtils {
     public static OptExpression getQueryOptExpression(ConnectContext connectContext,
                                                       ColumnRefFactory columnRefFactory,
                                                       LogicalPlan logicalPlan,
-                                                      OptimizerConfig optimizerConfig) {
+                                                      OptimizerOptions optimizerOptions) {
         OptExpression optimizedPlan;
         try (Timer t = Tracers.watchScope("Optimizer")) {
             Optimizer optimizer = null;
-            if (optimizerConfig != null) {
-                optimizer = new Optimizer(optimizerConfig);
-            } else {
-                optimizer = new Optimizer();
+            OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory);
+            if (optimizerOptions != null) {
+                context.setOptimizerOptions(optimizerOptions);
             }
+            optimizer = OptimizerFactory.create(context);
             optimizedPlan = optimizer.optimize(
-                        connectContext,
                         logicalPlan.getRoot(),
                         new PhysicalPropertySet(),
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
         return optimizedPlan;
     }
@@ -1139,12 +1157,12 @@ public class UtFrameUtils {
                 DataInputStream dis =
                             new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
                 try {
-                    JournalEntity je = new JournalEntity();
-                    je.readFields(dis);
-                    if (je.getOpCode() == expectCode) {
-                        return je.getData();
+                    short opCode = dis.readShort();
+                    JournalEntity je = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis));
+                    if (je.opCode() == expectCode) {
+                        return je.data();
                     } else {
-                        System.err.println("ignore irrelevant journal id " + je.getOpCode());
+                        System.err.println("ignore irrelevant journal id " + je.opCode());
                     }
                 } finally {
                     dis.close();
@@ -1156,14 +1174,16 @@ public class UtFrameUtils {
             int count = followerJournalQueue.size();
             while (!followerJournalQueue.isEmpty()) {
                 DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
-                JournalEntity je = new JournalEntity();
+                JournalEntity je = new JournalEntity(OperationType.OP_INVALID, null);
                 try (DataInputStream dis = new DataInputStream(
                             new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
-                    je.readFields(dis);
+
+                    short opCode = dis.readShort();
+                    je = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis));
                     GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), je);
                     // System.out.println("replayed journal type: " + je.getOpCode());
                 } catch (JournalInconsistentException e) {
-                    System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
+                    System.err.println("load journal failed, type: " + je.opCode() + " , error: " + e.getMessage());
                     e.printStackTrace();
                     Assert.fail();
                 }
@@ -1215,8 +1235,8 @@ public class UtFrameUtils {
     }
 
     public static void setPartitionVersion(Partition partition, long version) {
-        partition.setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getBaseIndex();
+        partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -1224,6 +1244,18 @@ public class UtFrameUtils {
                 replica.updateVersionInfo(version, -1, version);
             }
         }
+    }
+
+    public static void mockLogicalScanIsEmptyOutputRows(boolean expect) {
+        new MockUp<LogicalOlapScanOperator>() {
+            /**
+             * {@link LogicalOlapScanOperator#isEmptyOutputRows()}
+             */
+            @Mock
+            public boolean isEmptyOutputRows() {
+                return expect;
+            }
+        };
     }
 
     public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
@@ -1234,7 +1266,7 @@ public class UtFrameUtils {
             @Mock
             public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
                                                           boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+                return MvUpdateInfo.noRefresh(mv);
             }
         };
 
@@ -1299,6 +1331,8 @@ public class UtFrameUtils {
 
             // Disable text based rewrite by default.
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+            // disable mv analyze stats in FE UTs
+            connectContext.getSessionVariable().setAnalyzeForMv("");
         }
 
         new MockUp<PlanTestBase>() {
@@ -1323,6 +1357,15 @@ public class UtFrameUtils {
         };
     }
 
+    public static void mockEnableQueryContextCache() {
+        new MockUp<QueryMaterializationContext>() {
+            @Mock
+            public boolean isEnableQueryContextCache() {
+                return true;
+            }
+        };
+    }
+
     public static void mockDML() {
         new MockUp<StmtExecutor>() {
             /**
@@ -1339,7 +1382,7 @@ public class UtFrameUtils {
                     if (tbl != null) {
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
                         }
                     }
                 } else if (stmt instanceof DeleteStmt) {
@@ -1394,5 +1437,36 @@ public class UtFrameUtils {
                 iterator.remove();
             }
         }
+    }
+
+    /***
+     * Get the OptExpression of the query which is only optimized by rbo only.
+     */
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      String query) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        QueryStatement statement = null;
+        try {
+            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
+        } catch (Exception e) {
+            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+        }
+        LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+        OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
+        OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
+                logicalPlan, optimizerOptions);
+        return optExpression;
+    }
+
+
+    /**
+     * Get the scan operators of the query which is only optimized by rbo only.
+     */
+    public static List<LogicalScanOperator> getQueryScanOperators(ConnectContext connectContext,
+                                                                  String query) {
+        OptExpression optExpression = getQueryOptExpression(connectContext, query);
+        Assert.assertNotNull(optExpression);
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
+        return scanOperators;
     }
 }

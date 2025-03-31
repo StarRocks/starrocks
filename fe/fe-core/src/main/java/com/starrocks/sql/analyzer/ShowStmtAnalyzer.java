@@ -21,7 +21,6 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
@@ -33,6 +32,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
@@ -56,6 +56,9 @@ import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -65,6 +68,7 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
@@ -139,7 +143,6 @@ public class ShowStmtAnalyzer {
             return visitShowTableStatement(node, context);
         }
 
-
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt node, ConnectContext context) {
             ShowTabletStmtAnalyzer.analyze(node, context);
@@ -187,6 +190,15 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getDatabaseName(db, context);
             node.setDb(db);
+            String catalogName;
+            if (node.getCatalogName() != null) {
+                catalogName = node.getCatalogName();
+            } else {
+                catalogName = context.getCurrentCatalog();
+            }
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
             return null;
         }
 
@@ -498,8 +510,8 @@ public class ShowStmtAnalyzer {
                                 mysqlTable.getPort(),
                                 mysqlTable.getUserName(),
                                 mysqlTable.getPasswd(),
-                                mysqlTable.getMysqlDatabaseName(),
-                                mysqlTable.getMysqlTableName());
+                                mysqlTable.getCatalogDBName(),
+                                mysqlTable.getCatalogTableName());
                         node.getTotalRows().add(row);
                     } else {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, table.getType());
@@ -541,19 +553,34 @@ public class ShowStmtAnalyzer {
                 return;
             }
 
-            if (!(predicate instanceof BinaryPredicate) || !((BinaryPredicate) predicate).getOp().isEquivalence()) {
-                throw new SemanticException("Only support equal predicate in show statement");
-            }
+            List<Expr> exprs = AnalyzerUtils.extractConjuncts(predicate);
+            for (Expr expr : exprs) {
+                if (!(expr instanceof BinaryPredicate && ((BinaryPredicate) expr).getOp().isEquivalence()) &&
+                        !(expr instanceof LikePredicate)) {
+                    throw new SemanticException(
+                            "Invalid predicate in SHOW statement. Only '=' and 'LIKE' operators are supported. " +
+                                    "Found: '" + expr.toSql() + "'");
+                }
 
-            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
-            if (!(binaryPredicate.getChild(0) instanceof SlotRef &&
-                    binaryPredicate.getChild(1) instanceof LiteralExpr)) {
-                throw new SemanticException("Only support column = \"string literal\" format predicate");
+                if (!(expr.getChild(0) instanceof SlotRef)) {
+                    throw new SemanticException(
+                            "Invalid left operator in predicate '" + expr.toSql() + "'. " +
+                                    "Left side must be a column reference");
+                }
+
+                if (!(expr.getChild(1) instanceof StringLiteral)) {
+                    throw new SemanticException(
+                            "Invalid right operator in predicate '" + expr.toSql() + "'. " +
+                                    "Right side must be a string literal. " +
+                                    "Example: column = 'value' or column LIKE 'pattern%'");
+                }
             }
         }
 
         @Override
         public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
+            TableName tbl = statement.getTbl();
+            tbl.normalization(context);
             String dbName = statement.getDbName();
             dbName = getDatabaseName(dbName, context);
             statement.setDbName(dbName);
@@ -561,7 +588,7 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -571,19 +598,27 @@ public class ShowStmtAnalyzer {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
-                if (!(table instanceof OlapTable)) {
-                    throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP table");
+                Table table =
+                        MetaUtils.getSessionAwareTable(context, db, new TableName(tbl.getCatalog(), dbName, tableName));
+                if (!(table instanceof OlapTable) && !(table instanceof PaimonTable)) {
+                    throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP/Paimon table");
                 }
-
                 // build proc path
                 StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder.append("/dbs/");
-                stringBuilder.append(db.getId());
-                stringBuilder.append("/").append(table.getId());
-                if (isTempPartition) {
-                    stringBuilder.append("/temp_partitions");
-                } else {
+                if (table instanceof OlapTable) {
+                    stringBuilder.append("/dbs/");
+                    stringBuilder.append(db.getId());
+                    stringBuilder.append("/").append(table.getId());
+                    if (isTempPartition) {
+                        stringBuilder.append("/temp_partitions");
+                    } else {
+                        stringBuilder.append("/partitions");
+                    }
+                } else if (table instanceof PaimonTable) {
+                    stringBuilder.append("/catalog/");
+                    stringBuilder.append(tbl.getCatalog());
+                    stringBuilder.append("/").append(dbName);
+                    stringBuilder.append("/").append(tableName);
                     stringBuilder.append("/partitions");
                 }
 
@@ -705,6 +740,47 @@ public class ShowStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
             return null;
+        }
+
+        @Override
+        public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        public void analyzeOrderByItems(ShowStmt node) {
+            List<OrderByElement> orderByElements = node.getOrderByElements();
+            if (orderByElements != null && !orderByElements.isEmpty()) {
+                List<OrderByPair> orderByPairs = new ArrayList<>();
+                for (OrderByElement orderByElement : orderByElements) {
+                    if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Should order by column");
+                    }
+                    SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                    int index = node.getMetaData().getColumnIdx(slotRef.getColumnName());
+                    OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
+                    orderByPairs.add(orderByPair);
+                }
+                node.setOrderByPairs(orderByPairs);
+            }
         }
     }
 }

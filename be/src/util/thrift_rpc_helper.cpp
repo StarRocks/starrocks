@@ -103,12 +103,14 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
     Status status;
     ClientConnection<T> client(_s_exec_env->get_client_cache<T>(), address, timeout_ms, &status);
     if (!status.ok()) {
+        _s_exec_env->get_client_cache<T>()->close_connections(address);
         LOG(WARNING) << "Connect " << ThriftMsgTypeTraits<T>::rpc_name << " failed, address=" << address
                      << ", status=" << status.message();
         return status;
     }
 
-    for (int i = 0; i < retry_times; i++) {
+    int i = 0;
+    do {
         status = rpc_impl(callback, client, address);
         if (status.ok()) {
             return Status::OK();
@@ -121,7 +123,7 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
             LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << st.message();
             break;
         }
-    }
+    } while (i++ < retry_times);
     return status;
 }
 

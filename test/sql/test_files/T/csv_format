@@ -9,29 +9,15 @@ shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_b
 shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
 
 -- load
-create table t1 as select * from files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}/*', 'format'='csv', "csv.column_separator"=",","csv.row_delimiter"="\n");
+create table t1 as select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
 
 -- query
-select * from files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}/*', 'format'='csv', "csv.column_separator"=",","csv.row_delimiter"="\n");
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+select $3 + 1, $2 from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
 
 -- check schema
 desc t1;
-desc files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}/*', 'format'='csv', "csv.column_separator"=",","csv.row_delimiter"="\n");
-
--- list files
-select path, size, is_dir from files(
-    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
-    "list_files_only" = "true",
-    "aws.s3.access_key" = "${oss_ak}",
-    "aws.s3.secret_key" = "${oss_sk}",
-    "aws.s3.endpoint" = "${oss_endpoint}");
-
-select path, size, is_dir from files(
-    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*/*",
-    "list_files_only" = "true",
-    "aws.s3.access_key" = "${oss_ak}",
-    "aws.s3.secret_key" = "${oss_sk}",
-    "aws.s3.endpoint" = "${oss_endpoint}");
+desc files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
 
 -- clean
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

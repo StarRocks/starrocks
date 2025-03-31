@@ -49,7 +49,9 @@ bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, Lik
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
-        error << "Invalid hyperscan expression: " << std::string(slice.data, slice.size) << ": "
+        auto chopped_size = std::min<size_t>(slice.size, 64);
+        auto ellipsis = (chopped_size < slice.size) ? "..." : "";
+        error << "Invalid hyperscan expression: " << std::string(slice.data, chopped_size) << ellipsis << ": "
               << state->compile_err->message << PROMPT_INFO;
         LOG(WARNING) << error.str().c_str();
         hs_free_compile_error(state->compile_err);
@@ -329,7 +331,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         } else {
             res->append(true);
         }
-        return ConstColumn::create(res, columns[0]->size());
+        return ConstColumn::create(std::move(res), columns[0]->size());
     }
 
     BinaryColumn* haystack = nullptr;
@@ -384,7 +386,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     }
 
     if (columns[0]->has_null()) {
-        return NullableColumn::create(res, res_null);
+        return NullableColumn::create(std::move(res), std::move(res_null));
     }
     return res;
 }

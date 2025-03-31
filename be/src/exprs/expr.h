@@ -122,6 +122,7 @@ public:
     bool is_cast_expr() const { return _node_type == TExprNodeType::CAST_EXPR; }
     virtual bool is_lambda_function() const { return false; }
     virtual bool is_literal() const { return false; }
+    virtual bool is_dictmapping_expr() const { return false; }
 
     // In most time, this field is passed from FE
     // Sometimes we want to construct expr on BE implicitly and we have knowledge about `monotonicity`
@@ -267,6 +268,7 @@ public:
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
+    SlotId max_used_slot_id() const;
 
 protected:
     friend class MathFunctions;

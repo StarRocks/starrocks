@@ -33,7 +33,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.StarOSAgent;
@@ -204,7 +204,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+        public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
             return partitionId;
         }
 
@@ -245,12 +245,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
-            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
-        }
-
-        @Override
-        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
     }

@@ -60,6 +60,7 @@ import java.util.Objects;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
+
     private String catalog;
     @SerializedName(value = "tbl")
     private String tbl;
@@ -90,6 +91,9 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public static TableName fromString(String name) {
         List<String> pieces = Splitter.on(".").splitToList(name);
+        if (pieces.size() == 3) {
+            return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
+        }
         String catalog = ConnectContext.get().getCurrentCatalog();
         String db = ConnectContext.get().getDatabase();
         if (pieces.isEmpty()) {
@@ -101,8 +105,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
             return new TableName(catalog, db, pieces.get(0));
         } else if (pieces.size() == 2) {
             return new TableName(catalog, pieces.get(0), pieces.get(1));
-        } else if (pieces.size() == 3) {
-            return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
         } else {
             throw new IllegalArgumentException("illegal table name: " + name);
         }

@@ -23,6 +23,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "storage/lake/delta_writer_finish_mode.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class MemTracker;
@@ -112,6 +113,8 @@ public:
 
     [[nodiscard]] int64_t last_write_ts() const;
 
+    DeltaWriter* delta_writer();
+
 private:
     AsyncDeltaWriterImpl* _impl;
 };
@@ -191,6 +194,16 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_load_id(const PUniqueId& load_id) {
+        _load_id = load_id;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_profile(RuntimeProfile* profile) {
+        _profile = profile;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -207,6 +220,8 @@ private:
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
+    PUniqueId _load_id;
+    RuntimeProfile* _profile{nullptr};
 };
 
 } // namespace starrocks::lake

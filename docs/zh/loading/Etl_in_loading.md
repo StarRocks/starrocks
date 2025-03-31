@@ -38,16 +38,6 @@ StarRocks 支持在导入数据的过程中实现数据转换。
   
   支持 Apache Hive™ 分区路径命名方式，使 StarRocks 能够从文件路径中获取分区列的内容。
 
-## 前提条件
-
-### Broker Load
-
-参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/cloud_storage_load.md)中的“背景信息”小节。
-
-### Routine Load
-
-如果使用 [Routine Load](./RoutineLoad.md) 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署两个 Topic，分别为 `topic1` 和 `topic2`。
-
 ## 数据样例
 
 1. 在本地文件系统中创建数据文件。
@@ -271,7 +261,7 @@ WITH BROKER;
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
 COLUMNS TERMINATED BY ",",
-COLUMNS (user_id, user_gender, event_date, event_type)
+COLUMNS (user_id, user_gender, event_date, event_type),
 WHERE event_type = 1
 FROM KAFKA
 (

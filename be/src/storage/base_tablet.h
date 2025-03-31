@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "storage/olap_define.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 
@@ -118,6 +119,11 @@ public:
 
     virtual size_t num_rows() const = 0;
 
+    virtual StatusOr<bool> has_delete_predicates(const Version& version) = 0;
+
+    virtual bool belonged_to_cloud_native() const = 0;
+
+protected:
     virtual void on_shutdown() {}
 
 protected:
