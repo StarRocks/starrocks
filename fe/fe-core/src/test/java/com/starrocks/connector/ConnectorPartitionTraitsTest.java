@@ -93,7 +93,7 @@ public class ConnectorPartitionTraitsTest {
 
     @Test
     public void testHiveResourceTableName() {
-        HiveTable hiveTable = new HiveTable(0, "name", Lists.newArrayList(), "resource_name", "hive_catalog",
+        HiveTable hiveTable = new HiveTable(0, "root", "name", Lists.newArrayList(), "resource_name", "hive_catalog",
                 "hiveDb", "hiveTable", "location", "", 0,
                 Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null,
                 HiveTable.HiveTableType.MANAGED_TABLE);

@@ -163,6 +163,7 @@ public class HiveMetastoreApiConverter {
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setHiveTableOwner(table.getOwner())
                 .setTableName(table.getTableName())
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hive"))
@@ -198,7 +199,7 @@ public class HiveMetastoreApiConverter {
         apiTable.setDbName(table.getCatalogDBName());
         apiTable.setTableName(table.getCatalogTableName());
         apiTable.setTableType(table.getHiveTableType().name());
-        apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
+        apiTable.setOwner(table.getOwner());
         apiTable.setParameters(toApiTableProperties(table));
         apiTable.setPartitionKeys(table.getPartitionColumns().stream()
                 .map(HiveMetastoreApiConverter::toMetastoreApiFieldSchema)

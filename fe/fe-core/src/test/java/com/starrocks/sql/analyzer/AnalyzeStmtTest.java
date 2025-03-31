@@ -205,7 +205,7 @@ public class AnalyzeStmtTest {
         new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext session, Database database, TableName tableName) {
-                return new HiveTable(1, "customer", Lists.newArrayList(), "resource_name",
+                return new HiveTable(1, "root", "customer", Lists.newArrayList(), "resource_name",
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("resource_name", "hive"),
                         "hive", "tpch", "", "",
                         0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),

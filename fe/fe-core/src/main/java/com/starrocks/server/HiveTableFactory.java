@@ -42,6 +42,7 @@ public class HiveTableFactory extends ExternalTableFactory {
     public static void copyFromCatalogTable(HiveTable.Builder tableBuilder, HiveTable catalogTable,
                                             Map<String, String> properties) {
         tableBuilder
+                .setHiveTableOwner(catalogTable.getOwner())
                 .setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
                 .setHiveDbName(catalogTable.getCatalogDBName())

@@ -27,6 +27,7 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -139,6 +140,14 @@ public class HiveMetastoreOperations {
         return metastore.getAllTableNames(dbName);
     }
 
+    private String getCurrentUser() {
+        ConnectContext context = ConnectContext.get();
+        if (context == null) {
+            return System.getenv("HADOOP_USER_NAME");
+        }
+        return context.getQualifiedUser();
+    }
+
     public boolean createTable(CreateTableStmt stmt, List<Column> partitionColumns) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
@@ -187,6 +196,7 @@ public class HiveMetastoreOperations {
         }
         HiveTable.Builder builder = HiveTable.builder()
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setHiveTableOwner(getCurrentUser())
                 .setTableName(tableName)
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hive"))
