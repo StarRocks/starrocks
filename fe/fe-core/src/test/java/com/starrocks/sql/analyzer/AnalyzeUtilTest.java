@@ -428,7 +428,7 @@ public class AnalyzeUtilTest {
         Map<String, PartitionDesc> partitionNames = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         {
             AddPartitionClause addPartitionClauses =
-                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, "");
+                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues);
             ListPartitionDesc listPartitionDesc = (ListPartitionDesc) addPartitionClauses.getPartitionDesc();
             List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
             Assert.assertEquals(combinations.size(), descs.size());
@@ -440,7 +440,7 @@ public class AnalyzeUtilTest {
 
         {
             AddPartitionClause addPartitionClauses =
-                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, "");
+                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues);
             ListPartitionDesc listPartitionDesc = (ListPartitionDesc) addPartitionClauses.getPartitionDesc();
             List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
             Assert.assertEquals(combinations.size(), descs.size());
@@ -451,7 +451,7 @@ public class AnalyzeUtilTest {
 
         {
             AddPartitionClause addPartitionClauses =
-                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, "");
+                    AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues);
             ListPartitionDesc listPartitionDesc = (ListPartitionDesc) addPartitionClauses.getPartitionDesc();
             List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
             Assert.assertEquals(combinations.size(), descs.size());
