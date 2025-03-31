@@ -33,6 +33,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -145,7 +146,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         slotManager.start();
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SlotManager getSlotManager() {
+            public BaseSlotManager getSlotManager() {
                 return slotManager;
             }
         };
@@ -789,12 +790,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
         // 2. The leader is changed, so the query can get slot from the new leader.
-        SlotManager oldSlotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        BaseSlotManager oldSlotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         SlotManager slotManager = new SlotManager(GlobalStateMgr.getCurrentState().getResourceUsageMonitor());
         slotManager.start();
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SlotManager getSlotManager() {
+            public BaseSlotManager getSlotManager() {
                 return slotManager;
             }
         };
@@ -809,7 +810,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SlotManager getSlotManager() {
+            public BaseSlotManager getSlotManager() {
                 return oldSlotManager;
             }
         };
@@ -1507,8 +1508,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             ShowResultSet res = ShowExecutor.execute(showStmt, ctx);
             Assert.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
 
-            final int groupIndex = 1;
-            final int stateIndex = 5;
+            final int groupIndex = 2;
+            final int stateIndex = 6;
             Map<String, Map<String, Integer>> groupToStateToCount =
                     res.getResultRows().stream().collect(Collectors.groupingBy(
                             row -> row.get(groupIndex),

@@ -1380,6 +1380,11 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public long getCurrentWarehouseId() {
+        return connectContext.getCurrentWarehouseId();
+    }
+
+    @Override
     public String getResourceGroupName() {
         return jobSpec.getResourceGroup() == null ? ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME :
                 jobSpec.getResourceGroup().getName();

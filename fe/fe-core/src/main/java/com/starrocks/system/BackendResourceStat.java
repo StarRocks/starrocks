@@ -19,10 +19,13 @@ import com.starrocks.common.CloseableLock;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Cache the resource information of all backends and compute nodes, and provide the average value of the resource information.
@@ -76,6 +79,18 @@ public class BackendResourceStat {
         }
     }
 
+    public Map<Long, Integer> getHardwareCoresPerBe(Predicate<Long> pred) {
+        return numHardwareCoresPerBe.entrySet().stream()
+                .filter(entry -> pred.test(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public Map<Long, Long> getMemLimitBytesPerBeWithPred(Predicate<Long> pred) {
+        return memLimitBytesPerBe.entrySet().stream()
+                .filter(entry -> pred.test(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
     public int getNumBes() {
         return Math.max(numHardwareCoresPerBe.size(), memLimitBytesPerBe.size());
     }
@@ -111,14 +126,17 @@ public class BackendResourceStat {
             if (numHardwareCoresPerBe.isEmpty()) {
                 return DEFAULT_CORES_OF_BE;
             }
-
-            int sum = numHardwareCoresPerBe.values().stream().reduce(Integer::sum).orElse(DEFAULT_CORES_OF_BE);
-            int avg = sum / numHardwareCoresPerBe.size();
+            int avg = getAvgNumHardwareCoresOfBe(numHardwareCoresPerBe);
             cachedAvgNumHardwareCores.set(avg);
-            LOG.info("update avgNumHardwareCoresOfBe to {}, current cpuCores stats: {}", avg, numHardwareCoresPerBe);
-
             return avg;
         }
+    }
+
+    public static int getAvgNumHardwareCoresOfBe(Map<Long, Integer> numHardwareCoresPerBe) {
+        int sum = numHardwareCoresPerBe.values().stream().reduce(Integer::sum).orElse(DEFAULT_CORES_OF_BE);
+        int avg = sum / numHardwareCoresPerBe.size();
+        LOG.info("update avgNumHardwareCoresOfBe to {}, current cpuCores stats: {}", avg, numHardwareCoresPerBe);
+        return avg;
     }
 
     public int getMinNumHardwareCoresOfBe() {
@@ -151,13 +169,16 @@ public class BackendResourceStat {
             if (memLimitBytesPerBe.isEmpty()) {
                 return DEFAULT_MEM_LIMIT_BYTES;
             }
-
-            long sum = memLimitBytesPerBe.values().stream().reduce(Long::sum).orElse(DEFAULT_MEM_LIMIT_BYTES);
-            long avg = sum / memLimitBytesPerBe.size();
+            long avg = getAvgMemLimitBytes(memLimitBytesPerBe);
             cachedAvgMemLimitBytes.set(avg);
-
             return avg;
         }
+    }
+
+    public static long getAvgMemLimitBytes(Map<Long, Long> memLimitBytesPerBe) {
+        long sum = memLimitBytesPerBe.values().stream().reduce(Long::sum).orElse(DEFAULT_MEM_LIMIT_BYTES);
+        long avg = sum / memLimitBytesPerBe.size();
+        return avg;
     }
 
     public int getDefaultDOP() {

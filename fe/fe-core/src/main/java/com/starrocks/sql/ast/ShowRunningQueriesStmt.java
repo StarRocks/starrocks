@@ -37,6 +37,8 @@ public class ShowRunningQueriesStmt extends ShowStmt {
     private static final List<Pair<Column, Function<LogicalSlot, String>>> META_DATA = ImmutableList.of(
             Pair.create(new Column("QueryId", ScalarType.createVarchar(64)),
                     slot -> DebugUtil.printId(slot.getSlotId())),
+            Pair.create(new Column("WarehouseId", ScalarType.createVarchar(64)),
+                    slot -> slot.getGroupId() == LogicalSlot.ABSENT_GROUP_ID ? "-" : Long.toString(slot.getWarehouseId())),
             Pair.create(new Column("ResourceGroupId", ScalarType.createVarchar(64)),
                     slot -> slot.getGroupId() == LogicalSlot.ABSENT_GROUP_ID ? "-" : Long.toString(slot.getGroupId())),
             Pair.create(new Column("StartTime", ScalarType.createVarchar(64)),
