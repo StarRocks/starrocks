@@ -2101,6 +2101,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setOther_msg(otherMsg);
             info.setLatest_source_position(getSourceProgressString());
             info.setOffset_lag(getSourceLagString(progressJsonStr));
+            info.setTimestamp_progress(getTimestampProgress().toJsonString());
             return info;
         } finally {
             readUnlock();

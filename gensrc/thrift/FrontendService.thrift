@@ -614,6 +614,7 @@ struct TRoutineLoadJobInfo {
     19: optional string other_msg
     20: optional string latest_source_position
     21: optional string offset_lag
+    22: optional string timestamp_progress
 }
 
 struct TGetStreamLoadsResult {
