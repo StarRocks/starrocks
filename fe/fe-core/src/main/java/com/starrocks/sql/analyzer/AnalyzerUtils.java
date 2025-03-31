@@ -1380,12 +1380,7 @@ public class AnalyzerUtils {
                     String formatValue = getFormatPartitionValue(value);
                     formattedPartitionValue.add(formatValue);
                 }
-<<<<<<< HEAD
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
-=======
-
-                String partitionName = DEFAULT_PARTITION_NAME_PREFIX + Joiner.on("_").join(formattedPartitionValue);
->>>>>>> 124ac6e0d4 ([BugFix] Fix Create automic partitions with case insensitive bug (backport #54278) (#54867))
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
                             + "_" + Integer.toHexString(partitionName.hashCode());
