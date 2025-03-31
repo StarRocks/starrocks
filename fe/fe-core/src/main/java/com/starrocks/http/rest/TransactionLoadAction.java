@@ -60,19 +60,25 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -224,7 +230,7 @@ public class TransactionLoadAction extends RestBaseAction {
         // redirect transaction op to BE
         TNetworkAddress redirectAddress = result.getRedirectAddress();
         if (null == redirectAddress) {
-            Long nodeId = getNodeId(txnOperation, label);
+            Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName());
             ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeId);
             if (node == null) {
                 node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
@@ -279,12 +285,32 @@ public class TransactionLoadAction extends RestBaseAction {
                 ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
     }
 
-    private Long getNodeId(TransactionOperation txnOperation, String label) throws StarRocksException {
+    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws StarRocksException {
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
-            Long chosenNodeId = GlobalStateMgr.getCurrentState().getNodeMgr()
-                    .getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
+            // Choose a backend sequentially, or choose a cn in shared_data mode
+            List<Long> nodeIds = new ArrayList<>();
+            if (RunMode.isSharedDataMode()) {
+                List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+                for (long cnNodeId : computeIds) {
+                    ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+                            getBackendOrComputeNode(cnNodeId);
+                    if (node != null && node.isAvailable()) {
+                        nodeIds.add(cnNodeId);
+                    }
+                }
+                Collections.shuffle(nodeIds);
+            } else {
+                SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, true, false, null);
+            }
+
+            if (CollectionUtils.isEmpty(nodeIds)) {
+                throw new DdlException("No backend alive.");
+            }
+
+            Long chosenNodeId = nodeIds.get(0);
             nodeId = chosenNodeId;
             // txnNodeMap is LRU cache, it atomic remove unused entry
             accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, chosenNodeId));
