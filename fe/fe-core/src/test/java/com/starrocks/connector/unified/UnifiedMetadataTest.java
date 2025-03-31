@@ -126,7 +126,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hiveMetadata.createDb((ConnectContext) any, "test_db", (Map) any);
+                hiveMetadata.createDb((ConnectContext) any, "test_db", new HashMap<>());
                 times = 1;
             }
 
@@ -153,14 +153,14 @@ public class UnifiedMetadataTest {
             }
         };
 
-        List<String> dbNames = unifiedMetadata.listDbNames(new ConnectContext());
+        List<String> dbNames = unifiedMetadata.listDbNames(connectContext);
         assertEquals(ImmutableList.of("test_db1", "test_db2"), dbNames);
-        List<String> tblNames = unifiedMetadata.listTableNames(new ConnectContext(), "test_db");
+        List<String> tblNames = unifiedMetadata.listTableNames(connectContext, "test_db");
         assertEquals(ImmutableList.of("test_tbl1", "test_tbl2"), tblNames);
         unifiedMetadata.createDb(connectContext, "test_db", new HashMap<>());
         unifiedMetadata.createDb(connectContext, "test_db", ImmutableMap.of("key", "value"));
-        assertTrue(unifiedMetadata.dbExists(new ConnectContext(), "test_db"));
-        unifiedMetadata.dropDb(new ConnectContext(), "test_db", false);
+        assertTrue(unifiedMetadata.dbExists(connectContext, "test_db"));
+        unifiedMetadata.dropDb(connectContext, "test_db", false);
         CloudConfiguration cloudConfiguration = unifiedMetadata.getCloudConfiguration();
         assertEquals(CloudType.DEFAULT, cloudConfiguration.getCloudType());
     }

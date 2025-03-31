@@ -107,7 +107,8 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         mockedNativeTableA.refresh();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableA;
             }
         };
@@ -216,7 +217,8 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         mockedNativeTableC.refresh();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
         };
@@ -379,7 +381,8 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
         };
@@ -551,7 +554,8 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         mockedNativeTableC.refresh();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
         };
