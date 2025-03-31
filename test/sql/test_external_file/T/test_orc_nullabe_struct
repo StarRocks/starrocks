@@ -1,0 +1,20 @@
+-- name: testORCNullabeStruct
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_nullable_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/test_data/orc/nullable_struct.orc oss://${oss_bucket}/test_orc_nullable_struct/${uuid0}/nullable_struct.orc | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE nullable_struct_test
+(
+    c1 int,
+    c2 struct<c21 string>
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_orc_nullable_struct/${uuid0}/",
+    "format" = "orc"
+);
+
+select * from nullable_struct_test where c1 = 9999;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_nullable_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
