@@ -4367,10 +4367,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitUpdateFailPointStatusStatement(
             StarRocksParser.UpdateFailPointStatusStatementContext ctx) {
         String failpointName = ((StringLiteral) visit(ctx.string(0))).getStringValue();
-        List<String> backendList = null;
-        if (ctx.BACKEND() != null) {
-            String tmp = ((StringLiteral) visit(ctx.string(1))).getStringValue();
-            backendList = Lists.newArrayList(tmp.split(","));
+        List<String> backendList;
+        if (ctx.FRONTEND() != null) {
+            backendList = null;
+        } else {
+            backendList = new ArrayList<>();
+            if (ctx.BACKEND() != null) {
+                String strValue = ((StringLiteral) visit(ctx.string(1))).getStringValue();
+                backendList = Lists.newArrayList(strValue.split(","));
+            }
         }
         if (ctx.ENABLE() != null) {
             if (ctx.TIMES() != null) {
@@ -4389,8 +4394,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return new UpdateFailPointStatusStatement(failpointName, probability, backendList, createPos(ctx));
             }
             return new UpdateFailPointStatusStatement(failpointName, true, backendList, createPos(ctx));
+        } else {
+            return new UpdateFailPointStatusStatement(failpointName, false, backendList, createPos(ctx));
         }
-        return new UpdateFailPointStatusStatement(failpointName, false, backendList, createPos(ctx));
     }
 
     @Override
