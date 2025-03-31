@@ -86,8 +86,8 @@ public class SecurityIntegrationTest {
 
         Map<String, String> properties = new HashMap<>();
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OIDCSecurityIntegration.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OIDCSecurityIntegration.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
 
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         authenticationMgr.createSecurityIntegration("oidc2", properties, true);
@@ -101,7 +101,7 @@ public class SecurityIntegrationTest {
         MysqlCodec.writeLenEncodedString(outputStream, idToken);
 
         AuthenticationHandler.authenticate(
-                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray(), null);
+                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray());
     }
 
     private String getOpenIdConnect(String fileName) throws IOException {
@@ -152,8 +152,8 @@ public class SecurityIntegrationTest {
 
         Map<String, String> properties = new HashMap<>();
         properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OIDCSecurityIntegration.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OIDCSecurityIntegration.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
 
@@ -183,7 +183,7 @@ public class SecurityIntegrationTest {
         try {
             ConnectContext connectContext = new ConnectContext();
             AuthenticationHandler.authenticate(
-                    connectContext, "harbor", "127.0.0.1", outputStream.toByteArray(), null);
+                    connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
             StatementBase statementBase = SqlParser.parse("select current_group()", connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
 
@@ -199,6 +199,6 @@ public class SecurityIntegrationTest {
         alterProperties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group_5");
         authenticationMgr.alterSecurityIntegration("oidc", alterProperties, true);
         Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
-                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray(), null));
+                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray()));
     }
 }
