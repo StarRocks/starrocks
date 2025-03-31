@@ -667,6 +667,7 @@ public class StarOSAgent {
     public List<Long> getAllNodeIdsInWorkerGroupByShard(long shardId, long workerGroupId) throws StarClientException {
         List<ReplicaInfoSnapshotList> snapshotLists =
                 client.getReplicaWorkerInfoSnapshotList(serviceId, Lists.newArrayList(shardId), workerGroupId);
+        // as there is only one shard in the previous request, the size of snapshotList should be 1
         Preconditions.checkState(snapshotLists.size() == 1);
         List<ReplicaInfoSnapshot> snapshotList = snapshotLists.get(0).getReplicaSnapshotList();
         List<Long> nodeIds = new ArrayList<>();
