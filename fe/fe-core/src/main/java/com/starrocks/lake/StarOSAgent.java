@@ -53,7 +53,6 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
-import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -581,6 +580,10 @@ public class StarOSAgent {
                 return Optional.of(beId);
             }
         }
+        return updateNodeIdByWorkerInfo(info);
+    }
+
+    private Optional<Long> updateNodeIdByWorkerInfo(WorkerInfo info) {
         String workerAddr = info.getIpPort();
         String[] hostPorts = workerAddr.split(":");
         String host = hostPorts[0];
@@ -610,8 +613,8 @@ public class StarOSAgent {
         }
         if (result.isPresent()) {
             try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-                workerToId.put(workerAddr, workerId);
-                workerToNode.put(workerId, result.get());
+                workerToId.put(workerAddr, info.getWorkerId());
+                workerToNode.put(info.getWorkerId(), result.get());
             }
         }
         return result;
@@ -667,14 +670,14 @@ public class StarOSAgent {
         Preconditions.checkState(snapshotLists.size() == 1);
         List<ReplicaInfoSnapshot> snapshotList = snapshotLists.get(0).getReplicaSnapshotList();
         List<Long> nodeIds = new ArrayList<>();
-        snapshotList.stream()
-                .map(this::getOrUpdateNodeIdByReplicaSnapshot)
-                .forEach(x -> x.ifPresent(nodeIds::add));
+        for (ReplicaInfoSnapshot snapshot : snapshotList) {
+            Optional<Long> opt = getOrUpdateNodeIdByReplicaSnapshot(snapshot.getWorkerId());
+            opt.ifPresent(nodeIds::add);
+        }
         return nodeIds;
     }
 
-    private Optional<Long> getOrUpdateNodeIdByReplicaSnapshot(ReplicaInfoSnapshot snapshot) {
-        long workerId = snapshot.getWorkerId();
+    private Optional<Long> getOrUpdateNodeIdByReplicaSnapshot(long workerId) throws StarClientException {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             // get the backend id directly from workerToBackend
             Long beId = workerToNode.get(workerId);
@@ -682,40 +685,8 @@ public class StarOSAgent {
                 return Optional.of(beId);
             }
         }
-        String workerAddr = snapshot.getIpPort();
-        String[] hostPorts = workerAddr.split(":");
-        String host = hostPorts[0];
-        int starletPort = -1;
-        try {
-            starletPort = Integer.parseInt(hostPorts[1]);
-        } catch (NumberFormatException ex) {
-            LOG.warn("Malformed worker address info:" + workerAddr);
-            return Optional.empty();
-        }
-        Optional<Long> result = getNodeIdByHostStarletPort(host, starletPort);
-        if (!result.isPresent()) {
-            LOG.info("can't find backendId with starletPort for {}, try using be_heartbeat_port to search again",
-                    workerAddr);
-            // FIXME: workaround fix of missing starletPort due to Backend::write() missing the field during
-            //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
-            if (StringUtils.isNotEmpty(snapshot.getBeHeartbeatPort())) {
-                int heartbeatPort = -1;
-                try {
-                    heartbeatPort = Integer.parseInt(snapshot.getBeHeartbeatPort());
-                } catch (NumberFormatException ex) {
-                    LOG.warn("Malformed be_heartbeat_port for worker:" + workerAddr);
-                    return Optional.empty();
-                }
-                result = getNodeIdByHostHeartbeatPort(host, heartbeatPort);
-            }
-        }
-        if (result.isPresent()) {
-            try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-                workerToId.put(workerAddr, workerId);
-                workerToNode.put(workerId, result.get());
-            }
-        }
-        return result;
+        WorkerInfo info = client.getWorkerInfo(serviceId, workerId);
+        return updateNodeIdByWorkerInfo(info);
     }
 
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
