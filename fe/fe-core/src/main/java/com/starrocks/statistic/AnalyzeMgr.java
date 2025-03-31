@@ -338,7 +338,7 @@ public class AnalyzeMgr implements Writable {
 
     public long getExistUpdateRows(Long tableId) {
         BasicStatsMeta existInfo =  basicStatsMetaMap.get(tableId);
-        return existInfo == null ? 0 : existInfo.getUpdateRows();
+        return existInfo == null ? 0 : existInfo.getTotalRows();
     }
 
     public Map<StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {

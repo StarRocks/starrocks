@@ -44,7 +44,9 @@ import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 public class PartitionCommitInfo implements Writable {
@@ -84,6 +86,8 @@ public class PartitionCommitInfo implements Writable {
     // compaction score quantiles of lake table
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
+
+    private final Map<Long, Long> tabletIdToRowCountForPartitionFirstLoad = new HashMap<>();
 
     private boolean isDoubleWrite = false;
 
@@ -176,6 +180,10 @@ public class PartitionCommitInfo implements Writable {
 
     public void setCompactionScore(Quantiles compactionScore) {
         this.compactionScore = compactionScore;
+    }
+
+    public Map<Long, Long> getTabletIdToRowCountForPartitionFirstLoad() {
+        return tabletIdToRowCountForPartitionFirstLoad;
     }
 
     @Nullable

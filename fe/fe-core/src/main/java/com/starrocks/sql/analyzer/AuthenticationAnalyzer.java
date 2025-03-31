@@ -110,8 +110,8 @@ public class AuthenticationAnalyzer {
             } else {
                 authPluginUsing = userAuthOption.getAuthPlugin();
             }
-
-            AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
+            String authString = userAuthOption == null ? null : userAuthOption.getAuthString();
+            AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing, authString);
             if (provider == null) {
                 throw new SemanticException("Cannot find " + authPluginUsing
                         + " from " + Arrays.toString(AuthPlugin.Client.values()));

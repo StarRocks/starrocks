@@ -40,6 +40,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -1233,7 +1234,7 @@ public class ShowExecutorTest {
             }
         };
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowBasicStatsMetaStmt stmt = new ShowBasicStatsMetaStmt(null);
+        ShowBasicStatsMetaStmt stmt = new ShowBasicStatsMetaStmt(null, List.of(), LimitElement.NO_LIMIT, NodePosition.ZERO);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("hive0.testDb", resultSet.getResultRows().get(0).get(0));

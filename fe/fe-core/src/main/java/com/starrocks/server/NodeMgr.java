@@ -34,6 +34,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -47,12 +48,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -85,6 +88,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -115,6 +119,8 @@ public class NodeMgr {
      */
     @SerializedName(value = "f")
     private ConcurrentHashMap<String, Frontend> frontends = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Integer, Frontend> frontendIds = new ConcurrentHashMap<>();
+
     @SerializedName(value = "rf")
     private ConcurrentLinkedQueue<String> removedFrontends = new ConcurrentLinkedQueue<>();
 
@@ -210,6 +216,13 @@ public class NodeMgr {
         }
 
         return result;
+    }
+
+    public Frontend getFrontend(Integer frontendId) {
+        if (frontendId == 0) {
+            return getMySelf();
+        }
+        return frontendIds.get(frontendId);
     }
 
     public List<String> getRemovedFrontendNames() {
@@ -338,11 +351,13 @@ public class NodeMgr {
                 isVersionFileChanged = true;
 
                 isFirstTimeStartUp = true;
-                Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+                int fid = allocateNextFrontendId();
+                Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
                 // We don't need to check if frontends already contains self.
                 // frontends must be empty cause no image is loaded and no journal is replayed yet.
                 // And this frontend will be persisted later after opening bdbje environment.
                 frontends.put(nodeName, self);
+                frontendIds.put(fid, self);
             } else {
                 clusterId = storage.getClusterID();
                 if (storage.getToken() == null) {
@@ -758,8 +773,13 @@ public class NodeMgr {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
             }
 
-            Frontend fe = new Frontend(role, nodeName, host, editLogPort);
+            int fid = allocateNextFrontendId();
+            if (fid == 0) {
+                throw new DdlException("No available frontend ID can allocate to new frontend");
+            }
+            Frontend fe = new Frontend(fid, role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
+            frontendIds.put(fid, fe);
             if (role == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(host, editLogPort));
             }
@@ -777,10 +797,35 @@ public class NodeMgr {
                 bdbha.removeNodeIfExist(host, editLogPort, nodeName);
             }
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAddFrontend(fe);
+            GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
         } finally {
             unlock();
         }
+    }
+
+    /**
+     * Allocates the next available ID, ensuring it stays within the range [1, 255].
+     * If the ID reaches 255, it wraps around and searches from 1.
+     *
+     * @return the allocated ID, or 0 if all IDs are occupied.
+     */
+    public int allocateNextFrontendId() {
+        if (frontendIds.isEmpty()) {
+            return 1; // Start from 0 if no IDs are assigned yet
+        }
+
+        // Find the max key in the current map
+        int maxKey = Collections.max(frontendIds.keySet());
+
+        // Try to allocate the next available ID
+        for (int i = 0; i <= 255; i++) {
+            int candidateId = ((maxKey + i) % 255) + 1;
+            if (!frontendIds.containsKey(candidateId)) {
+                return candidateId; // Found an available ID
+            }
+        }
+
+        return 0; //No available frontend ID can allocate to new frontend
     }
 
     public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
@@ -844,13 +889,14 @@ public class NodeMgr {
                         NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
             frontends.remove(fe.getNodeName());
+            frontendIds.remove(fe.getFid());
             removedFrontends.add(fe.getNodeName());
 
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
                 helperNodes.remove(Pair.create(host, port));
 
-                BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
+                HAProtocol ha = GlobalStateMgr.getCurrentState().getHaProtocol();
                 ha.removeUnstableNode(host, getFollowerCnt());
             }
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(fe);
@@ -894,6 +940,7 @@ public class NodeMgr {
                 return;
             }
             frontends.put(fe.getNodeName(), fe);
+            frontendIds.put(fe.getFid(), fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
             }
@@ -930,6 +977,8 @@ public class NodeMgr {
             if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
             }
+
+            frontendIds.remove(removedFe.getFid());
 
             removedFrontends.add(removedFe.getNodeName());
         } finally {
@@ -1033,10 +1082,6 @@ public class NodeMgr {
         return frontends.get(name);
     }
 
-    public Frontend getSelfFe() {
-        return frontends.get(nodeName);
-    }
-
     public int getFollowerCnt() {
         int cnt = 0;
         for (Frontend fe : frontends.values()) {
@@ -1127,9 +1172,9 @@ public class NodeMgr {
                 TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.getQueryStatistics(request));
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.getQueryStatistics(request));
                 if (response.getStatus().getStatus_code() != TStatusCode.OK) {
                     LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost());
                 } else if (response.isSetQueryStatistics_infos()) {
@@ -1155,14 +1200,21 @@ public class NodeMgr {
         return frontends.get(nodeName);
     }
 
+    @VisibleForTesting
+    public void setMySelf(Frontend frontend) {
+        selfNode = Pair.create(frontend.getHost(), frontend.getRpcPort());
+    }
+
     public ConcurrentHashMap<String, Frontend> getFrontends() {
         return frontends;
     }
 
     public void resetFrontends() {
         frontends.clear();
-        Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+        int fid = allocateNextFrontendId();
+        Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
         frontends.put(self.getNodeName(), self);
+        frontendIds.put(fid, self);
         // reset helper nodes
         helperNodes.clear();
         helperNodes.add(selfNode);
@@ -1173,6 +1225,7 @@ public class NodeMgr {
     public void replayResetFrontends(Frontend frontend) {
         frontends.clear();
         frontends.put(frontend.getNodeName(), frontend);
+        frontendIds.put(frontend.getFid(), frontend);
         // reset helper nodes
         helperNodes.clear();
         helperNodes.add(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
@@ -1202,6 +1255,18 @@ public class NodeMgr {
 
         systemInfo = nodeMgr.systemInfo;
         brokerMgr = nodeMgr.brokerMgr;
+
+        //Sort by frontend name to ensure the order of assigned IDs is consistent
+        List<Frontend> sortedList = frontends.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).map(Map.Entry::getValue).collect(Collectors.toList());
+        for (Frontend fe : sortedList) {
+            if (fe.getFid() == 0) {
+                int frontendId = allocateNextFrontendId();
+                LOG.info("Frontend has no ID assigned, newly assigned ID {} to {}", frontendId, fe.getNodeName());
+                fe.setFid(frontendId);
+            }
+            frontendIds.put(fe.getFid(), fe);
+        }
     }
 
     public void setLeaderInfo() {

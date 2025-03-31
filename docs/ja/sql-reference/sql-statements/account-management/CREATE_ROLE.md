@@ -22,7 +22,7 @@ CREATE ROLE <role_name>
 
 `role_name`: ロールの名前。命名規則については、[システム制限](../../System_limit.md)を参照してください。
 
-作成されたロール名は、[システム定義ロール](../../../administration/user_privs/privilege_overview.md#system-defined-roles)である `root`、`cluster_admin`、`db_admin`、`user_admin`、および `public` と同じにすることはできません。
+作成されたロール名は、[システム定義ロール](../../../administration/user_privs/user_privs.md#system-defined-roles)である `root`、`cluster_admin`、`db_admin`、`user_admin`、および `public` と同じにすることはできません。
 
 ## 制限
 

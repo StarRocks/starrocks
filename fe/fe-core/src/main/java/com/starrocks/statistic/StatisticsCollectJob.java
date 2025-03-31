@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -72,6 +73,12 @@ public abstract class StatisticsCollectJob {
     // for multi-column combined statistics job.
     // Using group is to support automatic collection of all predicate columns of a table in the future.
     protected final List<List<String>> columnGroups;
+
+    // for partition first load to collect statistics with sample strategy.
+    // After the partition is first imported, we cannot immediately get the tablet row count.
+    // we need to wait the tabletStatMgr to sync in the background. so we collect row num for each tablet.
+    // partition_id -> tablet_id -> row_count
+    protected com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                    StatsConstants.AnalyzeType analyzeType, StatsConstants.ScheduleType scheduleType,
@@ -179,6 +186,10 @@ public abstract class StatisticsCollectJob {
         // set the max task num of connector io tasks per scan operator to 4, default is 16,
         // to avoid generate too many chunk source for collect stats in BE
         sessionVariable.setConnectorIoTasksPerScanOperator(4);
+    }
+
+    public void setPartitionTabletRowCounts(com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
+        this.partitionTabletRowCounts = partitionTabletRowCounts;
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {

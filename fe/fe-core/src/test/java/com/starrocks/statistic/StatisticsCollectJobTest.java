@@ -399,7 +399,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         BasicStatsMeta basicStatsMeta2 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap(),
-                basicStatsMeta.getUpdateRows());
+                basicStatsMeta.getTotalRows());
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(

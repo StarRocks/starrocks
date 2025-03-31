@@ -1181,6 +1181,16 @@ public:
         }
     }
 
+    void insert_into_hash_partitions(const CppType& value) {
+        DCHECK(!_hash_partition_bf.empty());
+        size_t hash = compute_hash(value);
+        for (auto& bf : _hash_partition_bf) {
+            if (LIKELY(bf.can_use())) {
+                bf.insert_hash(hash);
+            }
+        }
+    }
+
     void evaluate(const Column* input_column, RunningContext* ctx) const override {
         if (!_hash_partition_bf.empty()) {
             return _hash_partition_bf[0].can_use() ? _t_evaluate<true, true>(input_column, ctx)
@@ -1538,6 +1548,10 @@ public:
         DCHECK(false) << "RuntimeEmptyFilter does not support intersect";
     }
 
+    void insert_into_hash_partitions(const CppType& value) {
+        DCHECK(false) << "RuntimeEmptyFilter does not support insert_skew_values";
+    }
+
     RuntimeFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeEmptyFilter()); }
 
     void insert(const CppType& value) {}
@@ -1650,6 +1664,11 @@ public:
     void intersect(const RuntimeFilter* rf) override {
         DCHECK(false) << "RuntimeBitsetFilter does not support intersect";
     }
+
+    void insert_into_hash_partitions(const CppType& value) {
+        DCHECK(false) << "RuntimeEmptyFilter does not support insert_skew_values";
+    }
+
     /// RuntimeBitsetFilter only support for broadcast join, so `merge` and `concat` are not supported.
     void merge(const RuntimeFilter* rf) override { DCHECK(false) << "RuntimeBitsetFilter does not support merge"; }
     void concat(RuntimeFilter* rf) override { DCHECK(false) << "RuntimeBitsetFilter does not support concat"; }
@@ -1709,6 +1728,11 @@ public:
 
     void insert(const CppType& value) {
         membership_filter().insert(value);
+        min_max_filter().insert(value);
+    }
+
+    void insert_skew_values(const CppType& value) {
+        _membership_filter.insert_into_hash_partitions(value);
         min_max_filter().insert(value);
     }
 
