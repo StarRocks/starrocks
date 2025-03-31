@@ -45,3 +45,8 @@ select offset_lag from information_schema.routine_load_jobs where name = "rl_off
 -- result:
 [REGEX].*{.*}.*
 -- !result
+
+select timestamp_progress from information_schema.routine_load_jobs where name = "rl_offset_lag" order by id desc limit 1;
+-- result:
+[REGEX].*{.*}.*
+-- !result
