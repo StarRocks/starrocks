@@ -232,6 +232,14 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         }
         _rs_version_map[version] = std::move(rowset);
     }
+    
+    for (auto& [version, rowset] : _rs_version_map) {
+        if (rowset->rowset_meta()->tablet_id() != _tablet_meta->tablet_id()) {
+            LOG(INFO) << "tablet: " << _tablet_meta->tablet_id() << " version: " << version << " not the same tablet: " << rowset->rowset_meta()->tablet_id();
+            CHECK(false);
+        }
+    }
+
 
     if (config::enable_event_based_compaction_framework) {
         StorageEngine::instance()->compaction_manager()->update_tablet_async(
