@@ -158,7 +158,7 @@ public:
     double get_compression_factor(FunctionContext* ctx) const override {
         double compression = DEFAULT_COMPRESSION_FACTOR;
         if (ctx->get_num_args() > 3) {
-            compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
+            compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(3));
             if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
                 LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
                              << DEFAULT_COMPRESSION_FACTOR;
