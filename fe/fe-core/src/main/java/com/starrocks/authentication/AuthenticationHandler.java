@@ -72,10 +72,12 @@ public class AuthenticationHandler {
                         LOG.debug("cannot find user {}@{}", user, remoteHost);
                     } else {
                         try {
-                            AuthenticationProvider provider =
-                                    AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                            AuthenticationProvider provider = AuthenticationProviderFactory.create(
+                                    matchedUserIdentity.getValue().getAuthPlugin(),
+                                    matchedUserIdentity.getValue().getAuthString());
                             Preconditions.checkState(provider != null);
-                            provider.authenticate(user, remoteHost, authResponse, randomString, matchedUserIdentity.getValue());
+                            provider.authenticate(context, user, remoteHost, authResponse, randomString,
+                                    matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
 
                             if (authenticatedUser != null) {
@@ -120,7 +122,7 @@ public class AuthenticationHandler {
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
+                        provider.authenticate(context, user, remoteHost, authResponse, randomString, userAuthenticationInfo);
 
                         if (securityIntegration.getType().equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
                             AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();

@@ -376,7 +376,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                         userIdentity.toString(),
                         userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
                         userAuthenticationInfo.getAuthPlugin(),
-                        userAuthenticationInfo.getTextForAuthPlugin()));
+                        userAuthenticationInfo.getAuthString()));
             }
         }
 

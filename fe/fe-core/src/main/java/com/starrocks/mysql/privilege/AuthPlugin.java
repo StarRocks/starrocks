@@ -14,17 +14,19 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.KerberosAuthenticationProvider;
 import com.starrocks.authentication.LDAPAuthProviderForNative;
 import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.Config;
-
-import java.util.Map;
+import org.json.JSONObject;
 
 public class AuthPlugin {
+    private static final PlainPasswordAuthenticationProvider PLAIN_PASSWORD_AUTHENTICATION_PROVIDER =
+            new PlainPasswordAuthenticationProvider();
+    private static final LDAPAuthProviderForNative LDAP_AUTH_PROVIDER = new LDAPAuthProviderForNative();
+    private static final KerberosAuthenticationProvider KERBEROS_AUTH_PROVIDER = new KerberosAuthenticationProvider();
 
     public enum Server {
         MYSQL_NATIVE_PASSWORD,
@@ -32,20 +34,36 @@ public class AuthPlugin {
         AUTHENTICATION_KERBEROS,
         AUTHENTICATION_OPENID_CONNECT;
 
-        private static final Map<String, AuthenticationProvider> PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER =
-                ImmutableMap.<String, AuthenticationProvider>builder()
-                        .put(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(), new PlainPasswordAuthenticationProvider())
-                        .put(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name(), new LDAPAuthProviderForNative())
-                        .put(AuthPlugin.Server.AUTHENTICATION_KERBEROS.name(), new KerberosAuthenticationProvider())
-                        .put(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name(), new OpenIdConnectAuthenticationProvider(
-                                Config.oidc_jwks_url,
-                                Config.oidc_principal_field,
-                                Config.oidc_required_issuer,
-                                Config.oidc_required_audience))
-                        .build();
+        public AuthenticationProvider getProvider(String authString) {
+            AuthPlugin.Server authPlugin = this;
+            switch (authPlugin) {
+                case MYSQL_NATIVE_PASSWORD -> {
+                    return PLAIN_PASSWORD_AUTHENTICATION_PROVIDER;
+                }
 
-        public AuthenticationProvider getProvider() {
-            return PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.getOrDefault(name(), null);
+                case AUTHENTICATION_LDAP_SIMPLE -> {
+                    return LDAP_AUTH_PROVIDER;
+                }
+
+                case AUTHENTICATION_KERBEROS -> {
+                    return KERBEROS_AUTH_PROVIDER;
+                }
+
+                case AUTHENTICATION_OPENID_CONNECT -> {
+                    if (authString == null) {
+                        authString = "{}";
+                    }
+                    JSONObject authStringJSON = new JSONObject(authString);
+                    String jwksUrl = authStringJSON.optString("jwks_url", Config.oidc_jwks_url);
+                    String principalFiled = authStringJSON.optString("principal_field", Config.oidc_principal_field);
+                    String requiredIssuer = authStringJSON.optString("required_issuer", Config.oidc_required_issuer);
+                    String requiredAudience = authStringJSON.optString("required_audience", Config.oidc_required_audience);
+
+                    return new OpenIdConnectAuthenticationProvider(jwksUrl, principalFiled, requiredIssuer, requiredAudience);
+                }
+            }
+
+            return null;
         }
     }
 
@@ -67,6 +85,8 @@ public class AuthPlugin {
             return Client.MYSQL_NATIVE_PASSWORD.toString();
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_LDAP_SIMPLE.toString())) {
             return Client.MYSQL_CLEAR_PASSWORD.toString();
+        } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_KERBEROS.toString())) {
+            return Client.AUTHENTICATION_KERBEROS_CLIENT.toString();
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_OPENID_CONNECT.toString())) {
             return Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString();
         }

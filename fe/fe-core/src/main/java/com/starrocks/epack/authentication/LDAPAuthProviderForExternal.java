@@ -17,6 +17,7 @@ package com.starrocks.epack.authentication;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
@@ -133,7 +134,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(String user, String host, byte[] password, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] password, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         LDAPSecurityIntegration ldapSecurityIntegration = (LDAPSecurityIntegration) GlobalStateMgr.getCurrentState()
                 .getAuthenticationMgr().getSecurityIntegration(securityIntegrationName);

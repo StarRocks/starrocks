@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.Expose;
@@ -31,7 +30,7 @@ public class UserAuthenticationInfo implements Writable {
     @SerializedName(value = "a")
     private String authPlugin = null;
     @SerializedName(value = "t")
-    private String textForAuthPlugin = null;
+    private String authString = null;
     @SerializedName(value = "h")
     private String origHost;
     @SerializedName(value = "u")
@@ -91,8 +90,8 @@ public class UserAuthenticationInfo implements Writable {
         return origUser;
     }
 
-    public String getTextForAuthPlugin() {
-        return textForAuthPlugin;
+    public String getAuthString() {
+        return authString;
     }
 
     public void setPassword(byte[] password) {
@@ -103,8 +102,8 @@ public class UserAuthenticationInfo implements Writable {
         this.authPlugin = authPlugin;
     }
 
-    public void setTextForAuthPlugin(String textForAuthPlugin) {
-        this.textForAuthPlugin = textForAuthPlugin;
+    public void setAuthString(String authString) {
+        this.authString = authString;
     }
 
     public void setOrigUserHost(String origUser, String origHost) throws AuthenticationException {

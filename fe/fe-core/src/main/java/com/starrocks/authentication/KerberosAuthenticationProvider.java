@@ -11,12 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
@@ -51,18 +53,18 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
         if (userAuthOption == null || userAuthOption.getAuthString() == null) {
-            info.setTextForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
+            info.setAuthString(Config.authentication_kerberos_service_principal.split("@")[1]);
         } else {
-            info.setTextForAuthPlugin(userAuthOption.getAuthString());
+            info.setAuthString(userAuthOption.getAuthString());
         }
         return info;
     }
 
     @Override
-    public void authenticate(String user, String host, byte[] password, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] password, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         try {
-            String userForAuthPlugin = authenticationInfo.getTextForAuthPlugin();
+            String userForAuthPlugin = authenticationInfo.getAuthString();
 
             String spn = Config.authentication_kerberos_service_principal;
             String keytab = Config.authentication_kerberos_service_key_tab;
@@ -145,7 +147,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
                 String msg = String.format("Can not find kerberos authentication with [user: %s, remoteIp: %s].", user, host);
                 throw new Exception(msg);
             }
-            String userRealm = authenticationInfo.getValue().getTextForAuthPlugin();
+            String userRealm = authenticationInfo.getValue().getAuthString();
             String spnString = Config.authentication_kerberos_service_principal;
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
