@@ -294,6 +294,7 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
     return _metacache->lookup_tablet_metadata(tablet_latest_metadata_cache_key(tablet_id));
 }
 
+<<<<<<< HEAD
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache) {
     if (version <= kInitialVersion) {
         // Handle tablet initial metadata
@@ -305,6 +306,27 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
         }
     }
     return get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache);
+=======
+StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
+                                                               int64_t expected_gtid,
+                                                               const std::shared_ptr<FileSystem>& fs) {
+    auto tablet_metadata_or =
+            get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
+    if (!tablet_metadata_or.status().is_not_found() || version > kInitialVersion) {
+        return tablet_metadata_or;
+    }
+
+    // Handle tablet initial metadata
+    auto initial_metadata_or =
+            get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
+    if (!initial_metadata_or.ok()) {
+        return tablet_metadata_or;
+    }
+
+    auto tablet_metadata = std::make_shared<TabletMetadata>(*initial_metadata_or.value());
+    tablet_metadata->set_id(tablet_id);
+    return tablet_metadata;
+>>>>>>> 76f78a0690 ([Enhancement] Avoid useless get object api call in get tablet medata for shared-data cluster (#57370))
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, bool fill_cache) {
