@@ -12,7 +12,7 @@ Changes login password for users. The [ALTER USER](ALTER_USER.md) command can al
 
 - All users can reset their own password.
 - Only users with the `user_admin` role can change the password of other users.
-- Only the `root` user itself can change its password. For more information, see [the priviege overview](../../../administration/user_privs/privilege_overview.md).
+- Only the `root` user itself can change its password. For more information, see [the priviege overview](../../../administration/user_privs/user_privs.md).
 
 :::
 
