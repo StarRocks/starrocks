@@ -57,6 +57,7 @@ namespace starrocks {
 
 DEFINE_FAIL_POINT(tablets_channel_add_chunk_wait_write_block);
 DEFINE_FAIL_POINT(tablets_channel_wait_secondary_replica_block);
+DEFINE_FAIL_POINT(tablets_channel_abort_replica_failure);
 
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
@@ -724,6 +725,16 @@ void LocalTabletsChannel::_abort_replica_tablets(
         const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets) {
     for (auto& [node_id, tablet_ids] : node_id_to_abort_tablets) {
         auto& endpoint = _node_id_to_endpoint[node_id];
+        FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_abort_replica_failure, {
+            std::string tablets_str;
+            JoinInts(tablet_ids, ",", &tablets_str);
+            LOG(INFO) << "tablets_channel_abort_replica_failure, load_id: " << print_id(request.id())
+                      << ", txn_id: " << _txn_id;
+            << ", node: " << endpoint.host() << ":" << endpoint.port() << ", abort_reason: " << abort_reason
+            << ", tablet_id: " << tablets_str;
+            continue;
+        });
+
         auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(endpoint.host(), endpoint.port());
         if (stub == nullptr) {
             auto msg =

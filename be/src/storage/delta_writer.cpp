@@ -32,11 +32,13 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+#include "util/failpoint/fail_point.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
 #define ADD_COUNTER_RELAXED(counter, value) counter.fetch_add(value, std::memory_order_relaxed)
+DEFINE_FAIL_POINT(segment_flush_fail)
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
@@ -502,6 +504,11 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
+
+        FAIL_POINT_TRIGGER_EXECUTE(segment_flush_fail, {
+            LOG(INFO) << "segment_flush_fail, txn_id: " << _opt.txn_id << ", tablet_id: " << _opt.tablet_id;
+            return Status::InternalError("inject segment_flush_fail");
+        });
         RETURN_IF_ERROR(_rowset_writer->flush_segment(segment_pb, data));
     }
     auto io_stat = scope.current_scoped_tls_io();

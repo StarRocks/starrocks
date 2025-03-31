@@ -26,9 +26,12 @@
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
+#include "util/failpoint/fail_point.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(segment_replicate_send_request_fail);
 
 class SegmentReplicateTask final : public Runnable {
 public:
@@ -165,7 +168,14 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     // brpc send buffer is also considered as part of the memory used by load
     _mem_tracker->consume_without_root(_closure->request_size);
 
+#ifdef FIU_ENABLE
+    FAIL_POINT_TRIGGER_EXECUTE(segment_replicate_send_request_fail, {
+        _closure->cntl.SetFailed("segment_replicate_send_request_fail triggered");
+        LOG(INFO) << "segment_replicate_send_request_fail, " << debug_string();
+    });
+#else
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
+#endif
 
     request.release_id();
     if (segment != nullptr) {
