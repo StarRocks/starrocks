@@ -50,6 +50,7 @@
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "service/backend_options.h"
+#include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_info.h"
@@ -325,6 +326,12 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     init_signals();
     init_minidump();
+
+    // Don't bother set the limit if the process is running with very limited memory capacity
+    if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
+        // set mem hook to reject the memory allocation if large than available physical memory detected.
+        set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
+    }
 }
 
 void Daemon::stop() {

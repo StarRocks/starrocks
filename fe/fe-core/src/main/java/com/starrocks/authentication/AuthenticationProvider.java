@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -30,6 +31,7 @@ public interface AuthenticationProvider {
      * login authentication
      */
     void authenticate(
+            ConnectContext context,
             String user,
             String host,
             byte[] password,
@@ -41,6 +43,16 @@ public interface AuthenticationProvider {
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
      */
     default byte[] authMoreDataPacket(String user, String host) throws AuthenticationException {
+        return null;
+    }
+
+    /**
+     * Authentication method Switch Request Packet
+     * If both server and the client support CLIENT_PLUGIN_AUTH capability,
+     * server can send this packet tp ask client to use another authentication method.
+     * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_switch_request.html">...</a>
+     */
+    default byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
         return null;
     }
 }

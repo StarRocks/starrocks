@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,6 +47,7 @@ import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
@@ -68,7 +70,13 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -226,7 +234,7 @@ public class AnalyzeStmtTest {
     @Test
     public void testShow() throws MetaNotFoundException {
         String sql = "show analyze";
-        ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+        analyzeSuccess(sql);
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "t0");
 
@@ -247,10 +255,34 @@ public class AnalyzeStmtTest {
                 ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), externalAnalyzeJob).toString());
 
         sql = "show analyze job";
-        showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+        analyzeSuccess(sql);
 
-        sql = "show analyze status";
-        ShowAnalyzeStatusStmt showAnalyzeStatusStatement = (ShowAnalyzeStatusStmt) analyzeSuccess(sql);
+        sql = "show analyze job where catalog = 'hive0'";
+        ShowAnalyzeJobStmt stmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(externalAnalyzeJob);
+        String res = ShowExecutor.execute(stmt, getConnectContext()).getResultRows().toString();
+        Assert.assertTrue(res.contains("hive0, partitioned_db, t1, ALL, FULL, ONCE, {}, FINISH, None"));
+
+        sql = "show analyze job where catalog = 'xxxx'";
+        stmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(externalAnalyzeJob);
+        res = ShowExecutor.execute(stmt, getConnectContext()).getResultRows().toString();
+        Assert.assertEquals("[]", res);
+
+        sql = "show analyze status where id = 1";
+        analyzeFail(sql, "Detail message: Invalid right operator in predicate 'id = 1'. Right side must be a string literal." +
+                " Example: column = 'value' or column LIKE 'pattern%'");
+        analyzeSuccess("show analyze status where id = '1'");
+
+        sql = "show analyze status where id > 1";
+        analyzeFail(sql, "Invalid predicate in SHOW statement. Only '=' and 'LIKE' operators are supported. Found: 'id > 1'");
+
+        sql = "show analyze status where max(id) = 6";
+        analyzeFail(sql, "Invalid left operator in predicate 'max(id) = 6'. " +
+                "Left side must be a column reference.");
+
+        analyzeSuccess("show analyze status where db_name like '%tpc%'");
+        analyzeSuccess("show analyze status where db_name like '%tpc%' and id = '123456'");
 
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
@@ -269,16 +301,21 @@ public class AnalyzeStmtTest {
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
         Assert.assertNull(ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), extenalAnalyzeStatus));
 
-        sql = "show stats meta";
-        ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
-
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(testDb.getId(), table.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
         Assert.assertEquals("[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%, ]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(getConnectContext(), basicStatsMeta).toString());
 
-        sql = "show histogram meta";
+        sql = "show stats meta where `database` like '%te%'";
+        ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
+        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
+        res = ShowExecutor.execute(showAnalyzeMetaStmt, getConnectContext()).getResultRows().toString();
+        Assert.assertEquals("[[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%, ]]", res);
+        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().dropBasicStatsMetaAndData(
+                getConnectContext(), Set.of(table.getId()));
+
+        sql = "show histogram meta where updateTime = '2020-01-01 01:01:00'";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
         HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(testDb.getId(), table.getId(), "v1",
                 StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(
@@ -286,6 +323,199 @@ public class AnalyzeStmtTest {
                 Maps.newHashMap());
         Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
                 ShowHistogramStatsMetaStmt.showHistogramStatsMeta(getConnectContext(), histogramStatsMeta).toString());
+
+        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
+        res = ShowExecutor.execute(showHistogramStatsMetaStmt, getConnectContext()).getResultRows().toString();
+        Assert.assertEquals("[[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]]", res);
+    }
+
+    @Test
+    public void testShowWithOrderByLimit() {
+        Database db = getConnectContext().getGlobalStateMgr().getLocalMetastore().getDb("db");
+
+        Table tbl = db.getTable("tbl");
+        Table tb2 = db.getTable("tb2");
+        Table structA = db.getTable("struct_a");
+        Table upperTbl = db.getTable("upper_tbl");
+
+        AnalyzeMgr analyzeMgr = getConnectContext().getGlobalStateMgr().getAnalyzeMgr();
+        analyzeMgr.dropBasicStatsMetaAndData(getConnectContext(),
+                Set.of(tbl.getId(), tb2.getId(), structA.getId(), upperTbl.getId()));
+
+
+        BasicStatsMeta meta1 = new BasicStatsMeta(db.getId(), tbl.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2022, 1, 1, 10, 0),
+                Maps.newHashMap(),
+                1000);
+
+        Map<String, String> sampleProps = new HashMap<>();
+        sampleProps.put("sample_ratio", "0.3");
+
+        BasicStatsMeta meta2 = new BasicStatsMeta(db.getId(), tb2.getId(),
+                Arrays.asList("kk1", "kk2"),
+                StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.of(2022, 3, 15, 14, 30),
+                sampleProps,
+                500);
+
+        BasicStatsMeta meta3 = new BasicStatsMeta(db.getId(), structA.getId(),
+                Arrays.asList("a", "b"),
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2021, 12, 31, 23, 59),
+                Maps.newHashMap(),
+                10000);
+
+        Map<String, String> sampleProps2 = new HashMap<>();
+        sampleProps2.put("sample_ratio", "0.5");
+        sampleProps2.put("time_cost", "45s");
+
+        BasicStatsMeta meta4 = new BasicStatsMeta(db.getId(), upperTbl.getId(),
+                Arrays.asList("Ka1", "Kb2"),
+                StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.of(2023, 5, 20, 8, 45),
+                sampleProps2,
+                2500);
+
+        analyzeMgr.addBasicStatsMeta(meta1);
+        analyzeMgr.addBasicStatsMeta(meta2);
+        analyzeMgr.addBasicStatsMeta(meta3);
+        analyzeMgr.addBasicStatsMeta(meta4);
+
+        // case 1: Sort by update time in descending order
+        String sql1 = "show stats meta order by `UpdateTime` desc";
+        ShowBasicStatsMetaStmt stmt1 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql1);
+        List<List<String>> res1 = ShowExecutor.execute(stmt1, getConnectContext()).getResultRows();
+
+        // should be meta4, meta2, meta1, meta3
+        Assert.assertEquals(4, res1.size());
+
+        // First row should be meta4 (2023-05-20)
+        Assert.assertEquals("db", res1.get(0).get(0)); // Database
+        Assert.assertEquals("upper_tbl", res1.get(0).get(1)); // Table
+        Assert.assertEquals("SAMPLE", res1.get(0).get(3)); // Type
+        Assert.assertEquals("2023-05-20 08:45:00", res1.get(0).get(4)); // UpdateTime
+        Assert.assertTrue(res1.get(0).get(5).contains("sample_ratio")); // Properties
+        Assert.assertTrue(res1.get(0).get(5).contains("time_cost")); // Properties
+
+        // Second row should be meta2 (2022-03-15)
+        Assert.assertEquals("db", res1.get(1).get(0));
+        Assert.assertEquals("tb2", res1.get(1).get(1));
+        Assert.assertEquals("SAMPLE", res1.get(1).get(3));
+        Assert.assertEquals("2022-03-15 14:30:00", res1.get(1).get(4));
+        Assert.assertTrue(res1.get(1).get(5).contains("sample_ratio")); // Properties
+
+        // Third row should be meta1 (2022-01-01)
+        Assert.assertEquals("db", res1.get(2).get(0));
+        Assert.assertEquals("tbl", res1.get(2).get(1));
+        Assert.assertEquals("FULL", res1.get(2).get(3));
+        Assert.assertEquals("2022-01-01 10:00:00", res1.get(2).get(4));
+
+        // Fourth row should be meta3 (2021-12-31)
+        Assert.assertEquals("db", res1.get(3).get(0));
+        Assert.assertEquals("struct_a", res1.get(3).get(1));
+        Assert.assertEquals("FULL", res1.get(3).get(3));
+        Assert.assertEquals("2021-12-31 23:59:00", res1.get(3).get(4));
+
+        // case 2: Sort by table name and limit results
+        String sql2 = "show stats meta order by `Table` asc limit 2";
+        ShowBasicStatsMetaStmt stmt2 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql2);
+        List<List<String>> res2 = ShowExecutor.execute(stmt2, getConnectContext()).getResultRows();
+
+        // Should return the first 2 records sorted by table name
+        Assert.assertEquals(2, res2.size());
+
+        // First row should be struct_a table
+        Assert.assertEquals("struct_a", res2.get(0).get(1)); // Table
+
+        // Second row should be tb2 table
+        Assert.assertEquals("tb2", res2.get(1).get(1)); // Table
+
+        // Test case 3: Sort by type
+        String sql3 = "show stats meta order by `Type` asc";
+        ShowBasicStatsMetaStmt stmt3 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql3);
+        List<List<String>> res3 = ShowExecutor.execute(stmt3, getConnectContext()).getResultRows();
+
+        // should be sorted by type in alphabetical order
+        Assert.assertEquals(4, res3.size());
+
+        // Types should be in alphabetical order: FULL, SAMPLE
+        String[] expectedTypeOrder = {"FULL", "FULL", "SAMPLE", "SAMPLE"};
+        for (int i = 0; i < res3.size(); i++) {
+            Assert.assertEquals(expectedTypeOrder[i], res3.get(i).get(3)); // Type
+        }
+
+        // case 4: Sort by type and update time
+        String sql4 = "show stats meta order by `Type` asc, `UpdateTime` desc";
+        ShowBasicStatsMetaStmt stmt4 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql4);
+        List<List<String>> res4 = ShowExecutor.execute(stmt4, getConnectContext()).getResultRows();
+
+        // should be sorted by type ascending, and within each type by time descending
+        Assert.assertEquals(4, res4.size());
+
+        // First and second rows should be FULL type, sorted by time descending
+        Assert.assertEquals("FULL", res4.get(0).get(3));
+        Assert.assertEquals("FULL", res4.get(1).get(3));
+
+        LocalDateTime time1 = LocalDateTime.parse(res4.get(0).get(4),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        LocalDateTime time2 = LocalDateTime.parse(res4.get(1).get(4),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        Assert.assertTrue(time1.isAfter(time2));
+
+        Assert.assertEquals("SAMPLE", res4.get(2).get(3));
+        Assert.assertEquals("SAMPLE", res4.get(3).get(3));
+
+        LocalDateTime time3 = LocalDateTime.parse(res4.get(2).get(4),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        LocalDateTime time4 = LocalDateTime.parse(res4.get(3).get(4),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        Assert.assertTrue(time3.isAfter(time4));
+
+        // case 5: Filter by property content and sort
+        String sql6 = "show stats meta where `Properties` like '%sample_ratio%' order by `Table` desc";
+        ShowBasicStatsMetaStmt stmt6 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql6);
+        List<List<String>> res6 = ShowExecutor.execute(stmt6, getConnectContext()).getResultRows();
+
+        // should have meta2 and meta4, sorted by table name in descending order
+        Assert.assertEquals(2, res6.size());
+
+        // First row should be upper_tbl table
+        Assert.assertEquals("upper_tbl", res6.get(0).get(1)); // Table
+        Assert.assertEquals("SAMPLE", res6.get(0).get(3)); // Type
+
+        // Second row should be tb2 table
+        Assert.assertEquals("tb2", res6.get(1).get(1)); // Table
+        Assert.assertEquals("SAMPLE", res6.get(1).get(3)); // Type
+
+        // case 6: Complex condition with limit
+        String sql7 = "show stats meta where `Type` = 'FULL' order by `UpdateTime` desc limit 1";
+        ShowBasicStatsMetaStmt stmt7 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql7);
+        List<List<String>> res7 = ShowExecutor.execute(stmt7, getConnectContext()).getResultRows();
+
+        // should only have meta1
+        Assert.assertEquals(1, res7.size());
+        Assert.assertEquals("db", res7.get(0).get(0)); // Database
+        Assert.assertEquals("tbl", res7.get(0).get(1)); // Table
+        Assert.assertEquals("ALL", res7.get(0).get(2)); // Columns
+        Assert.assertEquals("FULL", res7.get(0).get(3)); // Type
+        Assert.assertEquals("2022-01-01 10:00:00", res7.get(0).get(4)); // UpdateTime
+
+        // case 7: Test limit only
+        String sql8 = "show stats meta limit 3";
+        ShowBasicStatsMetaStmt stmt8 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql8);
+        List<List<String>> res8 = ShowExecutor.execute(stmt8, getConnectContext()).getResultRows();
+
+        Assert.assertEquals(3, res8.size());
+
+        // case 8: Test ORDER BY multiple columns and LIMIT combination
+        String sql9 = "show stats meta order by `Database` asc, `Table` desc, `UpdateTime` desc limit 2";
+        ShowBasicStatsMetaStmt stmt9 = (ShowBasicStatsMetaStmt) analyzeSuccess(sql9);
+        List<List<String>> res9 = ShowExecutor.execute(stmt9, getConnectContext()).getResultRows();
+
+        Assert.assertEquals(2, res9.size());
+        Assert.assertEquals("upper_tbl", res9.get(0).get(1)); // Table
+        Assert.assertEquals("tbl", res9.get(1).get(1)); // Table
     }
 
     @Test

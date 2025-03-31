@@ -38,6 +38,7 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.Before;
@@ -58,7 +59,58 @@ public class TableTest {
     }
 
     @Test
-    public void testGetMysqlType() {
+    public void testGetMysqlType_Version5() {
+        GlobalVariable.version = "5.7.0";
+        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
+
+        Assert.assertEquals("BASE TABLE", new Table(TableType.MYSQL).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.BROKER).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.HIVE).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.ICEBERG).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.HUDI).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.JDBC).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.DELTALAKE).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.FILE).getMysqlType());
+
+        Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
+
+        Assert.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
+    }
+
+    @Test
+    public void testGetMysqlType_Version8() {
+        GlobalVariable.version = "8.0.33";
+        Assert.assertEquals("TABLE", new Table(TableType.OLAP).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
+
+        Assert.assertEquals("TABLE", new Table(TableType.MYSQL).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.BROKER).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.HIVE).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.ICEBERG).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.HUDI).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.JDBC).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.DELTALAKE).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.FILE).getMysqlType());
+
+        Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
+
+        Assert.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
+    }
+
+    @Test
+    public void testGetMysqlType_InvalidVersion() {
+        GlobalVariable.version = "invalid.version";
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());

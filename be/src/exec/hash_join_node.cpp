@@ -145,8 +145,13 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.late_materialization) {
         _enable_late_materialization = tnode.hash_join_node.late_materialization;
     }
+
     if (tnode.hash_join_node.__isset.enable_partition_hash_join) {
         _enable_partition_hash_join = tnode.hash_join_node.enable_partition_hash_join;
+    }
+
+    if (tnode.hash_join_node.__isset.is_skew_join) {
+        _is_skew_join = tnode.hash_join_node.is_skew_join;
     }
     return Status::OK();
 }
@@ -477,7 +482,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
                           _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization,
-                          _enable_partition_hash_join);
+                          _enable_partition_hash_join, _is_skew_join);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector
@@ -499,9 +504,9 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
         runtime_join_filter_pushdown_limit = _runtime_join_filter_pushdown_limit * num_right_partitions;
     }
 
-    auto partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(pool, runtime_join_filter_pushdown_limit,
-                                                                          global_runtime_filter_build_max_size,
-                                                                          runtime_state()->func_version());
+    auto partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(
+            pool, runtime_join_filter_pushdown_limit, global_runtime_filter_build_max_size,
+            runtime_state()->func_version(), runtime_state()->enable_join_runtime_bitset_filter());
 
     auto build_op = std::make_shared<HashJoinBuilderFactory>(context->next_operator_id(), id(), hash_joiner_factory,
                                                              std::move(partial_rf_merger), _distribution_mode,

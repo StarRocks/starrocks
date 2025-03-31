@@ -117,7 +117,7 @@ public:
 
     virtual ~LocalExchanger() = default;
 
-    enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2, SCALE = 3 };
+    enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2, SCALE = 3, DIRECT = 4 };
 
     virtual Status prepare(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
@@ -281,6 +281,18 @@ public:
 
 private:
     std::atomic<size_t> _next_accept_source = 0;
+};
+
+// Exchange the local data accroding to sink_driver_sequence
+class DirectThroughExchanger final : public LocalExchanger {
+public:
+    DirectThroughExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                           LocalExchangeSourceOperatorFactory* source)
+            : LocalExchanger("Passthrough", memory_manager, source) {}
+
+    ~DirectThroughExchanger() override = default;
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 };
 
 // Scale local source for connector sink

@@ -2015,7 +2015,7 @@ public class Config extends ConfigBase {
      * The collect thread work interval
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_interval_sec = 5L * 60L; // 5m
+    public static long statistic_collect_interval_sec = 10L * 60L; // 10m
 
     @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
     public static long statistic_predicate_columns_persist_interval_sec = 60L;
@@ -2844,6 +2844,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true)
+    public static String statistics_collect_warehouse = "default_warehouse";
 
     @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;

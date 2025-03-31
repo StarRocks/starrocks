@@ -83,6 +83,10 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// Whether abort the process if a large memory allocation is detected which the requested
+// size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
+CONF_mBool(abort_on_large_memory_allocation, "false");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -1618,4 +1622,6 @@ CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
+
+CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 } // namespace starrocks::config
