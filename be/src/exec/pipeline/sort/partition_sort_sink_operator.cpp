@@ -83,6 +83,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
                     _hub, _plan_node_id,
                     std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, std::move(lst)));
         }
+
         state->runtime_filter_port()->publish_runtime_filters(build_descs);
     }
 

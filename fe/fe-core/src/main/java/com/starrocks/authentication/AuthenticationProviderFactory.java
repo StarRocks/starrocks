@@ -20,14 +20,14 @@ public class AuthenticationProviderFactory {
     private AuthenticationProviderFactory() {
     }
 
-    public static AuthenticationProvider create(String plugin) {
-        if (plugin == null) {
+    public static AuthenticationProvider create(String authPlugin, String authString) {
+        if (authPlugin == null) {
             return null;
         }
 
         try {
-            AuthPlugin.Server authPlugin = AuthPlugin.Server.valueOf(plugin);
-            return authPlugin.getProvider();
+            AuthPlugin.Server authPluginServer = AuthPlugin.Server.valueOf(authPlugin);
+            return authPluginServer.getProvider(authString);
         } catch (IllegalArgumentException e) {
             return null;
         }

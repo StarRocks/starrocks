@@ -98,9 +98,9 @@ public:
     static AggregateFunctionPtr MakeCountAggregateFunction();
 
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
+    static auto MakeCountDistinctAggregateFunction();
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
+    static auto MakeCountDistinctAggregateFunctionV2();
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -286,12 +286,12 @@ AggregateFunctionPtr AggregateFactory::MakeWindowfunnelAggregateFunction() {
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunction() {
+auto AggregateFactory::MakeCountDistinctAggregateFunction() {
     return std::make_shared<DistinctAggregateFunction<LT, AggDistinctType::COUNT>>();
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
+auto AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<LT, AggDistinctType::COUNT>>();
 }
 
