@@ -111,6 +111,11 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+// copy from iceberg 1.7.1, do some changes:
+// 1. use basic auth (base64 encode credential) as Authorization header instead of bearer token
+// 2. do not add actor_token/actor_token_type in token exchange request if enable_actor_token is false
+// 3. do not refresh Authorization header when refresh token
+
 public class RESTSessionCatalog extends BaseViewSessionCatalog
         implements Configurable<Object>, Closeable {
     private static final Logger LOG = LoggerFactory.getLogger(RESTSessionCatalog.class);
