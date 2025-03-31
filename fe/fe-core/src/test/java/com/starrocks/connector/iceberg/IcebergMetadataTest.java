@@ -180,7 +180,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
-        Assert.assertEquals(expectResult, metadata.listDbNames(new ConnectContext()));
+        Assert.assertEquals(expectResult, metadata.listDbNames(connectContext));
     }
 
     @Test
@@ -198,7 +198,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         Database expectResult = new Database(0, db);
-        Assert.assertEquals(expectResult, metadata.getDb(new ConnectContext(), db));
+        Assert.assertEquals(expectResult, metadata.getDb(connectContext, db));
     }
 
     @Test
@@ -215,7 +215,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertNull(metadata.getDb(new ConnectContext(), db));
+        Assert.assertNull(metadata.getDb(connectContext, db));
     }
 
     @Test
@@ -235,7 +235,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
-        Assert.assertEquals(expectResult, metadata.listTableNames(new ConnectContext(), db1));
+        Assert.assertEquals(expectResult, metadata.listTableNames(connectContext, db1));
     }
 
     @Test
@@ -293,7 +293,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertTrue(metadata.tableExists(new ConnectContext(), "db", "tbl"));
+        Assert.assertTrue(metadata.tableExists(connectContext, "db", "tbl"));
     }
 
     @Test
@@ -325,7 +325,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assert.assertNull(metadata.getTable(new ConnectContext(), "db", "tbl2"));
+        Assert.assertNull(metadata.getTable(connectContext, "db", "tbl2"));
     }
 
     @Test(expected = AlreadyExistsException.class)
@@ -404,7 +404,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        metadata.createDb(new ConnectContext(), "iceberg_db", new HashMap<>());
+        metadata.createDb(connectContext, "iceberg_db", new HashMap<>());
     }
 
     @Test
@@ -425,7 +425,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
+            metadata.dropDb(connectContext, "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
@@ -528,7 +528,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
+            metadata.dropDb(connectContext, "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -544,7 +544,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
+            metadata.dropDb(connectContext, "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -560,7 +560,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropDb(new ConnectContext(), "iceberg_db", true);
+            metadata.dropDb(connectContext, "iceberg_db", true);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof MetaNotFoundException);
@@ -593,7 +593,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        metadata.dropDb(new ConnectContext(), "iceberg_db", true);
+        metadata.dropDb(connectContext, "iceberg_db", true);
     }
 
     @Test
@@ -1053,12 +1053,13 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).appendFile(FILE_B_3).commit();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableB;
             }
 
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(0, dbName);
             }
         };
@@ -1082,7 +1083,8 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableB;
             }
         };
@@ -1107,7 +1109,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableG;
             }
         };
@@ -1137,7 +1140,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableB;
             }
         };
@@ -1300,12 +1303,13 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableG;
             }
 
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(0, dbName);
             }
         };
@@ -1344,12 +1348,12 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableA;
             }
 
             @Mock
-            Database getDB(String dbName) {
+            Database getDB(ConnectContext context, String dbName) {
                 return new Database(0, dbName);
             }
         };
@@ -1398,12 +1402,13 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
 
             @Mock
-            boolean tableExists(String dbName, String tableName) {
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
                 return true;
             }
         };
@@ -1535,19 +1540,20 @@ public class IcebergMetadataTest extends TableTestBase {
                                                        @Mocked Snapshot snapshot) throws Exception {
         new MockUp<IcebergMetadata>() {
             @Mock
-            public Database getDb(String dbName) {
+            public Database getDb(ConnectContext context, String dbName) {
                 return new Database(1, "db");
             }
         };
 
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
                 return mockedNativeTableA;
             }
 
             @Mock
-            boolean tableExists(String dbName, String tableName) {
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
                 return true;
             }
         };

@@ -90,10 +90,10 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
-    public void testListAllDatabases(@Mocked RESTCatalog restCatalog) {
+    public void testListAllDatabases(@Mocked RESTSessionCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.listNamespaces();
+                restCatalog.listNamespaces((SessionCatalog.SessionContext) any);
                 result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
                 times = 1;
             }
@@ -107,10 +107,10 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
-    public void testTableExists(@Mocked RESTCatalog restCatalog) {
+    public void testTableExists(@Mocked RESTSessionCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.tableExists((TableIdentifier) any);
+                restCatalog.tableExists((SessionCatalog.SessionContext) any, (TableIdentifier) any);
                 result = true;
             }
         };
@@ -121,10 +121,10 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
-    public void testRenameTable(@Mocked RESTCatalog restCatalog) {
+    public void testRenameTable(@Mocked RESTSessionCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.tableExists((TableIdentifier) any);
+                restCatalog.tableExists((SessionCatalog.SessionContext) any, (TableIdentifier) any);
                 result = true;
             }
         };
