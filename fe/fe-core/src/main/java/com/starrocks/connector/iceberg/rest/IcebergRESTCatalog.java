@@ -314,7 +314,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         Map<String, String> credentials;
         if (Strings.isNullOrEmpty(context.getAuthToken())) {
-            credentials = Maps.filterKeys(securityProperties.get(), key -> Set.of(TOKEN, CREDENTIAL).contains(key));
+            return SessionCatalog.SessionContext.createEmpty();
         } else {
             credentials = ImmutableMap.<String, String>builder()
                     .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken())
