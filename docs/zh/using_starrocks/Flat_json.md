@@ -28,7 +28,6 @@ FROM logs;
 
 StarRocks 引入了 Flat JSON 功能，以提高 JSON 数据查询效率和降低用户使用 JSON 的复杂度。
 - 从 3.3.0 版本开始提供此功能，默认情况下关闭，需要手动启用。
-- 从 3.4.0 版本开始，默认启用 Flat JSON 功能，无需用户手动操作。
 
 ## 什么是 Flat JSON
 
