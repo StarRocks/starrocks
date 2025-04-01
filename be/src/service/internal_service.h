@@ -89,6 +89,9 @@ public:
     void fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                     PFetchDataResult* result, google::protobuf::Closure* done) override;
 
+    void fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
+                         PFetchDataCacheResponse* response, google::protobuf::Closure* done) override;
+
     void tablet_writer_open(google::protobuf::RpcController* controller, const PTabletWriterOpenRequest* request,
                             PTabletWriterOpenResult* response, google::protobuf::Closure* done) override;
 
@@ -214,6 +217,9 @@ private:
 
     void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                      PFetchDataResult* result, google::protobuf::Closure* done);
+
+    void _fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
+                          PFetchDataCacheResponse* response, google::protobuf::Closure* done);
 
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response, google::protobuf::Closure* done,
                         int timeout_ms);

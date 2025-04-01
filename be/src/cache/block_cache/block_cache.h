@@ -17,7 +17,8 @@
 #include <atomic>
 
 #include "cache/block_cache/disk_space_monitor.h"
-#include "cache/block_cache/kv_cache.h"
+#include "cache/block_cache/local_cache.h"
+#include "cache/block_cache/remote_cache.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -61,11 +62,19 @@ public:
     // Update the datacache disk space infomation, such as disk quota or disk path.
     Status update_disk_spaces(const std::vector<DirSpace>& spaces);
 
-    void record_read_remote(size_t size, int64_t lateny_us);
-
-    void record_read_cache(size_t size, int64_t lateny_us);
-
+    // Get datacache metrics.
+    // The level can be: 0, 1, 2. The higher the level, more detailed metrics will be returned.
     const DataCacheMetrics cache_metrics(int level = 0) const;
+
+    // Read data from remote cache
+    Status read_buffer_from_remote_cache(const std::string& cache_key, size_t offset, size_t size, IOBuffer* buffer,
+                                         ReadCacheOptions* options);
+
+    void record_read_local_cache(size_t size, int64_t lateny_us);
+
+    void record_read_remote_cache(size_t size, int64_t lateny_us);
+
+    void record_read_remote_storage(size_t size, int64_t lateny_us, bool local_only);
 
     // Shutdown the cache instance to save some state meta
     Status shutdown();
@@ -85,7 +94,7 @@ public:
     DataCacheEngineType engine_type();
 
 #ifdef WITH_STARCACHE
-    std::shared_ptr<starcache::StarCache> starcache_instance() { return _kv_cache->starcache_instance(); }
+    std::shared_ptr<starcache::StarCache> starcache_instance() { return _local_cache->starcache_instance(); }
 #endif
 
     static const size_t MAX_BLOCK_SIZE;
@@ -94,7 +103,8 @@ private:
     void _refresh_quota();
 
     size_t _block_size = 0;
-    std::shared_ptr<KvCache> _kv_cache;
+    std::shared_ptr<LocalCache> _local_cache;
+    std::shared_ptr<RemoteCache> _remote_cache;
     std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
     std::vector<std::string> _disk_paths;
     std::atomic<bool> _initialized = false;

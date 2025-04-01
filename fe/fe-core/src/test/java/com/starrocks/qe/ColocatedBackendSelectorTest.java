@@ -318,7 +318,7 @@ public class ColocatedBackendSelectorTest {
         )));
         ImmutableMap<Long, ComputeNode> id2ComputeNode = ImmutableMap.of();
 
-        return new DefaultWorkerProvider(id2Backend, id2ComputeNode, id2Backend, id2ComputeNode, false);
+        return new DefaultWorkerProvider(id2Backend, id2ComputeNode, id2Backend, id2ComputeNode, false, 0);
     }
 
 }
