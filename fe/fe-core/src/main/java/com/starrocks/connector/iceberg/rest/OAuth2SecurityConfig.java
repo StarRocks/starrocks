@@ -24,6 +24,7 @@ public class OAuth2SecurityConfig {
     private String scope;
     private String token;
     private URI serverUri;
+    private String audience;
 
     // The type of security to use (default: NONE). OAUTH2 requires either a token or credential. Example: OAUTH2
     public static String SECURITY = "security";
@@ -36,6 +37,8 @@ public class OAuth2SecurityConfig {
     public static String OAUTH2_TOKEN = "oauth2.token";
     // The endpoint to retrieve access token from OAuth2 Server
     public static String SERVER_URI = "oauth2.server-uri";
+
+    public static String OAUTH2_AUDIENCE = "oauth2.audience";
 
     public SecurityEnum getSecurity() {
         return security;
@@ -82,6 +85,15 @@ public class OAuth2SecurityConfig {
         return this;
     }
 
+    public Optional<String> getAudience() {
+        return Optional.ofNullable(audience);
+    }
+
+    public OAuth2SecurityConfig setAudience(String audience) {
+        this.audience = audience;
+        return this;
+    }
+
     // OAuth2 requires a credential or token
     public boolean credentialOrTokenPresent() {
         return credential != null || token != null;
@@ -109,7 +121,9 @@ class OAuth2SecurityConfigBuilder {
         config = config.setSecurity(SecurityEnum.OAUTH2)
                 .setCredential(properties.get(OAuth2SecurityConfig.OAUTH2_CREDENTIAL))
                 .setScope(properties.get(OAuth2SecurityConfig.OAUTH2_SCOPE))
-                .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN));
+                .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN))
+                .setAudience(properties.get(OAuth2SecurityConfig.OAUTH2_AUDIENCE));
+
         String serverUri = properties.get(OAuth2SecurityConfig.SERVER_URI);
         if (serverUri != null) {
             config = config.setServerUri(URI.create(serverUri));

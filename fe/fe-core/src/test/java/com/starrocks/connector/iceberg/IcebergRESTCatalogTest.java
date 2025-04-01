@@ -38,8 +38,9 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
 import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
@@ -63,6 +64,7 @@ public class IcebergRESTCatalogTest {
     public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
 
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
+    public static ConnectContext connectContext;
 
     static {
         DEFAULT_CONFIG.put(ICEBERG_CATALOG_TYPE, "rest");
@@ -72,10 +74,11 @@ public class IcebergRESTCatalogTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        connectContext = UtFrameUtils.createDefaultCtx();
         AnalyzeTestUtil.init();
     }
 
-    public IcebergMetadata buildIcebergMetadata(RESTCatalog restCatalog) {
+    public IcebergMetadata buildIcebergMetadata(RESTSessionCatalog restCatalog) {
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
                 CATALOG_NAME, icebergRESTCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
@@ -86,10 +89,10 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
-    public void testListAllDatabases(@Mocked RESTCatalog restCatalog) {
+    public void testListAllDatabases(@Mocked RESTSessionCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.listNamespaces();
+                restCatalog.listNamespaces((SessionCatalog.SessionContext) any);
                 result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
                 times = 1;
             }
@@ -98,50 +101,50 @@ public class IcebergRESTCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), icebergProperties);
-        List<String> dbs = icebergRESTCatalog.listAllDatabases();
+        List<String> dbs = icebergRESTCatalog.listAllDatabases(connectContext);
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
     @Test
-    public void testTableExists(@Mocked RESTCatalog restCatalog) {
+    public void testTableExists(@Mocked RESTSessionCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.tableExists((TableIdentifier) any);
+                restCatalog.tableExists((SessionCatalog.SessionContext) any, (TableIdentifier) any);
                 result = true;
             }
         };
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), new HashMap<>());
-        boolean exists = icebergRESTCatalog.tableExists("db1", "tbl1");
+        boolean exists = icebergRESTCatalog.tableExists(connectContext, "db1", "tbl1");
         Assert.assertTrue(exists);
     }
 
     @Test
-    public void testRenameTable(@Mocked RESTCatalog restCatalog) {
+    public void testRenameTable(@Mocked RESTSessionCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.tableExists((TableIdentifier) any);
+                restCatalog.tableExists((SessionCatalog.SessionContext) any, (TableIdentifier) any);
                 result = true;
             }
         };
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), new HashMap<>());
-        icebergRESTCatalog.renameTable("db", "tb1", "tb2");
-        boolean exists = icebergRESTCatalog.tableExists("db", "tbl2");
+        icebergRESTCatalog.renameTable(connectContext, "db", "tb1", "tb2");
+        boolean exists = icebergRESTCatalog.tableExists(connectContext, "db", "tbl2");
         Assert.assertTrue(exists);
     }
 
     @Test
-    public void testShowTableVies(@Mocked RESTCatalog restCatalog) {
+    public void testShowTableVies(@Mocked RESTSessionCatalog restCatalog) {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
 
         new Expectations() {
             {
-                restCatalog.listTables((Namespace) any);
+                restCatalog.listTables((SessionCatalog.SessionContext) any, (Namespace) any);
                 result = ImmutableList.of(TableIdentifier.of("db", "tbl1"));
                 minTimes = 1;
 
-                restCatalog.listViews((Namespace) any);
+                restCatalog.listViews((SessionCatalog.SessionContext) any, (Namespace) any);
                 result = ImmutableList.of(TableIdentifier.of("db", "view1"));
                 minTimes = 1;
             }
@@ -153,7 +156,7 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
-    public void testDropView(@Mocked RESTCatalog restCatalog) {
+    public void testDropView(@Mocked RESTSessionCatalog restCatalog) {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
         new MockUp<IcebergMetadata>() {
             @Mock
@@ -166,24 +169,25 @@ public class IcebergRESTCatalogTest {
 
         new Expectations() {
             {
-                restCatalog.dropView((TableIdentifier) any);
+                restCatalog.dropView((SessionCatalog.SessionContext) any, (TableIdentifier) any);
                 result = true;
                 minTimes = 1;
             }
         };
 
-        metadata.dropTable(new DropTableStmt(false, new TableName("catalog", "db", "view"), false));
+        metadata.dropTable(connectContext, new DropTableStmt(false, new TableName("catalog", "db", "view"),
+                false));
     }
 
     @Test
-    public void testCreateView(@Mocked RESTCatalog restCatalog, @Mocked BaseView baseView,
+    public void testCreateView(@Mocked RESTSessionCatalog restCatalog, @Mocked BaseView baseView,
                                @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
 
         CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
-        metadata.createView(stmt);
+        metadata.createView(connectContext, stmt);
 
         new Expectations() {
             {
@@ -211,13 +215,13 @@ public class IcebergRESTCatalogTest {
                 result = null;
                 minTimes = 1;
 
-                restCatalog.loadView(TableIdentifier.of("db", "view"));
+                restCatalog.loadView((SessionCatalog.SessionContext) any, TableIdentifier.of("db", "view"));
                 result = baseView;
                 minTimes = 1;
             }
         };
 
-        Table table = metadata.getView("db", "view");
+        Table table = metadata.getView(connectContext, "db", "view");
         Assert.assertEquals(ICEBERG_VIEW, table.getType());
         Assert.assertNull(table.getTableLocation());
     }
