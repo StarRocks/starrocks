@@ -97,7 +97,9 @@ public class TablePEntryObject implements PEntryObject {
                 throw new PrivObjNotFoundException("cannot find catalog: " + catalogName);
             }
             catalogId = catalog.getId();
-
+            // As a system database, `information_schema` is case-insensitive
+            // across both internal and external catalogs. Queries can access it
+            // regardless of letter case (e.g. `information_schema`, `INFORMATION_SCHEMA`, `Information_Schema`).
             if (tokens.size() == 2 && "information_schema".equalsIgnoreCase(tokens.get(0))) {
                 tokens.set(0, tokens.get(0).toLowerCase());
                 tokens.set(1, tokens.get(1).toLowerCase());
