@@ -28,7 +28,7 @@ public class ShowCreateSecurityIntegrationStatement extends ShowStmt {
                     .addColumn(new Column("Create Security Integration", ScalarType.createVarchar(500)))
                     .build();
 
-    private String name;
+    private final String name;
 
     public ShowCreateSecurityIntegrationStatement(String name, NodePosition pos) {
         super(pos);
@@ -37,10 +37,6 @@ public class ShowCreateSecurityIntegrationStatement extends ShowStmt {
 
     public String getName() {
         return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     @Override

@@ -140,10 +140,9 @@ public class ConnectScheduler {
             AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
             int currentConn = currentConnAtomic.get();
             long currentUserMaxConn =
-                    ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+                    ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
             if (currentConn >= currentUserMaxConn) {
-                String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
-                        ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
+                String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() + ") connection limit, " +
                         "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
                         ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
                         ", user.currConn=" + currentConn +
