@@ -30,6 +30,8 @@
 
 namespace starrocks::pipeline {
 
+DEFINE_FAIL_POINT(operator_return_failed_status);
+
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
                                            PipelineExecutorMetrics* metrics)
@@ -171,6 +173,12 @@ void GlobalDriverExecutor::_worker_thread() {
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
                 status = driver->workgroup()->check_big_query(*query_ctx);
             }
+
+            FAIL_POINT_TRIGGER_EXECUTE(operator_return_failed_status, {
+                if (status.ok()) {
+                    status = Status::InternalError("injected failed status");
+                }
+            });
 
             if (!status.ok()) {
                 auto o_id = get_backend_id();

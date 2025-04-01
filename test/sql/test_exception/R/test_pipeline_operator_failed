@@ -1,0 +1,28 @@
+-- name: test_pipeline_operator_failed 
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+admin enable failpoint 'operator_return_failed_status';
+-- result:
+-- !result
+[UC] select count(*) from t0;
+-- result:
+-- !result
+[UC] select count(*) from t0 group by c0;
+-- result:
+-- !result
+admin disable failpoint 'operator_return_failed_status';
+-- result:
+-- !result
