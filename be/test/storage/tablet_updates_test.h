@@ -122,6 +122,34 @@ public:
         return *writer->build();
     }
 
+    RowsetSharedPtr create_rowset_auto_increment(const TabletSharedPtr& tablet, const vector<int64_t>& keys) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = tablet->thread_safe_get_tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto& cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->append_datum(Datum(key));
+            int vcol_start = schema.num_key_fields();
+            cols[vcol_start]->append_datum(Datum((int64_t)(key % 100 + 1)));
+            cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
+    }
+
     RowsetSharedPtr create_rowset_with_mutiple_segments(const TabletSharedPtr& tablet,
                                                         const vector<vector<int64_t>>& keys_by_segment,
                                                         Column* one_delete = nullptr, bool empty = false,
@@ -209,6 +237,45 @@ public:
             for (long key : keys) {
                 cols[0]->append_datum(Datum(key));
                 cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
+            }
+            CHECK_OK(writer->flush_chunk(*chunk));
+        }
+        RowsetSharedPtr partial_rowset = *writer->build();
+
+        return partial_rowset;
+    }
+
+    RowsetSharedPtr create_partial_rowset_auto_increment(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                                         std::vector<int32_t>& column_indexes,
+                                                         const std::shared_ptr<TabletSchema>& partial_schema) {
+        // create partial rowset
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.full_tablet_schema = tablet->tablet_schema();
+        writer_context.is_partial_update = true;
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        writer_context.miss_auto_increment_column = true;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(partial_schema);
+
+        if (keys.size() > 0) {
+            auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+            EXPECT_TRUE(2 == chunk->num_columns());
+            auto& cols = chunk->columns();
+            for (long key : keys) {
+                cols[0]->append_datum(Datum(key));
+                cols[1]->append_datum(Datum((int64_t)(0)));
             }
             CHECK_OK(writer->flush_chunk(*chunk));
         }
@@ -420,6 +487,42 @@ public:
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.push_back(k3);
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    }
+
+    TabletSharedPtr create_tablet_with_auto_increment(int64_t tablet_id, int32_t schema_hash) {
+        srand(GetCurrentTimeMicros());
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(0);
+        request.tablet_schema.__set_schema_version(0);
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.__set_is_auto_increment(true);
+        k2.column_type.type = TPrimitiveType::BIGINT;
         request.tablet_schema.columns.push_back(k2);
 
         TColumn k3;
