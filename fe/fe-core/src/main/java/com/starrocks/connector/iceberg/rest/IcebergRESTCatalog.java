@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg.rest;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -262,10 +263,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                     new RuntimeException("Failed to list views using REST Catalog, exception: " + re.getMessage(), re));
         }
 
-        if (!viewIdentifiers.isEmpty()) {
-            tableIdentifiers.addAll(viewIdentifiers);
-        }
-        return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+        final List<TableIdentifier> finalIdentifiers = ImmutableList.<TableIdentifier>builder()
+                .addAll(tableIdentifiers)
+                .addAll(viewIdentifiers)
+                .build();
+
+        return finalIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Override
