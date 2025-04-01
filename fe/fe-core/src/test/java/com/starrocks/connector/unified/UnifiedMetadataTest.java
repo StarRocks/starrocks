@@ -53,7 +53,6 @@ import org.wildfly.common.Assert;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
