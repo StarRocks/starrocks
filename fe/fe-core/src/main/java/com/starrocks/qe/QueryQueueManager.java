@@ -68,10 +68,6 @@ public class QueryQueueManager {
             LogicalSlot allocatedSlot = null;
             final long warehouseId = context.getCurrentWarehouseId();
             while (allocatedSlot == null) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("[Slot] require slot for query [slot={}]", slotRequirement);
-                }
-
                 // Check timeout.
                 long currentMs = System.currentTimeMillis();
                 if (slotRequirement.isPendingTimeout()) {

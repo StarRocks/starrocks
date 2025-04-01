@@ -120,16 +120,6 @@ public class QueryQueueOptions {
         return enableQueryQueueV2;
     }
 
-    @Override
-    public String toString() {
-        final StringBuffer sb = new StringBuffer("QueryQueueOptions{");
-        sb.append("enableQueryQueueV2=").append(enableQueryQueueV2);
-        sb.append(", v2=").append(v2);
-        sb.append(", policy=").append(policy);
-        sb.append('}');
-        return sb.toString();
-    }
-
     public V2 v2() {
         return v2;
     }
@@ -155,6 +145,16 @@ public class QueryQueueOptions {
     @Override
     public int hashCode() {
         return Objects.hash(enableQueryQueueV2, v2, policy);
+    }
+
+    @Override
+    public String toString() {
+        final StringBuffer sb = new StringBuffer("QueryQueueOptions{");
+        sb.append("enableQueryQueueV2=").append(enableQueryQueueV2);
+        sb.append(", v2=").append(v2);
+        sb.append(", policy=").append(policy);
+        sb.append('}');
+        return sb.toString();
     }
 
     public static class V2 {

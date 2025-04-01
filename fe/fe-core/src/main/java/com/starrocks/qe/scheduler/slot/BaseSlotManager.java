@@ -120,10 +120,19 @@ public abstract class BaseSlotManager {
         resourceUsageMonitor.registerResourceAvailableListener(this::notifyResourceUsageAvailable);
     }
 
+    /**
+     * Get all the slots in the slot manager.
+     */
     public abstract List<LogicalSlot> getSlots();
 
+    /**
+     * Get the slot tracker by the warehouse id.
+     */
     public abstract SlotTracker getSlotTracker(long warehouseId);
 
+    /**
+     * Start the slot manager.
+     */
     public abstract void doStart();
 
     public void start() {
