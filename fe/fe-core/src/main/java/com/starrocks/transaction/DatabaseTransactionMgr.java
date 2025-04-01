@@ -1904,7 +1904,12 @@ public class DatabaseTransactionMgr {
     }
 
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
+                List.of(transactionStateBatch.getTableId()),
+                LockType.WRITE);
         writeLock();
+
         try {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             transactionStateBatch.replaySetTransactionStatus();
@@ -1914,6 +1919,8 @@ public class DatabaseTransactionMgr {
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {
             writeUnlock();
+            locker.unLockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
+                    List.of(transactionStateBatch.getTableId()), LockType.WRITE);
         }
     }
 
