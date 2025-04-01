@@ -836,7 +836,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_backup_materialized_view
 
-- デフォルト: true
+- デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
