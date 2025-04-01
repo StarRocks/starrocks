@@ -34,7 +34,7 @@ public class WarehouseIdleCheckerTest {
 
         Config.warehouse_idle_check_enable = true;
 
-        IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+        IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus(true);
         Assert.assertFalse(idleStatus.isClusterIdle);
         Assert.assertEquals(3, idleStatus.warehouses.size());
         for (int i = 0; i < idleStatus.warehouses.size(); i++) {

@@ -44,6 +44,20 @@ public class IdleStatus {
         boolean isIdle;
         @SerializedName("idleTime")
         long idleTime;
+        @SerializedName("runningStreamLoadCnt")
+        long runningStreamLoadCnt;
+        @SerializedName("runningLoadCnt")
+        long runningLoadCnt;
+        @SerializedName("runningRoutineLoadCnt")
+        long runningRoutineLoadCnt;
+        @SerializedName("runningBackupRestoreCnt")
+        long runningBackupRestoreCnt;
+        @SerializedName("runningAlterJobCnt")
+        long runningAlterJobCnt;
+        @SerializedName("runningTaskCnt")
+        long runningTaskCnt;
+        @SerializedName("lastFinishedJobTime")
+        long lastFinishedJobTime;
 
         public WarehouseStatus(long id, String name, boolean isIdle, long idleTime) {
             this.id = id;
