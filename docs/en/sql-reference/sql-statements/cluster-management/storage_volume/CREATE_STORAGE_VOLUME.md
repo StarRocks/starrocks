@@ -127,12 +127,16 @@ The table below lists all available properties of storage volumes. Following the
 
 ##### GCS
 
+:::tip 
+GCS is supported using the [XML API](https://cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax.
+:::
+
 If you use GCP Cloud Storage, set the following properties:
 
 ```SQL
 "enabled" = "{ true | false }",
 
--- For example: us-east-1
+-- For example: us-east1
 "aws.s3.region" = "<region>",
 
 -- For example: https://storage.googleapis.com
