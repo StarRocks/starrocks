@@ -14,17 +14,63 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.LeaderInfo;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.CoordinatorPreprocessor;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
+import com.starrocks.system.Frontend;
+import com.starrocks.system.FrontendHbResponse;
+import com.starrocks.thrift.FrontendService;
+import com.starrocks.thrift.TFinishSlotRequirementRequest;
+import com.starrocks.thrift.TFinishSlotRequirementResponse;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TReleaseSlotRequest;
+import com.starrocks.thrift.TReleaseSlotResponse;
+import com.starrocks.thrift.TRequireSlotRequest;
+import com.starrocks.thrift.TRequireSlotResponse;
+import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.utframe.MockGenericPool;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class SchedulerTestBase extends SchedulerTestNoneDBBase {
     private static final String DB_NAME = "test";
     private static final AtomicLong COLOCATE_GROUP_INDEX = new AtomicLong(0L);
+
+    protected static final List<Frontend> FRONTENDS = ImmutableList.of(
+            new Frontend(FrontendNodeType.FOLLOWER, "fe-1", "127.0.0.1", 8030),
+            new Frontend(FrontendNodeType.FOLLOWER, "fe-2", "127.0.0.2", 8030),
+            new Frontend(FrontendNodeType.FOLLOWER, "fe-3", "127.0.0.3", 8030)
+    );
+    protected static final Frontend LOCAL_FRONTEND = FRONTENDS.get(1);
+    protected static final int ABSENT_CONCURRENCY_LIMIT = -1;
+    protected static final int ABSENT_MAX_CPU_CORES = -1;
+    protected final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
+    protected final QueryQueueManager manager = QueryQueueManager.getInstance();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -219,4 +265,137 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
 
         SchedulerTestNoneDBBase.afterClass();
     }
+
+    protected static class MockFrontendServiceClient extends FrontendService.Client {
+        private final FrontendService.Iface frontendService = new FrontendServiceImpl(null);
+
+        public MockFrontendServiceClient() {
+            super(null);
+        }
+
+        @Override
+        public TRequireSlotResponse requireSlotAsync(TRequireSlotRequest request) throws org.apache.thrift.TException {
+            return frontendService.requireSlotAsync(request);
+        }
+
+        @Override
+        public TReleaseSlotResponse releaseSlot(TReleaseSlotRequest request) throws org.apache.thrift.TException {
+            return frontendService.releaseSlot(request);
+        }
+
+        @Override
+        public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request)
+                throws org.apache.thrift.TException {
+            return frontendService.finishSlotRequirement(request);
+        }
+    }
+
+    protected static void mockFrontendService(MockFrontendServiceClient client) {
+        ThriftConnectionPool.frontendPool = new MockGenericPool<FrontendService.Client>("query-queue-mocked-pool") {
+            @Override
+            public FrontendService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
+                return client;
+            }
+        };
+    }
+
+    /**
+     * Make the coordinator of every query uses the mocked resource group.
+     *
+     * <p> Mock methods:
+     * <ul>
+     *  <li> {@link CoordinatorPreprocessor#prepareResourceGroup(ConnectContext, ResourceGroupClassifier.QueryType)}
+     *  <li> {@link ResourceGroupMgr#getResourceGroup(long)}
+     *  <li> {@link ResourceGroupMgr#getResourceGroupIds()}
+     * </ul>
+     *
+     * @param group The returned group of the mocked method.
+     */
+    protected void mockResourceGroup(TWorkGroup group) {
+        new MockUp<CoordinatorPreprocessor>() {
+            @Mock
+            public TWorkGroup prepareResourceGroup(ConnectContext connect,
+                                                   ResourceGroupClassifier.QueryType queryType) {
+                return group;
+            }
+        };
+
+        if (group != null && group.getId() != LogicalSlot.ABSENT_GROUP_ID) {
+            ResourceGroup resourceGroup = new ResourceGroup();
+            if (group.getConcurrency_limit() != ABSENT_CONCURRENCY_LIMIT) {
+                resourceGroup.setConcurrencyLimit(group.getConcurrency_limit());
+            }
+            if (group.getMax_cpu_cores() != ABSENT_MAX_CPU_CORES) {
+                resourceGroup.setMaxCpuCores(group.getMax_cpu_cores());
+            }
+            resourceGroup.setId(group.getId());
+            resourceGroup.setName(group.getName());
+            mockedGroups.put(group.getId(), resourceGroup);
+            new MockUp<ResourceGroupMgr>() {
+                @Mock
+                public ResourceGroup getResourceGroup(long id) {
+                    return mockedGroups.get(id);
+                }
+
+                @Mock
+                public List<Long> getResourceGroupIds() {
+                    return new ArrayList<>(mockedGroups.keySet());
+                }
+            };
+        }
+    }
+
+    /**
+     * Mock {@link NodeMgr} to make it return the specific RPC endpoint of self and leader.
+     * The mocked methods including {@link NodeMgr#getFeByName(String)}, {@link NodeMgr#getFeByName(String)}
+     * and {@link NodeMgr#getSelfIpAndRpcPort()}.
+     */
+    protected static void mockFrontends(List<Frontend> frontends) {
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getFeByName(String name) {
+                return frontends.stream().filter(fe -> name.equals(fe.getNodeName())).findAny().orElse(null);
+            }
+
+            @Mock
+            public Frontend getFeByHost(String host) {
+                return frontends.stream().filter(fe -> host.equals(fe.getHost())).findAny().orElse(null);
+            }
+
+            @Mock
+            public Pair<String, Integer> getSelfIpAndRpcPort() {
+                return Pair.create(LOCAL_FRONTEND.getHost(), LOCAL_FRONTEND.getRpcPort());
+            }
+        };
+
+        long startTimeMs = System.currentTimeMillis() - 1000L;
+        frontends.forEach(fe -> handleHbResponse(fe, startTimeMs, true));
+
+        changeLeader(frontends.get(0));
+    }
+
+    protected static void changeLeader(Frontend fe) {
+        LeaderInfo leaderInfo = new LeaderInfo(fe.getHost(), 80, fe.getRpcPort());
+        GlobalStateMgr.getCurrentState().getNodeMgr().setLeader(leaderInfo);
+    }
+
+    protected static void handleHbResponse(Frontend fe, long startTimeMs, boolean isAlive) {
+        FrontendHbResponse hbResponse;
+        if (isAlive) {
+            hbResponse = new FrontendHbResponse(fe.getNodeName(), fe.getQueryPort(), fe.getRpcPort(),
+                    fe.getReplayedJournalId(), fe.getLastUpdateTime(), startTimeMs, fe.getFeVersion(), 0.5f);
+        } else {
+            hbResponse = new FrontendHbResponse(fe.getNodeName(), "mock-dead-frontend");
+        }
+        fe.handleHbResponse(hbResponse, false);
+    }
+
+    protected DefaultCoordinator runNoPendingQuery() throws Exception {
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, coord);
+        Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+        return coord;
+    }
+
 }

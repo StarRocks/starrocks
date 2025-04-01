@@ -23,6 +23,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -38,7 +39,8 @@ public class ShowRunningQueriesStmt extends ShowStmt {
             Pair.create(new Column("QueryId", ScalarType.createVarchar(64)),
                     slot -> DebugUtil.printId(slot.getSlotId())),
             Pair.create(new Column("WarehouseId", ScalarType.createVarchar(64)),
-                    slot -> slot.getGroupId() == LogicalSlot.ABSENT_GROUP_ID ? "-" : Long.toString(slot.getWarehouseId())),
+                    slot -> slot.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID  ? "-" :
+                            Long.toString(slot.getWarehouseId())),
             Pair.create(new Column("ResourceGroupId", ScalarType.createVarchar(64)),
                     slot -> slot.getGroupId() == LogicalSlot.ABSENT_GROUP_ID ? "-" : Long.toString(slot.getGroupId())),
             Pair.create(new Column("StartTime", ScalarType.createVarchar(64)),
