@@ -1668,7 +1668,10 @@ public class SchemaChangeHandler extends AlterHandler {
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
-            if (col.isPresent() && col.get().equals(partitionCol)) {
+            // NOTE: partition column in partition info maybe changed(eg: str2date partition table), use original
+            // table schema instead.
+            Column refPartitionCol = olapTable.getColumn(partitionCol.getName());
+            if (col.isPresent() && !col.get().equals(refPartitionCol)) {
                 throw new DdlException("Can not modify partition column[" + colName + "]. index["
                         + olapTable.getIndexNameById(alterIndexId) + "]");
             }
