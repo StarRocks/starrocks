@@ -323,6 +323,7 @@ public:
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
+    PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
@@ -410,6 +411,7 @@ private:
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
+    PriorityThreadPool* _datacache_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
     std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;

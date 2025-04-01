@@ -25,6 +25,7 @@ set(CACHE_FILES
   block_cache/datacache_utils.cpp
   block_cache/disk_space_monitor.cpp
   block_cache/block_cache_hit_rate_counter.hpp
+  block_cache/peer_cache_wrapper.cpp
   object_cache/lrucache_module.cpp
 )
 
