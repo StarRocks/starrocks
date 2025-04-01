@@ -52,7 +52,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -62,8 +61,6 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static java.lang.String.format;
 import static org.apache.iceberg.CatalogUtil.configureHadoopConf;
-import static org.apache.iceberg.rest.auth.OAuth2Properties.CREDENTIAL;
-import static org.apache.iceberg.rest.auth.OAuth2Properties.TOKEN;
 
 public class IcebergRESTCatalog implements IcebergCatalog {
 
