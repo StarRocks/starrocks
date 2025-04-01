@@ -1405,7 +1405,7 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
-CONF_mBool(enable_json_flat, "true");
+CONF_mBool(enable_json_flat, "false");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
