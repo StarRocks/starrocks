@@ -1,5 +1,5 @@
 
-有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) 和 [SET_DEFAULT_STORAGE_VOLUME](../../sql-reference/sql-statements/cluster_management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md)。
+有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) 和 [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md)。
 
 ### 创建数据库和云原生表
 
