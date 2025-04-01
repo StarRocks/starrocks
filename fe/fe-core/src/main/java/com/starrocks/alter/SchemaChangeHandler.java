@@ -1668,7 +1668,7 @@ public class SchemaChangeHandler extends AlterHandler {
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
-            if (col.isPresent() && !col.get().equals(partitionCol)) {
+            if (col.isPresent() && col.get().equals(partitionCol)) {
                 throw new DdlException("Can not modify partition column[" + colName + "]. index["
                         + olapTable.getIndexNameById(alterIndexId) + "]");
             }
