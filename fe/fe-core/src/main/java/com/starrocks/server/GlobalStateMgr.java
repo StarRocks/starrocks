@@ -227,6 +227,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -472,6 +473,8 @@ public class GlobalStateMgr {
     private final CompactionControlScheduler compactionControlScheduler;
 
     private final WarehouseManager warehouseMgr;
+
+    private final HistoricalNodeMgr historicalNodeMgr;
 
     private final ConfigRefreshDaemon configRefreshDaemon;
 
@@ -747,6 +750,7 @@ public class GlobalStateMgr {
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManager();
+        this.historicalNodeMgr = new HistoricalNodeMgr();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
@@ -1017,6 +1021,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public HistoricalNodeMgr getHistoricalNodeMgr() {
+        return historicalNodeMgr;
     }
 
     public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
@@ -1590,6 +1598,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
+                .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1810,6 +1819,7 @@ public class GlobalStateMgr {
                 warehouseMgr.save(imageWriter);
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
+                historicalNodeMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
