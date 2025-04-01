@@ -965,6 +965,8 @@ DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
 DEFINE_FAIL_POINT(tablet_internal_error_code_but_memory_limit);
+DEFINE_FAIL_POINT(inconsistent_rowset_stats_not_found);
+DEFINE_FAIL_POINT(inconsistent_rowset_stats_out_bound);
 
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -1197,6 +1199,10 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
             st = manager->set_cached_del_vec(tsid, delvec_pair.second);
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_cache_del_vec_failed, {
+                st = Status::InternalError("inject tablet_apply_cache_del_vec_failed");
+                manager->clear_cached_del_vec({tsid});
+            });
             if (!st.ok()) {
                 failure_handler("set_cached_del_vec failed", Status::Corruption(st.message()));
                 return apply_st;
@@ -1773,15 +1779,16 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             uint32_t rssid = new_delete.first;
             auto iter = _rowset_stats.upper_bound(rssid);
             iter--;
+            FAIL_POINT_TRIGGER_EXECUTE(inconsistent_rowset_stats_not_found, { iter = _rowset_stats.end(); });
+            FAIL_POINT_TRIGGER_EXECUTE(inconsistent_rowset_stats_out_bound,
+                                       { rssid = iter->first + iter->second->num_segments + 1; });
             if (iter == _rowset_stats.end()) {
                 string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1 $2",
                                                  _tablet.tablet_id(), rssid);
-                DCHECK(false) << msg;
                 LOG(ERROR) << msg;
             } else if (rssid >= iter->first + iter->second->num_segments) {
                 string msg = strings::Substitute("inconsistent rowset_stats, tablet=$0 rssid=$1 >= $2",
                                                  _tablet.tablet_id(), rssid, iter->first + iter->second->num_segments);
-                DCHECK(false) << msg;
                 LOG(ERROR) << msg;
             } else {
                 iter->second->num_dels += new_delete.second.size();

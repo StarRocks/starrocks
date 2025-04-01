@@ -3685,16 +3685,50 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", 17, N / 2);
 
     // 17. delvec inconsistent
+    test_fail_point("tablet_delvec_inconsistent", 18, N / 2);
+
+    // 18. inconsistency rowset stats (not_found)
     {
-        // Enable fail point
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_delvec_inconsistent");
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("inconsistent_rowset_stats_not_found");
         fp->setMode(trigger_mode);
 
         // Create and commit rowset
         auto rs = create_rowset(_tablet, keys, &deletes);
-        ASSERT_TRUE(_tablet->rowset_commit(18, rs).ok());
-        ASSERT_EQ(18, _tablet->updates()->max_version());
+        ASSERT_TRUE(_tablet->rowset_commit(19, rs).ok());
+        ASSERT_EQ(19, _tablet->updates()->max_version());
+        ASSERT_EQ(N / 2, read_tablet(_tablet, 19));
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
+
+    // 19. inconsistency rowset stats (out of bound)
+    {
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("inconsistent_rowset_stats_out_bound");
+        fp->setMode(trigger_mode);
+
+        // Create and commit rowset
+        auto rs = create_rowset(_tablet, keys, &deletes);
+        ASSERT_TRUE(_tablet->rowset_commit(20, rs).ok());
+        ASSERT_EQ(20, _tablet->updates()->max_version());
+        ASSERT_EQ(N / 2, read_tablet(_tablet, 20));
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
+
+    // 20. delvec inconsistent
+    {
+        // Enable fail point
+        config::max_apply_retry_times = 30;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_cache_del_vec_failed");
+        fp->setMode(trigger_mode);
+
+        // Create and commit rowset
+        auto rs = create_rowset(_tablet, keys, &deletes);
+        ASSERT_TRUE(_tablet->rowset_commit(21, rs).ok());
+        ASSERT_EQ(21, _tablet->updates()->max_version());
 
         // Wait for a short duration and check error state
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
