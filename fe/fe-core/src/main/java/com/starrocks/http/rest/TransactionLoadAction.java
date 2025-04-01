@@ -39,6 +39,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -72,9 +73,12 @@ import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -269,6 +273,20 @@ public class TransactionLoadAction extends RestBaseAction {
                     coordinatorMgr.get(label, txnOperationParams.getDbName());
 
             redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
+        }
+
+        if (Config.stream_load_force_use_ip) {
+            InetAddressValidator validator = InetAddressValidator.getInstance();
+            String redirectHost = redirectAddress.getHostname();
+            if (!validator.isValidInet4Address(redirectHost) && !validator.isValidInet6Address(redirectHost)) {
+                try {
+                    InetAddress ipAddress = InetAddress.getByName(redirectHost);
+                    redirectHost = ipAddress.getHostAddress();
+                } catch (UnknownHostException ex) {
+                    LOG.warn("get redirect host for leader {} failed!", redirectHost);
+                }
+            }
+            redirectAddress = new TNetworkAddress(redirectHost, redirectAddress.getPort());
         }
 
         LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}, warehouse: {}",
