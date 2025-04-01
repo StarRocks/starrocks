@@ -79,14 +79,14 @@ private:
     TabletWriter* _writer;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+    // used when input profile is nullptr
+    std::unique_ptr<RuntimeProfile> _dummy_profile;
     RuntimeProfile* _profile = nullptr;
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;
     SchemaPtr _schema;
     // used for spill merge, parent trakcer is compaction tracker
     std::unique_ptr<MemTracker> _merge_mem_tracker = nullptr;
-    // used when input profile is nullptr
-    std::unique_ptr<RuntimeProfile> _dummy_profile;
 };
 
 } // namespace lake
