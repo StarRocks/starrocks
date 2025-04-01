@@ -19,7 +19,7 @@ package com.starrocks.common;
 
 public enum CaseSensibility {
     CLUSTER(true),
-    DATABASE(false),
+    DATABASE(true),
     TABLE(true),
     ROLUP(true),
     PARTITION(true),

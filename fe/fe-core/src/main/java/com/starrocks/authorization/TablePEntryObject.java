@@ -97,6 +97,11 @@ public class TablePEntryObject implements PEntryObject {
                 throw new PrivObjNotFoundException("cannot find catalog: " + catalogName);
             }
             catalogId = catalog.getId();
+
+            if (tokens.size() == 2 && "information_schema".equalsIgnoreCase(tokens.get(0))) {
+                tokens.set(0, tokens.get(0).toLowerCase());
+                tokens.set(1, tokens.get(1).toLowerCase());
+            }
         }
 
         if (Objects.equals(tokens.get(0), "*")) {
