@@ -589,7 +589,18 @@ public class QueryTransformer {
             }
 
             LogicalRepeatOperator repeatOperator =
+<<<<<<< HEAD
                     new LogicalRepeatOperator(repeatOutput, repeatColumnRefList, groupingIds);
+=======
+                    new LogicalRepeatOperator(repeatOutput, repeatColumnRefList, groupingIds, groupingFnArgs);
+
+            // constant group-by column in grouping-set should not propagate upwards, since repeat operator
+            // would output NULL values for this constant group-by column and projection operator upon
+            // aggregate operator would substitute this values with constant values mistakenly, so NULL values
+            // is eliminated.
+            groupByColumnRefs.forEach(groupByCol ->
+                    groupingTranslations.getColumnRefToConstOperators().remove(groupByCol));
+>>>>>>> 6b89906c31 ([BugFix] Constant group-by column in grouping-sets should not propagate upwards (#57471))
             subOpt = new OptExprBuilder(repeatOperator, Lists.newArrayList(subOpt), groupingTranslations);
         }
 
