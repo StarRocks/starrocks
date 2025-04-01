@@ -65,8 +65,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -80,6 +82,7 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static java.lang.String.format;
+import static org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap.copyOf;
 import static org.apache.iceberg.view.ViewProperties.COMMENT;
 
 public class IcebergApiConverter {
@@ -101,7 +104,9 @@ public class IcebergApiConverter {
                 .setComment(nativeTbl.properties().getOrDefault("common", ""))
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl.schema()))
-                .setIcebergProperties(toIcebergProps(nativeCatalogType));
+                .setIcebergProperties(toIcebergProps(
+                        nativeTbl.properties() != null ? Optional.of(copyOf(nativeTbl.properties())) : Optional.empty(),
+                        nativeCatalogType));
 
         return tableBuilder.build();
     }
@@ -222,10 +227,15 @@ public class IcebergApiConverter {
         return fullSchema;
     }
 
-    public static Map<String, String> toIcebergProps(String nativeCatalogType) {
-        Map<String, String> options = new HashMap<>();
-        options.put(ICEBERG_CATALOG_TYPE, nativeCatalogType);
-        return options;
+    public static Map<String, String> toIcebergProps(Optional<Map<String, String>> properties, String nativeCatalogType) {
+        AtomicReference<Map<String, String>> options = new AtomicReference<>();
+        properties.ifPresentOrElse(value -> {
+            options.set(new HashMap<>(value));
+        },
+                () -> options.set(new HashMap<>()));
+
+        options.get().put(ICEBERG_CATALOG_TYPE, nativeCatalogType);
+        return options.get();
     }
 
     public static RemoteFileInputFormat getHdfsFileFormat(FileFormat format) {

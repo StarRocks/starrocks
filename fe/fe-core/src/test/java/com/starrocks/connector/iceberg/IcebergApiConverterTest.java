@@ -33,27 +33,31 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
-import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static org.apache.iceberg.TableProperties.AVRO_COMPRESSION;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class IcebergApiConverterTest {
 
     @Test
     public void testGetHdfsFileFormat() {
         RemoteFileInputFormat fileFormat = IcebergApiConverter.getHdfsFileFormat(FileFormat.PARQUET);
-        Assert.assertTrue(fileFormat.equals(RemoteFileInputFormat.PARQUET));
-        Assert.assertThrows("Unexpected file format: %s", StarRocksConnectorException.class, () -> {
+        assertTrue(fileFormat.equals(RemoteFileInputFormat.PARQUET));
+        assertThrows("Unexpected file format: %s", StarRocksConnectorException.class, () -> {
             IcebergApiConverter.getHdfsFileFormat(FileFormat.AVRO);
         });
     }
@@ -65,7 +69,7 @@ public class IcebergApiConverterTest {
         Type decimalType = ScalarType.createUnifiedDecimalType(precision, scale);
         org.apache.iceberg.types.Type icebergType = Types.DecimalType.of(precision, scale);
         Type resType = fromIcebergType(icebergType);
-        Assert.assertEquals(resType, decimalType);
+        assertEquals(resType, decimalType);
     }
 
     @Test
@@ -73,21 +77,21 @@ public class IcebergApiConverterTest {
         Type stringType = ScalarType.createDefaultCatalogString();
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = fromIcebergType(icebergType);
-        Assert.assertEquals(resType, stringType);
+        assertEquals(resType, stringType);
     }
 
     @Test
     public void testUUID() {
         org.apache.iceberg.types.Type icebergType = Types.UUIDType.get();
         Type resType = fromIcebergType(icebergType);
-        Assert.assertTrue(resType.isBinaryType());
+        assertTrue(resType.isBinaryType());
     }
 
     @Test
     public void testArray() {
-        Assert.assertEquals(fromIcebergType(Types.ListType.ofRequired(136, Types.IntegerType.get())),
+        assertEquals(fromIcebergType(Types.ListType.ofRequired(136, Types.IntegerType.get())),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
-        Assert.assertEquals(fromIcebergType(Types.ListType.ofRequired(136,
+        assertEquals(fromIcebergType(Types.ListType.ofRequired(136,
                         Types.ListType.ofRequired(136, Types.IntegerType.get()))),
                 new ArrayType(new ArrayType(ScalarType.createType(PrimitiveType.INT))));
     }
@@ -97,24 +101,24 @@ public class IcebergApiConverterTest {
         org.apache.iceberg.types.Type icebergType = Types.MapType.ofRequired(1, 2,
                 Types.ListType.ofRequired(136, Types.IntegerType.get()), Types.StringType.get());
         Type resType = fromIcebergType(icebergType);
-        Assert.assertTrue(resType.isUnknown());
+        assertTrue(resType.isUnknown());
 
         org.apache.iceberg.types.Type keyUnknownMapType = Types.MapType.ofRequired(1, 2,
                 Types.FixedType.ofLength(1), Types.StringType.get());
         Type resKeyUnknowType = fromIcebergType(keyUnknownMapType);
-        Assert.assertTrue(resKeyUnknowType.isUnknown());
+        assertTrue(resKeyUnknowType.isUnknown());
 
         org.apache.iceberg.types.Type valueUnknownMapType = Types.MapType.ofRequired(1, 2,
                 Types.StringType.get(), Types.FixedType.ofLength(1));
         Type resValueUnknowType = fromIcebergType(valueUnknownMapType);
-        Assert.assertTrue(resValueUnknowType.isUnknown());
+        assertTrue(resValueUnknowType.isUnknown());
 
         List<Types.NestedField> fields = new ArrayList<>();
         fields.add(Types.NestedField.optional(1, "a", Types.IntegerType.get()));
         fields.add(Types.NestedField.required(1, "b", Types.FixedType.ofLength(1)));
         org.apache.iceberg.types.Type unknownSubfieldStructType = Types.StructType.of(fields);
         Type unknownStructType = fromIcebergType(unknownSubfieldStructType);
-        Assert.assertTrue(unknownStructType.isUnknown());
+        assertTrue(unknownStructType.isUnknown());
     }
 
     @Test
@@ -122,7 +126,7 @@ public class IcebergApiConverterTest {
         org.apache.iceberg.types.Type icebergType = Types.MapType.ofRequired(1, 2,
                 Types.StringType.get(), Types.IntegerType.get());
         Type resType = fromIcebergType(icebergType);
-        Assert.assertEquals(resType,
+        assertEquals(resType,
                 new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
     }
 
@@ -133,7 +137,7 @@ public class IcebergApiConverterTest {
         fields.add(Types.NestedField.required(1, "b", Types.StringType.get()));
         org.apache.iceberg.types.Type icebergType = Types.StructType.of(fields);
         Type resType = fromIcebergType(icebergType);
-        Assert.assertTrue(resType.isStructType());
+        assertTrue(resType.isStructType());
     }
 
     @Test
@@ -148,13 +152,13 @@ public class IcebergApiConverterTest {
         PartitionSpec partitionSpec = builder.identity("dt").build();
         String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
                 "dt=2022-08-01"));
-        Assert.assertEquals("dt=2022-08-01", partitionName);
+        assertEquals("dt=2022-08-01", partitionName);
 
         builder = PartitionSpec.builderFor(schema);
         partitionSpec = builder.identity("id").identity("dt").build();
         partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
                 "id=1/dt=2022-08-01"));
-        Assert.assertEquals("id=1/dt=2022-08-01", partitionName);
+        assertEquals("id=1/dt=2022-08-01", partitionName);
     }
 
     @Test
@@ -169,13 +173,13 @@ public class IcebergApiConverterTest {
         PartitionSpec partitionSpec = builder.hour("ts").build();
         String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
                 "ts_hour=62255"));
-        Assert.assertEquals("ts_hour=1977-02-06-23", partitionName);
+        assertEquals("ts_hour=1977-02-06-23", partitionName);
 
         builder = PartitionSpec.builderFor(schema);
         partitionSpec = builder.hour("ts").truncate("data", 2).build();
         partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
                 "ts_hour=365/data_trunc=xy"));
-        Assert.assertEquals("ts_hour=1970-01-16-05/data_trunc=xy", partitionName);
+        assertEquals("ts_hour=1970-01-16-05/data_trunc=xy", partitionName);
     }
 
     @Test
@@ -199,7 +203,7 @@ public class IcebergApiConverterTest {
         columns.add(new Column("c16", Type.TIME));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
-        Assert.assertEquals("table {\n" +
+        assertEquals("table {\n" +
                 "  1: c1: required boolean\n" +
                 "  2: c2: required int\n" +
                 "  3: c3: required long\n" +
@@ -219,27 +223,27 @@ public class IcebergApiConverterTest {
                 "}", schema.toString());
 
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));
-        Assert.assertTrue(spec.isPartitioned());
-        Assert.assertEquals(1, spec.fields().size());
+        assertTrue(spec.isPartitioned());
+        assertEquals(1, spec.fields().size());
     }
 
     @Test
     public void testRebuildCreateTableProperties() {
         Map<String, String> source = ImmutableMap.of("file_format", "orc");
         Map<String, String> target = IcebergApiConverter.rebuildCreateTableProperties(source);
-        Assert.assertEquals("orc", target.get(DEFAULT_FILE_FORMAT));
+        assertEquals("orc", target.get(DEFAULT_FILE_FORMAT));
 
         source = ImmutableMap.of("file_format", "orc", "compression_codec", "snappy");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
-        Assert.assertEquals("snappy", target.get(ORC_COMPRESSION));
+        assertEquals("snappy", target.get(ORC_COMPRESSION));
 
         source = ImmutableMap.of("file_format", "parquet", "compression_codec", "snappy");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
-        Assert.assertEquals("snappy", target.get(PARQUET_COMPRESSION));
+        assertEquals("snappy", target.get(PARQUET_COMPRESSION));
 
         source = ImmutableMap.of("file_format", "avro", "compression_codec", "zstd");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
-        Assert.assertEquals("zstd", target.get(AVRO_COMPRESSION));
+        assertEquals("zstd", target.get(AVRO_COMPRESSION));
     }
 
     @Test
@@ -247,13 +251,33 @@ public class IcebergApiConverterTest {
         Type timeType = ScalarType.createType(PrimitiveType.TIME);
         org.apache.iceberg.types.Type icebergType = Types.TimeType.get();
         Type resType = fromIcebergType(icebergType);
-        Assert.assertEquals(resType, timeType);
+        assertEquals(resType, timeType);
     }
 
     @Test
     public void testConvertDbNameToNamespace() {
-        Assert.assertEquals(Namespace.of(""), IcebergApiConverter.convertDbNameToNamespace(""));
-        Assert.assertEquals(Namespace.of("a"), IcebergApiConverter.convertDbNameToNamespace("a"));
-        Assert.assertEquals(Namespace.of("a", "b", "c"), IcebergApiConverter.convertDbNameToNamespace("a.b.c"));
+        assertEquals(Namespace.of(""), IcebergApiConverter.convertDbNameToNamespace(""));
+        assertEquals(Namespace.of("a"), IcebergApiConverter.convertDbNameToNamespace("a"));
+        assertEquals(Namespace.of("a", "b", "c"), IcebergApiConverter.convertDbNameToNamespace("a.b.c"));
+    }
+
+    @Test
+    public void testToIcebergPropsWithProps() {
+        Map<String, String> toBeIcebergProps = ImmutableMap.of("k1", "v1", "k2", "v2");
+        Map<String, String> toBeIcebergPropsWithCatType = ImmutableMap.of("k1", "v1", "k2", "v2",
+                ICEBERG_CATALOG_TYPE, "rest");
+        Map<String, String> icebergPropsWithCatType = IcebergApiConverter.toIcebergProps(
+                Optional.of(toBeIcebergProps), "rest");
+
+        assertEquals(toBeIcebergPropsWithCatType, icebergPropsWithCatType);
+    }
+
+    @Test
+    public void testToIcebergPropsWithoutProps() {
+        Map<String, String> toBeIcebergPropsWithCatType = ImmutableMap.of(ICEBERG_CATALOG_TYPE, "rest");
+        Map<String, String> icebergPropsWithCatType = IcebergApiConverter.toIcebergProps(
+                Optional.empty(), "rest");
+
+        assertEquals(toBeIcebergPropsWithCatType, icebergPropsWithCatType);
     }
 }
