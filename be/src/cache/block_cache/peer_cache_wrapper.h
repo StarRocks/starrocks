@@ -14,33 +14,27 @@
 
 #pragma once
 
-#include "cache/block_cache/local_cache.h"
-#include "common/status.h"
-#include "starcache/star_cache.h"
+#include "cache/block_cache/remote_cache.h"
 #include "starcache/time_based_cache_adaptor.h"
 
 namespace starrocks {
 
-class StarCacheWrapper : public LocalCache {
+class PeerCacheWrapper : public RemoteCache {
 public:
-    StarCacheWrapper() = default;
-    ~StarCacheWrapper() override = default;
+    PeerCacheWrapper() = default;
+    ~PeerCacheWrapper() override = default;
 
     Status init(const CacheOptions& options) override;
 
-    Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
-
     Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer, ReadCacheOptions* options) override;
 
-    bool exist(const std::string& key) const override;
+    Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override {
+        return Status::NotSupported("write data to peer cache is unsupported");
+    }
 
-    Status remove(const std::string& key) override;
-
-    Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
-
-    Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
-
-    const DataCacheMetrics cache_metrics(int level) override;
+    Status remove(const std::string& key) override {
+        return Status::NotSupported("remove data from peer cache is unsupported");
+    }
 
     void record_read_remote(size_t size, int64_t lateny_us) override;
 
@@ -48,14 +42,8 @@ public:
 
     Status shutdown() override;
 
-    DataCacheEngineType engine_type() override { return DataCacheEngineType::STARCACHE; }
-
-    std::shared_ptr<starcache::StarCache> starcache_instance() override { return _cache; }
-
 private:
-    std::shared_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
-    bool _enable_tiered_cache = false;
-    bool _enable_datacache_persistence = false;
 };
+
 } // namespace starrocks

@@ -424,6 +424,8 @@ struct THdfsScanRange {
     30: optional Types.TTableId table_id;
 
     31:optional TDeletionVectorDescriptor deletion_vector_descriptor
+
+    32: optional string candidate_node
 }
 
 struct TBinlogScanRange {
