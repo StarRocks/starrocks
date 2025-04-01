@@ -66,7 +66,7 @@ public:
                            PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
 
     virtual void get_replica_state(const std::string& remote_ip, const PLoadReplicaStateRequest* request,
-                                   PLoadReplicaStateResult* response);
+                                   PLoadReplicaStateResult* response) = 0;
 
     virtual void cancel() = 0;
 

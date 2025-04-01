@@ -166,13 +166,17 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 class ReplicaWaiter {
 public:
     ReplicaWaiter(const PUniqueId& load_id, int64_t txn_id, int64_t tablet_id, int64_t sink_id,
-                  AsyncDeltaWriter* delta_writer, int64_t timeout_ms)
+                  AsyncDeltaWriter* delta_writer, int64_t timeout_ms,
+                  const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& all_writers,
+                  const std::unordered_map<int64_t, std::vector<int64_t>>& inverted_replica_tablets)
             : _load_id(load_id),
               _txn_id(txn_id),
               _tablet_id(tablet_id),
               _sink_id(sink_id),
               _delta_writer(delta_writer),
-              _timeout_ms(timeout_ms) {
+              _timeout_ms(timeout_ms),
+              _all_writers(all_writers),
+              _inverted_replica_tablets(inverted_replica_tablets) {
         StarRocksMetrics::instance()->load_replica_waiting_num.increment(1);
     }
 
@@ -225,34 +229,33 @@ private:
             }
             _replica_state_closure->join();
             _last_get_replicate_state_time_ms = MonotonicMillis();
-            bool need_abort = false;
-            std::string abort_reason;
             if (_replica_state_closure->cntl.Failed()) {
                 _replicate_state_fail_num += 1;
                 if (_replicate_state_fail_num >= 3) {
-                    need_abort = true;
-                    abort_reason = "can't get state from primary replica for more than 3 times, error: " +
-                                   _replica_state_closure->cntl.ErrorText();
+                    _delta_writer->cancel(
+                            Status::Cancelled("can't get state from primary replica for more than 3 times, error: " +
+                                              _replica_state_closure->cntl.ErrorText()));
+                    _delta_writer->abort(true);
                 }
             } else {
                 _replicate_state_fail_num = 0;
                 PLoadReplicaStateResult& result = _replica_state_closure->result;
-                if (result.tablet_states().size() == 1 && result.tablet_states(0).tablet_id() == _tablet_id) {
-                    auto state = result.tablet_states(0).state();
-                    if (state == PLoadReplicaStateResult_ReplicaStatePB_NOT_FOUND ||
-                        state == PLoadReplicaStateResult_ReplicaStatePB_FAILED) {
-                        need_abort = true;
-                        abort_reason = fmt::format("the state at primary replica is {}, message: {}",
-                                                   PLoadReplicaStateResult_ReplicaStatePB_Name(state),
-                                                   result.tablet_states(0).message());
+                for (auto& state : result.tablet_states()) {
+                    auto it = _all_writers.find(state.tablet_id());
+                    if (it == _all_writers.end()) {
+                        continue;
+                    }
+                    auto& writer = it->second;
+                    if (state.state() == PLoadReplicaStateResult_ReplicaStatePB_NOT_FOUND ||
+                        state.state() == PLoadReplicaStateResult_ReplicaStatePB_FAILED) {
+                        writer->cancel(Status::Cancelled(fmt::format(
+                                "the state at primary replica is {}, message: {}",
+                                PLoadReplicaStateResult_ReplicaStatePB_Name(state.state()), state.message())));
+                        writer->abort(true);
                     }
                 }
             }
             _release_replica_state_closure();
-            if (need_abort) {
-                _delta_writer->cancel(Status::Cancelled(abort_reason));
-                _delta_writer->abort(true);
-            }
         } else {
             if (_last_get_replicate_state_time_ms <= 0) {
                 _last_get_replicate_state_time_ms = MonotonicMillis();
@@ -282,8 +285,10 @@ private:
             request.set_txn_id(_txn_id);
             request.set_index_id(_delta_writer->writer()->index_id());
             request.set_sink_id(_sink_id);
-            request.set_node_id(_delta_writer->writer()->node_id());
-            request.add_tablet_ids(_tablet_id);
+            int64_t node_id = _delta_writer->writer()->node_id();
+            request.set_node_id(node_id);
+            const auto& tablet_ids = _inverted_replica_tablets.find(node_id)->second;
+            request.mutable_tablet_ids()->CopyFrom({tablet_ids.begin(), tablet_ids.end()});
             _replica_state_closure->ref();
             stub->load_replica_state(&_replica_state_closure->cntl, &request, &_replica_state_closure->result,
                                      _replica_state_closure);
@@ -333,8 +338,8 @@ private:
         _replica_state_closure->cancel();
         if (_replica_state_closure->unref()) {
             delete _replica_state_closure;
-            _replica_state_closure = nullptr;
         }
+        _replica_state_closure = nullptr;
     }
 
     const PUniqueId& _load_id;
@@ -343,6 +348,8 @@ private:
     int64_t _sink_id;
     AsyncDeltaWriter* _delta_writer;
     int64_t _timeout_ms;
+    const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& _all_writers;
+    const std::unordered_map<int64_t, std::vector<int64_t>>& _inverted_replica_tablets;
     bool _trigger_diagnose{false};
     MonotonicStopWatch _watch;
     int64_t _replicate_state_fail_num{0};
@@ -532,11 +539,19 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // We need wait all secondary replica commit before we close the channel
     if (_is_replicated_storage && close_channel && response->status().status_code() == TStatusCode::OK) {
+        // TODO lazy initialized
+        std::unordered_map<int64_t, std::vector<int64_t>> inverted_replica_tablets;
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            if (delta_writer->replica_state() == Secondary) {
+                int64_t node_id = delta_writer->writer()->replicas()[0].node_id();
+                inverted_replica_tablets[node_id].push_back(tablet_id);
+            }
+        }
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
             if (delta_writer->replica_state() == Secondary) {
                 int64_t left_timeout_ms = std::max((uint64_t)0, request.timeout_ms() - watch.elapsed_time() / 1000000);
                 ReplicaWaiter waiter(request.id(), _txn_id, tablet_id, request.sink_id(), delta_writer.get(),
-                                     left_timeout_ms);
+                                     left_timeout_ms, _delta_writers, inverted_replica_tablets);
                 Status status = waiter.wait();
                 if (status.is_time_out()) {
                     break;
@@ -729,9 +744,8 @@ void LocalTabletsChannel::_abort_replica_tablets(
             std::string tablets_str;
             JoinInts(tablet_ids, ",", &tablets_str);
             LOG(INFO) << "tablets_channel_abort_replica_failure, load_id: " << print_id(request.id())
-                      << ", txn_id: " << _txn_id;
-            << ", node: " << endpoint.host() << ":" << endpoint.port() << ", abort_reason: " << abort_reason
-            << ", tablet_id: " << tablets_str;
+                      << ", txn_id: " << _txn_id << ", node: " << endpoint.host() << ":" << endpoint.port()
+                      << ", abort_reason: " << abort_reason << ", tablet_id: " << tablets_str;
             continue;
         });
 
