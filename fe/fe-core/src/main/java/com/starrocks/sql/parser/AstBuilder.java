@@ -2842,7 +2842,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropAnalyzeJobStatement(StarRocksParser.DropAnalyzeJobStatementContext context) {
-        return new DropAnalyzeJobStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        long id = context.ALL() != null ? -1 : Long.parseLong(context.INTEGER_VALUE().getText());
+        return new DropAnalyzeJobStmt(id, createPos(context));
     }
 
     @Override

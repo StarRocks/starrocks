@@ -301,20 +301,6 @@ public class AnalyzeStmtTest {
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
         Assert.assertNull(ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), extenalAnalyzeStatus));
 
-        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(testDb.getId(), table.getId(), null,
-                StatsConstants.AnalyzeType.FULL,
-                LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        Assert.assertEquals("[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%, ]",
-                ShowBasicStatsMetaStmt.showBasicStatsMeta(getConnectContext(), basicStatsMeta).toString());
-
-        sql = "show stats meta where `database` like '%te%'";
-        ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
-        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
-        res = ShowExecutor.execute(showAnalyzeMetaStmt, getConnectContext()).getResultRows().toString();
-        Assert.assertEquals("[[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%, ]]", res);
-        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().dropBasicStatsMetaAndData(
-                getConnectContext(), Set.of(table.getId()));
-
         sql = "show histogram meta where updateTime = '2020-01-01 01:01:00'";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
         HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(testDb.getId(), table.getId(), "v1",

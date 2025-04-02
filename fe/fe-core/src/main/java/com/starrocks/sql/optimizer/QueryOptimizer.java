@@ -946,6 +946,7 @@ public class QueryOptimizer extends Optimizer {
             result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
         }
 
+
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
 
         OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
