@@ -897,7 +897,7 @@ public class MaterializedViewRule extends Rule {
     }
 
     private static Set<String> COUNT_DISTINCT_FUNCTION_NAMES = Sets.newHashSet(
-            FunctionSet.BITMAP_AGG, FunctionSet.BITMAP_UNION, FunctionSet.HLL_UNION, FunctionSet.PERCENTILE_UNION);
+            FunctionSet.BITMAP_AGG, FunctionSet.BITMAP_UNION, FunctionSet.HLL_UNION);
 
     private boolean isCountDistinctCandidateFunc(CallOperator mvColumnFn) {
         return mvColumnFn.isDistinct() || COUNT_DISTINCT_FUNCTION_NAMES.contains(mvColumnFn.getFnName());
