@@ -401,13 +401,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     void publishVersionForLakeTableBatch(List<TransactionStateBatch> readyTransactionStatesBatch) {
         Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
+        Set<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionStateBatch txnStateBatch : readyTransactionStatesBatch) {
             if (txnStateBatch.size() == 1) {
                 // there are two situations:
                 // 1. the transactionState in txnStateBatch is with multi-tables
                 // 2. only one transactionState with the table committed in the interval of publish.
                 TransactionState state = txnStateBatch.transactionStates.get(0);
-                if (publishingLakeTransactions.contains(state.getTransactionId())) {
+                if (publishingTransactions.contains(state.getTransactionId())) {
                     // When the `enable_lake_batch_publish_version` switch is just set to true,
                     // it is possible that the result of publish task
                     // sent by `publishVersionForLakeTable` has not been returned,
@@ -428,7 +429,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     // sent by `publishVersionForLakeTable` has not been returned,
                     // we need to wait for the result to return if the same txn is involved.
                     for (TransactionState txnState : txnStateBatch.transactionStates) {
-                        if (publishingLakeTransactions.contains(txnState.getTransactionId())) {
+                        if (publishingTransactions.contains(txnState.getTransactionId())) {
                             LOG.info(
                                     "maybe enable_lake_batch_publish_version is set to true just now, " +
                                             "txn {} will be published later",
