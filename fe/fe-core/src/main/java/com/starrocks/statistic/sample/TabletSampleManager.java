@@ -25,6 +25,8 @@ import com.starrocks.statistic.StatsConstants;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
+
 public class TabletSampleManager {
 
     private static double HIGH_WEIGHT_READ_RATIO = 0.005;
@@ -86,7 +88,7 @@ public class TabletSampleManager {
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
             for (Partition logicalPartition : olapTable.getPartitions()) {
-                if (!logicalPartition.hasData()) {
+                if (!logicalPartition.hasData() || logicalPartition.getName().startsWith(SHADOW_PARTITION_PREFIX)) {
                     continue;
                 }
                 for (PhysicalPartition physicalPartition : logicalPartition.getSubPartitions()) {
