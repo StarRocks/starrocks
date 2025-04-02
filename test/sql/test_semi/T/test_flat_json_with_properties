@@ -1,22 +1,26 @@
--- name: test_normal_flat_json @system
+-- name: test_normal_flat_json_with_properties @system
+
 CREATE TABLE `js1` (
   `v1` bigint(20) NULL COMMENT "",
   `v2` int(11) NULL COMMENT "",
   `j1` json NULL COMMENT "",
   `j2` json NULL COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`v1`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "true",
+"enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"compression" = "LZ4",
+"flat_json.enable" = "true",
+"flat_json.null.factor" = "0.2",
+"flat_json.sparsity.factor" = "0.2",
+"flat_json.column.max" = "120"
 );
--- result:
--- !result
+
 INSERT INTO `js1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (1, 28, parse_json('{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16", "key7": "value17", "key8": "value18"}'), parse_json('{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}')),
 (2, 29, parse_json('{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27"}'), parse_json('{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27", "key8": "value28"}')),
@@ -68,260 +72,77 @@ INSERT INTO `js1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (48, 44, parse_json('{"key1": "value481", "key2": "value482", "key3": "value483", "key4": "value484", "key5": "value485", "key6": "value486", "key7": "value487", "key8": "value488", "key9": "value489"}'), parse_json('{"key1": "value481", "key2": "value482", "key3": "value483", "key4": "value484", "key5": "value485", "key6": "value486", "key7": "value487"}')),
 (49, 5, parse_json('{"key1": "value491", "key2": "value492", "key3": "value493", "key4": "value494", "key5": "value495", "key6": "value496", "key7": "value497"}'), parse_json('{"key1": "value491", "key2": "value492", "key3": "value493", "key4": "value494", "key5": "value495", "key6": "value496", "key7": "value497"}')),
 (50, 76, parse_json('{"key1": "value501", "key2": "value502", "key3": "value503", "key4": "value504", "key5": "value505", "key6": "value506", "key7": "value507", "key8": "value508"}'), parse_json('{"key1": "value501", "key2": "value502", "key3": "value503", "key4": "value504", "key5": "value505", "key6": "value506", "key7": "value507"}'));
--- result:
--- !result
+
 insert into js1 select * from js1;
--- result:
--- !result
 insert into js1 select * from js1;
--- result:
--- !result
 insert into js1 select * from js1;
--- result:
--- !result
+
 select get_json_string(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from js1 order by v1 limit 2;
--- result:
-value12	None	value14
-value12	None	value14
--- !result
 select get_json_string(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from js1 order by v1 limit 2;
--- result:
-value18	None	None
-value18	None	None
--- !result
 select get_json_string(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from js1 order by v1 limit 2;
--- result:
-None	None	{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}
-None	None	{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}
--- !result
 select get_json_string(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from js1 order by v1 limit 2;
--- result:
-None	None	value13
-None	None	value13
--- !result
 select get_json_string(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-value12	None
-value12	None
--- !result
+
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-1	0
-1	0
--- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key3"), JSON_EXISTS(j2, "$.key4") from js1 order by v1 limit 2;
--- result:
-1	1	1
-1	1	1
--- !result
 select JSON_EXISTS(j1, "$.key8"), JSON_EXISTS(j2, "$.key9"), JSON_EXISTS(j2, "$.key10") from js1 order by v1 limit 2;
--- result:
-1	0	0
-1	0	0
--- !result
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from js1 order by v1 limit 2;
--- result:
-0	0	1
-0	0	1
--- !result
 select JSON_EXISTS(j1, "asdf"), JSON_EXISTS(j2, "$13"), JSON_EXISTS(j2, "$.key3") from js1 order by v1 limit 2;
--- result:
-0	0	1
-0	0	1
--- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-1	0
-1	0
--- !result
+
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-1	0
-1	0
--- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from js1 order by v1 limit 2;
--- result:
-1	1	1
-1	1	1
--- !result
 select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from js1 order by v1 limit 2;
--- result:
-1	0	0
-1	0	0
--- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from js1 order by v1 limit 2;
--- result:
-0	0	6
-0	0	6
--- !result
 select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from js1 order by v1 limit 2;
--- result:
-0	0	1
-0	0	1
--- !result
+
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from js1 where v2 = 2 order by v1 limit 2;
--- result:
-1	0
-1	0
--- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from js1 where v2 > 1 order by v1 limit 2;
--- result:
-1	1	1
-1	1	1
--- !result
 select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from js1 where v1 < 1 order by v1 limit 2;
--- result:
--- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
 select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from js1 where v1 = 10 order by v1 limit 2;
--- result:
-0	0	1
-0	0	1
--- !result
+
+-- delete data
 delete from js1 where v1 = 1;
--- result:
--- !result
 delete from js1 where v1 = 2;
--- result:
--- !result
 delete from js1 where v1 = 3;
--- result:
--- !result
+
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from js1 order by v1 limit 2;
--- result:
-0	0	1
-0	0	1
--- !result
 select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from js1 order by v1 limit 2;
--- result:
-0	0	0
-0	0	0
--- !result
 select get_json_string(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from js1 order by v1 limit 2;
--- result:
-None	None	value43
-None	None	value43
--- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
+
+-- schema change
 ALTER TABLE js1 ADD COLUMN j3 JSON DEFAULT NULL AFTER j2;
--- result:
--- !result
 ALTER TABLE js1 ADD COLUMN j4 JSON DEFAULT NULL AFTER j1;
--- result:
--- !result
+
 select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from js1 order by v1 limit 2;
--- result:
-value42	None	None
-value42	None	None
--- !result
 select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-value42	None
-value42	None
--- !result
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j3, "$.key13"), JSON_EXISTS(j3, "$") from js1 order by v1 limit 2;
--- result:
-0	None	None
-0	None	None
--- !result
 select JSON_EXISTS(j1, "asdf"), JSON_EXISTS(j3, "$13"), JSON_EXISTS(j3, "$.key3") from js1 order by v1 limit 2;
--- result:
-0	None	None
-0	None	None
--- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j3, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-1	None
-1	None
--- !result
 select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j3, "$13"), JSON_LENGTH(j3, "$.key3") from js1 order by v1 limit 2;
--- result:
-0	None	None
-0	None	None
--- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j3, "$.key2.key3") from js1 where v2 = 2 order by v1 limit 2;
--- result:
-1	None
-1	None
--- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
+
 select get_json_string(j4, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from js1 order by v1 limit 2;
--- result:
-None	None	None
-None	None	None
--- !result
 select get_json_string(j4, "$.key2"), get_json_double(j3, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-None	None
-None	None
--- !result
 select JSON_EXISTS(j4, "$.key12"), JSON_EXISTS(j3, "$.key13"), JSON_EXISTS(j3, "$") from js1 order by v1 limit 2;
--- result:
-None	None	None
-None	None	None
--- !result
 select JSON_EXISTS(j4, "asdf"), JSON_EXISTS(j3, "$13"), JSON_EXISTS(j2, "$.key3") from js1 order by v1 limit 2;
--- result:
-None	None	1
-None	None	1
--- !result
 select JSON_LENGTH(j4, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from js1 order by v1 limit 2;
--- result:
-None	0
-None	0
--- !result
 select JSON_LENGTH(j4, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from js1 order by v1 limit 2;
--- result:
-None	0	1
-None	0	1
--- !result
 select JSON_LENGTH(j4, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from js1 where v2 = 2 order by v1 limit 2;
--- result:
-None	0
-None	0
--- !result
 select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j3, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
 select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
 select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j2, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result
+
+
 ALTER TABLE js1 DROP COLUMN j1;
--- result:
--- !result
 ALTER TABLE js1 DROP COLUMN j4;
--- result:
--- !result
+
 select JSON_EXISTS(j2, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from js1 order by v1 limit 2;
--- result:
-0	0	1
-0	0	1
--- !result
 select JSON_LENGTH(j2, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from js1 order by v1 limit 2;
--- result:
-0	0	0
-0	0	0
--- !result
 select get_json_string(j2, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from js1 order by v1 limit 2;
--- result:
-None	None	value43
-None	None	value43
--- !result
 select JSON_LENGTH(j2, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from js1 where v1 = -1 order by v1 limit 2;
--- result:
--- !result

@@ -34,6 +34,7 @@
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
+#include <storage/flat_json_config.h>
 #include "storage/types.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
@@ -52,11 +53,29 @@ public:
     ~FlatJsonColumnRWTest() override = default;
 
 protected:
-    void SetUp() override { _meta.reset(new ColumnMetaPB()); }
+    void SetUp() override {
+        _meta.reset(new ColumnMetaPB());
+        _meta_with_config.reset(new ColumnMetaPB());
+        _meta_with_config->mutable_json_meta()->set_flat_json_null_factor(0.3);
+        _meta_with_config->mutable_json_meta()->set_flat_json_sparsity_factory(0.9);
+    }
 
     void TearDown() override {
         config::json_flat_sparsity_factor = 0.9;
         config::json_flat_null_factor = 0.3;
+    }
+
+    void set_flat_json_null_factor(double null_factor) {
+        _meta_with_config->mutable_json_meta()->set_flat_json_null_factor(null_factor);
+    }
+
+    void set_flat_json_sparsity_factor(double sparsity_factor) {
+        _meta_with_config->mutable_json_meta()->set_flat_json_sparsity_factory(sparsity_factor);
+    }
+
+    void reset_flat_json_config() {
+        _meta_with_config->mutable_json_meta()->set_flat_json_null_factor(0.3);
+        _meta_with_config->mutable_json_meta()->set_flat_json_sparsity_factory(0.9);
     }
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
@@ -125,6 +144,68 @@ protected:
         }
     }
 
+    void test_json_with_config(ColumnWriterOptions& writer_opts, const std::string& case_file, ColumnPtr& write_col,
+                   ColumnPtr& read_col, ColumnAccessPath* path) {
+        auto fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+
+        TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+        TypeInfoPtr type_info = get_type_info(json_tablet_column);
+
+        const std::string fname = TEST_DIR + case_file;
+        auto segment = create_dummy_segment(fs, fname);
+
+        // write data
+        {
+            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+
+            writer_opts.meta = _meta_with_config.get();
+            writer_opts.meta->set_column_id(0);
+            writer_opts.meta->set_unique_id(0);
+            writer_opts.meta->set_type(TYPE_JSON);
+            writer_opts.meta->set_length(0);
+            writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+            writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+            writer_opts.meta->set_is_nullable(write_col->is_nullable());
+            writer_opts.need_zone_map = false;
+
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
+            ASSERT_OK(writer->init());
+
+            ASSERT_TRUE(writer->append(*write_col).ok());
+
+            ASSERT_TRUE(writer->finish().ok());
+            ASSERT_TRUE(writer->write_data().ok());
+            ASSERT_TRUE(writer->write_ordinal_index().ok());
+
+            // close the file
+            ASSERT_TRUE(wfile->close().ok());
+        }
+
+        auto res = ColumnReader::create(_meta_with_config.get(), segment.get(), nullptr);
+        ASSERT_TRUE(res.ok());
+        auto reader = std::move(res).value();
+
+        {
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            auto st = iter->seek_to_first();
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            size_t rows_read = write_col->size();
+            st = iter->next_batch(&rows_read, read_col.get());
+            ASSERT_TRUE(st.ok());
+        }
+    }
+
     ColumnPtr create_json(const std::vector<std::string>& jsons, bool is_nullable) {
         auto json_col = JsonColumn::create();
         auto null_col = NullColumn::create();
@@ -148,6 +229,7 @@ protected:
 private:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
+    std::shared_ptr<ColumnMetaPB> _meta_with_config;
 };
 
 TEST_F(FlatJsonColumnRWTest, testNormalJson) {
@@ -177,6 +259,43 @@ TEST_F(FlatJsonColumnRWTest, testNormalJson) {
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     EXPECT_EQ("{\"a\": 1, \"b\": 21}", read_json->debug_item(0));
     EXPECT_EQ("{\"a\": 4, \"b\": 24}", read_json->debug_item(3));
+}
+
+TEST_F(FlatJsonColumnRWTest, testFlatJsonWithConfig) {
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "b": 21, "c": 31})"));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse(R"({"a": 2, "b": 22, "d": 32})"));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse(R"({"a": 3, "b": 23, "e": 33})"));
+
+    json_col->append(&jv1);
+    json_col->append(&jv2);
+    json_col->append(&jv3);
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    set_flat_json_null_factor(0.2);
+    set_flat_json_sparsity_factor(0.2);
+    test_json_with_config(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
+
+    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
+    EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
+    EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
+    EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
+    EXPECT_EQ("b", writer_opts.meta->children_columns(1).name());
+    EXPECT_EQ("c", writer_opts.meta->children_columns(2).name());
+    EXPECT_EQ("d", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("e", writer_opts.meta->children_columns(4).name());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(3, read_col->size());
+    EXPECT_EQ(R"({"a": 1, "b": 21, "c": 31})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22, "d": 32})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23, "e": 33})", read_col->debug_item(2));
+    reset_flat_json_config();
 }
 
 TEST_F(FlatJsonColumnRWTest, testNormalJsonWithPath) {
@@ -239,6 +358,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
+
     test_json(writer_opts, "/test_flat_json_rw1.data", write_col, read_col, root_path.get());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());

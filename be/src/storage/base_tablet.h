@@ -97,6 +97,7 @@ public:
     int32_t schema_hash() const;
     int16_t shard_id();
     const int64_t creation_time() const;
+    const std::shared_ptr<FlatJsonConfig> flat_json_config() const;
     void set_creation_time(int64_t creation_time);
     bool equal(int64_t tablet_id, int32_t schema_hash);
 
@@ -189,6 +190,10 @@ inline const int64_t BaseTablet::creation_time() const {
 
 inline void BaseTablet::set_creation_time(int64_t creation_time) {
     _tablet_meta->set_creation_time(creation_time);
+}
+
+inline const std::shared_ptr<FlatJsonConfig> BaseTablet::flat_json_config() const {
+    return _tablet_meta->get_flat_json_config();
 }
 
 inline bool BaseTablet::equal(int64_t id, int32_t hash) {

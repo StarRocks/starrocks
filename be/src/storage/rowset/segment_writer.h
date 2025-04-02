@@ -38,6 +38,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <storage/flat_json_config.h>
 
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
@@ -78,6 +79,7 @@ struct SegmentWriterOptions {
     SegmentFileMark segment_file_mark;
     std::string encryption_meta;
     bool is_compaction = false;
+    std::shared_ptr<FlatJsonConfig> flat_Json_config = nullptr;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
