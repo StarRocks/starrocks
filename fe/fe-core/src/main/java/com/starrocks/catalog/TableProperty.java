@@ -199,6 +199,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // it's a SQL expression, and the partition will be deleted if the condition is not true.
     private String partitionRetentionCondition = null;
 
+    private String timeDriftConstraintSpec = null;
+
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
@@ -393,6 +395,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildPartitionTTL();
                 buildPartitionLiveNumber();
                 buildPartitionRetentionCondition();
+                buildTimeDriftConstraint();
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
@@ -414,6 +417,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildResourceGroup();
         buildConstraint();
+        buildTimeDriftConstraint();
         buildMvSortKeys();
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
@@ -504,6 +508,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildPartitionRetentionCondition() {
         partitionRetentionCondition = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, "");
+        return this;
+    }
+
+    public TableProperty buildTimeDriftConstraint() {
+        timeDriftConstraintSpec = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, "");
         return this;
     }
 
@@ -856,6 +865,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.partitionRetentionCondition = partitionRetentionCondition;
     }
 
+    public String getTimeDriftConstraintSpec() {
+        return timeDriftConstraintSpec;
+    }
+
+    public void setTimeDriftConstraintSpec(String spec) {
+        this.timeDriftConstraintSpec = spec;
+    }
+
     public int getAutoRefreshPartitionsLimit() {
         return autoRefreshPartitionsLimit;
     }
@@ -1100,6 +1117,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildWriteQuorum();
         buildPartitionLiveNumber();
         buildPartitionRetentionCondition();
+        buildTimeDriftConstraint();
         buildReplicatedStorage();
         buildBucketSize();
         buildEnableLoadProfile();

@@ -220,6 +220,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             PropertyAnalyzer.analyzePartitionTTL(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             // do nothing
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            // do nothing
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
             PropertyAnalyzer.analyzeReplicationNum(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -342,6 +344,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 TimeUtils.parseHumanReadablePeriodOrDuration(
                         properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION));
             } catch (DateTimeParseException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            try {
+                String timeDriftConstraintSpec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+                PropertyAnalyzer.analyzeTimeDriftConstraint(timeDriftConstraintSpec, table, properties);
+            } catch (Throwable e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
         } else {

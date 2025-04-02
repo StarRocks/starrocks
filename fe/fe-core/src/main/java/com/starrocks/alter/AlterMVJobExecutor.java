@@ -127,6 +127,12 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
             ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db,
                     materializedView, properties, true, mvPartitionByExprToAdjustMap);
         }
+        String timeDriftConstraintSpec = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            String spec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+            PropertyAnalyzer.analyzeTimeDriftConstraint(spec, materializedView, properties);
+            timeDriftConstraintSpec = spec;
+        }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
@@ -164,6 +170,7 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
             foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
             properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
+
         TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
                 materializedView.getTableProperty().getForceExternalTableQueryRewrite();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
@@ -258,6 +265,12 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
             materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
             // re-analyze mv retention condition
             materializedView.analyzeMVRetentionCondition(context);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT) &&
+                timeDriftConstraintSpec != null && !timeDriftConstraintSpec.equalsIgnoreCase(
+                materializedView.getTableProperty().getTimeDriftConstraintSpec())) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+            materializedView.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER) &&
                 materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {
