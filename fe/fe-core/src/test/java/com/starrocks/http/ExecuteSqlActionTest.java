@@ -41,7 +41,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     public void test1ExecuteSqlSuccess() throws Exception {
         super.setUpWithCatalog();
         RequestBody body =
-                RequestBody.create(JSON, "{ \"query\" :  \"kill 0\" }");
+                RequestBody.create(JSON, "{ \"query\" :  \"kill 1\" }");
 
         Request request = new Request.Builder()
                 .get()

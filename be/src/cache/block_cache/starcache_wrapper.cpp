@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "cache/status.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"

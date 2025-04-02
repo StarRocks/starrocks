@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -30,6 +31,7 @@ public interface AuthenticationProvider {
      * login authentication
      */
     void authenticate(
+            ConnectContext context,
             String user,
             String host,
             byte[] password,

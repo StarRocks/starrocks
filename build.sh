@@ -109,6 +109,8 @@ Usage: $0 <options>
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
      --output           specify the output directory (default: $STARROCKS_HOME/output)
+     --disable-java-check-style
+                        disable Java checkstyle checks during build (default: $DISABLE_JAVA_CHECK_STYLE)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
@@ -120,6 +122,7 @@ Usage: $0 <options>
     $0 --hive-udf                                build Hive UDF
     $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
+    DISABLE_JAVA_CHECK_STYLE=ON ./build.sh       build with Java checkstyle disabled
   "
   exit 1
 }
@@ -150,6 +153,7 @@ OPTS=$(getopt \
   -l 'with-maven-batch-mode:' \
   -l 'output:' \
   -l 'help' \
+  -l 'disable-java-check-style' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -208,6 +212,9 @@ if [[ -z ${JEMALLOC_DEBUG} ]]; then
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
     ENABLE_JIT=ON
+fi
+if [[ -z ${DISABLE_JAVA_CHECK_STYLE} ]]; then
+    DISABLE_JAVA_CHECK_STYLE=OFF
 fi
 
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
@@ -292,6 +299,7 @@ else
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
+            --disable-java-check-style) DISABLE_JAVA_CHECK_STYLE=ON; shift ;;
             --) shift ;  break ;;
             *) echo "Internal error" ; exit 1 ;;
         esac
@@ -345,6 +353,7 @@ echo "Get params:
     WITH_TENANN                 -- $WITH_TENANN
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
     WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
+    DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
 "
 
 check_tool()
@@ -390,6 +399,11 @@ addon_mvn_opts=""
 if [ "x$WITH_MAVEN_BATCH_MODE" = "xON" ] ; then
     # this option is only available with mvn >= 3.6
     addon_mvn_opts="--batch-mode"
+fi
+
+if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
+    # Add checkstyle.skip parameter to disable Java checkstyle
+    addon_mvn_opts="${addon_mvn_opts} -Dcheckstyle.skip=true"
 fi
 
 # Clean and build Backend
@@ -587,7 +601,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
-               ${STARROCKS_OUTPUT}/be/lib/hadoop-lib \
+               ${STARROCKS_OUTPUT}/be/lib/hadoop \
                ${STARROCKS_OUTPUT}/be/www  \
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
@@ -622,8 +636,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
 
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop-lib/
-        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop-lib/
+        # note that conf files will not be overwritten when doing upgrade.
+        # so we have to preserve directory structure to avoid upgrade incompatibility.
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/native
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop/common
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

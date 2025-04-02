@@ -126,6 +126,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db,
                     materializedView, properties, true, mvPartitionByExprToAdjustMap);
         }
+        String timeDriftConstraintSpec = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            String spec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+            PropertyAnalyzer.analyzeTimeDriftConstraint(spec, materializedView, properties);
+            timeDriftConstraintSpec = spec;
+        }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
@@ -163,6 +169,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
             properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
+
         TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
                 materializedView.getTableProperty().getForceExternalTableQueryRewrite();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
@@ -257,6 +264,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
             // re-analyze mv retention condition
             materializedView.analyzeMVRetentionCondition(context);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT) &&
+                timeDriftConstraintSpec != null && !timeDriftConstraintSpec.equalsIgnoreCase(
+                materializedView.getTableProperty().getTimeDriftConstraintSpec())) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+            materializedView.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER) &&
                 materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {
@@ -457,7 +470,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                            .refreshMaterializedView(dbName, materializedView.getName(), false, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
@@ -611,6 +624,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
                     doInactiveMaterializedView(mv, reason);
                 }
+            } finally {
+                // clear version map to make sure the MV will be refreshed
+                mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             }
         }
     }

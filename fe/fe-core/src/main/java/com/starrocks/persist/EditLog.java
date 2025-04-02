@@ -458,6 +458,11 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayDropBackend(be);
                     break;
                 }
+                case OperationType.OP_UPDATE_HISTORICAL_NODE: {
+                    UpdateHistoricalNodeLog log = (UpdateHistoricalNodeLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayUpdateHistoricalNode(log);
+                    break;
+                }
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.data();
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
@@ -1457,6 +1462,10 @@ public class EditLog {
 
     public void logDropBackend(Backend be) {
         logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
+    }
+
+    public void logUpdateHistoricalNode(UpdateHistoricalNodeLog log) {
+        logEdit(OperationType.OP_UPDATE_HISTORICAL_NODE, log);
     }
 
     public void logAddFrontend(Frontend fe) {
