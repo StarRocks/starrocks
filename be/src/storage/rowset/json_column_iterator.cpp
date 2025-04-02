@@ -454,6 +454,9 @@ public:
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
 private:
     template <typename FUNC>
     Status _merge(JsonColumn* dst, FUNC func);
@@ -612,6 +615,21 @@ Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const Col
                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> JsonMergeIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                       Column* dst) {
+    std::vector<std::pair<int64_t, int64_t>> res;
+    if (_null_iter != nullptr) {
+        ASSIGN_OR_RETURN(auto vec, _null_iter->get_io_range_vec(range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+
+    for (size_t i = 0; i < _all_iter.size(); i++) {
+        ASSIGN_OR_RETURN(auto vec, _all_iter[i]->get_io_range_vec(range, dst));
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+    return res;
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
