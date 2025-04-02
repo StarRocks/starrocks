@@ -1412,8 +1412,15 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         if (buf_size <= 0) {
             buf_size = 1048576; // 1MB
         }
-        for (auto& [cid, stream] : _column_files) {
-            ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range));
+        _context->_read_chunk->reset();
+        Chunk* chunk = _context->_read_chunk.get();
+        size_t column_index = 0;
+        for (size_t cid = 0; cid < _column_iterators.size(); ++cid) {
+            if (_column_iterators[cid] == nullptr) {
+                continue;
+            }
+            ColumnPtr& col = chunk->get_column_by_index(column_index++);
+            ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range, col.get()));
             for (auto e : vec) {
                 // if buf_size is 1MB, offset is 123, and size is 2MB
                 // after calculation, offset will be 0, and size will be 2MB+123
@@ -1421,7 +1428,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 size_t size = e.second + (e.first % buf_size);
                 while (size > 0) {
                     size_t cur_size = std::min(buf_size, size);
-                    RETURN_IF_ERROR(stream->touch_cache(offset, cur_size));
+                    RETURN_IF_ERROR(_column_files[cid]->touch_cache(offset, cur_size));
                     offset += cur_size;
                     size -= cur_size;
                 }
@@ -1885,6 +1892,10 @@ Status SegmentIterator::_init_context() {
             }
         }
 
+        if (_opts.lake_io_opts.cache_file_only) {
+            // CACHE SELECT disable late materialization
+            _late_materialization_ratio = 0;
+        }
         if (_late_materialization_ratio <= 0) {
             // late materialization been disabled.
             RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
