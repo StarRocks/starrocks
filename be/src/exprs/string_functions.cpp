@@ -2955,7 +2955,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
  */
 StatusOr<ColumnPtr> StringFunctions::concat(FunctionContext* context, const Columns& columns) {
     if (columns.size() == 1) {
-        return columns[0]->clone_shared();
+        return columns[0]->clone();
     }
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
