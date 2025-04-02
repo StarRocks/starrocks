@@ -104,7 +104,7 @@ public class LogUtil {
     public static JsonArray getStackTraceToJsonArray(Thread thread, int reserveLevels) {
         StackTraceElement[] stackTraceElements = thread.getStackTrace();
         return strListToJsonArray(getStackTraceToList(stackTraceElements,
-                stackTraceElements.length - reserveLevels, reserveLevels));
+                Math.max(0, stackTraceElements.length - reserveLevels), reserveLevels));
     }
 
     public static String getCurrentStackTrace() {
