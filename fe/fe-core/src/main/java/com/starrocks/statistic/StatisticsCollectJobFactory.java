@@ -48,6 +48,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL;
 
 public class StatisticsCollectJobFactory {
@@ -122,13 +123,17 @@ public class StatisticsCollectJobFactory {
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
 
+        partitionIdList = (partitionIdList == null)
+                ? table.getPartitions().stream()
+                .filter(partition -> partition.hasData() && !partition.getName().startsWith(SHADOW_PARTITION_PREFIX))
+                .map(Partition::getId)
+                .collect(Collectors.toList())
+                : partitionIdList.stream()
+                .filter(id -> !table.getPartition(id).getName().startsWith(SHADOW_PARTITION_PREFIX))
+                .collect(Collectors.toList());
+
         LOG.debug("statistics job work on table: {}, type: {}", table.getName(), analyzeType.name());
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE) && statisticsTypes.isEmpty()) {
-            if (partitionIdList == null) {
-                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
-                        .map(Partition::getId).collect(Collectors.toList());
-            }
-            
             if (Config.statistic_use_meta_statistics) {
                 return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                         StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
@@ -139,11 +144,6 @@ public class StatisticsCollectJobFactory {
         } else if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             return new HistogramStatisticsCollectJob(db, table, columnNames, columnTypes, scheduleType, properties);
         } else if (analyzeType.equals(StatsConstants.AnalyzeType.FULL) && statisticsTypes.isEmpty()) {
-            if (partitionIdList == null) {
-                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
-                        .map(Partition::getId).collect(Collectors.toList());
-            }
-
             if (Config.statistic_use_meta_statistics) {
                 return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                         StatsConstants.AnalyzeType.FULL, scheduleType, properties);
@@ -152,11 +152,6 @@ public class StatisticsCollectJobFactory {
                         StatsConstants.AnalyzeType.FULL, scheduleType, properties);
             }
         } else {
-            if (partitionIdList == null) {
-                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
-                        .map(Partition::getId).collect(Collectors.toList());
-            }
-
             return new MultiColumnHyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                     analyzeType, scheduleType, properties, statisticsTypes, columnGroup);
         }
