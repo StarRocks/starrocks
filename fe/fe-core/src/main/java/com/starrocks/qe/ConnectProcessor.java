@@ -94,6 +94,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -185,10 +187,21 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
+    private static long initAllocatedMemoryProvider() {
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+            com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
+
+            return casted.getThreadAllocatedBytes(Thread.currentThread().getId());
+        }
+        return 0;
+    }
+
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
+        long threadAllocatedMemory = initAllocatedMemoryProvider() - ctx.getCurrentThreadAllocatedMemory();
 
         boolean isForwardToLeader = (executor != null) ? executor.getIsForwardToLeaderOrInit(false) : false;
 
@@ -239,6 +252,7 @@ public class ConnectProcessor {
                 ctx.getAuditEventBuilder().setBigQueryLogScanRowsThreshold(
                         ctx.getSessionVariable().getBigQueryLogScanRowsThreshold());
             }
+            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
@@ -285,6 +299,9 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        long beginMemory = initAllocatedMemoryProvider();
+        ctx.setCurrentThreadAllocatedMemory(beginMemory);
+
         // convert statement to Java string
         String originStmt = null;
         byte[] bytes = packetBuf.array();

@@ -285,6 +285,8 @@ public class ConnectContext {
     // Whether leader is transferred during executing stmt
     private boolean isLeaderTransferred = false;
 
+    private long currentThreadAllocatedMemory;
+
     public void setExplicitTxnState(ExplicitTxnState explicitTxnState) {
         this.explicitTxnState = explicitTxnState;
     }
@@ -1458,5 +1460,13 @@ public class ConnectContext {
 
         return endTime.isAfter(startTime)
                 && endTime.plusMillis(milliSeconds).isBefore(Instant.now());
+    }
+
+    public long getCurrentThreadAllocatedMemory() {
+        return currentThreadAllocatedMemory;
+    }
+
+    public void setCurrentThreadAllocatedMemory(long currentThreadAllocatedMemory) {
+        this.currentThreadAllocatedMemory = currentThreadAllocatedMemory;
     }
 }
