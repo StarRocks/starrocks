@@ -629,6 +629,79 @@ TEST_F(SpillTest, partition_process) {
     }
 }
 
+struct PredoSyncExecutor {
+    static std::function<void()> predo;
+    static Status submit(workgroup::ScanTask task) {
+        do {
+            predo();
+            task.run();
+        } while (!task.is_finished());
+        return Status::OK();
+    }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+std::function<void()> PredoSyncExecutor::predo;
+
+TEST_F(SpillTest, partition_yield_with_failed) {
+    ObjectPool pool;
+
+    // order by id_int
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    (void)ctx;
+
+    std::vector<ExprContext*> tuple;
+    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options(4);
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 1;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::PartitionedSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+
+        PredoSyncExecutor::predo = [&]() { spiller.reset(); };
+        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    }
+}
+
 TEST_F(SpillTest, aligned_buffer) {
     spill::AlignedBuffer buffer;
     ASSERT_EQ(buffer.data(), nullptr);
