@@ -343,6 +343,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: スキーマ変更のために使用されるスレッドの数。
 - 導入バージョン: -
 
+##### avro_ignore_union_type_tag
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Avro の Union データタイプからシリアライズされた JSON 文字列からタイプタグを取り除くかどうか。
+- 導入バージョン: v3.3.7, v3.4
+
 ##### clone_worker_count
 
 - デフォルト: 3
