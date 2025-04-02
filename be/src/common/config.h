@@ -617,7 +617,7 @@ CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
 // the failed apply task will retry after `retry_apply_interval_second`
 CONF_mBool(enable_retry_apply, "true");
 CONF_mInt32(retry_apply_interval_second, "30");
-CONF_mInt32(max_apply_retry_times, "30");
+CONF_mInt32(retry_apply_timeout, "7200");
 
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");

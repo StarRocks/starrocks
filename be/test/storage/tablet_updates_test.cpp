@@ -3406,7 +3406,7 @@ TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
     ASSERT_EQ(N * 2, read_tablet(_tablet, rowsets.size() + 1));
 
     {
-        config::max_apply_retry_times = 0;
+        config::retry_apply_timeout = 0;
         _tablet->updates()->set_error("ut_test");
         ASSERT_TRUE(_tablet->updates()->is_error());
         config::enable_pindex_rebuild_in_compaction = false;
@@ -3422,7 +3422,7 @@ TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
     }
 
     {
-        config::max_apply_retry_times = 1;
+        config::retry_apply_timeout = 3600;
         config::retry_apply_interval_second = 1;
         _tablet->updates()->reset_error();
         _tablet->updates()->check_for_apply();
@@ -3557,7 +3557,7 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
 
 TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     config::retry_apply_interval_second = 1;
-    config::max_apply_retry_times = 0;
+    config::retry_apply_timeout = 0;
     _tablet = create_tablet(rand(), rand());
     _tablet->updates()->stop_compaction(true);
     _tablet->set_enable_persistent_index(true);
@@ -3662,7 +3662,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         fp->setMode(trigger_mode);
 
         auto old_val = config::retry_apply_interval_second;
-        config::retry_apply_interval_second = 2;
+        config::retry_apply_timeout = 3600;
         // Create and commit rowset
         auto rs = create_rowset(_tablet, keys, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(16, rs).ok());
@@ -3681,6 +3681,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         config::retry_apply_interval_second = old_val;
     }
 
+    config::retry_apply_timeout = 0;
     // 16. write tablet meta failed
     test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", 17, N / 2);
 
@@ -3720,7 +3721,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     // 20. delvec inconsistent
     {
         // Enable fail point
-        config::max_apply_retry_times = 30;
+        config::retry_apply_timeout = 3600;
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_cache_del_vec_failed");
         fp->setMode(trigger_mode);
@@ -3741,7 +3742,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
 TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     config::retry_apply_interval_second = 1;
-    config::max_apply_retry_times = 1;
+    config::retry_apply_timeout = 0;
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(true);
     _tablet->updates()->stop_compaction(true);
@@ -3757,7 +3758,6 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     ASSERT_EQ(N, read_tablet(_tablet, 3));
 
     // 1. load index failed
-    config::max_apply_retry_times = 0;
     PFailPointTriggerMode trigger_mode;
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
     std::string fp_name = "tablet_apply_load_index_failed";
@@ -3823,7 +3823,7 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     // 10. write meta failed
     test_fail_point("tablet_apply_index_commit_failed", "tablet_meta_manager_apply_rowset_manager_internal_error");
 
-    config::max_apply_retry_times = 1;
+    config::retry_apply_timeout = 0;
     // 11. cache del vec failed
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
     fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";

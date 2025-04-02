@@ -878,6 +878,24 @@ bool TabletUpdates::_check_status_msg(std::string_view msg) {
     return has_memory && (has_exceed_limit || has_alloc_failed);
 }
 
+bool TabletUpdates::_retry_times_limit() {
+    const size_t base_interval = config::retry_apply_interval_second;
+    const size_t max_interval = 1800;
+    const size_t max_retries = max_interval / base_interval;
+    const size_t failed_retries = _apply_failed_time;
+
+    size_t total_duration = 0;
+
+    if (failed_retries <= max_retries) {
+        total_duration = failed_retries * (base_interval + base_interval * failed_retries) / 2;
+    } else {
+        const size_t sum_base = max_retries * (base_interval + base_interval * max_retries) / 2;
+        total_duration = sum_base + (failed_retries - max_retries) * max_interval;
+    }
+
+    return total_duration < config::retry_apply_timeout;
+}
+
 bool TabletUpdates::_is_retryable(Status& status) {
     switch (status.code()) {
     case TStatusCode::OK:
@@ -888,7 +906,7 @@ bool TabletUpdates::_is_retryable(Status& status) {
     case TStatusCode::CORRUPTION:
         return false;
     default:
-        return _check_status_msg(status.message()) || (_apply_failed_time < config::max_apply_retry_times);
+        return _check_status_msg(status.message()) || _retry_times_limit();
     }
 }
 
@@ -1027,6 +1045,7 @@ void TabletUpdates::do_apply() {
         } else if (_is_breakpoint(apply_st)) {
             // apply stopped, clean states and quit.
             _reset_apply_status(*version_info_apply);
+            _apply_failed_time = 0;
             LOG(INFO) << "apply stopped, clean states and quit tablet id: " << _tablet.tablet_id();
             break;
         } else {
@@ -1783,7 +1802,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             FAIL_POINT_TRIGGER_EXECUTE(inconsistent_rowset_stats_out_bound,
                                        { rssid = iter->first + iter->second->num_segments + 1; });
             if (iter == _rowset_stats.end()) {
-                string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1 $2",
+                string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1",
                                                  _tablet.tablet_id(), rssid);
                 LOG(ERROR) << msg;
             } else if (rssid >= iter->first + iter->second->num_segments) {

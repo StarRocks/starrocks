@@ -526,6 +526,7 @@ private:
                                           vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
 
     bool _check_status_msg(std::string_view msg);
+    bool _retry_times_limit();
     bool _is_retryable(Status& status);
     bool _is_breakpoint(Status& status);
 
