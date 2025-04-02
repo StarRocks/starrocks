@@ -62,7 +62,7 @@ public:
     bool is_output_finished() const { return _next_processed_iter == _hash_set_end_iter; }
 
     // Called in the preparation phase of IntersectBuildSinkOperator.
-    Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
+    Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs, bool has_outer_join_child);
 
     void close(RuntimeState* state) override;
 
