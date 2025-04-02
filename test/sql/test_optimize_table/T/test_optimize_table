@@ -141,26 +141,6 @@ create table t(k int) distributed by hash(k) buckets 10;
 alter table t distributed by hash(k);
 cancel alter table optimize from t;
 function: wait_optimize_table_finish(expect_status="CANCELLED")
-<<<<<<< HEAD
-=======
-
--- name: test_online_optimize_table_batch @seqential
-create database db_${uuid0};
-use db_${uuid0};
-create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
-(
-    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
-    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
-    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
-) distributed by hash(k) buckets 10;
-alter table t distributed by hash(k);
-shell: bash ${root_path}/sql/test_optimize_table/T/insert.sh "${mysql_cmd}" db_${uuid0}
-select * from t;
-select count(*) from t;
-function: wait_optimize_table_finish()
-show create table t;
-select * from t;
-select count(*) from t;
 
 -- name: test_optimize_duplicate_partitions
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -190,17 +170,3 @@ alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202006,p2020
 function: wait_optimize_table_finish()
 show temporary partitions from duplicate_table_with_null_partition;
 show partitions from duplicate_table_with_null_partition;
-
--- name: test_drop_all_temporary_partitions
-create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
-(
-    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
-    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
-    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
-) distributed by hash(k) buckets 10;
-alter table t add temporary partition tp202008 VALUES LESS THAN ("2020-09-01");
-alter table t add temporary partition tp202009 VALUES LESS THAN ("2020-10-01");
-show temporary partitions from t;
-alter table t drop all temporary partitions;
-show temporary partitions from t;
->>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005))

@@ -1218,66 +1218,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
-<<<<<<< HEAD
         clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
-=======
-        if (clause.getMultiRangePartitionDesc() != null) {
-            if (!(table instanceof OlapTable)) {
-                throw new SemanticException("Can't drop partitions with multi-range since it is not olap table");
-            }
-            OlapTable olapTable = (OlapTable) table;
-            MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
-            PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
-            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
-
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            List<SingleRangePartitionDesc> singleRangePartitionDescs =
-                    convertMultiRangePartitionDescToSingleRangePartitionDescs(
-                            partitionInfo.isAutomaticPartition(),
-                            olapTable.getTableProperty().getProperties(),
-                            clause.isTempPartition(),
-                            multiRangePartitionDesc,
-                            partitionInfo.getPartitionColumns(olapTable.getIdToColumn()),
-                            null);
-
-            clause.setResolvedPartitionNames(singleRangePartitionDescs.stream()
-                    .map(SinglePartitionDesc::getPartitionName).collect(Collectors.toList()));
-        } else if (clause.getPartitionName() != null) {
-            clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
-        } else if (clause.getPartitionNames() != null) {
-            clause.setResolvedPartitionNames(clause.getPartitionNames());
-        } else if (clause.getDropWhereExpr() != null) {
-            // do check drop partition expression
-            if (!(table instanceof OlapTable)) {
-                throw new SemanticException("Can't drop partitions with where expression since it is not olap table");
-            }
-            OlapTable olapTable = (OlapTable) table;
-            if (!olapTable.getPartitionInfo().isPartitioned()) {
-                throw new SemanticException("Can't drop partitions with where expression since it is not a partition table");
-            }
-            if (clause.isTempPartition()) {
-                throw new SemanticException("Can't drop temp partitions with where expression and `TEMPORARY` keyword");
-            }
-            if (clause.isSetIfExists()) {
-                throw new SemanticException("Can't drop partitions with where expression and `IF EXISTS` keyword");
-            }
-            Expr expr = clause.getDropWhereExpr();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getDb(context, context.getCurrentCatalog(), context.getDatabase());
-            TableName tableName = new TableName(db.getFullName(), table.getName());
-            List<String> dropPartitionNames = PartitionSelector.getPartitionNamesByExpr(context, tableName,
-                    olapTable, expr, true);
-            clause.setResolvedPartitionNames(dropPartitionNames);
-        } else if (clause.isDropAll()) {
-            if (!(table instanceof OlapTable)) {
-                throw new SemanticException("Can't drop all partitions since it is not olap table");
-            }
-            if (!clause.isTempPartition()) {
-                throw new SemanticException("Can't drop all partitions since it is not temp partition");
-            }
-        }
-
->>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005))
         if (table instanceof OlapTable) {
             if (clause.getPartitionName() != null && clause.getPartitionName().startsWith(
                     ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
