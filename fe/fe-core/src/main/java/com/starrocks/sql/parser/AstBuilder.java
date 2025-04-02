@@ -4367,7 +4367,40 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean temp = context.TEMPORARY() != null;
         boolean force = context.FORCE() != null;
         boolean exists = context.EXISTS() != null;
+<<<<<<< HEAD
         return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+=======
+        boolean dropAll = context.ALL() != null;
+        Identifier identifier = null;
+        StarRocksParser.IdentifierContext identifierContext = context.identifier();
+        if (identifierContext != null) {
+            identifier = (Identifier) visit(context.identifier());
+        }
+        StarRocksParser.IdentifierListContext identifierListContext = context.identifierList();
+        List<Identifier> identifierList = null;
+        if (identifierListContext != null && identifierListContext.identifier() != null) {
+            identifierList = visit(identifierListContext.identifier(), Identifier.class);
+        }
+        if (context.multiRangePartition() != null) {
+            MultiRangePartitionDesc partitionDesc = (MultiRangePartitionDesc)
+                    visitMultiRangePartition(context.multiRangePartition());
+            return new DropPartitionClause(exists, partitionDesc, temp, force, createPos(context));
+        } else if (identifier != null) {
+            String partitionName = ((Identifier) visit(context.identifier())).getValue();
+            return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+        } else if (context.where != null) {
+            Expr whereExpr = (Expr) visitIfPresent(context.where);
+            return new DropPartitionClause(exists, whereExpr, temp, force, createPos(context));
+        } else if (dropAll) {
+            return new DropPartitionClause(temp, force, dropAll, createPos(context));
+        } else {
+            if (CollectionUtils.isNotEmpty(identifierList)) {
+                List<String> partitionNames = identifierList.stream().map(i -> i.getValue()).collect(toList());
+                return new DropPartitionClause(exists, partitionNames, temp, force, createPos(context));
+            }
+        }
+        return null;
+>>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005))
     }
 
     @Override

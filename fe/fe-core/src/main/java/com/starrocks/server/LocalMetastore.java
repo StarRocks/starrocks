@@ -1409,16 +1409,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
         CatalogUtils.checkTableExist(db, table.getName());
         OlapTable olapTable = (OlapTable) table;
+<<<<<<< HEAD
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
 
         String partitionName = clause.getPartitionName();
         boolean isTempPartition = clause.isTempPartition();
+=======
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        boolean isTempPartition = clause.isTempPartition();
+        boolean isDropAll = clause.isDropAll();
+        long dbId = db.getId();
+        long tableId = olapTable.getId();
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+>>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005))
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
 
+<<<<<<< HEAD
         if (!olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
             if (clause.isSetIfExists()) {
                 LOG.info("drop partition[{}] which does not exist", partitionName);
@@ -1429,6 +1440,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+=======
+        if (isDropAll && isTempPartition) {
+            olapTable.dropAllTempPartitions();
+            DropPartitionsInfo info =
+                    new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), null, true);
+            editLog.logDropPartitions(info);
+            LOG.info("succeed in dropping all partitions, is temp : {}, is force : {}", isTempPartition,
+                    clause.isForceDrop());
+            return;
+        }
+
+>>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005))
         if (!partitionInfo.isRangePartition() && partitionInfo.getType() != PartitionType.LIST) {
             throw new DdlException("Alter table [" + olapTable.getName() + "] failed. Not a partitioned table");
         }
@@ -1498,7 +1521,44 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.WRITE);
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    public void replayDropPartitions(DropPartitionsInfo info) {
+        Database db = this.getDb(info.getDbId());
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            LOG.info("Begin to unprotect drop partitions. db = " + info.getDbId()
+                    + " table = " + info.getTableId()
+                    + " partitionNames = " + info.getPartitionNames()
+                    + " isTempPartition = " + info.isTempPartition()
+                    + " isForceDrop = " + info.isForceDrop()
+                    + " isDropAll = " + info.isDropAll());
+            List<String> partitionNames = info.getPartitionNames();
+            OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
+            boolean isTempPartition = info.isTempPartition();
+            long dbId = info.getDbId();
+            boolean isForceDrop = info.isForceDrop();
+            boolean isDropAll = info.isDropAll();
+            if (isDropAll && isTempPartition) {
+                olapTable.dropAllTempPartitions();
+                return;
+            }
+            partitionNames.stream().forEach(partitionName -> {
+                if (isTempPartition) {
+                    olapTable.dropTempPartition(partitionName, true);
+                } else {
+                    olapTable.dropPartition(dbId, partitionName, isForceDrop);
+                }
+            });
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005))
         }
     }
 
