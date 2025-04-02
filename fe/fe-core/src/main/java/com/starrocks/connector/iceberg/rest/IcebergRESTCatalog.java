@@ -102,7 +102,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
         } catch (Exception re) {
             LOG.error("Failed to rest load catalog", re);
-            throw new StarRocksConnectorException("Failed to rest load catalog",
+            throw new StarRocksConnectorException("Failed to load rest catalog",
                     new RuntimeException("Failed to load rest catalog, exception: " + re.getMessage(), re));
         }
 
