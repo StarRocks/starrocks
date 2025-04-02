@@ -154,5 +154,7 @@ public abstract class Resource implements Writable {
     public String getDdlStmt() {
         return "";
     }
+
+    public void handleDropResource() throws DdlException {}
 }
 

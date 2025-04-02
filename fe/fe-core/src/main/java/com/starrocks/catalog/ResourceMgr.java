@@ -186,6 +186,8 @@ public class ResourceMgr implements Writable {
             Resource resource = nameToResource.remove(name);
             if (resource == null) {
                 throw new DdlException("Resource(" + name + ") does not exist");
+            } else {
+                resource.handleDropResource();
             }
 
             if (resource.needMappingCatalog()) {

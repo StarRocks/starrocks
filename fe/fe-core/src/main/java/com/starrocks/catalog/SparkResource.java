@@ -48,8 +48,10 @@ import com.starrocks.load.loadv2.SparkRepository;
 import com.starrocks.load.loadv2.SparkYarnConfigFiles;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ResourceDesc;
+import org.apache.commons.io.FileUtils;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Map;
 
 /**
@@ -385,6 +387,16 @@ public class SparkResource extends Resource {
         }
         for (Map.Entry<String, String> entry : brokerProperties.entrySet()) {
             result.addRow(Lists.newArrayList(name, lowerCaseType, entry.getKey(), entry.getValue()));
+        }
+    }
+
+    @Override
+    public void handleDropResource() throws DdlException {
+        File configDir = new File(Config.yarn_config_dir + "/" + getName());
+        try {
+            FileUtils.deleteDirectory(configDir);
+        } catch (IOException e) {
+            throw new DdlException("Failed to delete directory " + configDir.getAbsolutePath(), e);
         }
     }
 }
