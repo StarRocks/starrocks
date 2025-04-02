@@ -79,7 +79,6 @@ public class AlterJobV2Test {
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-<<<<<<< HEAD
                 .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withTable("CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) " +
@@ -87,16 +86,7 @@ public class AlterJobV2Test {
                 .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP " +
-                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
-=======
-                    .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " +
-                                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                    .withTable("CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) " +
-                                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                    .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
-                                "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
-                    .withTable("CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP " +
-                                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');")
+                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE partition_str2date(\n" +
                         "        id varchar(100),\n" +
                         "        k1 varchar(100),\n" +
@@ -106,7 +96,6 @@ public class AlterJobV2Test {
                         "PARTITION BY RANGE(str2date(id, '%Y-%m-%d'))(\n" +
                         "START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
                         ");");
->>>>>>> b209fd7360 ([BugFix] Fix alter column bug for str2date partition table (#57487))
     }
 
     @AfterClass
