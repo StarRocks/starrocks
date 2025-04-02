@@ -36,6 +36,7 @@ public:
     using DictCppType = RunTimeCppType<LowCardDictType>;
     using DictColumnType = RunTimeColumnType<LowCardDictType>;
     using StringColumnType = RunTimeColumnType<TYPE_VARCHAR>;
+    using StringCppType = RunTimeCppType<TYPE_VARCHAR>;
 
     GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
 
@@ -116,14 +117,19 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     if (!in->is_nullable()) {
         auto* res_column = down_cast<StringColumnType*>(out);
         const auto* column = down_cast<const DictColumnType*>(in);
-        for (size_t i = 0; i < in->size(); i++) {
+
+        const size_t num_rows = in->size();
+        std::vector<StringCppType> res_slices(num_rows);
+        for (size_t i = 0; i < num_rows; i++) {
             DictCppType key = column->get_data()[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
             }
-            res_column->append(iter->second);
+            res_slices[i] = iter->second;
         }
+        res_column->append_strings(res_slices.data(), num_rows);
+
         return Status::OK();
     }
 
@@ -134,20 +140,24 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     auto* res_data_column = down_cast<StringColumnType*>(res_column->data_column().get());
     const auto* data_column = down_cast<const DictColumnType*>(column->data_column().get());
 
-    for (size_t i = 0; i < in->size(); i++) {
+    const size_t num_rows = in->size();
+    std::vector<StringCppType> res_slices(num_rows);
+    for (size_t i = 0; i < num_rows; i++) {
         if (column->null_column_data()[i] == 0) {
-            res_column->null_column_data()[i] = 0;
             DictCppType key = data_column->get_data()[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
             }
-            res_data_column->append(iter->second);
+            res_slices[i] = iter->second;
         } else {
-            res_data_column->append_default();
-            res_column->set_null(i);
+            // res_slices[i] is empty slice which is done by constructor, so do nohting here.
         }
     }
+    res_data_column->append_strings(res_slices.data(), num_rows);
+    strings::memcpy_inlined(res_column->null_column_data().data(), column->null_column_data().data(),
+                            num_rows * sizeof(NullColumn::ValueType));
+
     return Status::OK();
 }
 
