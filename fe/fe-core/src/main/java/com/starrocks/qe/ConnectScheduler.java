@@ -42,6 +42,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -269,6 +270,22 @@ public class ConnectScheduler {
                 }
             });
         }
+    }
+
+    public void printAllRunningQuery() {
+        connectionMap.values().stream().forEach(ctx -> {
+            if (ctx.getCommand() == MysqlCommand.COM_QUERY || ctx.getCommand() == MysqlCommand.COM_STMT_EXECUTE ||
+                    ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE) {
+                if (ctx.getExecutor() != null) {
+                    if (ctx.getExecutor().getParsedStmt() != null) {
+                        if (ctx.getExecutor().getParsedStmt().getOrigStmt() != null) {
+                            LOG.warn("FE ShutDown! Running Query: " +
+                                    ctx.getExecutor().getParsedStmt().getOrigStmt().getOrigStmt());
+                        }
+                    }
+                }
+            }
+        });
     }
 
     /**

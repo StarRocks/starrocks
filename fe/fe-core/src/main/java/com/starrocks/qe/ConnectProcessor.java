@@ -201,7 +201,6 @@ public class ConnectProcessor {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
-        long threadAllocatedMemory = initAllocatedMemoryProvider() - ctx.getCurrentThreadAllocatedMemory();
 
         boolean isForwardToLeader = (executor != null) ? executor.getIsForwardToLeaderOrInit(false) : false;
 
@@ -252,16 +251,17 @@ public class ConnectProcessor {
                 ctx.getAuditEventBuilder().setBigQueryLogScanRowsThreshold(
                         ctx.getSessionVariable().getBigQueryLogScanRowsThreshold());
             }
-            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
 
-        // Build Digest for SELECT/INSERT/UPDATE/DELETE
+        // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
         if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
             if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
+            long threadAllocatedMemory = initAllocatedMemoryProvider() - ctx.getCurrentThreadAllocatedMemory();
+            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
