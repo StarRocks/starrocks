@@ -1,4 +1,4 @@
--- name: test_aa_statistic_behavior @sequential
+-- name: test_aa_statistic_behavior @sequential @slow
 DROP DATABASE IF EXISTS test_statistic_behavior;
 -- result:
 -- !result
