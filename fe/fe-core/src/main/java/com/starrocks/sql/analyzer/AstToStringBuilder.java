@@ -74,6 +74,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -1935,6 +1936,20 @@ public class AstToStringBuilder {
             createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
 
+        if (table.isPaimonTable()) {
+            List<String> pk = ((PaimonTable) table).getNativeTable().primaryKeys();
+            if (!pk.isEmpty()) {
+                createTableSql.append("\nPRIMARY KEYS (");
+                for (int i = 0; i < pk.size(); i++) {
+                    createTableSql.append(pk.get(i));
+                    if (i < pk.size() - 1) {
+                        createTableSql.append(", ");
+                    }
+                }
+                createTableSql.append(")");
+            }
+        }
+
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
             createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
@@ -1951,7 +1966,8 @@ public class AstToStringBuilder {
         String location = null;
         try {
             location = table.getTableLocation();
-            if (!Strings.isNullOrEmpty(location)) {
+            // Paimon table has a `path` property instead of location
+            if (!Strings.isNullOrEmpty(location) && !table.isPaimonTable()) {
                 properties.put("location", location);
             }
         } catch (NotImplementedException e) {
