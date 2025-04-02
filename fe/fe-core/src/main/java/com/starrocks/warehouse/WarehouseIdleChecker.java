@@ -168,6 +168,7 @@ public class WarehouseIdleChecker extends FrontendDaemon {
 
         idleStatus.warehouses.forEach(wStatus -> {
             wStatus.lastFinishedJobTime = getLastFinishedJobTime(wStatus.id);
+            wStatus.runningSqlCnt = getRunningSQLCount(wStatus.id).get();
             wStatus.runningStreamLoadCnt = runningStreamLoadCnt.getOrDefault(wStatus.id, 0L);
             wStatus.runningLoadCnt = runningLoadCnt.getOrDefault(wStatus.id, 0L);
             wStatus.runningRoutineLoadCnt = runningRoutineLoadCnt.getOrDefault(wStatus.id, 0L);
