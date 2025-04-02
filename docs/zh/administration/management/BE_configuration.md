@@ -527,6 +527,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
 
+##### avro_ignore_union_type_tag
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 Avro Union 数据结构序列化成 JSON 格式时，去除 Union 结构的类型标签信息。
+- 引入版本：v3.3.7, v3.4
+
 <!--
 ##### delete_worker_count_normal_priority
 
