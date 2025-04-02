@@ -157,6 +157,7 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     res_data_column->append_strings(res_slices.data(), num_rows);
     strings::memcpy_inlined(res_column->null_column_data().data(), column->null_column_data().data(),
                             num_rows * sizeof(NullColumn::ValueType));
+    res_column->set_has_null(column->has_null());
 
     return Status::OK();
 }
