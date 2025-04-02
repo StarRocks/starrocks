@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -119,6 +120,24 @@ public class TableMetaSyncerTest {
                     "\"table\" = \"test_ext_table\"" +
                 ")"), starRocksAssert.getCtx());
 
+        DDLStmtExecutor.execute(analyzeSuccess(
+                "CREATE TABLE t_recharge_detail2 (" +
+                            "id bigint," +
+                            "user_id bigint," +
+                            "recharge_money decimal(32,2)," +
+                            "city varchar(20) not null," +
+                            "dt varchar(20) not null" +
+                        ")" +
+                        "DUPLICATE KEY(id)" +
+                            "PARTITION BY LIST (city) (" +
+                            "PARTITION pCalifornia VALUES IN ('Los Angeles','San Francisco','San Diego')," +
+                                    "PARTITION pTexas VALUES IN ('Houston','Dallas','Austin')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(`id`)" +
+                        "properties (" +
+                            "\"replication_num\" = \"1\"" +
+                        ")"), starRocksAssert.getCtx());
+
         TGetTableMetaRequest request = new TGetTableMetaRequest();
         request.setDb_name("test_db");
         request.setTable_name("test_table");
@@ -130,5 +149,16 @@ public class TableMetaSyncerTest {
         ExternalOlapTable extTable = (ExternalOlapTable) table;
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
         Assert.assertEquals(4, extTable.getPartitions().size());
+
+        request = new TGetTableMetaRequest();
+        request.setDb_name("test_db");
+        request.setTable_name("t_recharge_detail2");
+
+        response = leader.getTableMeta(request);
+        Assert.assertEquals(TPartitionType.LIST, response.getTable_meta().getPartition_info().getType());
+        Assert.assertEquals(1, response.getTable_meta().getPartition_info().list_partition_desc.columns.size());
+        Assert.assertEquals(2, response.getTable_meta().getPartition_info().list_partition_desc.partition_values.size());
+        Assert.assertEquals("[[\"Los Angeles\"],[\"San Francisco\"],[\"San Diego\"]]",
+                response.getTable_meta().getPartition_info().list_partition_desc.partition_values.get(0));
     }
 }

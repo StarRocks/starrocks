@@ -1283,10 +1283,17 @@ struct TRangePartitionDesc {
     2: optional map<i64, TRange> ranges
 }
 
+struct TListPartitionDesc {
+    // partition keys
+    1: optional list<TColumnMeta> columns
+    2: optional list<string> partition_values
+}
+
 struct TPartitionInfo {
     1: optional Partitions.TPartitionType type
     2: optional TSinglePartitionDesc single_partition_desc
     3: optional TRangePartitionDesc  range_partition_desc
+    4: optional TListPartitionDesc list_partition_desc
 }
 
 struct TPartitionMeta {
