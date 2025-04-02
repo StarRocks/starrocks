@@ -24,6 +24,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -195,6 +196,37 @@ public class HistogramStatisticsTest {
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
                 Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
         Assert.assertEquals(exist.get().getBuckets().size(), 2);
+    }
+
+    @Test
+    public void testUpdateHistWithEqual() {
+        List<Bucket> bucketList = new ArrayList<>();
+        bucketList.add(new Bucket(1D, 10D, 100L, 20L));
+        bucketList.add(new Bucket(15D, 20D, 200L, 20L));
+        Map<String, Long> mcv = new HashMap<>();
+        mcv.put("22", 100L);
+        Histogram histogram = new Histogram(bucketList, mcv);
+        ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+
+        // histogram doesn't contain the constant
+        Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
+                Optional.of(new ConstantOperator(12, Type.BIGINT)));
+        Assert.assertFalse(notExist.isPresent());
+
+        // histogram contains the constant in the mcv
+        Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
+                Optional.of(new ConstantOperator(22, Type.BIGINT)));
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertEquals(exist.get().getBuckets().size(), 0);
+        Assert.assertEquals(exist.get().getMCV(), mcv);
+
+        // histogram contains the constant in a bucket
+        exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
+                Optional.of(new ConstantOperator(2, Type.BIGINT)));
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertEquals(exist.get().getBuckets().size(), 0);
+        Assert.assertTrue(exist.get().getMCV().containsKey("2"));
     }
 
     @Test
