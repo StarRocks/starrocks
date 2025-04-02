@@ -2434,6 +2434,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_equal(200, res.status_code, f"failed to post http request [res={res}] [url={exec_url}]")
         return res.content.decode("utf-8")
 
+
     def manual_compact(self, database_name, table_name):
         sql = "show tablet from " + database_name + "." + table_name
         res = self.execute_sql(sql, True)
@@ -2788,6 +2789,32 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         write_cache_size = int(result[1].replace("B", "").replace("KB", ""))
         tools.assert_true(read_cache_size + write_cache_size > 0,
                           "cache select is failed, read_cache_size + write_cache_size must larger than 0 bytes")
+
+    def show_stats_meta(self, sql=None):
+        if sql is None:
+            sql = "show stats meta"
+
+        res = self.execute_sql(sql, ori=True)
+        if not res["status"]:
+            return {"status": False, "msg": res["msg"]}
+
+        column_names = [desc[0] for desc in res["desc"]]
+
+        skip_columns = ["UpdateTime", "TabletStatsReportTime", "TableUpdateTime"]
+        time_related_columns = []
+        for i, col_name in enumerate(column_names):
+            if col_name in skip_columns:
+                time_related_columns.append(i)
+
+        processed_results = []
+        for row in res["result"]:
+            processed_row = []
+            for i, value in enumerate(row):
+                if i not in time_related_columns:
+                    processed_row.append(value)
+            processed_results.append(processed_row)
+
+        return processed_results
 
     @staticmethod
     def regex_match(check_str: str, pattern: str):

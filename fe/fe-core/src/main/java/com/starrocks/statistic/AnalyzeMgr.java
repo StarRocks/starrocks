@@ -124,6 +124,13 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void removeAnalyzeJob(long id) {
+        if (id == -1) {
+            List<Long> keysToRemove = new ArrayList<>(analyzeJobMap.keySet());
+            for (Long key : keysToRemove) {
+                AnalyzeJob job = analyzeJobMap.remove(key);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(job);
+            }
+        }
         if (analyzeJobMap.containsKey(id)) {
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(analyzeJobMap.remove(id));
         }

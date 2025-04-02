@@ -136,8 +136,10 @@ public class ExternalBasicStatsMeta implements Writable {
         if (MapUtils.isEmpty(columnStatsMetaMap)) {
             return "";
         }
+
         return columnStatsMetaMap.values().stream()
-                .map(ColumnStatsMeta::simpleString).collect(Collectors.joining(","));
+                .map(c -> c.simpleString(true))
+                .collect(Collectors.joining(","));
     }
 
     public ExternalBasicStatsMeta clone() {
