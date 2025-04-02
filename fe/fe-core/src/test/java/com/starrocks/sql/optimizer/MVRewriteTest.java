@@ -688,6 +688,39 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testBitmapUnionInSubqueryAndUnion() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s ) t", USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME);
+        }
+
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s union " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+        {
+            String query = String.format("select count(tag_id) from (select tag_id from %s union " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s union all " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+        {
+            String query = String.format("select count(tag_id) from (select tag_id from %s union all " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+    }
+
+    @Test
     public void testIncorrectMVRewriteInQuery() throws Exception {
         String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, "
                 + "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
@@ -1040,7 +1073,8 @@ public class MVRewriteTest {
         String union = "select a.empid from (select empid from " + EMPS_TABLE_NAME + " where deptno > 300" +
                 " union all select empid from"
                 + " " + EMPS_TABLE_NAME + " where deptno < 200) a group by a.empid";
-        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+        // NOTE: not support agg push down and union push down at the same time.
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainWithout(QUERY_USE_EMPS_MV);
         starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
     }
 
