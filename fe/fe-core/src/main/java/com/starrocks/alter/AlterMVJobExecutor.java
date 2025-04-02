@@ -505,6 +505,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
     /**
      * Inactive the materialized view and its related materialized views.
+     *
+     * NOTE:
+     * 1. This method will clear all visible version map of the MV since for all schema changes, the MV should be
+     * refreshed.
+     * 2. User's inactive-mv command should not call this which will reserve the visible version map.
      */
     private static void doInactiveMaterializedView(MaterializedView mv, String reason) {
         // Only check this in leader and not replay to avoid duplicate inactive
@@ -524,6 +529,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         } else {
             mv.setInactiveAndReason(reason);
         }
+        // clear version map to make sure the MV will be refreshed
+        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
         // recursive inactive
         inactiveRelatedMaterializedView(mv,
                 MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()), false);
@@ -624,9 +631,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
                     doInactiveMaterializedView(mv, reason);
                 }
-            } finally {
-                // clear version map to make sure the MV will be refreshed
-                mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             }
         }
     }

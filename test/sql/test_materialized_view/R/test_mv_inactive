@@ -1,0 +1,91 @@
+-- name: test_mv_refresh
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 date,
+    k2 int,
+    k3 int
+)
+DUPLICATE KEY(k1)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('2020-06-02',1,1),('2020-06-02',2,2),('2020-07-02',3,3);
+-- result:
+-- !result
+CREATE VIEW v1 AS SELECT k1,min(k2) as k2,min(k3) as k3 FROM t1 GROUP BY k1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS select k1, k2 from v1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;
+-- result:
+2020-06-02	1
+2020-07-02	3
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+True
+-- !result
+[UC]ALTER VIEW v1 AS SELECT k1,avg(k2) as k2,avg(k3) as k3 FROM t1 GROUP BY k1;
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+False
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+False
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+[UC]ALTER MATERIALIZED VIEW mv1 active;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Can not active materialized view [mv1] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv1` (`k1`, `k2`)\nDISTRIBUTED BY RANDOM\nREFRESH MANUAL\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT `db_98906810339046979f924c9f5f34c09a`.`v1`.`k1`, `db_98906810339046979f924c9f5f34c09a`.`v1`.`k2`\nFROM `db_98906810339046979f924c9f5f34c09a`.`v1`;\n\nCause an error: column schema not compatible: (`k2` int(11) NULL COMMENT "") and (`k2` double NULL COMMENT "").')
+-- !result
+[UC]ALTER VIEW v1 AS SELECT k1,max(k2) as k2,max(k3) as k3 FROM t1 GROUP BY k1;
+-- result:
+-- !result
+[UC]ALTER MATERIALIZED VIEW mv1 active;
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+False
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+False
+-- !result
+SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;
+-- result:
+2020-06-02	1
+2020-07-02	3
+-- !result
+SELECT k1,max(k2) FROM t1 GROUP BY k1 order by 1;
+-- result:
+2020-06-02	2
+2020-07-02	3
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
