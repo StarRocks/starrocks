@@ -1,0 +1,195 @@
+-- name: test_time_drift_constraint
+CREATE TABLE `hits` (
+  `CounterID` int(11) NULL COMMENT "",
+  `EventDate` date NOT NULL COMMENT "",
+  `UserID` bigint(20) NOT NULL COMMENT "",
+  `EventTime` datetime NOT NULL COMMENT "",
+  `WatchID` bigint(20) NOT NULL COMMENT "",
+  `LoadTime` datetime NOT NULL COMMENT "",
+  `Title` varchar(65533) NOT NULL COMMENT "",
+  `GoodEvent` smallint(6) NOT NULL COMMENT "",
+  `ClientIP` int(11) NOT NULL COMMENT "",
+  `RegionID` int(11) NOT NULL COMMENT "",
+  `URL` string NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`CounterID`, `EventDate`, `UserID`, `EventTime`, `WatchID`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`LoadTime`)
+(PARTITION p20130701 VALUES [('2013-07-01 00:00:00'), ('2013-07-02 00:00:00')),
+PARTITION p20130702 VALUES [('2013-07-02 00:00:00'), ('2013-07-03 00:00:00')),
+PARTITION p20130703 VALUES [('2013-07-03 00:00:00'), ('2013-07-04 00:00:00')),
+PARTITION p20130704 VALUES [('2013-07-04 00:00:00'), ('2013-07-05 00:00:00')),
+PARTITION p20130705 VALUES [('2013-07-05 00:00:00'), ('2013-07-06 00:00:00')),
+PARTITION p20130706 VALUES [('2013-07-06 00:00:00'), ('2013-07-07 00:00:00')),
+PARTITION p20130707 VALUES [('2013-07-07 00:00:00'), ('2013-07-08 00:00:00')),
+PARTITION p20130708 VALUES [('2013-07-08 00:00:00'), ('2013-07-09 00:00:00')),
+PARTITION p20130709 VALUES [('2013-07-09 00:00:00'), ('2013-07-10 00:00:00')),
+PARTITION p20130710 VALUES [('2013-07-10 00:00:00'), ('2013-07-11 00:00:00')),
+PARTITION p20130711 VALUES [('2013-07-11 00:00:00'), ('2013-07-12 00:00:00')),
+PARTITION p20130712 VALUES [('2013-07-12 00:00:00'), ('2013-07-13 00:00:00')),
+PARTITION p20130713 VALUES [('2013-07-13 00:00:00'), ('2013-07-14 00:00:00')),
+PARTITION p20130714 VALUES [('2013-07-14 00:00:00'), ('2013-07-15 00:00:00')),
+PARTITION p20130715 VALUES [('2013-07-15 00:00:00'), ('2013-07-16 00:00:00')),
+PARTITION p20130716 VALUES [('2013-07-16 00:00:00'), ('2013-07-17 00:00:00')),
+PARTITION p20130717 VALUES [('2013-07-17 00:00:00'), ('2013-07-18 00:00:00')),
+PARTITION p20130718 VALUES [('2013-07-18 00:00:00'), ('2013-07-19 00:00:00')),
+PARTITION p20130719 VALUES [('2013-07-19 00:00:00'), ('2013-07-20 00:00:00')),
+PARTITION p20130720 VALUES [('2013-07-20 00:00:00'), ('2013-07-21 00:00:00')),
+PARTITION p20130721 VALUES [('2013-07-21 00:00:00'), ('2013-07-22 00:00:00')),
+PARTITION p20130722 VALUES [('2013-07-22 00:00:00'), ('2013-07-23 00:00:00')),
+PARTITION p20130723 VALUES [('2013-07-23 00:00:00'), ('2013-07-24 00:00:00')),
+PARTITION p20130724 VALUES [('2013-07-24 00:00:00'), ('2013-07-25 00:00:00')),
+PARTITION p20130725 VALUES [('2013-07-25 00:00:00'), ('2013-07-26 00:00:00')),
+PARTITION p20130726 VALUES [('2013-07-26 00:00:00'), ('2013-07-27 00:00:00')),
+PARTITION p20130727 VALUES [('2013-07-27 00:00:00'), ('2013-07-28 00:00:00')),
+PARTITION p20130728 VALUES [('2013-07-28 00:00:00'), ('2013-07-29 00:00:00')),
+PARTITION p20130729 VALUES [('2013-07-29 00:00:00'), ('2013-07-30 00:00:00')),
+PARTITION p20130730 VALUES [('2013-07-30 00:00:00'), ('2013-07-31 00:00:00')),
+PARTITION p20130731 VALUES [('2013-07-31 00:00:00'), ('2013-08-01 00:00:00')))
+DISTRIBUTED BY HASH(`UserID`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"time_drift_constraint" = "EventTime between seconds_add(LoadTime, -300) and seconds_add(LoadTime, 600)",
+"enable_persistent_index" = "true"
+);
+CREATE TABLE `hits_daily_list` (
+  `CounterID` int(11) NULL COMMENT "",
+  `EventDate` date NOT NULL COMMENT "",
+  `UserID` bigint(20) NOT NULL COMMENT "",
+  `EventTime` datetime NOT NULL COMMENT "",
+  `WatchID` bigint(20) NOT NULL COMMENT "",
+  `LoadTime` datetime NOT NULL COMMENT "",
+  `Title` varchar(65533) NOT NULL COMMENT "",
+  `GoodEvent` smallint(6) NOT NULL COMMENT "",
+  `ClientIP` int(11) NOT NULL COMMENT "",
+  `RegionID` int(11) NOT NULL COMMENT "",
+  `URL` string NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`CounterID`, `EventDate`, `UserID`, `EventTime`, `WatchID`)
+COMMENT "OLAP"
+PARTITION BY LIST(`LoadTime`)
+(
+PARTITION p01 VALUES IN ("2013-07-01"),
+PARTITION p02 VALUES IN ("2013-07-02"),
+PARTITION p03 VALUES IN ("2013-07-03"),
+PARTITION p04 VALUES IN ("2013-07-04"),
+PARTITION p05 VALUES IN ("2013-07-05"),
+PARTITION p06 VALUES IN ("2013-07-06"),
+PARTITION p07 VALUES IN ("2013-07-07"),
+PARTITION p08 VALUES IN ("2013-07-08"),
+PARTITION p09 VALUES IN ("2013-07-09"),
+PARTITION p10 VALUES IN ("2013-07-10"),
+PARTITION p11 VALUES IN ("2013-07-11"),
+PARTITION p12 VALUES IN ("2013-07-12"),
+PARTITION p13 VALUES IN ("2013-07-13"),
+PARTITION p14 VALUES IN ("2013-07-14"),
+PARTITION p15 VALUES IN ("2013-07-15"),
+PARTITION p16 VALUES IN ("2013-07-16"),
+PARTITION p17 VALUES IN ("2013-07-17"),
+PARTITION p18 VALUES IN ("2013-07-18"),
+PARTITION p19 VALUES IN ("2013-07-19"),
+PARTITION p20 VALUES IN ("2013-07-20"),
+PARTITION p21 VALUES IN ("2013-07-21"),
+PARTITION p22 VALUES IN ("2013-07-22"),
+PARTITION p23 VALUES IN ("2013-07-23"),
+PARTITION p24 VALUES IN ("2013-07-24"),
+PARTITION p25 VALUES IN ("2013-07-25"),
+PARTITION p26 VALUES IN ("2013-07-26"),
+PARTITION p27 VALUES IN ("2013-07-27"),
+PARTITION p28 VALUES IN ("2013-07-28"),
+PARTITION p29 VALUES IN ("2013-07-29"),
+PARTITION p30 VALUES IN ("2013-07-30"),
+PARTITION p31 VALUES IN ("2013-07-31")
+)
+DISTRIBUTED BY HASH(`UserID`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"time_drift_constraint" = "EventTime between seconds_add(LoadTime, -300) and seconds_add(LoadTime, 600)",
+"enable_persistent_index" = "true"
+);
+insert into hits with cte as (
+select 
+cast(random()*10000 as int) as r
+from table(generate_series(1,10000))
+)
+select 
+r as CounterID, 
+days_add('2013-07-01', r%31) as EventDate,
+r as UserID,
+seconds_add(days_add('2013-07-01 12:00:00', r%30), r%3600) as EventTime,
+r as WatchID,
+seconds_add(days_add('2013-07-01 12:00:00', r%30), r%3600) as LoadTime,
+concat("Title#", r) as Title,
+r as GoodEvent,
+r as ClientIP,
+r as RegionID,
+concat("www.foobar.com/bar_", r) as URL
+from cte;
+insert into hits_daily_list
+select 
+CounterID, 
+EventDate,
+UserID,
+EventTime,
+WatchID,
+date(LoadTime) as LoadTime,
+Title,
+GoodEvent,
+ClientIP,
+RegionID,
+URL
+from hits;
+with cte0 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits
+where minutes_add(EventTime, 10) > minutes_add('2013-07-27',10)
+),
+cte1 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits
+where EventTime  > '2013-07-27'
+)
+select assert_true(cte0.fp=cte1.fp and cte0.c = cte1.c and cte0.c > 0) from cte0,cte1;
+with cte0 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits_daily_list
+where minutes_add(EventTime, 10) > minutes_add('2013-07-27',10)
+),
+cte1 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits_daily_list
+where EventTime  > '2013-07-27'
+)
+select assert_true(cte0.fp=cte1.fp and cte0.c = cte1.c and cte0.c > 0) from cte0,cte1;
+alter table hits set ("time_drift_constraint" = "EventTime between seconds_add(LoadTime, -1821) and seconds_add(LoadTime, 1236)");
+alter table hits_daily_list set ("time_drift_constraint" = "EventTime between minutes_add(LoadTime, -30) and minutes_add(LoadTime, 21)");
+with cte0 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits
+where minutes_add(EventTime, 10) > minutes_add('2013-07-27',10)
+),
+cte1 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits
+where EventTime  > '2013-07-27'
+)
+select assert_true(cte0.fp=cte1.fp and cte0.c = cte1.c and cte0.c > 0) from cte0,cte1;
+with cte0 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits_daily_list
+where minutes_add(EventTime, 10) > minutes_add('2013-07-27',10)
+),
+cte1 as (
+select sum(murmur_hash3_32(EventTime,LoadTime)) fp, count(1) c
+from hits_daily_list
+where EventTime  > '2013-07-27'
+)
+select assert_true(cte0.fp=cte1.fp and cte0.c = cte1.c and cte0.c > 0) from cte0,cte1;
+
+function: assert_explain_contains("select * from hits where EventTime  > '2013-07-25' and EventTime < '2013-07-28 12:00:31';" ,"6: LoadTime < '2013-07-28 12:30:52', 6: LoadTime > '2013-07-24 23:39:24'")
+function: assert_explain_contains("select * from hits where EventTime  > '2013-07-25' and EventTime < '2013-07-28 12:00:31';" ,"partitions=5/31")
+
+function: assert_explain_contains("select * from hits_daily_list where EventTime  > '2013-07-25' and EventTime < '2013-07-28 12:00:31';" ,"6: LoadTime < '2013-07-28 12:30:31', 6: LoadTime > '2013-07-24 23:39:00'")
+function: assert_explain_contains("select * from hits_daily_list where EventTime  > '2013-07-25' and EventTime < '2013-07-28 12:00:31';" ,"partitions=4/31")
