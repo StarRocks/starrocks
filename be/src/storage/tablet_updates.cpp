@@ -880,7 +880,7 @@ bool TabletUpdates::_check_status_msg(std::string_view msg) {
 
 bool TabletUpdates::_retry_times_limit() {
     const size_t base_interval = config::retry_apply_interval_second;
-    const size_t max_interval = 1800;
+    const size_t max_interval = 600;
     const size_t max_retries = max_interval / base_interval;
     const size_t failed_retries = _apply_failed_time;
 
@@ -1034,7 +1034,7 @@ void TabletUpdates::do_apply() {
         if (config::enable_retry_apply && _is_retryable(apply_st) && !apply_st.ok()) {
             //reset pk index, reset rowset_update_states, reset compaction_state
             _reset_apply_status(*version_info_apply);
-            size_t interval_seconds = std::min((size_t)1800, config::retry_apply_interval_second * _apply_failed_time);
+            size_t interval_seconds = std::min((size_t)600, config::retry_apply_interval_second * _apply_failed_time);
             auto time_point = std::chrono::steady_clock::now() + std::chrono::seconds(interval_seconds);
             StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
             std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
