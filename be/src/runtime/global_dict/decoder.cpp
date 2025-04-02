@@ -151,7 +151,7 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
             }
             res_slices[i] = iter->second;
         } else {
-            // res_slices[i] is empty slice which is done by constructor, so do nohting here.
+            // res_slices[i] is an empty slice which is done by constructor, so do nothing here.
         }
     }
     res_data_column->append_strings(res_slices.data(), num_rows);
