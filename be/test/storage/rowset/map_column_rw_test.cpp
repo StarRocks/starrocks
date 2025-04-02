@@ -253,6 +253,27 @@ protected:
                 ASSERT_EQ("{4:CONST: NULL,5:CONST: NULL,6:CONST: NULL}", dst_column->debug_item(3));
             }
         }
+
+        {
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            auto dst_offsets = UInt32Column::create();
+            auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
+            SparseRange<> range;
+            range.add(Range<>(0, src_column->size()));
+            auto status_or = iter->get_io_range_vec(range, dst_column.get());
+            ASSERT_TRUE(status_or.ok());
+            ASSERT_EQ((*status_or).size(), 2);
+        }
     }
 
 private:
