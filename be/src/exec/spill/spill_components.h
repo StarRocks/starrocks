@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <queue>
 
 #include "column/vectorized_fwd.h"
@@ -178,6 +179,8 @@ public:
 
 public:
     struct FlushContext : public SpillIOTaskContext {
+        FlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
+        std::shared_ptr<Spiller> spiller;
         std::shared_ptr<SpillOutputDataStream> output;
         std::shared_ptr<BlockGroup> block_group;
         InputStreamPtr input_stream;
@@ -303,6 +306,7 @@ public:
 
 public:
     struct PartitionedFlushContext : public SpillIOTaskContext {
+        PartitionedFlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
         // used in spill stage
         struct SpillStageContext {
             size_t processing_idx{};
@@ -327,6 +331,7 @@ public:
         PartitionedFlushContext(PartitionedFlushContext&&) = default;
         PartitionedFlushContext& operator=(PartitionedFlushContext&&) = default;
 
+        std::shared_ptr<Spiller> spiller;
         SpillStageContext spill_stage_ctx;
         SplitStageContext split_stage_ctx;
     };
