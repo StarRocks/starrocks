@@ -135,7 +135,7 @@ public class BinaryPredicateStatisticCalculator {
         }
     }
 
-    private static Optional<Histogram> updateHistWithEqual(ColumnStatistic columnStatistic,
+    public static Optional<Histogram> updateHistWithEqual(ColumnStatistic columnStatistic,
                                                            Optional<ConstantOperator> constant) {
         if (constant.isEmpty() || columnStatistic.getHistogram() == null) {
             return Optional.empty();
@@ -377,7 +377,7 @@ public class BinaryPredicateStatisticCalculator {
         return builder.build();
     }
 
-    private static Optional<Histogram> updateHistWithJoin(ColumnStatistic leftColumnStatistic,
+    public static Optional<Histogram> updateHistWithJoin(ColumnStatistic leftColumnStatistic,
                                                           Type leftColumnType,
                                                           ColumnStatistic rightColumnStatistic,
                                                           Type rightColumnType) {
@@ -388,15 +388,16 @@ public class BinaryPredicateStatisticCalculator {
 
         Histogram leftHistogram = leftColumnStatistic.getHistogram();
         Histogram rightHistogram = rightColumnStatistic.getHistogram();
+        double leftColumnDistinctCount = min(leftHistogram.getDistinctRowsUpperBound(),
+                leftColumnStatistic.getDistinctValuesCount());
+        double rightColumnDistinctCount = min(rightHistogram.getDistinctRowsUpperBound(),
+                rightColumnStatistic.getDistinctValuesCount());
 
         Map<String, Long> estimatedMcv = estimateMcvToMcv(leftHistogram.getMCV(), rightHistogram.getMCV());
-        estimateMcvToNonMcv(leftHistogram.getMCV(), estimatedMcv, rightHistogram, rightColumnStatistic.getDistinctValuesCount(),
-                leftColumnType);
-        estimateMcvToNonMcv(rightHistogram.getMCV(), estimatedMcv, leftHistogram, leftColumnStatistic.getDistinctValuesCount(),
-                rightColumnType);
+        estimateMcvToNonMcv(leftHistogram.getMCV(), estimatedMcv, rightHistogram, rightColumnDistinctCount, leftColumnType);
+        estimateMcvToNonMcv(rightHistogram.getMCV(), estimatedMcv, leftHistogram, leftColumnDistinctCount, rightColumnType);
         List<Bucket> estimatedBuckets =
-                estimateNonMcvToNonMcv(leftHistogram, leftColumnStatistic.getDistinctValuesCount(), rightHistogram,
-                        rightColumnStatistic.getDistinctValuesCount());
+                estimateNonMcvToNonMcv(leftHistogram, leftColumnDistinctCount, rightHistogram, rightColumnDistinctCount);
 
         return Optional.of(new Histogram(estimatedBuckets, estimatedMcv));
     }
