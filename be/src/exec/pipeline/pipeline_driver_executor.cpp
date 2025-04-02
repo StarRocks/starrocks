@@ -30,6 +30,8 @@
 
 namespace starrocks::pipeline {
 
+DEFINE_FAIL_POINT(operator_return_failed_status);
+
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
                                            PipelineExecutorMetrics* metrics)
@@ -170,6 +172,12 @@ void GlobalDriverExecutor::_worker_thread() {
                 status = driver->workgroup()->check_big_query(*query_ctx);
             }
 
+            FAIL_POINT_TRIGGER_EXECUTE(operator_return_failed_status, {
+                if (status.ok()) {
+                    status = Status::InternalError("injected failed status");
+                }
+            });
+
             if (!status.ok()) {
                 auto o_id = get_backend_id();
                 int64_t be_id = o_id.has_value() ? o_id.value() : -1;
@@ -178,7 +186,12 @@ void GlobalDriverExecutor::_worker_thread() {
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
+<<<<<<< HEAD
                 query_ctx->cancel(status);
+=======
+                query_ctx->cancel(status, false);
+                runtime_state->set_is_cancelled(true);
+>>>>>>> ce2e8c6ba2 ([BugFix] Fix UAF when spill yield (#57311))
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
