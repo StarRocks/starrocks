@@ -46,7 +46,13 @@ public:
 
     ColumnReader* get_column_reader() override { return _reader; }
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
 private:
+    Status get_element_range_vec(const SparseRange<>& range, MapColumn* map_column, bool seek,
+                                 SparseRange<>& element_read_range, size_t& read_rows);
+
     ColumnReader* _reader;
 
     std::unique_ptr<ColumnIterator> _nulls;
