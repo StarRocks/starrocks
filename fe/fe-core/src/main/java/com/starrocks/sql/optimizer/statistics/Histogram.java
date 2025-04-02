@@ -44,18 +44,6 @@ public class Histogram {
         return Math.max(1, totalRows);
     }
 
-    public long getDistinctRowsUpperBound() {
-        long distinctRows = 0;
-        if (buckets != null && !buckets.isEmpty()) {
-            distinctRows += buckets.stream().map(bucket -> (long) (bucket.getUpper() - bucket.getLower())).reduce(Long::sum)
-                    .orElse(0L);
-        }
-        if (mcv != null) {
-            distinctRows += mcv.size();
-        }
-        return Math.max(1, distinctRows);
-    }
-
     public List<Bucket> getBuckets() {
         return buckets;
     }
@@ -92,22 +80,15 @@ public class Histogram {
             int mid = (left + right) / 2;
             Bucket bucket = buckets.get(mid);
 
-            if (bucket.getLower() <= value && value < bucket.getUpper()) {
-                long rowCount = bucket.getCount() - bucket.getUpperRepeats();
+            long prevRowCount = 0;
+            if (mid > 0) {
+                prevRowCount = buckets.get(mid - 1).getCount();
+            }
 
-                if (mid > 0) {
-                    rowCount -= buckets.get(mid - 1).getCount();
-                }
-
-                if (useFixedPointEstimation) {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
-                } else {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
-                }
-
-                return Optional.of(rowCount);
-            } else if (bucket.getUpper() == value) {
-                return Optional.of(bucket.getUpperRepeats());
+            Optional<Long> rowCountOfBucket = bucket.getRowCountInBucket(value, prevRowCount,
+                    distinctValuesCount / buckets.size(), useFixedPointEstimation);
+            if (rowCountOfBucket.isPresent()) {
+                return rowCountOfBucket;
             }
 
             if (value < bucket.getLower()) {
