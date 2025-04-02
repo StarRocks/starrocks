@@ -418,11 +418,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (!result.inputStringColumns.containsAny(onColumns)) {
             return result;
         }
+        onColumns.getStream().forEach(c -> disableRewriteStringColumns.union(c));
         result.outputStringColumns.clear();
         result.inputStringColumns.getStream().forEach(c -> {
-            if (onColumns.contains(c)) {
-                disableRewriteStringColumns.union(c);
-            } else {
+            if (!onColumns.contains(c)) {
                 result.outputStringColumns.union(c);
             }
         });
