@@ -435,7 +435,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
             }
 
-            List<Long> partitionIds = Lists.newArrayList();
+            Set<Long> partitionIds = Sets.newHashSet();
             for (String partitionName : partitionNameList) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {
@@ -443,7 +443,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
                 partitionIds.add(partition.getId());
             }
-            clause.setSourcePartitionIds(partitionIds);
+            clause.setSourcePartitionIds(Lists.newArrayList(partitionIds));
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
             clause.setTableOptimize(true);
@@ -1005,4 +1005,272 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         return null;
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseVisitor.java
+=======
+    // ------------------------------------------- Alter partition clause ----------------------------------==--------------------
+
+    @Override
+    public Void visitAddPartitionClause(AddPartitionClause clause, ConnectContext context) {
+        PartitionDescAnalyzer.analyze(clause.getPartitionDesc());
+
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(clause.getPartitionDesc(), olapTable);
+        }
+
+        List<PartitionDesc> partitionDescList = Lists.newArrayList();
+        PartitionDesc partitionDesc = clause.getPartitionDesc();
+        if (partitionDesc instanceof SingleItemListPartitionDesc
+                || partitionDesc instanceof MultiItemListPartitionDesc
+                || partitionDesc instanceof SingleRangePartitionDesc) {
+            partitionDescList = Lists.newArrayList(partitionDesc);
+        } else if (partitionDesc instanceof RangePartitionDesc) {
+            partitionDescList = Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs());
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            partitionDescList = Lists.newArrayList(((ListPartitionDesc) partitionDesc).getPartitionDescs());
+        } else if (partitionDesc instanceof MultiRangePartitionDesc) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't add multi-range partition to table type is not olap");
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+
+            List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                    convertMultiRangePartitionDescToSingleRangePartitionDescs(
+                            partitionInfo.isAutomaticPartition(),
+                            olapTable.getTableProperty().getProperties(),
+                            clause.isTempPartition(),
+                            (MultiRangePartitionDesc) partitionDesc,
+                            partitionInfo.getPartitionColumns(table.getIdToColumn()),
+                            clause.getProperties());
+            partitionDescList = singleRangePartitionDescs.stream()
+                    .map(item -> (PartitionDesc) item).collect(Collectors.toList());
+        }
+        clause.setResolvedPartitionDescList(partitionDescList);
+
+        if (table instanceof OlapTable) {
+            try {
+                OlapTable olapTable = (OlapTable) table;
+                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                upgradeDeprecatedSingleItemListPartitionDesc(olapTable, partitionDescList, clause, partitionInfo);
+                analyzeAddPartition(olapTable, partitionDescList, clause, partitionInfo);
+            } catch (DdlException | AnalysisException | NotImplementedException e) {
+                throw new SemanticException(e.getMessage(), e);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * {@link SingleItemListPartitionDesc}
+     */
+    private void upgradeDeprecatedSingleItemListPartitionDesc(OlapTable table,
+                                                              List<PartitionDesc> partitionDescs,
+                                                              AddPartitionClause addPartitionClause,
+                                                              PartitionInfo partitionInfo) throws AnalysisException {
+        if (!partitionInfo.isListPartition()) {
+            return;
+        }
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        boolean addSingleColumnPartition = partitionDescs.get(0) instanceof SingleItemListPartitionDesc;
+        if (addSingleColumnPartition &&
+                !listPartitionInfo.isMultiColumnPartition() &&
+                listPartitionInfo.isDeFactoMultiItemPartition()) {
+            Preconditions.checkState(partitionDescs.size() == 1);
+            MultiItemListPartitionDesc newDesc =
+                    ((SingleItemListPartitionDesc) partitionDescs.get(0)).upgradeToMultiItem();
+            partitionDescs.set(0, newDesc);
+            addPartitionClause.setPartitionDesc(newDesc);
+        }
+    }
+
+    private void analyzeAddPartition(OlapTable olapTable, List<PartitionDesc> partitionDescs,
+                                     AddPartitionClause addPartitionClause, PartitionInfo partitionInfo)
+            throws DdlException, AnalysisException, NotImplementedException {
+
+        Set<String> existPartitionNameSet =
+                CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
+        // partition properties is prior to clause properties
+        // clause properties is prior to table properties
+        // partition properties should inherit table properties
+        Map<String, String> properties = olapTable.getProperties();
+        Map<String, String> clauseProperties = addPartitionClause.getProperties();
+        if (clauseProperties != null && !clauseProperties.isEmpty()) {
+            properties.putAll(clauseProperties);
+        }
+
+        for (PartitionDesc partitionDesc : partitionDescs) {
+            Map<String, String> cloneProperties = Maps.newHashMap(properties);
+            Map<String, String> sourceProperties = partitionDesc.getProperties();
+            if (sourceProperties != null && !sourceProperties.isEmpty()) {
+                cloneProperties.putAll(sourceProperties);
+            }
+
+            String storageCoolDownTTL = olapTable.getTableProperty()
+                    .getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            if (storageCoolDownTTL != null) {
+                cloneProperties.putIfAbsent(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
+            }
+
+            if (partitionDesc instanceof SingleRangePartitionDesc) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                SingleRangePartitionDesc singleRangePartitionDesc = ((SingleRangePartitionDesc) partitionDesc);
+                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
+                if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
+                    rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
+                            addPartitionClause.isTempPartition());
+                }
+            } else if (partitionDesc instanceof SingleItemListPartitionDesc
+                    || partitionDesc instanceof MultiItemListPartitionDesc) {
+                List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns(olapTable.getIdToColumn()).stream()
+                        .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
+                        .collect(Collectors.toList());
+                PartitionDescAnalyzer.analyze(partitionDesc);
+                partitionDesc.analyze(columnDefList, cloneProperties);
+                if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
+                    CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
+                            addPartitionClause.isTempPartition());
+                }
+            } else {
+                throw new DdlException("Only support adding partition to range/list partitioned table");
+            }
+        }
+    }
+
+    private List<SingleRangePartitionDesc> convertMultiRangePartitionDescToSingleRangePartitionDescs(
+            boolean isAutoPartitionTable,
+            Map<String, String> tableProperties,
+            boolean isTempPartition,
+            MultiRangePartitionDesc partitionDesc,
+            List<Column> partitionColumns,
+            Map<String, String> properties) {
+        Column firstPartitionColumn = partitionColumns.get(0);
+
+        if (properties == null) {
+            properties = Maps.newHashMap();
+        }
+        if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+            properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
+                    tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
+        }
+        PartitionConvertContext context = new PartitionConvertContext();
+        context.setAutoPartitionTable(isAutoPartitionTable);
+        context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+        context.setProperties(properties);
+        context.setTempPartition(isTempPartition);
+        List<SingleRangePartitionDesc> singleRangePartitionDescs;
+        try {
+            singleRangePartitionDescs = partitionDesc.convertToSingle(context);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        return singleRangePartitionDescs;
+    }
+
+    @Override
+    public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
+        if (clause.getMultiRangePartitionDesc() != null) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't drop partitions with multi-range since it is not olap table");
+            }
+            OlapTable olapTable = (OlapTable) table;
+            MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
+            PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
+            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
+
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                    convertMultiRangePartitionDescToSingleRangePartitionDescs(
+                            partitionInfo.isAutomaticPartition(),
+                            olapTable.getTableProperty().getProperties(),
+                            clause.isTempPartition(),
+                            multiRangePartitionDesc,
+                            partitionInfo.getPartitionColumns(olapTable.getIdToColumn()),
+                            null);
+
+            clause.setResolvedPartitionNames(singleRangePartitionDescs.stream()
+                    .map(SinglePartitionDesc::getPartitionName).collect(Collectors.toList()));
+        } else if (clause.getPartitionName() != null) {
+            clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
+        } else if (clause.getPartitionNames() != null) {
+            clause.setResolvedPartitionNames(clause.getPartitionNames());
+        } else if (clause.getDropWhereExpr() != null) {
+            // do check drop partition expression
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't drop partitions with where expression since it is not olap table");
+            }
+            OlapTable olapTable = (OlapTable) table;
+            if (!olapTable.getPartitionInfo().isPartitioned()) {
+                throw new SemanticException("Can't drop partitions with where expression since it is not a partition table");
+            }
+            if (clause.isTempPartition()) {
+                throw new SemanticException("Can't drop temp partitions with where expression and `TEMPORARY` keyword");
+            }
+            if (clause.isSetIfExists()) {
+                throw new SemanticException("Can't drop partitions with where expression and `IF EXISTS` keyword");
+            }
+            Expr expr = clause.getDropWhereExpr();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(context, context.getCurrentCatalog(), context.getDatabase());
+            TableName tableName = new TableName(db.getFullName(), table.getName());
+            List<String> dropPartitionNames = PartitionSelector.getPartitionNamesByExpr(context, tableName,
+                    olapTable, expr, true);
+            clause.setResolvedPartitionNames(dropPartitionNames);
+        } else if (clause.isDropAll()) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't drop all partitions since it is not olap table");
+            }
+            if (!clause.isTempPartition()) {
+                throw new SemanticException("Can't drop all partitions since it is not temp partition");
+            }
+        }
+
+        if (table instanceof OlapTable) {
+            if (clause.getPartitionName() != null && clause.getPartitionName().startsWith(
+                    ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                throw new SemanticException("Deletion of shadow partitions is not allowed");
+            }
+            List<String> partitionNames = clause.getPartitionNames();
+            if (CollectionUtils.isNotEmpty(partitionNames)) {
+                boolean hasShadowPartition = partitionNames.stream().anyMatch(partitionName ->
+                        partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX));
+                if (hasShadowPartition) {
+                    throw new SemanticException("Deletion of shadow partitions is not allowed");
+                }
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableOperationClause(AlterTableOperationClause clause, ConnectContext context) {
+        String tableOperationName = clause.getTableOperationName();
+        if (tableOperationName == null) {
+            throw new SemanticException("Table operation name should be null");
+        }
+
+        List<ConstantOperator> args = new ArrayList<>();
+        for (Expr expr : clause.getExprs()) {
+            ScalarOperator result;
+            try {
+                Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, context);
+                ExpressionMapping expressionMapping = new ExpressionMapping(scope);
+                result = SqlToScalarOperatorTranslator.translate(expr, expressionMapping, new ColumnRefFactory());
+                if (result instanceof ConstantOperator) {
+                    args.add((ConstantOperator) result);
+                } else {
+                    throw new SemanticException("invalid arg " + expr);
+                }
+            } catch (Exception e) {
+                throw new SemanticException("Failed to resolve table operation args %s. msg: %s", expr, e.getMessage());
+            }
+        }
+        clause.setArgs(args);
+        return null;
+    }
+>>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseAnalyzer.java
 }

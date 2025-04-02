@@ -1056,7 +1056,14 @@ addPartitionClause
     ;
 
 dropPartitionClause
+<<<<<<< HEAD
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+=======
+    : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
+    | DROP ALL TEMPORARY PARTITIONS FORCE?
+>>>>>>> 57d92b34bc ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (#57005))
     ;
 
 truncatePartitionClause
