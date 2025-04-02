@@ -44,6 +44,18 @@ public class Histogram {
         return Math.max(1, totalRows);
     }
 
+    public long getDistinctRowsUpperBound() {
+        long distinctRows = 0;
+        if (buckets != null && !buckets.isEmpty()) {
+            distinctRows += buckets.stream().map(bucket -> (long) (bucket.getUpper() - bucket.getLower())).reduce(Long::sum)
+                    .orElse(0L);
+        }
+        if (mcv != null) {
+            distinctRows += mcv.size();
+        }
+        return Math.max(1, distinctRows);
+    }
+
     public List<Bucket> getBuckets() {
         return buckets;
     }
