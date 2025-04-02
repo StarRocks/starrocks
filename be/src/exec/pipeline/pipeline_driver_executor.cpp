@@ -184,12 +184,8 @@ void GlobalDriverExecutor::_worker_thread() {
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
-<<<<<<< HEAD
                 query_ctx->cancel(status);
-=======
-                query_ctx->cancel(status, false);
                 runtime_state->set_is_cancelled(true);
->>>>>>> ce2e8c6ba2 ([BugFix] Fix UAF when spill yield (#57311))
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
