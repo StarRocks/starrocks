@@ -41,10 +41,11 @@ class IntersectBuildSinkOperator final : public Operator {
 public:
     IntersectBuildSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                std::shared_ptr<IntersectContext> intersect_ctx,
-                               const std::vector<ExprContext*>& dst_exprs)
+                               const std::vector<ExprContext*>& dst_exprs, bool has_outer_join_child)
             : Operator(factory, id, "intersect_build_sink", plan_node_id, false, driver_sequence),
               _intersect_ctx(std::move(intersect_ctx)),
-              _dst_exprs(dst_exprs) {
+              _dst_exprs(dst_exprs),
+              _has_outer_join_child(has_outer_join_child) {
         _intersect_ctx->ref();
     }
 
@@ -71,6 +72,7 @@ private:
     std::shared_ptr<IntersectContext> _intersect_ctx;
 
     const std::vector<ExprContext*>& _dst_exprs;
+    const bool _has_outer_join_child;
 
     bool _is_finished = false;
 };
@@ -79,15 +81,16 @@ class IntersectBuildSinkOperatorFactory final : public OperatorFactory {
 public:
     IntersectBuildSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                       IntersectPartitionContextFactoryPtr intersect_partition_ctx_factory,
-                                      const std::vector<ExprContext*>& dst_exprs)
+                                      const std::vector<ExprContext*>& dst_exprs, bool has_outer_join_child)
             : OperatorFactory(id, "intersect_build_sink", plan_node_id),
               _intersect_partition_ctx_factory(std::move(intersect_partition_ctx_factory)),
-              _dst_exprs(dst_exprs) {}
+              _dst_exprs(dst_exprs),
+              _has_outer_join_child(has_outer_join_child) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<IntersectBuildSinkOperator>(
                 this, _id, _plan_node_id, driver_sequence,
-                _intersect_partition_ctx_factory->get_or_create(driver_sequence), _dst_exprs);
+                _intersect_partition_ctx_factory->get_or_create(driver_sequence), _dst_exprs, _has_outer_join_child);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -97,6 +100,7 @@ public:
 private:
     IntersectPartitionContextFactoryPtr _intersect_partition_ctx_factory;
     const std::vector<ExprContext*>& _dst_exprs;
+    const bool _has_outer_join_child;
 };
 
 } // namespace starrocks::pipeline
