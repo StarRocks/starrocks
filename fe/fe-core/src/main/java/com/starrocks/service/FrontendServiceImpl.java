@@ -197,6 +197,7 @@ import com.starrocks.thrift.TColumnStatsUsageReq;
 import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
+import com.starrocks.thrift.TConnectionInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
@@ -272,6 +273,8 @@ import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
+import com.starrocks.thrift.TListConnectionRequest;
+import com.starrocks.thrift.TListConnectionResponse;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
@@ -3234,5 +3237,44 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetWarehouseQueriesResponse getWarehouseQueries(TGetWarehouseQueriesRequest request) throws TException {
         return WarehouseQueryQueueMetrics.build(request);
+    }
+
+    @Override
+    public TListConnectionResponse listConnections(TListConnectionRequest request) {
+        TListConnectionResponse response = new TListConnectionResponse();
+
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(request.getAuth_info());
+        String forUser = "";
+        boolean showFull = request.isSetShow_full();
+
+        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
+                .listConnection(context, context.getQualifiedUser(), forUser);
+        long nowMs = System.currentTimeMillis();
+        for (ConnectContext.ThreadInfo info : threadInfos) {
+            List<String> row = info.toRow(nowMs, showFull);
+            if (row != null) {
+                TConnectionInfo tConnectionInfo = getTConnectionInfo(row);
+                response.addToConnections(tConnectionInfo);
+            }
+        }
+
+        return response;
+    }
+
+    @NotNull
+    private static TConnectionInfo getTConnectionInfo(List<String> row) {
+        TConnectionInfo tConnectionInfo = new TConnectionInfo();
+        tConnectionInfo.setConnection_id(row.get(0));
+        tConnectionInfo.setUser(row.get(1));
+        tConnectionInfo.setHost(row.get(2));
+        tConnectionInfo.setDb(row.get(3));
+        tConnectionInfo.setCommand(row.get(4));
+        tConnectionInfo.setConnection_start_time(row.get(5));
+        tConnectionInfo.setTime(row.get(6));
+        tConnectionInfo.setState(row.get(7));
+        tConnectionInfo.setInfo(row.get(8));
+        tConnectionInfo.setInfo(row.get(9));
+        return tConnectionInfo;
     }
 }

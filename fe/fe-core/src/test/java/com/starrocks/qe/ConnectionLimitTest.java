@@ -115,7 +115,6 @@ public class ConnectionLimitTest {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt) com.starrocks.sql.parser.SqlParser.parse(sql,
                 starRocksAssert.getCtx().getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
-        starRocksAssert.getCtx().setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         System.out.println(resultSet.getResultRows());
         Assert.assertEquals(1, resultSet.getResultRows().size());

@@ -143,16 +143,20 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -252,7 +256,13 @@ import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TConnectionInfo;
+import com.starrocks.thrift.TListConnectionRequest;
+import com.starrocks.thrift.TListConnectionResponse;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -260,6 +270,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -815,13 +826,51 @@ public class ShowExecutor {
         public ShowResultSet visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
             List<List<String>> rowSet = Lists.newArrayList();
 
-            List<ConnectContext.ThreadInfo> threadInfos = context.getConnectScheduler()
-                    .listConnection(context.getQualifiedUser(), statement.getForUser());
-            long nowMs = System.currentTimeMillis();
-            for (ConnectContext.ThreadInfo info : threadInfos) {
-                List<String> row = info.toRow(nowMs, statement.showFull());
-                if (row != null) {
-                    rowSet.add(row);
+            NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+            List<Frontend> frontends = nodeMgr.getFrontends(null);
+            for (Frontend frontend : frontends) {
+                if (nodeMgr.getMySelf().equals(frontend)) {
+                    List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
+                            .listConnection(context, context.getQualifiedUser(), statement.getForUser());
+                    long nowMs = System.currentTimeMillis();
+                    for (ConnectContext.ThreadInfo info : threadInfos) {
+                        List<String> row = info.toRow(nowMs, statement.showFull());
+                        if (row != null) {
+                            rowSet.add(row);
+                        }
+                    }
+                } else {
+                    try {
+                        TListConnectionRequest request = new TListConnectionRequest();
+                        TAuthInfo tAuthInfo = new TAuthInfo();
+                        tAuthInfo.setCurrent_user_ident(context.getCurrentUserIdentity().toThrift());
+                        request.setAuth_info(tAuthInfo);
+                        request.setFor_user(statement.getForUser());
+                        request.setShow_full(statement.showFull());
+
+                        TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
+                        TListConnectionResponse response = ThriftRPCRequestExecutor.call(
+                                ThriftConnectionPool.frontendPool,
+                                thriftAddress,
+                                client -> client.listConnections(request));
+                        for (TConnectionInfo tConnectionInfo : response.getConnections()) {
+                            List<String> row = new ArrayList<>();
+                            row.add(tConnectionInfo.getConnection_id());
+                            row.add(tConnectionInfo.getUser());
+                            row.add(tConnectionInfo.getHost());
+                            row.add(tConnectionInfo.getDb());
+                            row.add(tConnectionInfo.getCommand());
+                            row.add(tConnectionInfo.getConnection_start_time());
+                            row.add(tConnectionInfo.getTime());
+                            row.add(tConnectionInfo.getState());
+                            row.add(tConnectionInfo.getInfo());
+                            row.add(tConnectionInfo.getIsPending());
+
+                            rowSet.add(row);
+                        }
+                    } catch (TException e) {
+                        continue;
+                    }
                 }
             }
 
