@@ -117,13 +117,6 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
 
-<<<<<<< HEAD
-  feature-review:
-    needs: info
-    runs-on: [ self-hosted, normal ]
-    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'feature') && !contains(needs.info.outputs.LABELS, 'sync')
-    name: FEATURE-REVIEW
-=======
   feature-enhancement-backport-review:
     needs: info
     runs-on: [ self-hosted, normal ]
@@ -134,7 +127,6 @@ jobs:
       (startsWith(needs.info.outputs.TITLE, '[Feature]') || startsWith(needs.info.outputs.TITLE, '[Enhancement]')) &&
       needs.info.outputs.DIFF_LINES > 100
     name: FEATURE-ENHANCEMENT-BACKPORT-REVIEW
->>>>>>> 90c5fc36dc ([Tool] Add the limit on merging feature/enhancement prs on branches (#57278))
 
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
@@ -143,14 +135,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-<<<<<<< HEAD
-      - name: FEATURE-REVIEW
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
-          ./scripts/check-approve.sh
-=======
       - name: APPROVE-REVIEW
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
->>>>>>> 90c5fc36dc ([Tool] Add the limit on merging feature/enhancement prs on branches (#57278))
