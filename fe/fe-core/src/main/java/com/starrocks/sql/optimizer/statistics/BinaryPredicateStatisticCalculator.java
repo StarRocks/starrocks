@@ -84,8 +84,7 @@ public class BinaryPredicateStatisticCalculator {
                                                             ColumnStatistic columnStatistic,
                                                             Optional<ConstantOperator> constant,
                                                             Statistics statistics) {
-        Optional<Histogram> hist = updateHistWithEqual(columnStatistic, constant);
-        if (hist.isEmpty() || constant.isEmpty()) {
+        if (columnStatistic.getHistogram() == null || constant.isEmpty()) {
             StatisticRangeValues predicateRange;
 
             if (constant.isPresent()) {
@@ -106,21 +105,32 @@ public class BinaryPredicateStatisticCalculator {
             double max = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(), constantOperator.toString())
                     .orElse(POSITIVE_INFINITY);
 
-            ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic)
+            ColumnStatistic.Builder estimatedColumnStatisticBuilder = ColumnStatistic.buildFrom(columnStatistic)
                     .setNullsFraction(0)
                     .setMinValue(min)
                     .setMaxValue(max)
-                    .setDistinctValuesCount(columnStatistic.getDistinctValuesCount())
-                    .setHistogram(hist.get())
-                    .build();
+                    .setDistinctValuesCount(columnStatistic.getDistinctValuesCount());
 
-            double rowCountInHistogram = hist.get().getTotalRows();
-            double predicateFactor = rowCountInHistogram / (double) columnStatistic.getHistogram().getTotalRows();
-            double rows = Math.min(rowCountInHistogram, statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
-                    * predicateFactor);
+            double rows;
+            Histogram columnHist = columnStatistic.getHistogram();
+            Optional<Histogram> hist = updateHistWithEqual(columnStatistic, constant);
+            if (hist.isPresent()) {
+                estimatedColumnStatisticBuilder.setHistogram(hist.get());
+                double rowCountInHistogram = hist.get().getTotalRows();
+                double predicateFactor = rowCountInHistogram / (double) columnHist.getTotalRows();
+                rows = Math.min(rowCountInHistogram, statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
+                        * predicateFactor);
+            } else {
+                // The constant was not found in the column histogram.
+                Long mostCommonValuesCount = columnHist.getMCV().values().stream().reduce(Long::sum).orElse(0L);
+                double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - columnHist.getMCV().size(),
+                        columnHist.getBuckets().size());
+                double predicateFactor = (columnHist.getTotalRows() - mostCommonValuesCount) * f / columnHist.getTotalRows();
+                rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
+            }
 
-            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
-                            .setOutputRowCount(rows).addColumnStatistic(operator, estimatedColumnStatistic).build())
+            return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rows)
+                            .addColumnStatistic(operator, estimatedColumnStatisticBuilder.build()).build())
                     .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rows).build());
         }
     }
@@ -150,15 +160,11 @@ public class BinaryPredicateStatisticCalculator {
         } else {
             Optional<Long> rowCountInHistogram =
                     hist.getRowCountInBucket(constantOperator, columnStatistic.getDistinctValuesCount());
-            if (rowCountInHistogram.isPresent()) {
-                estimatedMcv.put(constantOperator.toString(), rowCountInHistogram.get());
-            } else {
-                Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
-                double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(),
-                        hist.getBuckets().size());
-                estimatedMcv.put(constantOperator.toString(), (long) ((columnStatistic.getHistogram().getTotalRows() -
-                        mostCommonValuesCount) * f));
+            if (rowCountInHistogram.isEmpty()) {
+                return Optional.empty();
             }
+
+            estimatedMcv.put(constantOperator.toString(), rowCountInHistogram.get());
         }
         return Optional.of(new Histogram(new ArrayList<>(), estimatedMcv));
     }
