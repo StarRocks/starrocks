@@ -3450,6 +3450,10 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
                     ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
         }
+        String timeDriftConstraintSpec = tableProperties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(timeDriftConstraintSpec)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+        }
         return properties;
     }
 

@@ -682,6 +682,15 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().setPartitionRetentionCondition(ttlCondition);
             }
 
+            // analyze time drift constraint
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+                String timeDriftConstraintSpec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+                PropertyAnalyzer.analyzeTimeDriftConstraint(timeDriftConstraintSpec, table, properties);
+                table.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+                table.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
+            }
+
             try {
                 processConstraint(db, table, properties);
             } catch (AnalysisException e) {
