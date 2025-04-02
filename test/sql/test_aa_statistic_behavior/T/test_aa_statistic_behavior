@@ -1,4 +1,4 @@
--- name: test_aa_statistic_behavior @sequential
+-- name: test_aa_statistic_behavior @sequential @slow
 
 -- This case is used to test statistics collection behavior.
 -- Include auto collection/partition first load
