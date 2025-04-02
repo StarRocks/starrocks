@@ -24,8 +24,8 @@ import com.nimbusds.jwt.SignedJWT;
 
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
-import java.util.Date;
 import java.util.Arrays;
+import java.util.Date;
 
 public class OpenIdConnectVerifier {
 
