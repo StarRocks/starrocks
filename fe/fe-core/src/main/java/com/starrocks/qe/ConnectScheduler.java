@@ -225,17 +225,13 @@ public class ConnectScheduler {
         return connCountByUser;
     }
 
-    private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext,
-                                                                       String currUser,
-                                                                       String forUser) {
+    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String currUser, String forUser) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
-        ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
-
         for (ConnectContext ctx : connectionMap.values()) {
             // Check authorization first.
             if (!ctx.getQualifiedUser().equals(currUser)) {
                 try {
-                    Authorizer.checkSystemAction(currContext, PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     continue;
                 }
@@ -249,14 +245,6 @@ public class ConnectScheduler {
             infos.add(ctx.toThreadInfo());
         }
         return infos;
-    }
-
-    public List<ConnectContext.ThreadInfo> listConnection(String currUser, String forUser) {
-        return getAllConnThreadInfoByUser(null, currUser, forUser);
-    }
-
-    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String currUser) {
-        return getAllConnThreadInfoByUser(context, currUser, null);
     }
 
     public Set<UUID> listAllSessionsId() {

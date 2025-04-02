@@ -1154,7 +1154,7 @@ public class StmtExecutor {
                 final String hostName = context.getProxyHostName();
                 killCtx = ProxyContextManager.getInstance().getContext(hostName, (int) id);
             } else {
-                killCtx = context.getConnectScheduler().getContext(id);
+                killCtx = ExecuteEnv.getInstance().getScheduler().getContext(id);
             }
             if (killCtx == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
