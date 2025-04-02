@@ -1,0 +1,15 @@
+-- name: test_intersect_with_null_child
+
+create table t0 (
+    c0 INT NOT NULL,
+    c1 BIGINT NOT NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+create table t1 (
+    c0 INT NOT NULL,
+    c1 BIGINT NOT NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t1 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  1024));
+insert into t1 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(4096,  8192));
+
+SELECT SUM(LC0), sum(LC1), sum(rc0), sum(rc1) FROM ( SELECT l.c0 lc0, l.c1 lc1, r.c0 rc0, r.c1 rc1 FROM t0 l FULL JOIN ( SELECT c0, c1 FROM t1 GROUP BY 1, 2 ORDER BY 1 desc ) r ON l.c0 = r.c0 INTERSECT SELECT l.c0 lc0, l.c1 lc1, r.c0 rc0, r.c1 rc1 FROM t0 l FULL JOIN t1 r ON l.c0 = r.c0 GROUP BY 1, 2, 3, 4 ) t;
