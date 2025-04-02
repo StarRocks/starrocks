@@ -4945,6 +4945,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean temp = context.TEMPORARY() != null;
         boolean force = context.FORCE() != null;
         boolean exists = context.EXISTS() != null;
+        boolean dropAll = context.ALL() != null;
         Identifier identifier = null;
         StarRocksParser.IdentifierContext identifierContext = context.identifier();
         if (identifierContext != null) {
@@ -4965,6 +4966,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.where != null) {
             Expr whereExpr = (Expr) visitIfPresent(context.where);
             return new DropPartitionClause(exists, whereExpr, temp, force, createPos(context));
+        } else if (dropAll) {
+            return new DropPartitionClause(temp, force, dropAll, createPos(context));
         } else {
             if (CollectionUtils.isNotEmpty(identifierList)) {
                 List<String> partitionNames = identifierList.stream().map(i -> i.getValue()).collect(toList());
