@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
 
 import java.util.List;
@@ -80,7 +81,8 @@ public final class PartitionRetentionTableCompensation extends TableCompensation
 
     @Override
     public String toString() {
-        return String.format("NOT(%s)", compensateOperator.debugString());
+        ScalarOperator compensate =  NegateFilterShuttle.getInstance().negateFilter(compensateOperator);
+        return String.format("%s", compensate.debugString());
     }
 
     public static TableCompensation build(Table refBaseTable,
