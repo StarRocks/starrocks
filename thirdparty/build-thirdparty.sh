@@ -1361,9 +1361,13 @@ build_icu() {
     unset CXXFLAGS
     unset CFLAGS
 
-    ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
-    make -j$PARALLEL
-    make install
+    # Use a subshell to prevent LD_LIBRARY_PATH from affecting the external environment
+    (
+        export LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH:-}
+        ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
+        make -j$PARALLEL
+        make install
+    )
     restore_compile_flags
 }
 
