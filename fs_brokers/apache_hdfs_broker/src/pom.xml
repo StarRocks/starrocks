@@ -42,12 +42,13 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <hadoop.version>3.4.0</hadoop.version>
         <guava.version>32.0.1-jre</guava.version>
-        <zookeeper.version>3.9.2</zookeeper.version>
+        <zookeeper.version>3.9.3</zookeeper.version>
         <protobuf.version>3.16.3</protobuf.version>
         <thrift.version>0.14.1</thrift.version>
         <tomcat.version>8.5.99</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
         <jackson.version>2.13.4.2</jackson.version>
+        <avro.version>1.11.4</avro.version>
     </properties>
 
     <profiles>
@@ -227,6 +228,12 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-common</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <artifactId>avro</artifactId>
+                        <groupId>org.apache.avro</groupId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -253,6 +260,13 @@ under the License.
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.avro/avro/ -->
+            <dependency>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro</artifactId>
+                <version>${avro.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/junit/junit -->
