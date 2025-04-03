@@ -379,6 +379,7 @@ public class OptExpressionDuplicator {
                 LogicalFilterOperator.Builder filterBuilder = (LogicalFilterOperator.Builder) opBuilder;
                 filterBuilder.setPredicate(newPredicate);
             }
+            processCommon(opBuilder);
             return OptExpression.create(opBuilder.build(), inputs);
         }
 
