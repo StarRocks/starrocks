@@ -293,7 +293,6 @@ public class ConnectScheduler {
                 }
             }
         });
-
     }
 
     /**

@@ -192,7 +192,7 @@ public class ConnectProcessor {
         if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
             com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
 
-            return casted.getThreadAllocatedBytes(Thread.currentThread().getId());
+            return casted.getThreadAllocatedBytes(threadId);
         }
         return 0;
     }
@@ -260,7 +260,8 @@ public class ConnectProcessor {
             if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
-            long threadAllocatedMemory = getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
+            long threadAllocatedMemory =
+                    getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
             ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         }
 
