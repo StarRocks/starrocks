@@ -26,13 +26,7 @@ Status IntersectBuildSinkOperator::push_chunk(RuntimeState* state, const ChunkPt
 
 Status IntersectBuildSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-<<<<<<< HEAD
-
-    return _intersect_ctx->prepare(state, _dst_exprs);
-=======
-    _intersect_ctx->observable().attach_sink_observer(state, observer());
     return _intersect_ctx->prepare(state, _dst_exprs, _has_outer_join_child);
->>>>>>> 72f6e973ab ([BugFix] Fix Intersect not process has_outer_join_child (#57546))
 }
 
 void IntersectBuildSinkOperator::close(RuntimeState* state) {
