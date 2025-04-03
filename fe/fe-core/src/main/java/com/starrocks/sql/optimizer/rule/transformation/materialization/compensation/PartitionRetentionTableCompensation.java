@@ -80,7 +80,12 @@ public final class PartitionRetentionTableCompensation extends TableCompensation
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return String.format("NOT(%s)", compensateOperator.debugString());
+=======
+        ScalarOperator compensate =  NegateFilterShuttle.getInstance().negateFilter(compensateOperator);
+        return String.format("%s", compensate.debugString());
+>>>>>>> 5c95850ede ([BugFix] Exclude all join on-predicate columns in  lowcardinality optimization (#57579))
     }
 
     public static TableCompensation build(Table refBaseTable,
