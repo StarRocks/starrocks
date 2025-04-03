@@ -49,16 +49,32 @@ ADMIN SET FRONTEND CONFIG ("enable_auto_collect_statistics" = "false");
 ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
 -- result:
 -- !result
+ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "6");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "3");
+-- result:
+-- !result
+update default_catalog.information_schema.be_configs set `value` = "3" where name= "tablet_stat_cache_update_interval_second";
+-- result:
+-- !result
 drop all analyze job;
 -- result:
 -- !result
-shell: sleep 7
+shell: sleep 110
 -- result:
 0
 
 -- !result
-update default_catalog.information_schema.be_configs set `value` = "3" where name= "tablet_stat_cache_update_interval_second";
+shell: sleep 110
 -- result:
+0
+
+-- !result
+shell: sleep 110
+-- result:
+0
+
 -- !result
 CREATE TABLE `target_table` (
   `k1` int(11) NULL COMMENT "",
@@ -117,7 +133,7 @@ shell: sleep 7
 -- !result
 function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, statistic_exclude_pattern=^(?!.*test_statistic_behavior).*$, sample_schedule_times=1}', '100%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=2050001, tableRowCountInStatistics=2050001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=1}', '100%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=2050001, tableRowCountInStatistics=2050001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
 -- !result
 drop all analyze job;
 -- result:
@@ -145,7 +161,7 @@ shell: sleep 7
 -- !result
 function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, statistic_exclude_pattern=^(?!.*test_statistic_behavior).*$, sample_schedule_times=2}', '100%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=4100001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '100%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=4100001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
 -- !result
 drop all analyze job;
 -- result:
@@ -173,7 +189,7 @@ shell: sleep 7
 -- !result
 function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, statistic_exclude_pattern=^(?!.*test_statistic_behavior).*$, sample_schedule_times=2}', '97%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=4200001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=123KB, updatePartitionRowCountForCalc=100000, deltaRowCount=0]']]
+[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '97%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=4200001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=123KB, updatePartitionRowCountForCalc=100000, deltaRowCount=0]']]
 -- !result
 drop all analyze job;
 -- result:
@@ -193,7 +209,7 @@ shell: sleep 5
 -- !result
 function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, init_stats_sample_job=true, sample_schedule_times=2}', '97%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=4450001, tableRowCountInStatistics=4350000, totalPartitionCount=6, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=123KB, updatePartitionRowCountForCalc=100001, deltaRowCount=0]']]
+[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, init_stats_sample_job=true}', '97%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=4450001, tableRowCountInStatistics=4350000, totalPartitionCount=6, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=123KB, updatePartitionRowCountForCalc=100001, deltaRowCount=0]']]
 -- !result
 insert into target_table select * from source;
 -- result:
@@ -213,7 +229,7 @@ shell: sleep 7
 -- !result
 function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, statistic_exclude_pattern=^(?!.*test_statistic_behavior).*$, sample_schedule_times=3}', '100%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=5600001, tableRowCountInStatistics=5600001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, statistic_exclude_pattern=^(?!.*test_statistic_behavior).*$, sample_schedule_times=1}', '100%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=5600001, tableRowCountInStatistics=5600001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
 -- !result
 drop all analyze job;
 -- result:
@@ -257,7 +273,7 @@ shell: sleep 7
 -- !result
 function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=4, full_schedule_times=1, sample_schedule_times=3}', '100%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=11200001, tableRowCountInStatistics=11200001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=4, full_schedule_times=3, sample_schedule_times=1}', '100%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=11200001, tableRowCountInStatistics=11200001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
 -- !result
 drop stats target_table;
 -- result:
@@ -289,9 +305,14 @@ ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_large_table_interval" = "4320
 ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_sample_threshold" = "0.3");
 -- result:
 -- !result
-ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "600");
+ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "300");
 -- result:
 -- !result
 ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "180");
 -- result:
+-- !result
+shell: sleep 10
+-- result:
+0
+
 -- !result
