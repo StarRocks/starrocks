@@ -613,8 +613,11 @@ CONF_Int32(update_memory_limit_percent, "60");
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
 
-// if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
-// the failed apply task will retry after `retry_apply_interval_second`
+// If enable_retry_apply is set to true, the system will attempt retries when apply fails. 
+// Retry scenarios for apply operations include the following cases:
+//   1. ​Retry indefinitely for explicitly retryable errors (e.g., memory limits)
+// ​  2. No retry for explicitly non-retryable errors (e.g., Corruption) → Directly enter error state
+// ​  3. Retry until timeout: If still failing after timeout duration → Enter error state
 CONF_mBool(enable_retry_apply, "true");
 CONF_mInt32(retry_apply_interval_second, "30");
 CONF_mInt32(retry_apply_timeout_second, "7200");
