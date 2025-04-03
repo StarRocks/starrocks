@@ -2670,7 +2670,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for expect in expects:
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(plan_string.find(expect) > 0,
-                              "assert expect %s is not found in plan: %s" % (expect, plan_string))
+                              "verbose plan of sql (%s) assert expect %s is not found in plan: %s" % (query, expect, plan_string))
 
     def assert_explain_costs_contains(self, query, *expects):
         """
