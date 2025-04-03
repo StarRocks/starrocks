@@ -81,7 +81,7 @@ public final class PartitionRetentionTableCompensation extends TableCompensation
     @Override
     public String toString() {
         ScalarOperator compensate =  NegateFilterShuttle.getInstance().negateFilter(compensateOperator);
-        return String.format("%)", compensate.debugString());
+        return String.format("%s", compensate.debugString());
     }
 
     public static TableCompensation build(Table refBaseTable,
