@@ -18,11 +18,8 @@ import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Status;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
 import com.starrocks.common.ThreadPoolManager;
->>>>>>> fa5de6af7e ([BugFix] Fix parallel fail when deploy large plan (#56849))
+import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -131,7 +128,7 @@ public class Deployer {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
                 LOG.warn("Error serialize request during deployFragments", e);
-                throw new StarRocksException(e);
+                throw new UserException(e);
             }
         }
 

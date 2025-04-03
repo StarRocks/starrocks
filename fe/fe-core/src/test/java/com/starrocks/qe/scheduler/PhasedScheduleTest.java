@@ -15,7 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.api.client.util.Lists;
-import com.starrocks.common.StarRocksException;
+import com.starrocks.common.UserException;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -127,42 +127,6 @@ public class PhasedScheduleTest extends SchedulerTestBase {
 
     }
 
-<<<<<<< HEAD
-=======
-    @Test
-    public void testScheduleWithException() throws Exception {
-        connectContext.getSessionVariable().setEnablePhasedScheduler(true);
-        connectContext.getSessionVariable().setPhasedSchedulerMaxConcurrency(1);
-
-        String sql = "select count(1) from lineitem " +
-                "UNION ALL select count(1) from lineitem " +
-                "UNION ALL select count(1) from lineitem";
-
-        Set<FragmentInstanceExecState> dispatched = Sets.newHashSet();
-        // deploy
-        new MockUp<FragmentInstanceExecState>() {
-            @Mock
-            public void deployAsync() {
-
-            }
-
-            @Mock
-            public FragmentInstanceExecState.DeploymentResult waitForDeploymentCompletion(long deployTimeoutMs) {
-                return new FragmentInstanceExecState.DeploymentResult(TStatusCode.CANCELLED,
-                        "QueryFinished", null);
-            }
-        };
-
-        // firstly schedule
-        final DefaultCoordinator coordinator = startScheduling(sql);
-        final ExecutionDAG executionDAG = coordinator.getExecutionDAG();
-
-        parallelReport(Sets.newHashSet(dispatched), executionDAG, coordinator);
-
-        executionDAG.getExecutions();
-
-    }
-
     @Test
     public void testScheduleWithSerializeRequestException() throws Exception {
         connectContext.getSessionVariable().setEnablePhasedScheduler(true);
@@ -180,10 +144,9 @@ public class PhasedScheduleTest extends SchedulerTestBase {
             }
         };
 
-        Assert.assertThrows("test", StarRocksException.class, () -> startScheduling(sql));
+        Assert.assertThrows("test", UserException.class, () -> startScheduling(sql));
     }
 
->>>>>>> fa5de6af7e ([BugFix] Fix parallel fail when deploy large plan (#56849))
     private void reportScan(Collection<FragmentInstanceExecState> instances, ExecutionDAG dag, Coordinator coordinator)
             throws Exception {
         for (FragmentInstanceExecState execution : instances) {
