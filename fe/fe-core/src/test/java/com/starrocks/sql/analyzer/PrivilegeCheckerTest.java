@@ -69,6 +69,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -1351,7 +1352,7 @@ public class PrivilegeCheckerTest {
 
         // Without operate privilege on system, test can only see its own process list
         ctxToTestUser();
-        List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(connectContext, "test", null);
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo threadInfo : results) {
             System.out.println(threadInfo.toRow(nowMs, true));
@@ -1361,7 +1362,7 @@ public class PrivilegeCheckerTest {
 
         // With operate privilege on system, test can only see all the process list
         grantRevokeSqlAsRoot("grant operate on system to test");
-        results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        results = connectScheduler.listConnection(connectContext, "test", null);
         for (ConnectContext.ThreadInfo threadInfo : results) {
             System.out.println(threadInfo.toRow(nowMs, true));
         }
@@ -2027,10 +2028,15 @@ public class PrivilegeCheckerTest {
         connectScheduler.registerConnection(ctx1);
         connectScheduler.registerConnection(ctx2);
 
+        new MockUp<ExecuteEnv>() {
+            @Mock
+            public ConnectScheduler getScheduler() {
+                return connectScheduler;
+            }
+        };
+
         ConnectContext ctx = starRocksAssert.getCtx();
         ctx.getState().setOk();
-        ConnectScheduler origConnectScheduler = ctx.getConnectScheduler();
-        ctx.setConnectScheduler(connectScheduler);
         ctxToTestUser();
 
         // can kill self without privilege check
@@ -2056,9 +2062,6 @@ public class PrivilegeCheckerTest {
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
         grantRevokeSqlAsRoot("revoke OPERATE on system from test");
-
-        // reset state
-        ctx.setConnectScheduler(origConnectScheduler);
     }
 
     @Test
