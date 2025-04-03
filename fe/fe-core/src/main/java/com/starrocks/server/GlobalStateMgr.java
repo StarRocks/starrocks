@@ -1506,7 +1506,7 @@ public class GlobalStateMgr {
 
         connectorTableTriggerAnalyzeMgr.start();
 
-        PredicateColumnsMgr.getInstance().startDaemon();
+        //PredicateColumnsMgr.getInstance().startDaemon();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
