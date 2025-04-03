@@ -389,7 +389,7 @@ public class BinaryPredicateStatisticCalculator {
         Histogram leftHistogram = leftColumnStatistic.getHistogram();
         Histogram rightHistogram = rightColumnStatistic.getHistogram();
         double leftColumnDistinctCount = min(leftHistogram.getTotalRows(), leftColumnStatistic.getDistinctValuesCount());
-        double rightColumnDistinctCount = min(leftHistogram.getTotalRows(), rightColumnStatistic.getDistinctValuesCount());
+        double rightColumnDistinctCount = min(rightHistogram.getTotalRows(), rightColumnStatistic.getDistinctValuesCount());
 
         Map<String, Long> estimatedMcv = estimateMcvToMcv(leftHistogram.getMCV(), rightHistogram.getMCV());
         estimateMcvToBucket(leftHistogram.getMCV(), estimatedMcv, rightHistogram, rightColumnDistinctCount, leftColumnType);
