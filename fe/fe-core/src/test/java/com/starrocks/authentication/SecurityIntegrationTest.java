@@ -23,6 +23,7 @@ import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -91,7 +92,6 @@ public class SecurityIntegrationTest {
 
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         authenticationMgr.createSecurityIntegration("oidc2", properties, true);
-
 
         Config.authentication_chain = new String[] {"native", "oidc2"};
 
@@ -200,5 +200,48 @@ public class SecurityIntegrationTest {
         authenticationMgr.alterSecurityIntegration("oidc", alterProperties, true);
         Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
                 new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray(), null));
+    }
+
+    @Test
+    public void testLDAPSecurityIntegration() throws DdlException, AuthenticationException, IOException {
+        Map<String, String> properties = new HashMap<>();
+
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_DN, "cn=admin,dc=example,dc=com");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD, "");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_BASE_DN, "");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR, "");
+        SimpleLDAPSecurityIntegration ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
+
+        SimpleLDAPSecurityIntegration finalLdapSecurityIntegration = ldapSecurityIntegration;
+        Assert.assertThrows(SemanticException.class, finalLdapSecurityIntegration::checkProperty);
+
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_ldap_simple");
+        ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
+        Assert.assertNotNull(ldapSecurityIntegration.getAuthenticationProvider());
+        Assert.assertNotNull(SecurityIntegrationFactory.createSecurityIntegration("ldap", properties));
+
+        LDAPAuthProviderForNative ldapAuthProviderForNative =
+                (LDAPAuthProviderForNative) ldapSecurityIntegration.getAuthenticationProvider();
+
+        UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
+        userAuthenticationInfo.setAuthString("");
+        ldapAuthProviderForNative.authenticate(
+                new ConnectContext(),
+                "admin",
+                "%",
+                null,
+                null,
+                userAuthenticationInfo);
+
+        userAuthenticationInfo.setAuthString("cn=admin,dc=example,dc=com");
+        ldapAuthProviderForNative.authenticate(
+                new ConnectContext(),
+                "admin",
+                "%",
+                null,
+                null,
+                userAuthenticationInfo);
     }
 }
