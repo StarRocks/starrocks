@@ -38,9 +38,13 @@ ADMIN SET FRONTEND CONFIG ("loads_history_sync_interval_second" = "1000000");
 ADMIN SET FRONTEND CONFIG ("enable_trigger_analyze_job_immediate" = "false");
 ADMIN SET FRONTEND CONFIG ("enable_auto_collect_statistics" = "false");
 ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
-drop all analyze job;
-shell: sleep 7
+ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "6");
+ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "3");
 update default_catalog.information_schema.be_configs set `value` = "3" where name= "tablet_stat_cache_update_interval_second";
+drop all analyze job;
+shell: sleep 110
+shell: sleep 110
+shell: sleep 110
 
 CREATE TABLE `target_table` (
   `k1` int(11) NULL COMMENT "",
@@ -133,5 +137,7 @@ ADMIN SET FRONTEND CONFIG ("enable_trigger_analyze_job_immediate" = "true");
 ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_small_table_size" = "5368709120");
 ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_large_table_interval" = "43200");
 ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_sample_threshold" = "0.3");
-ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "600");
+ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "300");
 ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "180");
+
+shell: sleep 10
