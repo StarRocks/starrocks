@@ -48,6 +48,7 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.io_count_remote = io_count_remote + that.io_count_remote;
     diff.in_queue_time_sec = in_queue_time_sec + that.in_queue_time_sec;
     diff.pk_sst_merge_ns = pk_sst_merge_ns + that.pk_sst_merge_ns;
+    diff.input_file_size = input_file_size + that.input_file_size;
     return diff;
 }
 
@@ -63,6 +64,7 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.io_count_remote = io_count_remote - that.io_count_remote;
     diff.in_queue_time_sec = in_queue_time_sec - that.in_queue_time_sec;
     diff.pk_sst_merge_ns = pk_sst_merge_ns - that.pk_sst_merge_ns;
+    diff.input_file_size = input_file_size - that.input_file_size;
     return diff;
 }
 
@@ -82,6 +84,7 @@ std::string CompactionTaskStats::to_json_stats() {
                    allocator);
     root.AddMember("in_queue_sec", rapidjson::Value(in_queue_time_sec), allocator);
     root.AddMember("pk_sst_merge_sec", rapidjson::Value(pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("input_file_size", rapidjson::Value(input_file_size), allocator);
 
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
