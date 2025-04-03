@@ -965,6 +965,8 @@ struct TIntersectNode {
     3: required list<list<Exprs.TExpr>> const_expr_lists
     // Index of the first child that needs to be materialized.
     4: required i64 first_materialized_child_idx
+    
+    5: optional bool has_outer_join_child
 }
 
 struct TExceptNode {
