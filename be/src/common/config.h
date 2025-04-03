@@ -1620,6 +1620,8 @@ CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "true");
+// larger buffer size means fewer reads, but higher memory usage
+CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 
 // default batch size for simdjson lib
 CONF_mInt32(json_parse_many_batch_size, "1000000");
