@@ -1,8 +1,11 @@
--- name: test_analyze_columnn @sequential
-create database analyze_test_${uuid0};
+-- name: test_analyze_column @sequential
+DROP DATABASE IF EXISTS test_analyze_column;
 -- result:
 -- !result
-use analyze_test_${uuid0};
+CREATE DATABASE test_analyze_column;
+-- result:
+-- !result
+USE test_analyze_column;
 -- result:
 -- !result
 CREATE TABLE `t1` (
@@ -35,67 +38,90 @@ INSERT INTO t1 VALUES
     (null,'2020-10-27 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 -- result:
 -- !result
-[UC] analyze sample table t1;
+analyze sample table t1;
 -- result:
-analyze_test_8a14e06f2aaa4d4aa329877dfd869c7b.t1	sample	status	OK
+test_analyze_column.t1	sample	status	OK
 -- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
--- result:
-[REGEX]analyze_test_.*	t1	ALL	SAMPLE	.*	{}	100%	
--- !result
-[UC] analyze full table t1\(k1,k2\);
--- result:
-analyze_test_8a14e06f2aaa4d4aa329877dfd869c7b.t1	analyze	status	OK
--- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
--- result:
-[REGEX]analyze_test_.*	t1	ALL	SAMPLE	.*	{}	100%	\(k1,FULL\),\(k2,FULL\)
--- !result
-[UC] analyze full table t1\(k3,k4\);
--- result:
-analyze_test_8a14e06f2aaa4d4aa329877dfd869c7b.t1	analyze	status	OK
--- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
--- result:
-[REGEX]analyze_test_.*	t1	ALL	SAMPLE	.*	{}	100%	\(k1,FULL\),\(k2,FULL\),\(k3,FULL\),\(k4,FULL\)
--- !result
-[UC] analyze sample table t1\(k3,k4\);
--- result:
-analyze_test_8a14e06f2aaa4d4aa329877dfd869c7b.t1	sample	status	OK
--- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
--- result:
-[REGEX]analyze_test_.*	t1	ALL	SAMPLE	.*	{}	100%	\(k1,FULL\),\(k2,FULL\),\(k3,SAMPLE\),\(k4,SAMPLE\)
--- !result
-[UC] analyze sample table t1;
--- result:
-analyze_test_8a14e06f2aaa4d4aa329877dfd869c7b.t1	sample	status	OK
--- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
--- result:
-[REGEX]analyze_test_.*	t1	ALL	SAMPLE	.*	{}	100%	\(k1,FULL\),\(k2,FULL\),\(k3,SAMPLE\),\(k4,SAMPLE\)
--- !result
-[UC] analyze full table t1;
--- result:
-analyze_test_8a14e06f2aaa4d4aa329877dfd869c7b.t1	analyze	status	OK
--- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
--- result:
-[REGEX]analyze_test_.*	t1	ALL	FULL	.*	{}	100%	\(k1,FULL\),\(k2,FULL\),\(k3,SAMPLE\),\(k4,SAMPLE\)
--- !result
-[UC] drop stats t1;
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 -- result:
 -- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze full table t1(k1,k2);
+-- result:
+test_analyze_column.t1	analyze	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+-- !result
+analyze full table t1(k3,k4);
+-- result:
+test_analyze_column.t1	analyze	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+k3	5
+k4	5
+-- !result
+analyze sample table t1(k3,k4);
+-- result:
+test_analyze_column.t1	sample	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+k3	5
+k4	5
+-- !result
+analyze sample table t1;
+-- result:
+test_analyze_column.t1	sample	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k2	5
+k3	5
+k4	5
+-- !result
+analyze full table t1;
+-- result:
+test_analyze_column.t1	analyze	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+k1	5
+k10	5
+k11	5
+k12	5
+k13	5
+k2	5
+k3	5
+k4	5
+k5	5
+k6	5
+k7	5
+k8	5
+k9	5
+-- !result
+drop stats t1;
 -- result:
 -- !result
-[UC] analyze sample table t1;
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 -- result:
-analyze_test_8a14e06f2aaa4d4aa329877dfd869c7b.t1	sample	status	OK
 -- !result
-show stats meta where `database` = 'analyze_test_${uuid0}';
+analyze sample table t1;
 -- result:
-[REGEX]analyze_test_.*	t1	ALL	SAMPLE	.*	{}	100%	
+test_analyze_column.t1	sample	status	OK
+-- !result
+select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+-- !result
+drop stats t1;
+-- result:
 -- !result
 admin set frontend config('enable_statistic_collect_on_first_load'='true');
 -- result:
