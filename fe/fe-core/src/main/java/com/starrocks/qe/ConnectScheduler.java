@@ -68,6 +68,7 @@ public class ConnectScheduler {
     private final AtomicInteger numberConnection;
     private final ConnectionIdGenerator connectionIdGenerator;
 
+    // mysql connectContext/ http connectContext/ arrowFlight connextContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
 
@@ -279,13 +280,20 @@ public class ConnectScheduler {
                 if (ctx.getExecutor() != null) {
                     if (ctx.getExecutor().getParsedStmt() != null) {
                         if (ctx.getExecutor().getParsedStmt().getOrigStmt() != null) {
-                            LOG.warn("FE ShutDown! Running Query: " +
-                                    ctx.getExecutor().getParsedStmt().getOrigStmt().getOrigStmt());
+                            long threadId = ctx.getCurrentThreadId();
+                            long theadAllocatedBytes = 0;
+                            if (threadId != 0) {
+                                theadAllocatedBytes = ConnectProcessor.getThreadAllocatedBytes(threadId) -
+                                        ctx.getCurrentThreadAllocatedMemory();
+                            }
+                            LOG.warn("FE ShutDown! Running Query:{},  QueryFEAllocatedMemory: {}",
+                                    ctx.getExecutor().getParsedStmt().getOrigStmt().getOrigStmt(), theadAllocatedBytes);
                         }
                     }
                 }
             }
         });
+
     }
 
     /**

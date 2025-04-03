@@ -187,7 +187,7 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
-    private static long initAllocatedMemoryProvider() {
+    public static long getThreadAllocatedBytes(long threadId) {
         ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
         if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
             com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
@@ -260,7 +260,7 @@ public class ConnectProcessor {
             if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
-            long threadAllocatedMemory = initAllocatedMemoryProvider() - ctx.getCurrentThreadAllocatedMemory();
+            long threadAllocatedMemory = getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
             ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         }
 
@@ -299,7 +299,7 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
-        long beginMemory = initAllocatedMemoryProvider();
+        long beginMemory = getThreadAllocatedBytes(Thread.currentThread().getId());
         ctx.setCurrentThreadAllocatedMemory(beginMemory);
 
         // convert statement to Java string

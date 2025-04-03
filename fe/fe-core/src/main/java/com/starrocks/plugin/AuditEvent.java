@@ -148,7 +148,7 @@ public class AuditEvent {
     @AuditField(value = "IsForwardToLeader")
     public boolean isForwardToLeader = false;
 
-    @AuditField(value = "queryFeMemory")
+    @AuditField(value = "QueryFEAllocatedMemory")
     public long queryFeMemory = 0;
 
     public static class AuditEventBuilder {
