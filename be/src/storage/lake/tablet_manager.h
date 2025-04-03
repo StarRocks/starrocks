@@ -80,6 +80,8 @@ public:
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);
 
+    Status put_aggregate_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas);
+
     // When using get_tablet_metadata to determine whether a new version exists in publish version,
     // a valid expected_gtid must be passed in.
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
@@ -150,6 +152,8 @@ public:
     std::string tablet_metadata_root_location(int64_t tablet_id) const;
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
+
+    std::string aggregate_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
     std::string tablet_initial_metadata_location(int64_t tablet_id) const;
 

@@ -311,6 +311,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private PeriodDuration dataCachePartitionDuration;
 
+    private boolean aggregateTabletMeta = false;
+
     private Multimap<String, String> location;
 
     public TableProperty() {
@@ -782,6 +784,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildAggregateTabletMeta() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
+            aggregateTabletMeta = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, "false"));
+        }
+        return this;
+    }
+
     public TableProperty buildStorageCoolDownTTL() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
@@ -1129,5 +1139,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
+        buildAggregateTabletMeta();
     }
 }
