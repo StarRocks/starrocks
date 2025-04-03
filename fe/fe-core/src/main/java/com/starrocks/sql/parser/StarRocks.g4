@@ -333,6 +333,13 @@ statement
     | showNodesStatement
     | alterWarehouseStatement
 
+    // CNGroup Statement
+    | createCNGroupStatement
+    | dropCNGroupStatement
+    | enableCNGroupStatement
+    | disableCNGroupStatement
+    | alterCNGroupStatement
+
     // Transaction Statement
     | beginStatement
     | commitStatement
@@ -967,11 +974,11 @@ modifyFrontendHostClause
   ;
 
 addBackendClause
-   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
+   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 dropBackendClause
-   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)? FORCE?
+   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)? FORCE?
    ;
 
 decommissionBackendClause
@@ -984,11 +991,11 @@ modifyBackendClause
    ;
 
 addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
+   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)?
+   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 modifyBrokerClause
@@ -1799,7 +1806,7 @@ privilegeType
     | ALTER | APPLY | BLACKLIST
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
-        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | PIPE )
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | CNGROUP | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
@@ -2151,17 +2158,37 @@ showWarehousesStatement
     ;
 
 showClustersStatement
-    : SHOW CLUSTERS FROM WAREHOUSE identifier
+    : SHOW (CLUSTERS | CNGROUPS) FROM WAREHOUSE identifier
     ;
 
 showNodesStatement
     : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
-    | SHOW NODES FROM WAREHOUSE identifier
+    | SHOW NODES FROM WAREHOUSE identifier (CNGROUP cngroupName=identifierOrString)?
     ;
 
 alterWarehouseStatement
     : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
     ;
+
+createCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString ADD CNGROUP (IF NOT EXISTS)? cngroupName=identifierOrString
+    comment? properties?
+    ;
+
+ dropCNGroupStatement
+     : ALTER WAREHOUSE warehouseName=identifierOrString DROP CNGROUP (IF EXISTS)? cngroupName=identifierOrString FORCE?
+     ;
+
+enableCNGroupStatement
+     : ALTER WAREHOUSE warehouseName=identifierOrString ENABLE CNGROUP cngroupName=identifierOrString
+     ;
+
+disableCNGroupStatement
+     : ALTER WAREHOUSE warehouseName=identifierOrString DISABLE CNGROUP cngroupName=identifierOrString
+     ;
+alterCNGroupStatement
+     : ALTER WAREHOUSE warehouseName=identifierOrString MODIFY CNGROUP cngroupName=identifierOrString modifyPropertiesClause
+     ;
 
 // ------------------------------------------- Transaction Statement ---------------------------------------------------
 
@@ -3039,7 +3066,7 @@ nonReserved
     | ARRAY_AGG | ARRAY_AGG_DISTINCT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
-    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE

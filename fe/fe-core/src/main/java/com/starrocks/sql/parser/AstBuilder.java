@@ -4488,27 +4488,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String cngroupName = "";
         if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
             whName = identifier.getValue();
+        }
+
+        if (context.cngroupName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(1));
+            cngroupName = identifier.getValue();
         }
 
         List<String> backends =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new AddBackendClause(backends, whName, createPos(context));
+        return new AddBackendClause(backends, whName, cngroupName, createPos(context));
     }
 
     @Override
     public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String cngroupName = "";
         if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
             whName = identifier.getValue();
+        }
+
+        if (context.cngroupName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(1));
+            cngroupName = identifier.getValue();
         }
 
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new DropBackendClause(clusters, context.FORCE() != null, whName, createPos(context));
+        return new DropBackendClause(clusters, context.FORCE() != null, whName, cngroupName, createPos(context));
     }
 
     @Override
@@ -4538,27 +4550,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddComputeNodeClause(StarRocksParser.AddComputeNodeClauseContext context) {
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String cngroupName = "";
         if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
             whName = identifier.getValue();
+        }
+        if (context.cngroupName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(1));
+            cngroupName = identifier.getValue();
         }
 
         List<String> hostPorts =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new AddComputeNodeClause(hostPorts, whName, createPos(context));
+        return new AddComputeNodeClause(hostPorts, whName, cngroupName, createPos(context));
     }
 
     @Override
     public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String cngroupName = "";
         if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
             whName = identifier.getValue();
+        }
+        if (context.cngroupName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString().get(1));
+            cngroupName = identifier.getValue();
         }
 
         List<String> hostPorts =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new DropComputeNodeClause(hostPorts, whName, createPos(context));
+        return new DropComputeNodeClause(hostPorts, whName, cngroupName, createPos(context));
     }
 
     @Override
