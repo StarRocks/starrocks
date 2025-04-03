@@ -893,7 +893,7 @@ bool TabletUpdates::_retry_times_limit() {
         total_duration = sum_base + (failed_retries - max_retries) * max_interval;
     }
 
-    return total_duration < config::retry_apply_timeout;
+    return total_duration < config::retry_apply_timeout_second;
 }
 
 bool TabletUpdates::_is_retryable(Status& status) {
