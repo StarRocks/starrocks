@@ -3227,11 +3227,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         ConnectContext context = new ConnectContext();
         context.setAuthInfoFromThrift(request.getAuth_info());
-        String forUser = "";
+        String forUser = request.getFor_user();
         boolean showFull = request.isSetShow_full();
 
         List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
-                .listConnection(context, context.getQualifiedUser(), forUser);
+                .listConnection(context, forUser);
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
             List<String> row = info.toRow(nowMs, showFull);

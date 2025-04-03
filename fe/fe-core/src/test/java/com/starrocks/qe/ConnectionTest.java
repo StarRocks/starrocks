@@ -15,6 +15,9 @@
 package com.starrocks.qe;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -24,17 +27,23 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.rest.ExecuteSqlAction;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TListConnectionRequest;
+import com.starrocks.thrift.TListConnectionResponse;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class ConnectionLimitTest {
+public class ConnectionTest {
     private static StarRocksAssert starRocksAssert;
     private static int connectionId = 100;
 
@@ -106,24 +115,6 @@ public class ConnectionLimitTest {
         Assert.assertTrue(result.second.contains("Reach user-level"));
     }
 
-    @Test
-    public void testShowProcessListForUser() {
-        String sql = "show processlist for 'test'";
-        ExecuteEnv.setup();
-        ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
-        ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test01"));
-        ShowProcesslistStmt stmt = (ShowProcesslistStmt) com.starrocks.sql.parser.SqlParser.parse(sql,
-                starRocksAssert.getCtx().getSessionVariable()).get(0);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
-        System.out.println(resultSet.getResultRows());
-        Assert.assertEquals(1, resultSet.getResultRows().size());
-        Assert.assertTrue(resultSet.getResultRows().get(0).contains("test"));
-
-        ShowProcesslistStmt showProcesslistStmt = new ShowProcesslistStmt(true);
-        Assert.assertNull(showProcesslistStmt.getForUser());
-    }
-
     private HttpConnectContext createHttpConnectContextForUser(String qualifiedName) {
         HttpConnectContext context = new HttpConnectContext();
         context.setQualifiedUser(qualifiedName);
@@ -156,5 +147,98 @@ public class ConnectionLimitTest {
         // reset
         Config.qe_max_connection = 4096;
         ExecuteEnv.setup();
+    }
+
+    @Test
+    public void testShowProcessListForUser() {
+        String sql = "show processlist for 'test'";
+        ExecuteEnv.setup();
+        ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
+        ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test01"));
+        ShowProcesslistStmt stmt = (ShowProcesslistStmt) com.starrocks.sql.parser.SqlParser.parse(sql,
+                starRocksAssert.getCtx().getSessionVariable()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("test", "%"));
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
+        System.out.println(resultSet.getResultRows());
+        Assert.assertEquals(1, resultSet.getResultRows().size());
+        Assert.assertTrue(resultSet.getResultRows().get(0).contains("test"));
+
+        ShowProcesslistStmt showProcesslistStmt = new ShowProcesslistStmt(true);
+        Assert.assertNull(showProcesslistStmt.getForUser());
+    }
+
+    @Test
+    public void testListConnections() throws Exception {
+        Config.qe_max_connection = 1000;
+        ExecuteEnv.setup();
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+
+        connectScheduler.registerConnection(createConnectContextForUser("u1"));
+        connectScheduler.registerConnection(createConnectContextForUser("u2"));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(ExecuteEnv.getInstance());
+        TListConnectionRequest request = new TListConnectionRequest();
+
+        TAuthInfo tAuthInfo = new TAuthInfo();
+        tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
+        request.setAuth_info(tAuthInfo);
+        request.setFor_user(null);
+        request.setShow_full(false);
+
+        TListConnectionResponse response = impl.listConnections(request);
+        Assert.assertEquals(2, response.getConnections().size());
+
+        tAuthInfo = new TAuthInfo();
+        tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
+        request.setAuth_info(tAuthInfo);
+        request.setFor_user("u2");
+        request.setShow_full(false);
+        response = impl.listConnections(request);
+        Assert.assertEquals(1, response.getConnections().size());
+
+        tAuthInfo = new TAuthInfo();
+        tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
+        request.setAuth_info(tAuthInfo);
+        request.setFor_user("u3");
+        request.setShow_full(false);
+        response = impl.listConnections(request);
+        Assert.assertEquals(0, response.getConnectionsSize());
+
+        UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain("u2", "test");
+        tAuthInfo = new TAuthInfo();
+        tAuthInfo.setCurrent_user_ident(userIdentity.toThrift());
+        request.setAuth_info(tAuthInfo);
+        request.setFor_user("u2");
+        request.setShow_full(false);
+        response = impl.listConnections(request);
+        Assert.assertEquals(1, response.getConnections().size());
+
+        new MockUp<NativeAccessController>() {
+            @Mock
+            public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException();
+            }
+        };
+
+        userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain("u1", "test");
+        tAuthInfo = new TAuthInfo();
+        tAuthInfo.setCurrent_user_ident(userIdentity.toThrift());
+        request.setAuth_info(tAuthInfo);
+        request.setFor_user("u2");
+        request.setShow_full(false);
+        response = impl.listConnections(request);
+        Assert.assertEquals(0, response.getConnectionsSize());
+    }
+
+    @Test
+    public void testConnectionSetAuthFromThrift() throws Exception {
+        ConnectContext context = new ConnectContext();
+        TAuthInfo tAuthInfo = new TAuthInfo();
+        tAuthInfo.setUser("user");
+        tAuthInfo.setUser_ip("%");
+        context.setAuthInfoFromThrift(tAuthInfo);
+        Assert.assertEquals("user", context.getCurrentUserIdentity().getUser());
     }
 }
