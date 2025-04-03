@@ -176,4 +176,11 @@ void PInternalService_RecoverableStub::process_dictionary_cache(
     _stub->process_dictionary_cache(controller, request, response, closure);
 }
 
+void PInternalService_RecoverableStub::fetch_datacache(::google::protobuf::RpcController* controller,
+                                                       const ::starrocks::PFetchDataCacheRequest* request,
+                                                       ::starrocks::PFetchDataCacheResponse* response,
+                                                       ::google::protobuf::Closure* done) {
+    _stub->fetch_datacache(controller, request, response, nullptr);
+}
+
 } // namespace starrocks

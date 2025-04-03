@@ -318,6 +318,7 @@ struct TQueryOptions {
   134: optional i32 datacache_priority;
   135: optional i64 datacache_ttl_seconds;
   136: optional bool enable_cache_select;
+  137: optional i64 datacache_sharing_work_period;
 
   140: optional string catalog;
 

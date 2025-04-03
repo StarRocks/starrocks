@@ -89,7 +89,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, warehouseId);
         }
     }
 
@@ -110,14 +110,18 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
+    private final long warehouseId;
+
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
-                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
+                                           long warehouseId
     ) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
         this.allComputeNodeIds = null;
+        this.warehouseId = warehouseId;
     }
 
     @Override
@@ -246,6 +250,10 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return computeNodesToString(true);
     }
 
+    @Override
+    public long getWarehouseId() {
+        return warehouseId;
+    }
     private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
 

@@ -90,6 +90,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private final boolean preferComputeNode;
 
+    private final long warehouseId;
+
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
@@ -116,7 +118,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
             return new DefaultWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
-                    preferComputeNode);
+                    preferComputeNode, warehouseId);
         }
     }
 
@@ -125,7 +127,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                  ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                  ImmutableMap<Long, ComputeNode> availableID2Backend,
                                  ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                 boolean preferComputeNode) {
+                                 boolean preferComputeNode, long warehouseId) {
         this.id2Backend = id2Backend;
         this.id2ComputeNode = id2ComputeNode;
 
@@ -141,6 +143,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             this.usedComputeNode = hasComputeNode && preferComputeNode;
         }
         this.preferComputeNode = preferComputeNode;
+        this.warehouseId = warehouseId;
     }
 
     @VisibleForTesting
@@ -158,6 +161,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.hasComputeNode = true;
         this.preferComputeNode = true;
         this.usedComputeNode = true;
+        this.warehouseId = 0;
     }
 
     @Override
@@ -293,6 +297,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
     public long selectBackupWorker(long workerId) {
         // not allowed to have backup node
         return -1;
+    }
+
+    @Override
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     private String toString(boolean chooseComputeNode, boolean allowNormalNodes) {

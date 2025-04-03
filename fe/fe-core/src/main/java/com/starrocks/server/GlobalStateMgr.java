@@ -250,6 +250,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -499,6 +500,8 @@ public class GlobalStateMgr {
     private final CompactionControlScheduler compactionControlScheduler;
 
     private final WarehouseManager warehouseMgr;
+
+    private final HistoricalNodeMgr historicalNodeMgr;
 
     private final ConfigRefreshDaemon configRefreshDaemon;
 
@@ -784,6 +787,7 @@ public class GlobalStateMgr {
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManagerEPack();
+        this.historicalNodeMgr = new HistoricalNodeMgr();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
@@ -1108,6 +1112,10 @@ public class GlobalStateMgr {
 
     public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
         return nodeMgr.getWarehouseInfosFromOtherFEs();
+    }
+
+    public HistoricalNodeMgr getHistoricalNodeMgr() {
+        return historicalNodeMgr;
     }
 
     public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
@@ -1706,6 +1714,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockIDEPack.RECOMMENDATIONS_TASK_MGR, recommendationsTaskMgr::load)
+                .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1931,6 +1940,7 @@ public class GlobalStateMgr {
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
                 recommendationsTaskMgr.save(imageWriter);
+                historicalNodeMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

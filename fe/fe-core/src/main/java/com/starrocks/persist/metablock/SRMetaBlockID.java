@@ -101,6 +101,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID BLACKLIST_MGR = new SRMetaBlockID(34);
 
+    public static final SRMetaBlockID HISTORICAL_NODE_MGR = new SRMetaBlockID(35);
+
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */

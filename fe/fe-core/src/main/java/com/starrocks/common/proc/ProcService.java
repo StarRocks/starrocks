@@ -74,6 +74,7 @@ public final class ProcService {
         root.register("warehouses", new WarehouseProcDir());
         root.register("meta_recovery", new MetaRecoveryProdDir());
         root.register("replications", new ReplicationsProcNode());
+        root.register("historical_nodes", new HistoricalNodeProcNode(GlobalStateMgr.getCurrentState()));
     }
 
     // Get the corresponding PROC Node by the specified path

@@ -208,8 +208,8 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
 
     // record read latencyr to ensure cache latency > remote latency
     for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
-        cache->record_read_cache(batch_size, 1000000000);
-        cache->record_read_remote(batch_size, 10);
+        cache->record_read_local_cache(batch_size, 1000000000);
+        cache->record_read_remote_storage(batch_size, 10, true);
     }
 
     // all reads will be reject by cache adaptor
@@ -225,8 +225,8 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
 
     // record read latencyr to ensure cache latency < remote latency
     for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
-        cache->record_read_cache(batch_size, 10);
-        cache->record_read_remote(batch_size, 1000000000);
+        cache->record_read_local_cache(batch_size, 10);
+        cache->record_read_remote_storage(batch_size, 1000000000, true);
     }
 
     // all reads will be accepted by cache adaptor
@@ -338,6 +338,24 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     }
 
     fs::remove_all(cache_dir);
+}
+
+TEST_F(BlockCacheTest, read_peer_cache) {
+    std::unique_ptr<BlockCache> cache(new BlockCache);
+    CacheOptions options;
+    options.mem_space_size = 1024 * 1024;
+    options.engine = "starcache";
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    IOBuffer iobuf;
+    ReadCacheOptions read_options;
+    read_options.remote_host = "127.0.0.1";
+    read_options.remote_port = 0;
+    auto st = cache->read_buffer_from_remote_cache("test_key", 0, 100, &iobuf, &read_options);
+    ASSERT_FALSE(st.ok());
+
+    cache->shutdown();
 }
 
 #endif
