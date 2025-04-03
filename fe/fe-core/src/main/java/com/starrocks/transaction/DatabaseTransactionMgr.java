@@ -601,12 +601,11 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-        // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.ABORTED);
-        boolean txnOperated = false;
-
         transactionState.writeLock();
+        boolean txnOperated = false;
         try {
+            // before state transform
+            transactionState.beforeStateTransform(TransactionStatus.ABORTED);
             writeLock();
             try {
                 txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
