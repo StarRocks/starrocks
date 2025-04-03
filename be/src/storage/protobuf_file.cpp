@@ -22,6 +22,7 @@
 #include "storage/utils.h"
 #include "testutil/sync_point.h"
 #include "util/raw_container.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -177,6 +178,32 @@ Status ProtobufFile::load(::google::protobuf::Message* message, bool fill_cache)
         return Status::Corruption(fmt::format("failed to parse protobuf file {}", _path));
     }
     return Status::OK();
+}
+
+Status ProtobufFile::init(bool sync) {
+    std::shared_ptr<FileSystem> fs;
+    if (_fs) {
+        fs = _fs;
+    } else {
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    }
+    WritableFileOptions opts{.sync_on_close = sync, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(_file, fs->new_writable_file(opts, _path));
+    return Status::OK();
+}
+
+Status ProtobufFile::append(const Slice& data) {
+    if (_file == nullptr) {
+        return Status::InternalError("writable file is not initialized");
+    }
+    return _file->append(data);
+}
+
+Status ProtobufFile::close() {
+    if (_file == nullptr) {
+        return Status::InternalError("writable file is not initialized");
+    }
+    return _file->close();
 }
 
 } // namespace starrocks

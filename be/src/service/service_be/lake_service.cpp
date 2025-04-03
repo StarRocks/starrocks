@@ -27,6 +27,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "runtime/load_channel_mgr.h"
+#include "service/brpc.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
@@ -108,7 +109,6 @@ int get_num_vacuum_active_tasks(void*) {
     return 0;
 #endif
 }
-
 bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
 bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
 bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_publish_tablet_version_queuing");
@@ -278,7 +278,127 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
     }
+
+    if (request->has_enable_aggregate_publish() && request->enable_aggregate_publish() &&
+        response->status().status_code() == 0) {
+        for (auto tablet_id : request->tablet_ids()) {
+            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, request->new_version());
+            if (!tablet_metadata.ok()) {
+                LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id
+                             << ", version: " << request->new_version() << ", error: " << tablet_metadata.status();
+                tablet_metadata.status().to_protobuf(response->mutable_status());
+                break;
+            }
+            auto& map = *response->mutable_tablet_metas();
+            map[tablet_id].CopyFrom(*(tablet_metadata.value()));
+        }
+    }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
+}
+
+void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcController* controller,
+                                                const ::starrocks::AggregatePublishVersionRequest* request,
+                                                ::starrocks::PublishVersionResponse* response,
+                                                ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard done_guard(done);
+    const auto timeout_ms = request->publish_reqs(0).has_timeout_ms() ? request->publish_reqs(0).timeout_ms()
+                                                                      : kDefaultTimeoutForPublishVersion;
+    const auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
+
+    auto thread_pool = publish_version_thread_pool(_env);
+    CHECK(thread_pool != nullptr);
+    auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
+
+    bthread::Mutex response_mtx;
+    BThreadCountDownLatch latch(request->publish_reqs_size());
+    Status final_status;
+    Status::OK().to_protobuf(response->mutable_status());
+    std::map<int64_t, TabletMetadata> tablet_metas;
+    bool has_failuer = false;
+
+    int64_t publish_reqs_size = request->publish_reqs_size();
+    for (auto i = 0; i < publish_reqs_size; i++) {
+        ComputeNode compute_node = request->compute_nodes(i);
+        PublishVersionRequest single_req = request->publish_reqs(i);
+
+        if (has_failuer) {
+            latch.count_down();
+            continue;
+        }
+        if (!compute_node.has_host() || !compute_node.has_brpc_port()) {
+            std::lock_guard l(response_mtx);
+            final_status = Status::InvalidArgument("compute node missing host/port");
+            latch.count_down();
+            continue;
+        }
+
+        auto task = std::make_shared<AutoCleanRunnable>(
+                [&] {
+                    // TODO(zhangqiang)
+                    // add stub cache
+                    auto* node_cntl = new brpc::Controller();
+                    auto* node_resp = new PublishVersionResponse();
+                    node_cntl->set_timeout_ms(timeout_ms);
+                    butil::EndPoint endpoint;
+                    std::string brpc_url = fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port());
+                    if (str2endpoint(brpc_url.c_str(), &endpoint)) {
+                        LOG(WARNING) << "unknown endpoint, host=" << compute_node.host();
+                        has_failuer = true;
+                    }
+                    std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+                    brpc::ChannelOptions options;
+                    options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+                    channel->Init(endpoint, &options);
+                    auto stub = std::make_shared<starrocks::LakeService_Stub>(
+                            channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+                    stub->publish_version(node_cntl, &single_req, node_resp, brpc::DoNothing());
+
+                    brpc::Join(node_cntl->call_id());
+                    {
+                        std::lock_guard l(response_mtx);
+                        if (node_cntl->Failed()) {
+                            final_status = Status::InternalError("link rpc channel failed");
+                            has_failuer = true;
+                        } else if (node_resp->status().status_code() != 0) {
+                            final_status = Status::InternalError("call publish version failed");
+                            has_failuer = true;
+                        }
+                        if (!has_failuer) {
+                            for (auto tablet_id : node_resp->failed_tablets()) {
+                                response->add_failed_tablets(tablet_id);
+                            }
+                            for (const auto& [tid, score] : node_resp->compaction_scores()) {
+                                (*response->mutable_compaction_scores())[tid] = score;
+                            }
+                            for (const auto& [tid, row_num] : node_resp->tablet_row_nums()) {
+                                (*response->mutable_tablet_row_nums())[tid] = row_num;
+                            }
+                            auto* mutable_metas = node_resp->mutable_tablet_metas();
+                            for (auto& [tid, meta] : *mutable_metas) {
+                                tablet_metas.emplace(tid, std::move(meta));
+                            }
+                        }
+                    }
+
+                    delete node_cntl;
+                    delete node_resp;
+                },
+                [&latch] { latch.count_down(); });
+
+        auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
+        if (!st.ok()) {
+            LOG(WARNING) << "Submit task failed: " << st;
+            std::lock_guard l(response_mtx);
+            final_status = st;
+            has_failuer = false;
+        }
+    }
+
+    latch.wait();
+    if (!has_failuer) {
+        final_status = ExecEnv::GetInstance()->lake_tablet_manager()->put_aggregate_tablet_metadata(tablet_metas);
+    }
+    final_status.to_protobuf(response->mutable_status());
 }
 
 void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
