@@ -1,0 +1,25 @@
+-- name: test_empty_input
+
+CREATE TABLE `t0` (
+  `v1` bigint(20) COMMENT "",
+  `v2` bigint(20) COMMENT "",
+  `v3` bigint(20) COMMENT "",
+  `v4` varchar COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+select percentile_disc(v1,0.5) from t0;
+select percentile_cont(v1,0.5) from t0;
+select percentile_disc_lc(v1,0.5) from t0;
+select max(v1),min(v1) from t0;
+select max(v1),count(*) from t0;
+select count(v1) from t0;
+select count(*) from t0;
+select count(distinct v1) from t0;
