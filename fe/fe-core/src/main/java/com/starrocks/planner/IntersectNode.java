@@ -54,6 +54,7 @@ public class IntersectNode extends SetOperationNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         toThrift(msg, TPlanNodeType.INTERSECT_NODE);
+        msg.intersect_node.setHas_outer_join_child(hasNullableGenerateChild);
     }
 
     @Override
