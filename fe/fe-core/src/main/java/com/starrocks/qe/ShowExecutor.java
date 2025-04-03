@@ -852,19 +852,19 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowRunningQueriesStatement(ShowRunningQueriesStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-
             List<LogicalSlot> slots = GlobalStateMgr.getCurrentState().getSlotManager().getSlots();
-            slots.sort(
-                    Comparator.<LogicalSlot>comparingInt(x -> x.getState().getSortOrder())
-                            .thenComparing(LogicalSlot::getStartTimeMs)
-                    .thenComparingLong(LogicalSlot::getExpiredAllocatedTimeMs));
+            if (CollectionUtils.isEmpty(slots)) {
+                return new ShowResultSet(statement.getMetaData(), rows);
+            }
 
+            slots.sort(Comparator.<LogicalSlot>comparingLong(LogicalSlot::getWarehouseId)
+                    .thenComparingLong(LogicalSlot::getStartTimeMs)
+                    .thenComparingLong(LogicalSlot::getExpiredAllocatedTimeMs));
             for (LogicalSlot slot : slots) {
                 List<String> row =
                         ShowRunningQueriesStmt.getColumnSuppliers().stream().map(columnSupplier -> columnSupplier.apply(slot))
                                 .collect(Collectors.toList());
                 rows.add(row);
-
                 if (statement.getLimit() >= 0 && rows.size() >= statement.getLimit()) {
                     break;
                 }
@@ -872,7 +872,6 @@ public class ShowExecutor {
 
             return new ShowResultSet(statement.getMetaData(), rows);
         }
-
         @Override
         public ShowResultSet visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();

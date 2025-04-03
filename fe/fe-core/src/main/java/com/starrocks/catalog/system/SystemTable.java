@@ -36,6 +36,8 @@ import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.information.TemporaryTablesTable;
 import com.starrocks.catalog.system.information.ViewsSystemTable;
+import com.starrocks.catalog.system.information.WarehouseMetricsSystemTable;
+import com.starrocks.catalog.system.information.WarehouseQueriesSystemTable;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
@@ -75,6 +77,8 @@ public class SystemTable extends Table {
                     .add(TasksSystemTable.NAME)
                     .add(TemporaryTablesTable.NAME)
                     .add(ViewsSystemTable.NAME)
+                    .add(WarehouseMetricsSystemTable.NAME)
+                    .add(WarehouseQueriesSystemTable.NAME)
                     .build();
 
     private final TSchemaTableType schemaTableType;

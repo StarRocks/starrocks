@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.server.WarehouseManager;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -140,7 +141,8 @@ public class SlotSelectionStrategyV2WeightedRoundRobinQueueTest {
     }
 
     private static SlotContext generateSlotContext(int numSlots) {
-        LogicalSlot slot = new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
+        LogicalSlot slot = new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
         return new SlotContext(slot);
     }
 
