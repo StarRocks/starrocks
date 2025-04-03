@@ -538,18 +538,11 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-<<<<<<< HEAD
-        // before state transform
-        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.ABORTED);
-        boolean txnOperated = false;
-
-=======
->>>>>>> aa3f87d725 ([BugFix] Fix deadLock when routineLoad task abortTxn (#57430))
         transactionState.writeLock();
         boolean txnOperated = false;
         try {
             // before state transform
-            transactionState.beforeStateTransform(TransactionStatus.ABORTED);
+            TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.ABORTED);
             writeLock();
             try {
                 txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
