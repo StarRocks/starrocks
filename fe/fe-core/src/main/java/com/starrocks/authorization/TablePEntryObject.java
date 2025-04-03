@@ -148,6 +148,8 @@ public class TablePEntryObject implements PEntryObject {
      * this(db1.tbl1), other(db1.tbl1) -> true
      * this(db1.tbl1), other(db1.ALL) -> true
      * this(db1.ALL), other(db1.tbl1) -> false
+     * - For external catalogs, match database and table names case-insensitively.
+     * - For internal catalog, keep case-sensitive match.
      */
     @Override
     public boolean match(Object obj) {
@@ -163,12 +165,33 @@ public class TablePEntryObject implements PEntryObject {
         }
         if (Objects.equals(other.tableUUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
             return this.catalogId == other.catalogId &&
-                    Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID),
-                            Catalog.getCompatibleDbUUID(other.databaseUUID));
+                    matchDatabaseUUID(other);
         }
         return this.catalogId == other.catalogId &&
-                Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID), Catalog.getCompatibleDbUUID(other.databaseUUID)) &&
-                Objects.equals(Catalog.getCompatibleTableUUID(this.tableUUID), Catalog.getCompatibleTableUUID(other.tableUUID));
+                matchDatabaseUUID(other) &&
+                matchTableUUID(other);
+    }
+
+    private boolean matchDatabaseUUID(TablePEntryObject other) {
+        if (isExternalCatalog(this.catalogId)) {
+            return Catalog.getCompatibleDbUUID(this.databaseUUID)
+                    .equalsIgnoreCase(Catalog.getCompatibleDbUUID(other.databaseUUID));
+        }
+        return Catalog.getCompatibleDbUUID(this.databaseUUID)
+                .equals(Catalog.getCompatibleDbUUID(other.databaseUUID));
+    }
+
+    private boolean matchTableUUID(TablePEntryObject other) {
+        if (isExternalCatalog(this.catalogId)) {
+            return Catalog.getCompatibleTableUUID(this.tableUUID)
+                    .equalsIgnoreCase(Catalog.getCompatibleTableUUID(other.tableUUID));
+        }
+        return Catalog.getCompatibleTableUUID(this.tableUUID)
+                .equals(Catalog.getCompatibleTableUUID(other.tableUUID));
+    }
+
+    private boolean isExternalCatalog(long catalogId) {
+        return catalogId != InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
     }
 
     @Override
