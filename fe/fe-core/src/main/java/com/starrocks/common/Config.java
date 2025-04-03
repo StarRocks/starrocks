@@ -1502,8 +1502,11 @@ public class Config extends ConfigBase {
      * update interval of tablet stat
      * All frontends will get tablet stat from all backends at each interval
      */
-    @ConfField
-    public static int tablet_stat_update_interval_second = 300;  // 5 min
+    @ConfField(mutable = true)
+    public static long tablet_stat_update_interval_second = 300;  // 5 min
+
+    @ConfField(mutable = true, comment = "for testing statistics behavior")
+    public static boolean enable_sync_tablet_stats = true;
 
     @ConfField(mutable = true, comment = "time interval to collect tablet info from backend")
     public static long tablet_collect_interval_seconds = 60;
