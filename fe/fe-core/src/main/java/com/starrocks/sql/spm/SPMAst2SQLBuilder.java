@@ -14,11 +14,11 @@
 
 package com.starrocks.sql.spm;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
@@ -27,6 +27,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -122,17 +123,35 @@ public class SPMAst2SQLBuilder {
 
         @Override
         public String visitSelect(SelectRelation stmt, Void context) {
-            if (stmt.hasGroupByClause()) {
-                aggCount++;
+            StringBuilder sqlBuilder = new StringBuilder();
+            SelectList selectList = stmt.getSelectList();
+            sqlBuilder.append("SELECT ");
+
+            // add hint
+            if (enableHints && selectList.getHintNodes() != null) {
+                sqlBuilder.append(extractHintStr(selectList.getHintNodes()));
+            }
+            if (selectList.isDistinct()) {
+                sqlBuilder.append("DISTINCT ");
             }
 
-            List<HintNode> hints = stmt.getSelectList().getHintNodes();
-            if (!enableHints) {
-                stmt.getSelectList().setHintNodes(null);
+            sqlBuilder.append(Joiner.on(", ").join(visitSelectItemList(stmt)));
+            String fromClause = visit(stmt.getRelation());
+            if (fromClause != null) {
+                sqlBuilder.append(" FROM ").append(fromClause);
             }
-            String s = super.visitSelect(stmt, context);
-            stmt.getSelectList().setHintNodes(hints);
-            return s;
+            if (stmt.hasWhereClause()) {
+                sqlBuilder.append(" WHERE ").append(visit(stmt.getWhereClause()));
+            }
+            if (stmt.hasGroupByClause()) {
+                aggCount++;
+                sqlBuilder.append(" GROUP BY ").append(visit(stmt.getGroupByClause()));
+            }
+            if (stmt.hasHavingClause()) {
+                sqlBuilder.append(" HAVING ").append(visit(stmt.getHavingClause()));
+            }
+
+            return sqlBuilder.toString();
         }
 
         protected List<String> visitSelectItemList(SelectRelation stmt) {
