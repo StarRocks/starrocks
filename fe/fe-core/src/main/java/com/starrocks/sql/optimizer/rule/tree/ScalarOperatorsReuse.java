@@ -331,9 +331,6 @@ public class ScalarOperatorsReuse {
 
         private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator,
                                                   CommonSubScalarOperatorCollectorContext context) {
-            if (depth > 100) {
-                return depth;
-            }
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
 
             boolean isDependentOnOuterLambda = isDependentOnOuterLambdaArguments(operator, context);
