@@ -32,6 +32,11 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import java.time.DateTimeException;
 import java.util.regex.Pattern;
 
+import static com.starrocks.analysis.BinaryType.GE;
+import static com.starrocks.analysis.BinaryType.GT;
+import static com.starrocks.analysis.BinaryType.LE;
+import static com.starrocks.analysis.BinaryType.LT;
+
 /**
  * if t is date
  * date_format(t, '%Y%m%d') >= '20230327' -> `t` >= '20230327'
@@ -41,8 +46,8 @@ import java.util.regex.Pattern;
  * replace(substring(cast(t as varchar), 1, 10), "-", "") >= '20230327' -> `t` >= '20230327'
  *
  * if it is datetime
- * date_format(t, '%Y-%m-%d') >/>=/< '2023-03-27' -> t >/>=/< '2023-03-27'
- * date_format(t, '%Y-%m-%d') <= '2023-03-27' -> t < days_add('2023-03-27', 1)
+ * date_format(t, '%Y-%m-%d') >=/< '2023-03-27' -> t >=/< '2023-03-27'
+ * date_format(t, '%Y-%m-%d') >/<= '2023-03-27' -> t >=/< days_add('2023-03-27', 1)
  */
 public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRewriteRule {
     private static final String DATE_PATTERN1 = "%Y%m%d";
@@ -76,14 +81,14 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         // if t is datetime,
         if (columnRef.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
             // date_format(t, '%Y-%m-%d') >/>=/< '2023-03-27' -> t >/>=/< '2023-03-27'
-            if (binaryType == BinaryType.GT || binaryType == BinaryType.GE || binaryType == BinaryType.LT) {
+            if (binaryType == BinaryType.GE || binaryType == BinaryType.LT) {
                 return new BinaryPredicateOperator(binaryType, columnRef, right);
-            }
-            // date_format(t, '%Y-%m-%d') <= '2023-03-27' -> t < days_add('2023-03-27', 1)
-            if (binaryType == BinaryType.LE) {
+            } else if (binaryType == GT || binaryType == LE) {
+                // date_format(t, '%Y-%m-%d') >/<= '2023-03-27' -> t >=/< days_add('2023-03-27', 1)
                 Function daysAddFn = Expr.getBuiltinFunction(FunctionSet.DAYS_ADD,
                         new Type[] {Type.DATETIME, Type.INT}, Function.CompareMode.IS_IDENTICAL);
-                return new BinaryPredicateOperator(BinaryType.LT, columnRef, new CallOperator(
+                binaryType = binaryType == GT ? GE : LT;
+                return new BinaryPredicateOperator(binaryType, columnRef, new CallOperator(
                         FunctionSet.DAYS_ADD, Type.DATETIME,
                         ImmutableList.of(right, ConstantOperator.createInt(1)), daysAddFn));
             }
