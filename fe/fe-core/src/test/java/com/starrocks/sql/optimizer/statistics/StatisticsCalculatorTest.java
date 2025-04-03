@@ -361,11 +361,6 @@ public class StatisticsCalculatorTest {
                 result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
                             0, 0, 30);
                 minTimes = 0;
-
-                cachedStatisticStorage.getColumnStatistic(table, "id_date");
-                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
-                            0, 0, 30);
-                minTimes = 0;
             }
         };
 
