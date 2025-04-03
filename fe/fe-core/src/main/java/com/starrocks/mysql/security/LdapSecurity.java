@@ -74,8 +74,7 @@ public class LdapSecurity {
                                               String ldapBindRootDN,
                                               String ldapBindRootPwd,
                                               String ldapBindBaseDN,
-                                              String ldapSearchFilter
-    ) {
+                                              String ldapSearchFilter) {
         if (Strings.isNullOrEmpty(ldapBindRootPwd)) {
             LOG.warn("empty password is not allowed for simple authentication");
             return false;
@@ -98,12 +97,12 @@ public class LdapSecurity {
             String baseDN = ldapBindBaseDN;
             baseDN = trim(baseDN, "\"");
             baseDN = trim(baseDN, "'");
-            ctx = new InitialDirContext(env);
             SearchControls sc = new SearchControls();
             sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
             // Escapes special characters in user input to prevent LDAP injection
             String safeUser = escapeLdapValue(user);
             String searchFilter = "(" + ldapSearchFilter + "=" + safeUser + ")";
+            ctx = new InitialDirContext(env);
             NamingEnumeration<SearchResult> results = ctx.search(baseDN, searchFilter, sc);
 
             String userDN = null;
