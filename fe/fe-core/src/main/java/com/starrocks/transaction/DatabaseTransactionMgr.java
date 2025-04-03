@@ -2085,6 +2085,58 @@ public class DatabaseTransactionMgr {
             try {
                 writeLock();
                 try {
+                    // check whether version is consistent
+                    Map<Long, PartitionCommitInfo> versions = new HashMap<>();
+                    List<TransactionState> states = stateBatch.getTransactionStates();
+                    long tableId = stateBatch.getTableId();
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
+                    if (table != null) {
+                        for (int i = 0; i < states.size(); i++) {
+                            TransactionState state = states.get(i);
+                            TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+                            // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
+                            if (tableInfo == null) {
+                                states = states.subList(0, Math.max(i, 1));
+                                break;
+                            }
+                            Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
+                            for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
+                                PartitionCommitInfo currTxnInfo = item.getValue();
+                                PartitionCommitInfo prevTxnInfo = versions.get(item.getKey());
+                                if (prevTxnInfo != null && prevTxnInfo.getVersion() + 1 != currTxnInfo.getVersion()) {
+                                    // should't happen
+                                    String errMsg =
+                                            String.format(
+                                                    "partition version is inconsistent in transactionStateBatch," +
+                                                            " partition %d, prev version %d, curr version: %d. table %d",
+                                                    item.getKey(), prevTxnInfo.getVersion(), currTxnInfo.getVersion(), tableId);
+                                    LOG.warn(errMsg);
+                                    return;
+
+                                } else if (prevTxnInfo == null) {
+                                    long partitionId = currTxnInfo.getPhysicalPartitionId();
+                                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                                    if (partition == null) {
+                                        continue;
+                                    }
+                                    if (partition.getVisibleVersion() + 1 != currTxnInfo.getVersion()) {
+                                        // should't happen
+                                        String errMsg =
+                                                String.format(
+                                                        "wait for publishing in batch partition %d version %d, " +
+                                                                "self version: %d. table %d",
+                                                        item.getKey(), partition.getVisibleVersion(),
+                                                        currTxnInfo.getVersion(), tableId);
+                                        LOG.warn(errMsg);
+                                        return;
+                                    }
+                                }
+                                versions.put(item.getKey(), currTxnInfo);
+                            }
+                        }
+                    }
+
                     stateBatch.setTransactionVisibleInfo();
                     unprotectSetTransactionStateBatch(stateBatch);
                     txnOperated = true;
