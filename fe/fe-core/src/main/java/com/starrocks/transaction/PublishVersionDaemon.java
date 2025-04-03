@@ -99,7 +99,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private ThreadPoolExecutor lakeTaskExecutor;
     private ThreadPoolExecutor deleteTxnLogExecutor;
-    private Set<Long> publishingLakeTransactions;
+
+    @VisibleForTesting
+    protected Set<Long> publishingLakeTransactions;
 
     @VisibleForTesting
     protected Set<Long> publishingLakeTransactionsBatchTableId;
@@ -428,14 +430,18 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     // it is possible that the result of publish task
                     // sent by `publishVersionForLakeTable` has not been returned,
                     // we need to wait for the result to return if the same txn is involved.
+                    boolean needWait = false;
                     for (TransactionState txnState : txnStateBatch.transactionStates) {
                         if (publishingTransactions.contains(txnState.getTransactionId())) {
                             LOG.info(
                                     "maybe enable_lake_batch_publish_version is set to true just now, " +
                                             "txn {} will be published later",
                                     txnState.getTransactionId());
-                            break;
+                            needWait = true;
                         }
+                    }
+                    if (needWait) {
+                        continue;
                     }
                     publishingLakeTransactionsBatchTableId.add(tableId);
 
