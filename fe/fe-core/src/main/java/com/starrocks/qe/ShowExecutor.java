@@ -829,15 +829,16 @@ public class ShowExecutor {
             NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
             List<Frontend> frontends = nodeMgr.getFrontends(null);
             for (Frontend frontend : frontends) {
-                if (nodeMgr.getMySelf().equals(frontend)) {
+                if (nodeMgr.getMySelf().getHost().equals(frontend.getHost())) {
                     List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
-                            .listConnection(context, context.getQualifiedUser(), statement.getForUser());
+                            .listConnection(context, statement.getForUser());
                     long nowMs = System.currentTimeMillis();
                     for (ConnectContext.ThreadInfo info : threadInfos) {
-                        List<String> row = info.toRow(nowMs, statement.showFull());
-                        if (row != null) {
-                            rowSet.add(row);
-                        }
+                        List<String> row = Lists.newArrayList();
+                        row.add(frontend.getNodeName());
+                        row.addAll(info.toRow(nowMs, statement.showFull()));
+
+                        rowSet.add(row);
                     }
                 } else {
                     try {
@@ -853,8 +854,11 @@ public class ShowExecutor {
                                 ThriftConnectionPool.frontendPool,
                                 thriftAddress,
                                 client -> client.listConnections(request));
-                        for (TConnectionInfo tConnectionInfo : response.getConnections()) {
+
+                        for (int i = 0; i < response.getConnectionsSize(); ++i) {
+                            TConnectionInfo tConnectionInfo = response.getConnections().get(i);
                             List<String> row = new ArrayList<>();
+                            row.add(frontend.getNodeName());
                             row.add(tConnectionInfo.getConnection_id());
                             row.add(tConnectionInfo.getUser());
                             row.add(tConnectionInfo.getHost());
@@ -869,7 +873,8 @@ public class ShowExecutor {
                             rowSet.add(row);
                         }
                     } catch (TException e) {
-                        continue;
+                        //ignore error
+                        LOG.warn("show processlist exception", e);
                     }
                 }
             }
@@ -1183,7 +1188,7 @@ public class ShowExecutor {
                     try {
                         try {
                             Authorizer.checkAnyActionOnTable(context, new TableName(routineLoadJob.getDbFullName(),
-                                            routineLoadJob.getTableName()));
+                                    routineLoadJob.getTableName()));
                         } catch (AccessDeniedException e) {
                             iterator.remove();
                         }
@@ -2669,13 +2674,13 @@ public class ShowExecutor {
             storageVolumeNames = storageVolumeNames.stream()
                     .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
                     .filter(storageVolumeName -> {
-                                    try {
-                                        Authorizer.checkAnyActionOnStorageVolume(context, storageVolumeName);
-                                    } catch (AccessDeniedException e) {
-                                        return false;
-                                    }
-                                    return true;
+                                try {
+                                    Authorizer.checkAnyActionOnStorageVolume(context, storageVolumeName);
+                                } catch (AccessDeniedException e) {
+                                    return false;
                                 }
+                                return true;
+                    }
                     ).collect(Collectors.toList());
             for (String storageVolumeName : storageVolumeNames) {
                 rows.add(Lists.newArrayList(storageVolumeName));
@@ -2997,7 +3002,6 @@ public class ShowExecutor {
 
             return filteredRows;
         }
-
 
         private List<List<String>> doOrderBy(List<List<String>> rows, List<OrderByPair> orderByPairs) {
             if (rows.isEmpty() || CollectionUtils.isEmpty(orderByPairs)) {

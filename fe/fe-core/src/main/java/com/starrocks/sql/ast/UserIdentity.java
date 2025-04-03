@@ -134,10 +134,6 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return ephemeral;
     }
 
-    public void setEphemeral(boolean ephemeral) {
-        this.ephemeral = ephemeral;
-    }
-
     public void analyze() {
         if (Strings.isNullOrEmpty(user)) {
             throw new SemanticException("Does not support anonymous user");

@@ -3245,11 +3245,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         ConnectContext context = new ConnectContext();
         context.setAuthInfoFromThrift(request.getAuth_info());
-        String forUser = "";
+        String forUser = request.getFor_user();
         boolean showFull = request.isSetShow_full();
 
         List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
-                .listConnection(context, context.getQualifiedUser(), forUser);
+                .listConnection(context, forUser);
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
             List<String> row = info.toRow(nowMs, showFull);
@@ -3274,7 +3274,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         tConnectionInfo.setTime(row.get(6));
         tConnectionInfo.setState(row.get(7));
         tConnectionInfo.setInfo(row.get(8));
-        tConnectionInfo.setInfo(row.get(9));
+        tConnectionInfo.setIsPending(row.get(9));
         return tConnectionInfo;
     }
 }

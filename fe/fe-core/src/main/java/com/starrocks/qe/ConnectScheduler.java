@@ -225,24 +225,24 @@ public class ConnectScheduler {
         return connCountByUser;
     }
 
-    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String currUser, String forUser) {
+    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext currentContext, String forUser) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
-        for (ConnectContext ctx : connectionMap.values()) {
+        for (ConnectContext contextToShow : connectionMap.values()) {
             // Check authorization first.
-            if (!ctx.getQualifiedUser().equals(currUser)) {
+            if (!contextToShow.getQualifiedUser().equals(currentContext.getCurrentUserIdentity().getUser())) {
                 try {
-                    Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(currentContext, PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     continue;
                 }
             }
 
             // Check whether it's the connection for the specified user.
-            if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
+            if (forUser != null && !contextToShow.getQualifiedUser().equals(forUser)) {
                 continue;
             }
 
-            infos.add(ctx.toThreadInfo());
+            infos.add(contextToShow.toThreadInfo());
         }
         return infos;
     }
