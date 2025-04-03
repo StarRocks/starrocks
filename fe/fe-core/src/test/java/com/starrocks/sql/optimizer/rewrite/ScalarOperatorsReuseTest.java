@@ -22,7 +22,9 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuse;
@@ -251,5 +253,37 @@ public class ScalarOperatorsReuseTest {
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
         assertEquals(commonSubScalarOperators.size(), 1);
 
+    }
+
+    private ScalarOperator generateCompoundPredicateOperator(ColumnRefOperator columnRefOperator,
+                                                             int orNum) {
+        ScalarOperator result = columnRefOperator;
+        for (int i = 0; i < orNum; i++) {
+            result = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                    result, ConstantOperator.createInt(i));
+        }
+        return result;
+    }
+
+    @Test
+    public void testCaseWhenWithOr() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
+        ScalarOperator or1 = generateCompoundPredicateOperator(column1, 2000);
+        ScalarOperator or2 = generateCompoundPredicateOperator(column2, 2000);
+
+        CaseWhenOperator cwo1 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+                Lists.newArrayList(or1, ConstantOperator.createInt(0), or2, ConstantOperator.createInt(1)));
+        CaseWhenOperator cwo2 = new CaseWhenOperator(Type.INT, or1, ConstantOperator.createInt(0),
+                Lists.newArrayList(or1, ConstantOperator.createInt(2), or2, ConstantOperator.createInt(3)));
+
+        List<ScalarOperator> oldOperators = Lists.newArrayList(cwo1, cwo2);
+
+
+        try {
+            List<ScalarOperator> newOperators = ScalarOperatorsReuse.rewriteOperators(oldOperators, columnRefFactory);
+        } catch (Exception e) {
+            Assert.fail();
+        }
     }
 }
