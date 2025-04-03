@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.WarehouseManager;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -69,6 +70,7 @@ public class DefaultSlotSelectionStrategyTest {
     }
 
     private static LogicalSlot generateSlot(int numSlots, long groupId) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", groupId, numSlots, 0, 0, 0, 0, 0);
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                groupId, numSlots, 0, 0, 0, 0, 0);
     }
 }

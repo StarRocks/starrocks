@@ -216,6 +216,7 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
@@ -529,7 +530,7 @@ public class GlobalStateMgr {
     private static long failoverGroupThreadId = -1;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
-    private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
+    private final BaseSlotManager slotManager;
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
     private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
@@ -814,8 +815,10 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
+            this.slotManager = new SlotManager(resourceUsageMonitor);
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
+            this.slotManager = new SlotManager(resourceUsageMonitor);
         }
 
         this.lockManager = new LockManager();
@@ -2838,7 +2841,7 @@ public class GlobalStateMgr {
         }
     }
 
-    public SlotManager getSlotManager() {
+    public BaseSlotManager getSlotManager() {
         return slotManager;
     }
 

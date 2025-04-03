@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import org.junit.After;
 import org.junit.Before;
@@ -57,8 +58,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testSmallSlot() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot largeSlot = generateSlot(opts.v2().getTotalSlots() - 1);
@@ -120,8 +121,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testHeadLineBlocking1() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -167,8 +168,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testHeadLineBlocking2() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -217,8 +218,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testUpdateOptionsPeriodicallyAtAllocating() throws InterruptedException {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -253,8 +254,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testUpdateOptionsPeriodicallyAtReleasing() throws InterruptedException {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -290,8 +291,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testUpdateOptionsChangeQueueStrategyOnline() throws InterruptedException {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -327,6 +328,7 @@ public class SlotSelectionStrategyV2Test {
     }
 
     private static LogicalSlot generateSlot(int numSlots) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
     }
 }

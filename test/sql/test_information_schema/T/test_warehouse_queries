@@ -1,0 +1,6 @@
+-- name: test_warehouse_queries
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+desc information_schema.warehouse_queries;
+SELECT * FROM information_schema.warehouse_queries;
+DROP DATABASE db_${uuid0};

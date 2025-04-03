@@ -260,6 +260,8 @@ public abstract class Coordinator {
 
     public abstract String getWarehouseName();
 
+    public abstract long getCurrentWarehouseId();
+
     public abstract String getResourceGroupName();
 
     public abstract boolean isShortCircuit();

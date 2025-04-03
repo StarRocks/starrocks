@@ -18,10 +18,15 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TResourceLogicalSlot;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A logical slot represents resources which is required by a query from the {@link SlotManager}.
@@ -37,8 +42,12 @@ public class LogicalSlot {
     private final TUniqueId slotId;
     private final String requestFeName;
 
+    private final long warehouseId;
+    private Optional<String> warehouseName = Optional.empty();
+
     private final long groupId;
 
+    // est number of physical slots to require
     private final int numPhysicalSlots;
 
     private final long expiredPendingTimeMs;
@@ -53,14 +62,17 @@ public class LogicalSlot {
     private final long startTimeMs;
     private final int numFragments;
     private int pipelineDop;
+    private Optional<Integer> allocatedNumPhysicalSlots = Optional.empty();
+    private Optional<Double> queuedWaitSeconds = Optional.empty();
 
     private State state = State.CREATED;
 
-    public LogicalSlot(TUniqueId slotId, String requestFeName, long groupId, int numPhysicalSlots,
+    public LogicalSlot(TUniqueId slotId, String requestFeName, long warehouseId, long groupId, int numPhysicalSlots,
                        long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs,
                        int numFragments, int pipelineDop) {
         this.slotId = slotId;
         this.requestFeName = requestFeName;
+        this.warehouseId = warehouseId;
         this.groupId = groupId;
         this.numPhysicalSlots = numPhysicalSlots;
         this.expiredPendingTimeMs = expiredPendingTimeMs;
@@ -81,6 +93,12 @@ public class LogicalSlot {
 
     public void onAllocate() {
         transitionState(State.REQUIRING, State.ALLOCATED);
+        if (state == State.ALLOCATED) {
+            // Record the number of physical slots allocated
+            allocatedNumPhysicalSlots = Optional.of(numPhysicalSlots);
+            // Record the time spent in the queue
+            queuedWaitSeconds = Optional.of((System.currentTimeMillis() - startTimeMs) / 1000.0);
+        }
     }
 
     public void onCancel() {
@@ -100,6 +118,7 @@ public class LogicalSlot {
         tslot.setSlot_id(slotId)
                 .setRequest_fe_name(requestFeName)
                 .setGroup_id(groupId)
+                .setWarehouse_id(warehouseId)
                 .setNum_slots(numPhysicalSlots)
                 .setExpired_pending_time_ms(expiredPendingTimeMs)
                 .setExpired_allocated_time_ms(expiredAllocatedTimeMs)
@@ -111,7 +130,8 @@ public class LogicalSlot {
     }
 
     public static LogicalSlot fromThrift(TResourceLogicalSlot tslot) {
-        return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_fe_name(), tslot.getGroup_id(), tslot.getNum_slots(),
+        return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_fe_name(), tslot.getWarehouse_id(),
+                tslot.getGroup_id(), tslot.getNum_slots(),
                 tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms(), tslot.getFe_start_time_ms(),
                 tslot.getNum_fragments(), tslot.getPipeline_dop());
     }
@@ -122,6 +142,10 @@ public class LogicalSlot {
 
     public String getRequestFeName() {
         return requestFeName;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public long getGroupId() {
@@ -176,11 +200,29 @@ public class LogicalSlot {
         this.pipelineDop = pipelineDop;
     }
 
+    public Optional<Integer> getAllocatedNumPhysicalSlots() {
+        return allocatedNumPhysicalSlots;
+    }
+
+    public double getQueuedWaitSeconds() {
+        return queuedWaitSeconds.orElse((System.currentTimeMillis() - startTimeMs) / 1000.0);
+    }
+
+    public String getWarehouseName() {
+        if (warehouseName.isEmpty()) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+            this.warehouseName = Optional.of(warehouse.getName());
+        }
+        return warehouseName.orElse("");
+    }
+
     @Override
     public String toString() {
         return "LogicalSlot{" +
                 "slotId=" + DebugUtil.printId(slotId) +
                 ", requestFeName='" + requestFeName + '\'' +
+                ", warehouseId=" + warehouseId +
                 ", groupId=" + groupId +
                 ", numPhysicalSlots=" + numPhysicalSlots +
                 ", expiredPendingTimeMs=" + TimeUtils.longToTimeString(expiredPendingTimeMs) +
@@ -236,5 +278,22 @@ public class LogicalSlot {
                     return "UNKNOWN";
             }
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(slotId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        LogicalSlot that = (LogicalSlot) obj;
+        return Objects.equals(slotId, that.slotId);
     }
 }
