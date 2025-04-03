@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.common.UserException;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -124,6 +125,26 @@ public class PhasedScheduleTest extends SchedulerTestBase {
 
         parallelReport(noDispatched, executionDAG, coordinator);
 
+    }
+
+    @Test
+    public void testScheduleWithSerializeRequestException() throws Exception {
+        connectContext.getSessionVariable().setEnablePhasedScheduler(true);
+        connectContext.getSessionVariable().setPhasedSchedulerMaxConcurrency(1);
+
+        String sql = "select count(1) from lineitem " +
+                "UNION ALL select count(1) from lineitem " +
+                "UNION ALL select count(1) from lineitem";
+
+        // deploy
+        new MockUp<FragmentInstanceExecState>() {
+            @Mock
+            public void serializeRequest() {
+                throw new RuntimeException("test");
+            }
+        };
+
+        Assert.assertThrows("test", UserException.class, () -> startScheduling(sql));
     }
 
     private void reportScan(Collection<FragmentInstanceExecState> instances, ExecutionDAG dag, Coordinator coordinator)
