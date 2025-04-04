@@ -13,3 +13,5 @@ SELECT id, name EXCLUDE (name) FROM test_table;
 SELECT * EXCLUDE (id, name, age, email) FROM test_table;
 SELECT * EXCLUDE (age, age) FROM test_table;
 SELECT * EXCLUDE (NAME) FROM test_table; 
+with cte1 as ( select * EXCLUDE (name) from test_table)  select * from cte1;
+select * from (select * EXCLUDE(name) from test_table)r;

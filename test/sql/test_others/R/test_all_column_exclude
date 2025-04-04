@@ -58,3 +58,13 @@ SELECT * EXCLUDE (NAME) FROM test_table;
 1	30	john@example.com
 2	25	alice@example.com
 -- !result
+with cte1 as ( select * EXCLUDE (name) from test_table)  select * from cte1;
+-- result:
+1	30	john@example.com
+2	25	alice@example.com
+-- !result
+select * from (select * EXCLUDE(name) from test_table)r;
+-- result:
+1	30	john@example.com
+2	25	alice@example.com
+-- !result
