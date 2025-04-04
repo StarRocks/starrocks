@@ -974,7 +974,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // 2. Remove from base tables
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
-            Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+            Optional<Table> baseTableOpt;
+            try {
+                baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+            } catch (Exception e) {
+                if (!(baseTableInfo.isInternalCatalog())) {
+                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                    baseTableInfo.getDbName(),
+                                    baseTableInfo.getTableIdentifier(),
+                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                            Sets.newHashSet(mvId)).build());
+                }
+                LOG.error("Failed to get base table: {}", baseTableInfo, e);
+                continue;
+            }
+
             if (baseTableOpt.isPresent()) {
                 Table baseTable = baseTableOpt.get();
                 baseTable.removeRelatedMaterializedView(mvId);
