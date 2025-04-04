@@ -282,9 +282,8 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originToNewCols);
         ScalarOperator newPredicate = rewriter.rewrite(scanOperator.getPredicate());
 
-        // we shouldn't push down limit to scan node in this pattern.
         LogicalIcebergScanOperator newOp =  new LogicalIcebergScanOperator(noDeleteTable, newColRefToColBuilder.build(),
-                newColToColRefBuilder.build(), -1, newPredicate, scanOperator.getTableVersionRange());
+                newColToColRefBuilder.build(), scanOperator.getLimit(), newPredicate, scanOperator.getTableVersionRange());
         newOp.setFromEqDeleteRewriteRule(true);
         return newOp;
     }
