@@ -7,9 +7,6 @@ alter table t distributed by random buckets 10;
 E: (5064, 'Getting analyzing error. Detail message: Random distribution table already supports automatic scaling and does not require optimization.')
 -- !result
 
-
-
-
 -- name: test_change_partial_partition_distribution
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
@@ -100,13 +97,6 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
-
-
-
-
-
-
-
 
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
@@ -208,4 +198,47 @@ cancel alter table optimize from t;
 function: wait_optimize_table_finish(expect_status="CANCELLED")
 -- result:
 None
+-- !result
+
+-- name: test_optimize_duplicate_partitions
+CREATE TABLE `duplicate_table_with_null_partition` (
+    `k1` date,
+    `k2` datetime,
+    `k3` char(20),
+    `k4` varchar(20),
+    `k5` boolean,
+    `k6` tinyint,
+    `k7` smallint,
+    `k8` int,
+    `k9` bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9)
+)
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3;
+-- result:
+-- !result
+alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202006,p202007) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show temporary partitions from duplicate_table_with_null_partition;
+-- result:
+-- !result
+show partitions from duplicate_table_with_null_partition;
+-- result:
+[REGEX].*p202006.*k1, k2, k3, k4, k5	4.*
+.*p202007.*k1, k2, k3, k4, k5	4.*
+.*p202008.*k1, k2, k3, k4, k5	3.*
 -- !result
