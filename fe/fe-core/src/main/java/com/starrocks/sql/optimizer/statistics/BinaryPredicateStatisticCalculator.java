@@ -146,10 +146,10 @@ public class BinaryPredicateStatisticCalculator {
         Histogram hist = columnStatistic.getHistogram();
         Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
 
-            String constantStringValue = constantOperator.toString();
-            if (constantOperator.getType() == Type.BOOLEAN) {
-                constantStringValue = constantOperator.getBoolean() ? "1" : "0";
-            }
+        String constantStringValue = constantOperator.toString();
+        if (constantOperator.getType() == Type.BOOLEAN) {
+            constantStringValue = constantOperator.getBoolean() ? "1" : "0";
+        }
         // If there is a constant key in MCV, we use the MCV count to estimate the row count.
         // If it is not in MCV but in a bucket, we use the bucket info to estimate the row count.
         // If it is not in MCV and not in any bucket, we combine hist row count, total row count and bucket number
