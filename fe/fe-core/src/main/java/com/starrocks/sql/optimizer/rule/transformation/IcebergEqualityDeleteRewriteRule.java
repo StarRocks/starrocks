@@ -211,13 +211,13 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
         // build union all
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
-        childOutputColumns.add(newScanOperator.getOutputColumns()); // 17,18
-        childOutputColumns.add(new ArrayList<>(logicalProjectOperator.getColumnRefMap().keySet())); //12, 13
+        childOutputColumns.add(newScanOperator.getOutputColumns());
+        childOutputColumns.add(new ArrayList<>(logicalProjectOperator.getColumnRefMap().keySet()));
 
         LogicalUnionOperator unionOperator = LogicalUnionOperator.builder()
                 .isUnionAll(true)
                 .isFromIcebergEqualityDeleteRewrite(true)
-                .setOutputColumnRefOp(scanOperator.getOutputColumns()) //1, 2
+                .setOutputColumnRefOp(scanOperator.getOutputColumns())
                 .setChildOutputColumns(childOutputColumns)
                 .setLimit(limit)
                 .build();
