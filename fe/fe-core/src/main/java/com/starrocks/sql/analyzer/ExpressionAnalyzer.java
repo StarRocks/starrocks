@@ -117,6 +117,7 @@ import java.util.function.Consumer;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.ArithmeticExpr.Operator.INT_DIVIDE;
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
@@ -715,7 +716,11 @@ public class ExpressionAnalyzer {
                         break;
                     case DIVIDE:
                         lhsType = ArithmeticExpr.getCommonType(t1, t2);
-                        if (lhsType.isFixedPointType()) {
+                        if (session.getSessionVariable().getSqlDialect().equalsIgnoreCase("trino")
+                                && lhsType.isIntegerType() && lhsType.isFixedPointType()) {
+                            lhsType = Type.BIGINT;
+                            op = INT_DIVIDE;
+                        } else if (lhsType.isFixedPointType()) {
                             lhsType = Type.DOUBLE;
                         }
                         rhsType = lhsType;
