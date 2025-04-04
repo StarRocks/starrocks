@@ -531,6 +531,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The number of threads used for Schema Change.
 - Introduced in: -
 
+##### avro_ignore_union_type_tag
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to strip the type tag from the JSON string serialized from the Avro Union data type.
+- Introduced in: v3.3.7, v3.4
+
 <!--
 ##### delete_worker_count_normal_priority
 
