@@ -819,8 +819,9 @@ public class TabletScheduler extends FrontendDaemon {
             // we do not concern priority here.
             // once we take the tablet out of priority queue, priority is meaningless.
             tabletCtx.setTablet(tablet);
-            tabletCtx.setVersionInfo(physicalPartition.getVisibleVersion(),
-                    physicalPartition.getCommittedVersion(), physicalPartition.getVisibleTxnId());
+            tabletCtx.setTabletKeysType(tbl.getKeysType());
+            tabletCtx.setVersionInfo(physicalPartition.getVisibleVersion(), physicalPartition.getCommittedVersion(),
+                    physicalPartition.getVisibleTxnId(), physicalPartition.getVisibleVersionTime());
             tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexId(idx.getId()));
             tabletCtx.setStorageMedium(dataProperty.getStorageMedium());
             if (!Objects.equals(oldStatus, statusPair.first)) {
