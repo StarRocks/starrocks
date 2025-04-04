@@ -92,6 +92,12 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
 
     @Override
     public int compareTo(PRangeCellPlus o) {
+        if (this == o) {
+            return 0;
+        }
+        if (o == null) {
+            return 1;
+        }
         return cell.compareTo(o.getCell());
     }
 
