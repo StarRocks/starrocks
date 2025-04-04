@@ -319,7 +319,7 @@ public abstract class BaseAction implements IAction {
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
         try {
             return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8), null);
+                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }

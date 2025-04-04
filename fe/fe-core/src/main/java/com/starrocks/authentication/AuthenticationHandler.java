@@ -34,7 +34,7 @@ public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
 
     public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
-                                            byte[] authResponse, byte[] randomString) throws AuthenticationException {
+                                            byte[] authResponse) throws AuthenticationException {
         String usePasswd = authResponse.length == 0 ? "NO" : "YES";
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
@@ -66,8 +66,7 @@ public class AuthenticationHandler {
                                     matchedUserIdentity.getValue().getAuthPlugin(),
                                     matchedUserIdentity.getValue().getAuthString());
                             Preconditions.checkState(provider != null);
-                            provider.authenticate(context, user, remoteHost, authResponse, randomString,
-                                    matchedUserIdentity.getValue());
+                            provider.authenticate(context, user, remoteHost, authResponse, matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
 
                             groupProviderName = List.of(Config.group_provider);
@@ -85,7 +84,7 @@ public class AuthenticationHandler {
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        provider.authenticate(context, user, remoteHost, authResponse, randomString, userAuthenticationInfo);
+                        provider.authenticate(context, user, remoteHost, authResponse, userAuthenticationInfo);
                         // the ephemeral user is identified as 'username'@'auth_mechanism'
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
 
@@ -120,7 +119,6 @@ public class AuthenticationHandler {
         context.setCurrentUserIdentity(authenticatedUser);
         if (!authenticatedUser.isEphemeral()) {
             context.setCurrentRoleIds(authenticatedUser);
-            context.setAuthDataSalt(randomString);
 
             UserProperty userProperty =
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(authenticatedUser.getUser());
