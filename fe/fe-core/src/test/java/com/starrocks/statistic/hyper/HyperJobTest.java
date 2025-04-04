@@ -86,7 +86,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
         pid = table.getPartition("t_struct").getId();
-        sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap());
+        sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap(), null);
 
         for (Partition partition : ((OlapTable) table).getAllPartitions()) {
             partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
@@ -259,7 +259,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
             }
 
         };
-        PartitionSampler sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap());
+        PartitionSampler sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap(), null);
         Assert.assertEquals(5550000, sampler.getSampleInfo(pid).getSampleRowCount());
     }
 

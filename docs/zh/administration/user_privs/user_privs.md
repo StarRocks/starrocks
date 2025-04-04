@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['quanxian', 'yonghu']
+sidebar_position: 5
 ---
 
 # 权限系统总览

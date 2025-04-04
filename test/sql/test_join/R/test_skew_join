@@ -41,6 +41,12 @@ PROPERTIES (
 );
 -- result:
 -- !result
+set enable_optimize_skew_join_by_query_rewrite=true;
+-- result:
+-- !result
+set enable_optimize_skew_join_by_broadcast_skew_values=false;
+-- result:
+-- !result
 truncate table t1;
 -- result:
 -- !result

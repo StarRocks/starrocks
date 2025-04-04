@@ -45,7 +45,7 @@ public class MysqlPasswordTest {
     @Test
     public void testCheckPass() {
         // client
-        byte[] publicSeed = MysqlPassword.createRandomString(20);
+        byte[] publicSeed = MysqlPassword.createRandomString();
         byte[] codePass = MysqlPassword.scramble(publicSeed, "mypass");
 
         Assert.assertTrue(MysqlPassword.checkScramble(codePass,

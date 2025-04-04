@@ -149,6 +149,7 @@ import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -728,6 +729,27 @@ public class LeaderImpl {
         TransactionState txnState = publishVersionTask.getTxnState();
         if (txnState != null) {
             txnState.updatePublishTaskFinishTime();
+
+            // Used to collect statistics when the partition is first imported
+            // TODO(stephen): support insert into multiple tables in a transaction
+            if (txnState.getSourceType() == LoadJobSourceType.INSERT_STREAMING &&
+                    txnState.getIdToTableCommitInfos().size() == 1 &&
+                    request.isSetFinish_tablet_infos() &&
+                    !request.getFinish_tablet_infos().isEmpty()) {
+                Map<Long, PartitionCommitInfo> idToPartitionCommitInfo = txnState.getIdToTableCommitInfos().values()
+                        .iterator().next().getIdToPartitionCommitInfo();
+                List<TTabletInfo> tabletInfos = request.getFinish_tablet_infos();
+                for (TTabletInfo tabletInfo : tabletInfos) {
+                    long partitionId = tabletInfo.getPartition_id();
+                    PartitionCommitInfo commitInfo = idToPartitionCommitInfo.get(partitionId);
+                    if (commitInfo != null && commitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
+                        long rowCount = tabletInfo.getRow_count();
+                        long tabletId = tabletInfo.getTablet_id();
+                        Map<Long, Long> tableIdToRowCount = commitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+                        tableIdToRowCount.put(tabletId, rowCount);
+                    }
+                }
+            }
         }
 
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {

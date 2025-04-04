@@ -89,14 +89,14 @@ public class BasicStatsMetaTest extends PlanTestBase {
                     StatsConstants.AnalyzeType.FULL,
                     LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
             basicStatsMeta.increaseDeltaRows(5000L);
-            basicStatsMeta.setUpdateRows(10000L);
+            basicStatsMeta.setTotalRows(10000L);
             Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
             basicStatsMeta.resetDeltaRows();
             Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
 
             basicStatsMeta.setProperties(ImmutableBiMap.of(INIT_SAMPLE_STATS_JOB, "true"));
             basicStatsMeta.increaseDeltaRows(5000L);
-            basicStatsMeta.setUpdateRows(10000L);
+            basicStatsMeta.setTotalRows(10000L);
             Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
         }
     }

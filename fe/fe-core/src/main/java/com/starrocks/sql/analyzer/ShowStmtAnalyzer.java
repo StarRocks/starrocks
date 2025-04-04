@@ -21,7 +21,6 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
@@ -57,6 +56,9 @@ import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -66,6 +68,7 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
@@ -550,14 +553,27 @@ public class ShowStmtAnalyzer {
                 return;
             }
 
-            if (!(predicate instanceof BinaryPredicate) || !((BinaryPredicate) predicate).getOp().isEquivalence()) {
-                throw new SemanticException("Only support equal predicate in show statement");
-            }
+            List<Expr> exprs = AnalyzerUtils.extractConjuncts(predicate);
+            for (Expr expr : exprs) {
+                if (!(expr instanceof BinaryPredicate && ((BinaryPredicate) expr).getOp().isEquivalence()) &&
+                        !(expr instanceof LikePredicate)) {
+                    throw new SemanticException(
+                            "Invalid predicate in SHOW statement. Only '=' and 'LIKE' operators are supported. " +
+                                    "Found: '" + expr.toSql() + "'");
+                }
 
-            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
-            if (!(binaryPredicate.getChild(0) instanceof SlotRef &&
-                    binaryPredicate.getChild(1) instanceof LiteralExpr)) {
-                throw new SemanticException("Only support column = \"string literal\" format predicate");
+                if (!(expr.getChild(0) instanceof SlotRef)) {
+                    throw new SemanticException(
+                            "Invalid left operator in predicate '" + expr.toSql() + "'. " +
+                                    "Left side must be a column reference");
+                }
+
+                if (!(expr.getChild(1) instanceof StringLiteral)) {
+                    throw new SemanticException(
+                            "Invalid right operator in predicate '" + expr.toSql() + "'. " +
+                                    "Right side must be a string literal. " +
+                                    "Example: column = 'value' or column LIKE 'pattern%'");
+                }
             }
         }
 
@@ -724,6 +740,47 @@ public class ShowStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
             return null;
+        }
+
+        @Override
+        public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        public void analyzeOrderByItems(ShowStmt node) {
+            List<OrderByElement> orderByElements = node.getOrderByElements();
+            if (orderByElements != null && !orderByElements.isEmpty()) {
+                List<OrderByPair> orderByPairs = new ArrayList<>();
+                for (OrderByElement orderByElement : orderByElements) {
+                    if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Should order by column");
+                    }
+                    SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                    int index = node.getMetaData().getColumnIdx(slotRef.getColumnName());
+                    OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
+                    orderByPairs.add(orderByPair);
+                }
+                node.setOrderByPairs(orderByPairs);
+            }
         }
     }
 }

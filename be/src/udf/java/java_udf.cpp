@@ -298,6 +298,9 @@ std::string JVMFunctionHelper::to_string(jobject obj) {
 }
 
 std::string JVMFunctionHelper::to_cxx_string(jstring str) {
+    if (str == nullptr) {
+        return "<null>";
+    }
     std::string res;
     const char* charflow = _env->GetStringUTFChars((jstring)str, nullptr);
     res = charflow;
