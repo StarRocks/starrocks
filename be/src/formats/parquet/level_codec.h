@@ -46,6 +46,7 @@ public:
     //     input 1000 length data, and decoder digest 100 bytes. slice will be set to
     //     the last 900.
     Status parse(tparquet::Encoding::type encoding, level_t max_level, uint32_t num_levels, Slice* slice);
+    Status parse_v2(uint32_t num_bytes, level_t max_level, uint32_t num_levels, Slice* slice);
 
     size_t next_repeated_count() {
         DCHECK_EQ(_encoding, tparquet::Encoding::RLE);
