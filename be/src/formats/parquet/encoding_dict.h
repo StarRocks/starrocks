@@ -209,7 +209,7 @@ private:
         } else {
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
             if (UNLIKELY(ret <= 0)) {
-                return Status::InternalError("DictDecoder GetBatchWithDict failed");
+                return Status::InternalError("DictDecoder<> GetBatchWithDict failed");
             }
         }
 
@@ -361,7 +361,7 @@ private:
             raw::stl_vector_resize_uninitialized(&_slices, count);
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
             if (UNLIKELY(ret <= 0)) {
-                return Status::InternalError("DictDecoder GetBatchWithDict failed");
+                return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
             }
             ret = dst->append_strings_overflow(_slices, _max_value_length);
             if (UNLIKELY(!ret)) {

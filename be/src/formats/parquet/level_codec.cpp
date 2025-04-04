@@ -30,18 +30,16 @@ Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level,
     switch (encoding) {
     case tparquet::Encoding::RLE: {
         if (slice->size < 4) {
-            return Status::InternalError("");
+            return Status::Corruption("");
         }
 
         auto* data = (uint8_t*)slice->data;
         uint32_t num_bytes = decode_fixed32_le(data);
         if (num_bytes > slice->size - 4) {
-            return Status::InternalError("");
+            return Status::Corruption("");
         }
         _rle_decoder = RleDecoder<level_t>(data + 4, num_bytes, _bit_width);
-
-        slice->data += 4 + num_bytes;
-        slice->size -= 4 + num_bytes;
+        slice->remove_prefix(4 + num_bytes);
         break;
     }
     case tparquet::Encoding::BIT_PACKED: {
@@ -51,14 +49,27 @@ Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level,
             return Status::Corruption("");
         }
         _bit_packed_decoder = BitReader((uint8_t*)slice->data, num_bytes);
-
-        slice->data += num_bytes;
-        slice->size -= num_bytes;
+        slice->remove_prefix(num_bytes);
         break;
     }
     default:
         return Status::InternalError("not supported encoding");
     }
+    return Status::OK();
+}
+
+Status LevelDecoder::parse_v2(uint32_t num_bytes, level_t max_level, uint32_t num_levels, Slice* slice) {
+    _encoding = tparquet::Encoding::RLE;
+    _bit_width = BitUtil::log2(max_level + 1);
+    _num_levels = num_levels;
+    // new page, invalid cached decode
+    _levels_decoded = _levels_parsed;
+    auto* data = (uint8_t*)slice->data;
+    if (num_bytes > slice->size) {
+        return Status::Corruption("");
+    }
+    _rle_decoder = RleDecoder<level_t>(data, num_bytes, _bit_width);
+    slice->remove_prefix(num_bytes);
     return Status::OK();
 }
 
