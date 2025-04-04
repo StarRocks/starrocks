@@ -147,7 +147,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         scanOperator.setMORParam(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
         scanOperator.setTableFullMORParams(icebergTableFullMorParams);
         scanOperator.setFromEqDeleteRewriteRule(true);
-        OptExpression dataFileWithoutDeleteScanOp = OptExpression.create(scanOperator);
+        //OptExpression dataFileWithoutDeleteScanOp = OptExpression.create(scanOperator);
 
         ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion = ImmutableMap.builder();
         LogicalIcebergScanOperator icebergDataFileWithDeleteScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
@@ -206,15 +206,18 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectForUnion.build(), limit);
         optExpression = OptExpression.create(logicalProjectOperator, optExpression);
 
+        LogicalIcebergScanOperator newScanOperator = build1(scanOperator, columnRefFactory, projectForUnion);
+        OptExpression dataFileWithoutDeleteScanOp = OptExpression.create(newScanOperator);
+
         // build union all
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
-        childOutputColumns.add(scanOperator.getOutputColumns());
-        childOutputColumns.add(new ArrayList<>(logicalProjectOperator.getColumnRefMap().keySet()));
+        childOutputColumns.add(newScanOperator.getOutputColumns()); // 17,18
+        childOutputColumns.add(new ArrayList<>(logicalProjectOperator.getColumnRefMap().keySet())); //12, 13
 
         LogicalUnionOperator unionOperator = LogicalUnionOperator.builder()
                 .isUnionAll(true)
                 .isFromIcebergEqualityDeleteRewrite(true)
-                .setOutputColumnRefOp(scanOperator.getOutputColumns())
+                .setOutputColumnRefOp(scanOperator.getOutputColumns()) //1, 2
                 .setChildOutputColumns(childOutputColumns)
                 .setLimit(limit)
                 .build();
@@ -240,6 +243,50 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
         List<ScalarOperator> onOps = onPredicates.stream().map(PredicateOperator::clone).collect(Collectors.toList());
         return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, onOps);
+    }
+
+    private LogicalIcebergScanOperator build1(
+            LogicalIcebergScanOperator scanOperator,
+            ColumnRefFactory columnRefFactory,
+            ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion) {
+        IcebergTable noDeleteTable = (IcebergTable) scanOperator.getTable();
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
+
+        ImmutableMap.Builder<ColumnRefOperator, Column> newColRefToColBuilder =
+                ImmutableMap.builder();
+        ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder =
+                ImmutableMap.builder();
+
+        // fill ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder
+        Map<ColumnRefOperator, ColumnRefOperator> originToNewCols = new HashMap<>();
+        for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
+            Column originalCol = entry.getKey();
+            ColumnRefOperator originalColRef = entry.getValue();
+            ColumnRefOperator newColRef = buildNewColumnRef(originalCol, columnRefFactory, noDeleteTable);
+            newColToColRefBuilder.put(originalCol, newColRef);
+            originToNewCols.put(originalColRef, newColRef);
+        }
+
+        // fill newColRefToColBuilder and projectForUnion to guarantee column order.
+        for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
+            ColumnRefOperator originRef = entry.getKey();
+            Column originCol = entry.getValue();
+            ColumnRefOperator newRef = originToNewCols.get(originRef);
+            projectForUnion.put(newRef, newRef);
+            newColRefToColBuilder.put(newRef, originCol);
+        }
+
+        // build new table's predicate
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originToNewCols);
+        ScalarOperator newPredicate = rewriter.rewrite(scanOperator.getPredicate());
+
+        // we shouldn't push down limit to scan node in this pattern.
+        LogicalIcebergScanOperator newOp =  new LogicalIcebergScanOperator(noDeleteTable, newColRefToColBuilder.build(),
+                newColToColRefBuilder.build(), -1, newPredicate, scanOperator.getTableVersionRange());
+        newOp.setFromEqDeleteRewriteRule(true);
+        return newOp;
     }
 
     private LogicalIcebergScanOperator buildNewScanOperatorWithUnselectedAndExtendedField(
