@@ -26,7 +26,6 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -102,7 +101,7 @@ public class PaimonTable extends Table {
     @Override
     public Map<String, String> getProperties() {
         if (properties == null) {
-            this.properties = new HashMap<>();
+            this.properties = paimonNativeTable.options();
         }
         return properties;
     }
