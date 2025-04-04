@@ -702,4 +702,11 @@ public class SelectStmtTest {
                 "  |  \n" +
                 "  0:OlapScanNode\n"));
     }
+
+    @Test
+    void testSelectAllExclude() throws Exception {
+        String sql = "SELECT * EXCEPT (k1, k2) FROM db1.tbl1";
+        String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
+        Assert.assertTrue(plan, plan.contains("  Output Exprs:3: k3 | 4: k4"));
+    }
 }
