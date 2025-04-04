@@ -2290,7 +2290,7 @@ selectItem
     ;
 
 excludeClause
-    : EXCLUDE '(' identifier (',' identifier)* ')'
+    : ( EXCEPT | EXCLUDE ) '(' identifier (',' identifier)* ')'
     ;
 
 relations
@@ -3077,5 +3077,5 @@ nonReserved
     | FIELD
     | ARRAY_ELEMENT
     | PERSISTENT
-    | EXCLUDE
+    | EXCLUDE | EXCEPT
     ;

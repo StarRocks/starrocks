@@ -1140,7 +1140,7 @@ GROUP BY c0;
 ```
 ### EXCLUDE  
 
-This feature is supported starting from version 3.6.  
+This feature is supported starting from version 4.0.  
 
 This functionality is used to exclude specified columns from query results, simplifying SQL statements when certain columns need to be ignored. It is particularly convenient when working with tables containing a large number of columns, avoiding the need to explicitly list all columns to be retained.  
 
