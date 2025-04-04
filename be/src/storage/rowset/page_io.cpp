@@ -131,6 +131,8 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
 
 Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                         PageFooterPB* footer) {
+    ScopedTimerPrinter read_and_decompress_page_timer("PageIO::read_and_decompress_page inner on file " +
+                                                      opts.read_file->filename()); // 2258113708 ns
     // the function will be used by query or load, current load is not allowed to fail when memory reach the limit,
     // so don't check when tls_thread_state.check is set to false
     CHECK_MEM_LIMIT("read and decompress page");
@@ -170,6 +172,8 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     std::unique_ptr<char[]> page(new char[page_size + Column::APPEND_OVERFLOW_MAX_SIZE]);
     Slice page_slice(page.get(), page_size);
     {
+        ScopedTimerPrinter read_at_fully_timer("opts.read_file->read_at_fully outer on file " +
+                                               opts.read_file->filename()); // 2258053947 ns
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
         // todo override is_cache_hit
         if (opts.read_file->is_cache_hit()) {
@@ -183,6 +187,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     }
 
     if (opts.verify_checksum) {
+        ScopedTimerPrinter decode_fixed32_le_timer("decode_fixed32_le outer on file " + opts.read_file->filename());
         uint32_t expect = decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
         uint32_t actual = crc32c::Value(page_slice.data, page_slice.size - 4);
         if (expect != actual) {
@@ -216,7 +221,10 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         // decompress page body
         Slice compressed_body(page_slice.data, body_size);
         Slice decompressed_body(decompressed_page.get(), footer->uncompressed_size());
-        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+        {
+            ScopedTimerPrinter decompress_timer("opts.codec->decompress outer on file " + opts.read_file->filename());
+            RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+        }
         if (decompressed_body.size != footer->uncompressed_size()) {
             return Status::Corruption(strings::Substitute(
                     "Bad page: record uncompressed size=$0 vs real decompressed size=$1, file=$2",
@@ -232,7 +240,11 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         opts.stats->uncompressed_bytes_read += body_size;
     }
 
-    RETURN_IF_ERROR(StoragePageDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, &page_slice));
+    {
+        ScopedTimerPrinter decode_page_timer("StoragePageDecoder::decode_page on file " + opts.read_file->filename());
+        RETURN_IF_ERROR(
+                StoragePageDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, &page_slice));
+    }
 
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
     if (opts.use_page_cache) {
