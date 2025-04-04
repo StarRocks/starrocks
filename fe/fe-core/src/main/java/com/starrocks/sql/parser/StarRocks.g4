@@ -3112,4 +3112,5 @@ nonReserved
     | FIELD
     | ARRAY_ELEMENT
     | PERSISTENT
+    | EXCLUDE
     ;

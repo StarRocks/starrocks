@@ -232,7 +232,7 @@ public class SelectAnalyzer {
                 }
 
                 List<String> excludedColumns = item.getExcludedColumns();
-                if (excludedColumns != null && !excludedColumns.isEmpty()) {
+                if (excludedColumns != null && excludedColumns.isNotEmpty()) {
                     Set<String> existingColumnsLower = fields.stream()
                             .map(field -> field.getName().toLowerCase())
                             .collect(Collectors.toSet());
