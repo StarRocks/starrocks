@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -232,7 +233,7 @@ public class SelectAnalyzer {
                 }
 
                 List<String> excludedColumns = item.getExcludedColumns();
-                if (excludedColumns != null && excludedColumns.isNotEmpty()) {
+                if (excludedColumns != null && CollectionUtils.isNotEmpty(excludedColumns)) {
                     Set<String> existingColumnsLower = fields.stream()
                             .map(field -> field.getName().toLowerCase())
                             .collect(Collectors.toSet());
