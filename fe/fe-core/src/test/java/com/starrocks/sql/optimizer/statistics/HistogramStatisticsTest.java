@@ -17,20 +17,23 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class HistogramStatisticsTest {
     @Test
-    public void test() {
+    public void testColumnToConstant() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
 
         List<Bucket> bucketList = new ArrayList<>();
@@ -162,6 +165,102 @@ public class HistogramStatisticsTest {
     }
 
     @Test
+    public void testColumnToColumn() {
+        ColumnRefOperator leftColumnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
+        List<Bucket> leftBucketList = new ArrayList<>();
+        leftBucketList.add(new Bucket(1D, 10D, 100L, 20L));
+        leftBucketList.add(new Bucket(15D, 20D, 200L, 20L));
+        leftBucketList.add(new Bucket(21D, 36D, 300L, 20L));
+        leftBucketList.add(new Bucket(40D, 45D, 400L, 20L));
+        leftBucketList.add(new Bucket(46D, 46D, 500L, 100L));
+        leftBucketList.add(new Bucket(47D, 47D, 600L, 100L));
+        leftBucketList.add(new Bucket(48D, 58D, 700L, 20L));
+        leftBucketList.add(new Bucket(61D, 65D, 800L, 20L));
+        leftBucketList.add(new Bucket(66D, 99D, 900L, 20L));
+        leftBucketList.add(new Bucket(100D, 100D, 1000L, 100L));
+        HashMap<String, Long> leftMcv = new HashMap<>();
+        leftMcv.put("59", 500L);
+        leftMcv.put("38", 300L);
+        leftMcv.put("17", 200L);
+        Histogram leftHistogram = new Histogram(leftBucketList, leftMcv);
+
+        ColumnRefOperator rightColumnRefOperator = new ColumnRefOperator(1, Type.BIGINT, "v2", true);
+        List<Bucket> rightBucketList = new ArrayList<>();
+        rightBucketList.add(new Bucket(1D, 15D, 200L, 20L));
+        rightBucketList.add(new Bucket(18D, 38D, 300L, 20L));
+        rightBucketList.add(new Bucket(41D, 55D, 400L, 20L));
+        rightBucketList.add(new Bucket(56D, 56D, 500L, 100L));
+        rightBucketList.add(new Bucket(57D, 57D, 600L, 100L));
+        rightBucketList.add(new Bucket(58D, 67D, 700L, 20L));
+        rightBucketList.add(new Bucket(70D, 98D, 900L, 20L));
+        rightBucketList.add(new Bucket(100D, 100D, 1000L, 100L));
+        HashMap<String, Long> rightMcv = new HashMap<>();
+        rightMcv.put("99", 500L);
+        rightMcv.put("16", 300L);
+        rightMcv.put("17", 200L);
+        Histogram rightHistogram = new Histogram(rightBucketList, rightMcv);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(2000 * 2000);
+        builder.addColumnStatistic(leftColumnRefOperator, ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(100)
+                .setNullsFraction(0)
+                .setAverageRowSize(20)
+                .setDistinctValuesCount(20)
+                .setHistogram(leftHistogram)
+                .build());
+        builder.addColumnStatistic(rightColumnRefOperator, ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(100)
+                .setNullsFraction(0)
+                .setAverageRowSize(20)
+                .setDistinctValuesCount(20)
+                .setHistogram(rightHistogram)
+                .build());
+        Statistics statistics = builder.build();
+        BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryType.EQ,
+                leftColumnRefOperator, rightColumnRefOperator);
+
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
+        Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
+        Assert.assertNull(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram());
+        Assert.assertNull(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram());
+        Assert.assertEquals(200000, estimated.getOutputRowCount(), 0.1);
+
+        connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
+        estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
+        Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
+        Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(),
+                estimated.getColumnStatistic(rightColumnRefOperator).getHistogram());
+        Histogram estimatedHistogram = estimated.getColumnStatistic(leftColumnRefOperator).getHistogram();
+        Assert.assertEquals(estimatedHistogram.getMcvString(), "MCV: [[17:40000][99:10000][38:6000][16:4800][59:4500]]");
+        Assert.assertEquals(estimatedHistogram.getBuckets().size(), 15);
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(0), 1, 10, 1428, 260));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(1), 15, 15, 1748, 320));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(2), 18, 20, 1948, 80));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(3), 21, 36, 2448, 80));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(4), 41, 45, 3019, 120));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(5), 46, 46, 3619, 600));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(6), 47, 47, 4219, 600));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(7), 48, 55, 4719, 160));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(8), 56, 56, 5519, 800));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(9), 57, 57, 6319, 800));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(10), 58, 58, 6499, 180));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(11), 61, 65, 7610, 180));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(12), 66, 67, 7670, 60));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(13), 70, 98, 8276, 60));
+        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(14), 100, 100, 18276, 10000));
+        Assert.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
+    }
+
+    boolean checkBucket(Bucket bucket, double lower, double upper, long count, long upperRepeats) {
+        return bucket.getLower() == lower && bucket.getUpper() == upper && bucket.getCount() == count &&
+                bucket.getUpperRepeats() == upperRepeats;
+    }
+
+    @Test
     public void testNotHitBucketInHist() {
         List<Bucket> bucketList = new ArrayList<>();
         bucketList.add(new Bucket(1D, 10D, 100L, 20L));
@@ -179,7 +278,6 @@ public class HistogramStatisticsTest {
                 Optional.of(new ConstantOperator(-1, Type.BIGINT)), true);
         Assert.assertFalse(notExist.isPresent());
 
-
         // only one bucket in histogram can cover the predicate range
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
                 Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
@@ -195,6 +293,37 @@ public class HistogramStatisticsTest {
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
                 Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
         Assert.assertEquals(exist.get().getBuckets().size(), 2);
+    }
+
+    @Test
+    public void testUpdateHistWithEqual() {
+        List<Bucket> bucketList = new ArrayList<>();
+        bucketList.add(new Bucket(1D, 10D, 100L, 20L));
+        bucketList.add(new Bucket(15D, 20D, 200L, 20L));
+        Map<String, Long> mcv = new HashMap<>();
+        mcv.put("22", 100L);
+        Histogram histogram = new Histogram(bucketList, mcv);
+        ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+
+        // histogram doesn't contain the constant
+        Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
+                Optional.of(new ConstantOperator(12, Type.BIGINT)));
+        Assert.assertFalse(notExist.isPresent());
+
+        // histogram contains the constant in the mcv
+        Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
+                Optional.of(new ConstantOperator(22, Type.BIGINT)));
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertEquals(exist.get().getBuckets().size(), 0);
+        Assert.assertEquals(exist.get().getMCV(), mcv);
+
+        // histogram contains the constant in a bucket
+        exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
+                Optional.of(new ConstantOperator(2, Type.BIGINT)));
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertEquals(exist.get().getBuckets().size(), 0);
+        Assert.assertTrue(exist.get().getMCV().containsKey("2"));
     }
 
     @Test
@@ -282,4 +411,164 @@ public class HistogramStatisticsTest {
         Assert.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
     }
 
+
+    @Test
+    public void testUpdateHistWithJoin() {
+        // no intersection.
+        List<Bucket> bucketListLeft = new ArrayList<>();
+        bucketListLeft.add(new Bucket(1D, 4D, 100L, 20L));
+        bucketListLeft.add(new Bucket(15D, 24D, 200L, 20L));
+        Map<String, Long> mcvLeft = new HashMap<>();
+        mcvLeft.put("12", 300L);
+        mcvLeft.put("22", 100L);
+        Histogram histogramLeft = new Histogram(bucketListLeft, mcvLeft);
+        ColumnStatistic columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
+
+        List<Bucket> bucketListRight = new ArrayList<>();
+        bucketListRight.add(new Bucket(5D, 11D, 100L, 20L));
+        bucketListRight.add(new Bucket(30D, 35D, 200L, 20L));
+        Map<String, Long> mcvRight = new HashMap<>();
+        mcvRight.put("25", 80L);
+        mcvRight.put("9", 50L);
+        Histogram histogramRight = new Histogram(bucketListRight, mcvRight);
+        ColumnStatistic columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
+
+        Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
+                columnStatisticRight, Type.BIGINT, true);
+        Assert.assertTrue(notExist.isEmpty());
+
+        // MCV to MCV intersection.
+        mcvLeft = new HashMap<>();
+        mcvLeft.put("10", 300L);
+        mcvLeft.put("22", 100L);
+        histogramLeft = new Histogram(null, mcvLeft);
+        columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
+
+        mcvRight = new HashMap<>();
+        mcvRight.put("22", 80L);
+        mcvRight.put("9", 50L);
+        histogramRight = new Histogram(null, mcvRight);
+        columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
+
+        Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
+                columnStatisticRight, Type.BIGINT, true);
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertNull(exist.get().getBuckets());
+        Assert.assertEquals(exist.get().getMCV().size(), 1);
+        Assert.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
+
+        // MCV to bucket intersection (upper).
+        bucketListLeft = new ArrayList<>();
+        bucketListLeft.add(new Bucket(1D, 4D, 100L, 20L));
+        bucketListLeft.add(new Bucket(15D, 23D, 200L, 20L));
+        mcvLeft = new HashMap<>();
+        mcvLeft.put("10", 300L);
+        mcvLeft.put("22", 100L);
+        histogramLeft = new Histogram(bucketListLeft, mcvLeft);
+        columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
+
+        bucketListRight = new ArrayList<>();
+        bucketListRight.add(new Bucket(5D, 10D, 100L, 20L));
+        bucketListRight.add(new Bucket(30D, 35D, 200L, 20L));
+        mcvRight = new HashMap<>();
+        mcvRight.put("23", 80L);
+        mcvRight.put("9", 50L);
+        histogramRight = new Histogram(bucketListRight, mcvRight);
+        columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
+
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
+                columnStatisticRight, Type.BIGINT, true);
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertTrue(exist.get().getBuckets().isEmpty());
+        Assert.assertEquals(exist.get().getMCV().size(), 2);
+        Assert.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 20);
+        Assert.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 20);
+
+        // MCV to bucket intersection (not upper).
+        bucketListLeft = new ArrayList<>();
+        bucketListLeft.add(new Bucket(1D, 4D, 100L, 20L));
+        bucketListLeft.add(new Bucket(15D, 24D, 200L, 20L));
+        mcvLeft = new HashMap<>();
+        mcvLeft.put("10", 300L);
+        mcvLeft.put("22", 100L);
+        histogramLeft = new Histogram(bucketListLeft, mcvLeft);
+        columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
+
+        bucketListRight = new ArrayList<>();
+        bucketListRight.add(new Bucket(5D, 11D, 100L, 20L));
+        bucketListRight.add(new Bucket(30D, 35D, 200L, 20L));
+        mcvRight = new HashMap<>();
+        mcvRight.put("23", 80L);
+        mcvRight.put("9", 50L);
+        histogramRight = new Histogram(bucketListRight, mcvRight);
+        columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
+
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
+                columnStatisticRight, Type.BIGINT, true);
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertTrue(exist.get().getBuckets().isEmpty());
+        Assert.assertEquals(exist.get().getMCV().size(), 2);
+        Assert.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 14);
+        Assert.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 9);
+
+        // bucket to bucket intersection (upper).
+        bucketListLeft = new ArrayList<>();
+        bucketListLeft.add(new Bucket(1D, 5D, 100L, 20L));
+        bucketListLeft.add(new Bucket(15D, 24D, 200L, 20L));
+        histogramLeft = new Histogram(bucketListLeft, new HashMap<>());
+        columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
+
+        bucketListRight = new ArrayList<>();
+        bucketListRight.add(new Bucket(5D, 11D, 100L, 20L));
+        bucketListRight.add(new Bucket(30D, 35D, 200L, 20L));
+        histogramRight = new Histogram(bucketListRight, new HashMap<>());
+        columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
+
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
+                columnStatisticRight, Type.BIGINT, true);
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertTrue(exist.get().getMCV().isEmpty());
+        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+        Bucket joinBucket = exist.get().getBuckets().get(0);
+        Assert.assertEquals(joinBucket.getLower(), 5D, 0.001);
+        Assert.assertEquals(joinBucket.getUpper(), 5D, 0.001);
+        Assert.assertEquals(joinBucket.getCount().longValue(), 20L * 14L);
+        Assert.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+
+        // bucket to bucket intersection (not upper).
+        bucketListLeft = new ArrayList<>();
+        bucketListLeft.add(new Bucket(1D, 9D, 100L, 20L));
+        bucketListLeft.add(new Bucket(15D, 24D, 200L, 20L));
+        histogramLeft = new Histogram(bucketListLeft, new HashMap<>());
+        columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
+
+        bucketListRight = new ArrayList<>();
+        bucketListRight.add(new Bucket(5D, 11D, 100L, 20L));
+        bucketListRight.add(new Bucket(30D, 35D, 200L, 20L));
+        histogramRight = new Histogram(bucketListRight, new HashMap<>());
+        columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
+
+        exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
+                columnStatisticRight, Type.BIGINT, true);
+        Assert.assertTrue(exist.isPresent());
+        Assert.assertTrue(exist.get().getMCV().isEmpty());
+        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+        joinBucket = exist.get().getBuckets().get(0);
+        Assert.assertEquals(joinBucket.getLower(), 5D, 0.001);
+        Assert.assertEquals(joinBucket.getUpper(), 9D, 0.001);
+        Assert.assertEquals(joinBucket.getCount().longValue(), 833);
+        Assert.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+    }
 }

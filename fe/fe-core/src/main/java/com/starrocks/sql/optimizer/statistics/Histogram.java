@@ -63,37 +63,32 @@ public class Histogram {
         return sb.toString();
     }
 
-    public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
+    public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double totalDistinctCount) {
         Optional<Double> valueOpt = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
                 constantOperator.toString());
-        if (!valueOpt.isPresent()) {
+        if (valueOpt.isEmpty()) {
             return Optional.empty();
         }
 
-        double value = valueOpt.get();
+        return getRowCountInBucket(valueOpt.get(), totalDistinctCount, constantOperator.getType().isFixedPointType());
+    }
 
+    public Optional<Long> getRowCountInBucket(double value, double distinctValuesCount, boolean useFixedPointEstimation) {
         int left = 0;
         int right = buckets.size() - 1;
         while (left <= right) {
             int mid = (left + right) / 2;
             Bucket bucket = buckets.get(mid);
 
-            if (bucket.getLower() <= value && value < bucket.getUpper()) {
-                long rowCount = bucket.getCount() - bucket.getUpperRepeats();
+            long prevRowCount = 0;
+            if (mid > 0) {
+                prevRowCount = buckets.get(mid - 1).getCount();
+            }
 
-                if (mid > 0) {
-                    rowCount -= buckets.get(mid - 1).getCount();
-                }
-
-                if (constantOperator.getType().isFixedPointType()) {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
-                } else {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
-                }
-
-                return Optional.of(rowCount);
-            } else if (bucket.getUpper() == value) {
-                return Optional.of(bucket.getUpperRepeats());
+            Optional<Long> rowCountOfBucket = bucket.getRowCountInBucket(value, prevRowCount,
+                    distinctValuesCount / buckets.size(), useFixedPointEstimation);
+            if (rowCountOfBucket.isPresent()) {
+                return rowCountOfBucket;
             }
 
             if (value < bucket.getLower()) {
