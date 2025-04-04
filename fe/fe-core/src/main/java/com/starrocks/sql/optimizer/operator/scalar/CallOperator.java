@@ -78,6 +78,7 @@ public class CallOperator extends ScalarOperator {
         this.fn = fn;
         this.isDistinct = isDistinct;
         this.removedDistinct = removedDistinct;
+        this.incrDepth(arguments);
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {
