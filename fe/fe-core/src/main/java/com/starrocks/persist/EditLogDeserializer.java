@@ -126,6 +126,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_BACKEND_STATE_CHANGE_V2, Backend.class)
             .put(OperationType.OP_ADD_COMPUTE_NODE, ComputeNode.class)
             .put(OperationType.OP_DROP_COMPUTE_NODE, DropComputeNodeLog.class)
+            .put(OperationType.OP_UPDATE_HISTORICAL_NODE, UpdateHistoricalNodeLog.class)
             .put(OperationType.OP_ADD_FRONTEND_V2, Frontend.class)
             .put(OperationType.OP_ADD_FIRST_FRONTEND_V2, Frontend.class)
             .put(OperationType.OP_UPDATE_FRONTEND_V2, Frontend.class)
