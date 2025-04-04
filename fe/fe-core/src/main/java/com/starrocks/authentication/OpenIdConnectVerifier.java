@@ -25,6 +25,7 @@ import com.nimbusds.jwt.SignedJWT;
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
 import java.util.Arrays;
+import java.util.Date;
 
 public class OpenIdConnectVerifier {
 
@@ -35,8 +36,7 @@ public class OpenIdConnectVerifier {
                               String[] requiredIssuer,
                               String[] requiredAudience) throws AuthenticationException {
         try {
-            OpenIdConnectVerifier.verifyJWT(idToken, jwkSet);
-            SignedJWT signedJWT = SignedJWT.parse(idToken);
+            SignedJWT signedJWT = verifyJWT(idToken, jwkSet);
             JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
             String jwtUserName = claims.getStringClaim(principalFiled);
 
@@ -46,6 +46,11 @@ public class OpenIdConnectVerifier {
 
             if (!jwtUserName.equalsIgnoreCase(userName)) {
                 throw new AuthenticationException("Login name " + userName + " is not matched to user " + jwtUserName);
+            }
+
+            Date exp = claims.getExpirationTime();
+            if (exp != null && exp.before(new Date())) {
+                throw new AuthenticationException("JWT expired at " + exp);
             }
 
             if (requiredIssuer != null && requiredIssuer.length != 0 &&
@@ -62,7 +67,7 @@ public class OpenIdConnectVerifier {
         }
     }
 
-    private static void verifyJWT(String jwt, JWKSet jwkSet) throws AuthenticationException, ParseException, JOSEException {
+    private static SignedJWT verifyJWT(String jwt, JWKSet jwkSet) throws AuthenticationException, ParseException, JOSEException {
         Preconditions.checkNotNull(jwt);
 
         SignedJWT signedJWT = SignedJWT.parse(jwt);
@@ -78,5 +83,6 @@ public class OpenIdConnectVerifier {
         if (!signedJWT.verify(verifier)) {
             throw new AuthenticationException("JWT with kid " + kid + " is invalid");
         }
+        return signedJWT;
     }
 }
