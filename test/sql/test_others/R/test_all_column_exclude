@@ -10,7 +10,19 @@ SELECT * EXCLUDE (age) FROM test_table;
 1	John	john@example.com
 2	Alice	alice@example.org
 -- !result
+SELECT * EXCEPT (age) FROM test_table;
+-- result:
+1	John	john@example.com
+2	Alice	alice@example.org
+-- !result
 SELECT * EXCLUDE (name, email) FROM test_table;
+-- result:
+id	age
+1	30
+2	25
+-- !result
+SELECT * EXCEPT (name, email) FROM test_table;
+-- result:
 id	age
 1	30
 2	25
