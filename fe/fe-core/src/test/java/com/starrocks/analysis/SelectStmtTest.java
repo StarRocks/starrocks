@@ -718,6 +718,6 @@ public class SelectStmtTest {
     void testSelectAllExclude() throws Exception {
         String sql = "SELECT * EXCLUDE(id, name) FROM db1.test_table";
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan, plan.contains("1"));
+        Assert.assertTrue(plan, plan.contains("OUTPUT EXPRS:3: age | 4: email"));
     }
 }
