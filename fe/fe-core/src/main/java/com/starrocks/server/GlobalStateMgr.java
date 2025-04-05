@@ -96,6 +96,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.proc.AuthProcSupplier;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
@@ -2758,5 +2759,9 @@ public class GlobalStateMgr {
 
     public void setJwkMgr(JwkMgr jwkMgr) {
         this.jwkMgr = jwkMgr;
+    }
+
+    public AuthProcSupplier getAuthProcSupplier() {
+        return new AuthProcSupplier(getAuthenticationMgr(), getAuthorizationMgr());
     }
 }

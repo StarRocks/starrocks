@@ -20,7 +20,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
           | '/resources' | '/load_error_hub' | '/transactions' 
           | '/monitor' | '/current_queries' | '/current_backend_instances' 
           | '/cluster_balance' | '/routine_loads' | '/colocation_group' 
-          | '/catalog' | '/replications' | '/global_current_queries' }
+          | '/catalog' | '/replications' | '/global_current_queries' | '/auth' }
 ```
 
 ## 参数说明
@@ -39,7 +39,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
 | '/load_error_hub'            | 查看当前集群的 Error Hub 的配置信息。Error Hub 用于管理导入作业产生的错误信息。 |
 | '/transactions'              | 查看当前集群的事务信息。                                     |
 | '/monitor'                   | 查看当前集群的监控信息。                                     |
-| '/current_queries'           | 查看当前连接的FE节点正在执行的查询信息。                       |
+| '/current_queries'           | 查看当前连接的FE节点正在执行的查询信息。                     |
 | '/current_backend_instances' | 查看当前集群正在执行作业的 BE 节点。                         |
 | '/cluster_balance'           | 查看当前集群的负载信息。                                     |
 | '/routine_loads'             | 查看当前集群的 Routine Load 导入信息。                       |
@@ -47,6 +47,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
 | '/catalog'                   | 查看当前集群的 Catalog 信息。                                |
 | '/replications'              | 查看当前集群的数据迁移任务信息。                               |
 | '/global_current_queries'    | 查询当前集群中所有FE节点正在执行的查询信息。                     |
+| '/auth'                      | 查看当前集群的用户名和对应的权限信息。                       |
 
 ## 示例
 
@@ -493,4 +494,47 @@ MySQL > show proc '/global_current_queries';
 | 2025-03-07 02:02:47 | 172.26.92.227 | 3603d566-fab5-11ef-8063-461f20abc3f0 | 12           | tpcds_2  | root | 100.886 MB | 4899036 rows | 114.491 MB  | 0.000 B       | 5.700 s | 0.713 s  | default_warehouse |               | rg1           |
 +---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
 
+```
+
+**示例十七：查看当前集群的用户授权信息。**
+
+```sql
+mysql> SHOW PROC '/auth';
++----------------------+----------+-----------------------+-------------+-------------+--------------+---------------+----------------------------------------------------------------------------------+---------------+
+| UserIdentity         | Password | AuthPlugin            | Roles       | GlobalPrivs | CatalogPrivs | DatabasePrivs | TablePrivs                                                                       | ResourcePrivs |
++----------------------+----------+-----------------------+-------------+-------------+--------------+---------------+----------------------------------------------------------------------------------+---------------+
+| 'root'@'%'           | *        | MYSQL_NATIVE_PASSWORD | [root]      | []          | []           | []            | []                                                                               | []            |
+| 'test_auth_user'@'%' | *        | MYSQL_NATIVE_PASSWORD | [test_role] | []          | []           | []            | [ALL TABLES IN ALL DATABASES(SELECT), ALL TABLES IN DATABASE db1(INSERT,UPDATE)] | []            |
++----------------------+----------+-----------------------+-------------+-------------+--------------+---------------+----------------------------------------------------------------------------------+---------------+
+```
+
+| **返回**       | **说明**                                     |
+| -------------- | -------------------------------------------- |
+| UserIdentity   | 用户标识 ('用户名'@'主机')。                 |
+| Password       | 出于安全原因显示为星号 (*) 的密码。          |
+| AuthPlugin     | 用于用户身份验证的插件。                     |
+| Roles          | 授予用户的角色列表。                         |
+| GlobalPrivs    | 全局权限列表。                               |
+| CatalogPrivs   | 目录级别权限列表。                           |
+| DatabasePrivs  | 数据库级别权限列表。                         |
+| TablePrivs     | 表级别权限列表。                             |
+| ResourcePrivs  | 资源权限列表。                               |
+
+查看特定用户的详细信息：
+
+```sql
+mysql> SHOW PROC "/auth/'root'@'%'";
++--------------------+------------------------------------------------+
+| Property           | Value                                          |
++--------------------+------------------------------------------------+
+| UserIdentity       | 'root'@'%'                                     |
+| AuthPlugin         | MYSQL_NATIVE_PASSWORD                          |
+| Roles              | [root]                                         |
+| GlobalPrivs        | []                                             |
+| CatalogPrivs       | []                                             |
+| DatabasePrivs      | []                                             |
+| TablePrivs         | []                                             |
+| ResourcePrivs      | []                                             |
+| DefaultRoles       | [root]                                         |
++--------------------+------------------------------------------------+
 ```
