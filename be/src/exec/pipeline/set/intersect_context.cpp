@@ -18,14 +18,15 @@
 
 namespace starrocks::pipeline {
 
-Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
+Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs,
+                                 bool has_outer_join_child) {
     RETURN_IF_ERROR(_hash_set->init(state));
     _build_pool = std::make_unique<MemPool>();
 
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
     _dst_nullables.reserve(build_exprs.size());
     for (auto build_expr : build_exprs) {
-        _dst_nullables.emplace_back(build_expr->root()->is_nullable());
+        _dst_nullables.emplace_back(build_expr->root()->is_nullable() || has_outer_join_child);
     }
 
     return Status::OK();

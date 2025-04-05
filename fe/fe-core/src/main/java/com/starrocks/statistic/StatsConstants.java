@@ -114,6 +114,11 @@ public class StatsConstants {
     public static final String TABLE_PROPERTY_SEPARATOR = ",\n\"";
     public static final String COLUMN_ID_SEPARATOR = "#";
 
+    public static final String FULL_ONCE_TIMES = "full_once_times";
+    public static final String FULL_SCHEDULE_TIMES = "full_schedule_times";
+    public static final String SAMPLE_ONCE_TIMES = "sample_once_times";
+    public static final String SAMPLE_SCHEDULE_TIMES = "sample_schedule_times";
+
     public enum AnalyzeType {
         SAMPLE,
         FULL,

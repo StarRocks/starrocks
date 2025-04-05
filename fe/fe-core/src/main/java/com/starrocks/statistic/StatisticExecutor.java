@@ -547,11 +547,13 @@ public class StatisticExecutor {
                         basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                                 statsJob.getColumnNames(), statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
                                 statsJob.getProperties(), existUpdateRows);
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     } else {
                         basicStatsMeta = basicStatsMeta.clone();
                         basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                         basicStatsMeta.setProperties(statsJob.getProperties());
                         basicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     }
 
                     for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {

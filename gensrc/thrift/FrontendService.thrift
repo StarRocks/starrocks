@@ -610,6 +610,7 @@ struct TRoutineLoadJobInfo {
     19: optional string other_msg
     20: optional string latest_source_position
     21: optional string offset_lag
+    22: optional string timestamp_progress
 }
 
 struct TGetRoutineLoadJobsResult {
@@ -1628,6 +1629,7 @@ struct TResourceLogicalSlot {
     5: optional i64 expired_pending_time_ms
     6: optional i64 expired_allocated_time_ms
     7: optional i64 fe_start_time_ms
+    8: optional i64 warehouse_id
 
     100: optional i32 num_fragments
     101: optional i32 pipeline_dop
@@ -1654,6 +1656,7 @@ struct TFinishSlotRequirementResponse {
 
 struct TReleaseSlotRequest {
     1: optional Types.TUniqueId slot_id
+    2: optional i64 warehouse_id
 }
 
 struct TReleaseSlotResponse {
@@ -1939,6 +1942,42 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
+struct TGetWarehouseMetricsRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseMetricsResponeItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string queue_pending_length;
+    4: optional string queue_running_length;
+    5: optional string max_pending_length;
+    6: optional string max_pending_time_second;
+    7: optional string earliest_query_wait_time;
+    8: optional string max_required_slots;
+    9: optional string sum_required_slots;
+    10: optional string remain_slots;
+    11: optional string max_slots;
+}
+struct TGetWarehouseMetricsRespone {
+    1:optional list<TGetWarehouseMetricsResponeItem> metrics;
+}
+
+struct TGetWarehouseQueriesRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseQueriesResponseItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string query_id;
+    4: optional string state;
+    5: optional string est_costs_slots;
+    6: optional string allocate_slots;
+    7: optional string queued_wait_seconds;
+}
+struct TGetWarehouseQueriesResponse {
+    1: optional list<TGetWarehouseQueriesResponseItem> queries;
+}
+
 struct TStartCheckpointRequest {
     1: optional i64 epoch;
     2: optional i64 journal_id;
@@ -2166,5 +2205,9 @@ service FrontendService {
     TGetApplicableRolesResponse getApplicableRoles(1: TGetApplicableRolesRequest request)
 
     TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
+
+    TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
+
+    TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
 }
 

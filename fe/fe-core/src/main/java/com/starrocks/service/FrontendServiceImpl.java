@@ -150,6 +150,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -262,6 +263,10 @@ import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
+import com.starrocks.thrift.TGetWarehouseMetricsRequest;
+import com.starrocks.thrift.TGetWarehouseMetricsRespone;
+import com.starrocks.thrift.TGetWarehouseQueriesRequest;
+import com.starrocks.thrift.TGetWarehouseQueriesResponse;
 import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TImmutablePartitionRequest;
@@ -343,6 +348,7 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
@@ -2930,7 +2936,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TReleaseSlotResponse releaseSlot(TReleaseSlotRequest request) throws TException {
-        GlobalStateMgr.getCurrentState().getSlotManager().releaseSlotAsync(request.getSlot_id());
+        long warehouseId = request.getWarehouse_id();
+        TUniqueId slotId = request.getSlot_id();
+        GlobalStateMgr.getCurrentState().getSlotManager().releaseSlotAsync(warehouseId, slotId);
 
         TStatus tstatus = new TStatus(OK);
         TReleaseSlotResponse res = new TReleaseSlotResponse();
@@ -3216,5 +3224,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetKeywordsResponse getKeywords(TGetKeywordsRequest request) throws TException {
         return InformationSchemaDataSource.generateKeywordsResponse(request);
+    }
+
+    @Override
+    public TGetWarehouseMetricsRespone getWarehouseMetrics(TGetWarehouseMetricsRequest request) throws TException {
+        return WarehouseQueryQueueMetrics.build(request);
+    }
+
+    @Override
+    public TGetWarehouseQueriesResponse getWarehouseQueries(TGetWarehouseQueriesRequest request) throws TException {
+        return WarehouseQueryQueueMetrics.build(request);
     }
 }

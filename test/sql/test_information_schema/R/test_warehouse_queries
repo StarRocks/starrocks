@@ -1,0 +1,23 @@
+-- name: test_warehouse_queries
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+desc information_schema.warehouse_queries;
+-- result:
+WAREHOUSE_ID	varchar(512)	YES	false	None	
+WAREHOUSE_NAME	varchar(2048)	YES	false	None	
+QUERY_ID	varchar(2048)	YES	false	None	
+STATE	varchar(2048)	YES	false	None	
+EST_COSTS_SLOTS	varchar(2048)	YES	false	None	
+ALLOCATE_SLOTS	varchar(2048)	YES	false	None	
+QUEUED_WAIT_SECONDS	varchar(2048)	YES	false	None	
+-- !result
+SELECT * FROM information_schema.warehouse_queries;
+-- result:
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

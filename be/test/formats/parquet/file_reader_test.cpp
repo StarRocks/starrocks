@@ -4294,4 +4294,34 @@ TEST_F(FileReaderTest, test_filter_to_dict_decoder) {
     EXPECT_EQ(2, total_row_nums);
 }
 
+TEST_F(FileReaderTest, test_data_page_v2) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+
+    const std::string file_path = "./be/test/formats/parquet/test_data/data_page_v2_test.parquet";
+    Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"name", TYPE_VARCHAR_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file_path, slot_descs);
+    auto file_reader = _create_file_reader(file_path);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        // for (int i = 0; i < chunk->num_rows(); i++) {
+        //     std::cout << chunk->debug_row(i) << std::endl;
+        // }
+        if (chunk->num_rows() == 4) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 'a']");
+            ASSERT_EQ(chunk->debug_row(1), "[2, 'b']");
+            ASSERT_EQ(chunk->debug_row(2), "[3, 'c']");
+            ASSERT_EQ(chunk->debug_row(3), "[4, 'd']");
+        }
+    }
+    EXPECT_EQ(4, total_row_nums);
+}
+
 } // namespace starrocks::parquet

@@ -1115,7 +1115,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
         }
     }
 
-    if (_opts.runtime_state->enable_join_runtime_filter_pushdown()) {
+    if (_is_root_builder && _opts.runtime_state->enable_join_runtime_filter_pushdown()) {
         for (const auto& it : _opts.runtime_filters->descriptors()) {
             RuntimeFilterProbeDescriptor* desc = it.second;
             SlotId slot_id;

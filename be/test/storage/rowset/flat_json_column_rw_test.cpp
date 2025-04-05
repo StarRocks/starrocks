@@ -1708,4 +1708,79 @@ TEST_F(FlatJsonColumnRWTest, testHyperDeepFlatternJson) {
     EXPECT_EQ(R"({ff.f1: NULL})", read_col->debug_item(3));
 }
 
+TEST_F(FlatJsonColumnRWTest, testGetIORangeVec) {
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse("{\"a\": 2, \"b\": 22}"));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse("{\"a\": 3, \"b\": 23}"));
+    ASSIGN_OR_ABORT(auto jv4, JsonValue::parse("{\"a\": 4, \"b\": 24}"));
+    ASSIGN_OR_ABORT(auto jv5, JsonValue::parse("{\"a\": 5, \"b\": 25}"));
+
+    json_col->append(&jv1);
+    json_col->append(&jv2);
+    json_col->append(&jv3);
+    json_col->append(&jv4);
+    json_col->append(&jv5);
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+
+    TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+    TypeInfoPtr type_info = get_type_info(json_tablet_column);
+
+    const std::string fname = TEST_DIR + "/test_flat_json_rw1.data";
+    auto segment = create_dummy_segment(fs, fname);
+
+    // write data
+    {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+
+        writer_opts.meta = _meta.get();
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_JSON);
+        writer_opts.meta->set_length(0);
+        writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+        writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+        writer_opts.meta->set_is_nullable(write_col->is_nullable());
+        writer_opts.need_zone_map = false;
+
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
+        ASSERT_OK(writer->init());
+
+        ASSERT_TRUE(writer->append(*write_col).ok());
+
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+
+        // close the file
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    auto res = ColumnReader::create(_meta.get(), segment.get(), nullptr);
+    ASSERT_TRUE(res.ok());
+    auto reader = std::move(res).value();
+
+    ASSIGN_OR_ABORT(auto iter, reader->new_iterator(nullptr));
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    iter_opts.read_file = read_file.get();
+    ASSERT_TRUE(iter->init(iter_opts).ok());
+
+    SparseRange<> range;
+    range.add(Range<>(0, write_col->size()));
+    auto status_or = iter->get_io_range_vec(range, read_col.get());
+    ASSERT_TRUE(status_or.ok());
+    ASSERT_EQ((*status_or).size(), 1);
+}
+
 } // namespace starrocks

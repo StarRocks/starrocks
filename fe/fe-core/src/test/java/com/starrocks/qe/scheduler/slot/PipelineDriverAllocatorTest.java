@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import mockit.Mock;
 import mockit.MockUp;
@@ -219,6 +220,8 @@ public class PipelineDriverAllocatorTest {
     }
 
     private LogicalSlot genSlot(int numFragments, int dop) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe-name", 0, 1, 0, 0, 0, numFragments, dop);
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe-name", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                0, 1, 0, 0, 0,
+                numFragments, dop);
     }
 }

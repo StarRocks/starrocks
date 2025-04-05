@@ -14,6 +14,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.re2j.Pattern;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.LDAPAuthProviderForNative;
 import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
@@ -25,7 +26,7 @@ public class AuthPlugin {
     private static final PlainPasswordAuthenticationProvider PLAIN_PASSWORD_AUTHENTICATION_PROVIDER =
             new PlainPasswordAuthenticationProvider();
     private static final LDAPAuthProviderForNative LDAP_AUTH_PROVIDER = new LDAPAuthProviderForNative();
-
+    private static final Pattern COMMA_SPLIT = Pattern.compile("\\s*,\\s*");
     public enum Server {
         MYSQL_NATIVE_PASSWORD,
         AUTHENTICATION_LDAP_SIMPLE,
@@ -49,10 +50,13 @@ public class AuthPlugin {
                     JSONObject authStringJSON = new JSONObject(authString);
                     String jwksUrl = authStringJSON.optString("jwks_url", Config.oidc_jwks_url);
                     String principalFiled = authStringJSON.optString("principal_field", Config.oidc_principal_field);
-                    String requiredIssuer = authStringJSON.optString("required_issuer", Config.oidc_required_issuer);
-                    String requiredAudience = authStringJSON.optString("required_audience", Config.oidc_required_audience);
+                    String requiredIssuer = authStringJSON.optString("required_issuer",
+                            String.join(",", Config.oidc_required_issuer));
+                    String requiredAudience = authStringJSON.optString("required_audience",
+                            String.join(",", Config.oidc_required_audience));
 
-                    return new OpenIdConnectAuthenticationProvider(jwksUrl, principalFiled, requiredIssuer, requiredAudience);
+                    return new OpenIdConnectAuthenticationProvider(jwksUrl, principalFiled,
+                            COMMA_SPLIT.split(requiredIssuer.trim()), COMMA_SPLIT.split(requiredAudience.trim()));
                 }
             }
 

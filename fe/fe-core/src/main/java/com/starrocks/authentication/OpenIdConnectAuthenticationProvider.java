@@ -28,11 +28,11 @@ import java.nio.ByteBuffer;
 public class OpenIdConnectAuthenticationProvider implements AuthenticationProvider {
     private final String jwksUrl;
     private final String principalFiled;
-    private final String requiredIssuer;
-    private final String requiredAudience;
+    private final String[] requiredIssuer;
+    private final String[] requiredAudience;
 
     public OpenIdConnectAuthenticationProvider(String jwksUrl, String principalFiled,
-                                               String requiredIssuer, String requiredAudience) {
+                                               String[] requiredIssuer, String[] requiredAudience) {
         this.jwksUrl = jwksUrl;
         this.principalFiled = principalFiled;
         this.requiredIssuer = requiredIssuer;

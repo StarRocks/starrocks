@@ -326,12 +326,14 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     init_signals();
     init_minidump();
-
+#if defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
+#else
     // Don't bother set the limit if the process is running with very limited memory capacity
     if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
         // set mem hook to reject the memory allocation if large than available physical memory detected.
         set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
     }
+#endif
 }
 
 void Daemon::stop() {

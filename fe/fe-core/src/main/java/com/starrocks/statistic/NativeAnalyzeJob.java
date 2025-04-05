@@ -37,6 +37,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.statistic.StatisticAutoCollector.DEFAULT_JOB_FLAG;
+
 public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @SerializedName("id")
@@ -208,7 +210,8 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
     }
 
     public boolean isDefaultJob() {
-        return isAnalyzeAllDb() && isAnalyzeAllTable() && getScheduleType() == ScheduleType.SCHEDULE;
+        return isAnalyzeAllDb() && isAnalyzeAllTable() && getScheduleType() == ScheduleType.SCHEDULE &&
+                getProperties() != null && getProperties().containsKey(DEFAULT_JOB_FLAG);
     }
 
     @Override
@@ -249,6 +252,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
         if (!hasFailedCollectJob) {
             setStatus(ScheduleStatus.FINISH);
+            setReason("");
             setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }

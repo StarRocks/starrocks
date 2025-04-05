@@ -309,6 +309,10 @@ public class FeExecuteCoordinator extends Coordinator {
         return connectContext.getSessionVariable().getWarehouseName();
     }
 
+    public long getCurrentWarehouseId() {
+        return connectContext.getCurrentWarehouseId();
+    }
+
     @Override
     public String getResourceGroupName() {
         return "";

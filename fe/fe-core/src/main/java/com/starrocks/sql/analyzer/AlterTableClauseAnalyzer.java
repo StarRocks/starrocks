@@ -220,6 +220,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             PropertyAnalyzer.analyzePartitionTTL(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             // do nothing
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            // do nothing
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
             PropertyAnalyzer.analyzeReplicationNum(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -342,6 +344,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 TimeUtils.parseHumanReadablePeriodOrDuration(
                         properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION));
             } catch (DateTimeParseException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            try {
+                String timeDriftConstraintSpec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+                PropertyAnalyzer.analyzeTimeDriftConstraint(timeDriftConstraintSpec, table, properties);
+            } catch (Throwable e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
         } else {
@@ -504,7 +513,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 }
             }
 
-            List<Long> partitionIds = Lists.newArrayList();
+            Set<Long> partitionIds = Sets.newHashSet();
             for (String partitionName : partitionNameList) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {
@@ -512,7 +521,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 }
                 partitionIds.add(partition.getId());
             }
-            clause.setSourcePartitionIds(partitionIds);
+            clause.setSourcePartitionIds(Lists.newArrayList(partitionIds));
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
             clause.setTableOptimize(true);
@@ -1291,6 +1300,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             List<String> dropPartitionNames = PartitionSelector.getPartitionNamesByExpr(context, tableName,
                     olapTable, expr, true);
             clause.setResolvedPartitionNames(dropPartitionNames);
+        } else if (clause.isDropAll()) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't drop all partitions since it is not olap table");
+            }
+            if (!clause.isTempPartition()) {
+                throw new SemanticException("Can't drop all partitions since it is not temp partition");
+            }
         }
 
         if (table instanceof OlapTable) {

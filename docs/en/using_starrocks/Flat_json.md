@@ -27,7 +27,6 @@ Due to the special nature of the JSON type, its performance in queries is not as
 
 StarRocks introduces the Flat JSON feature to improve JSON data query efficiency and reduce the complexity of using JSON.
 - This feature is available from version 3.3.0, disabled by default, and needs to be enabled manually.
-- From version 3.4.0, the Flat JSON feature is enabled by default, requiring no manual operation.
 
 ## What is Flat JSON
 

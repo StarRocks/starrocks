@@ -39,8 +39,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -125,10 +127,9 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         if (cachedColumnNameToColRefMap.isPresent()) {
             return cachedColumnNameToColRefMap.get();
         }
-
-        Map<String, ColumnRefOperator> columnRefOperatorMap = columnMetaToColRefMap.entrySet().stream()
-                .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
-        cachedColumnNameToColRefMap = Optional.of(columnRefOperatorMap);
+        CaseInsensitiveMap<String, ColumnRefOperator> columnRefOperatorMap = new CaseInsensitiveMap<>();
+        columnMetaToColRefMap.forEach((k, v) -> columnRefOperatorMap.put(k.getName(), v));
+        cachedColumnNameToColRefMap = Optional.of(Collections.unmodifiableMap(columnRefOperatorMap));
         return columnRefOperatorMap;
     }
 

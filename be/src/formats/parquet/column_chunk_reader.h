@@ -142,13 +142,12 @@ private:
     Status _parse_page_header();
     Status _parse_page_data();
 
-    Status _read_and_decompress_page_data();
-    Status _parse_data_page();
+    Status _parse_data_page(tparquet::PageType::type page_type);
     Status _parse_dict_page();
-
     Status _try_load_dictionary();
 
-    Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
+    Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed,
+                                          uint32_t bytes_level_size = 0);
 
 private:
     enum PageParseState {
