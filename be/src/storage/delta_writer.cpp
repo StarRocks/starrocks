@@ -867,7 +867,7 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
 
     // 3. fill the non-existing rows
     std::vector<int64_t> ids(gen_num);
-    int64_t table_id = _tablet->tablet_meta()->table_id();
+    int64_t table_id = _tablet->belonged_table_id();
     RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(table_id, gen_num, ids));
 
     for (int i = 0; i < _vectorized_schema.num_fields(); i++) {

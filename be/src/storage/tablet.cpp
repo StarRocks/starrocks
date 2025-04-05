@@ -207,7 +207,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
             LOG(WARNING) << "failed to save new local tablet_meta when clone: " << st;
             break;
         }
-        _tablet_meta = new_tablet_meta;
+        _tablet_meta.swap(new_tablet_meta);
     } while (false);
 
     for (auto& version : versions_to_delete) {
