@@ -71,6 +71,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -85,6 +86,7 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rewrite.TimeDriftConstraint;
 import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
@@ -196,6 +198,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
+    public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
 
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
@@ -508,6 +511,38 @@ public class PropertyAnalyzer {
             return forbiddenTimeRanges;
         }
         return "";
+    }
+
+    public static TimeDriftConstraint analyzeTimeDriftConstraint(String spec, Table table,
+                                                                 Map<String, String> properties) {
+        properties.remove(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+        TimeDriftConstraint constraint = TimeDriftConstraint.parseSpec(spec);
+        if (!table.containColumn(constraint.getTargetColumn())) {
+            throw new SemanticException("Target column '%s' not exists in table '%s'",
+                    constraint.getTargetColumn(), table.getName());
+        }
+        if (!table.containColumn(constraint.getReferenceColumn())) {
+            throw new SemanticException("Reference column '%s' not exists in table '%s'",
+                    constraint.getReferenceColumn(), table.getName());
+        }
+
+        boolean refColumnIsDateTypePartitionColumn = ConnectorPartitionTraits.build(table)
+                .getPartitionColumns().stream()
+                .filter(column -> column.getName().equals(constraint.getReferenceColumn()))
+                .findFirst().map(column -> column.getType().isDateType()).orElse(false);
+        if (!refColumnIsDateTypePartitionColumn) {
+            throw new SemanticException("Reference column '%s' must be a DATE/DATETIME type partition column",
+                    constraint.getReferenceColumn());
+        }
+
+        boolean targetColumnIsDateType = table.getColumns().stream()
+                .filter(column -> column.getName().equals(constraint.getTargetColumn()))
+                .findFirst().map(column -> column.getType().isDateType()).orElse(false);
+        if (!targetColumnIsDateType) {
+            throw new SemanticException("Target column '%s' must be a DATE/DATETIME type partition column",
+                    constraint.getReferenceColumn());
+        }
+        return constraint;
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
@@ -1131,6 +1166,7 @@ public class PropertyAnalyzer {
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, Table table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
+        ConnectContext context = new ConnectContext();
 
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
@@ -1149,7 +1185,7 @@ public class PropertyAnalyzer {
                 List<String> columnNames = parseResult.second;
                 if (table.isMaterializedView()) {
                     Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                            context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
                     if (uniqueConstraintTable == null) {
                         throw new SemanticException(String.format("table: %s does not exist", tableName));
                     }
@@ -1191,13 +1227,15 @@ public class PropertyAnalyzer {
         if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
             throw new SemanticException(String.format("catalog: %s do not exist", catalogName));
         }
-        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
+        ConnectContext context = new ConnectContext();
+        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (parentDb == null) {
             throw new SemanticException(
                     String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
         }
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(catalogName, dbName, tableName);
+                .getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new SemanticException(String.format("catalog:%s, database: %s, table:%s do not exist",
                     catalogName, dbName, tableName));
@@ -1562,6 +1600,15 @@ public class PropertyAnalyzer {
                 List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(
                         properties, db, materializedView);
                 materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            }
+
+            // time drift constraint
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+                String timeDriftConstraintSpec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+                PropertyAnalyzer.analyzeTimeDriftConstraint(timeDriftConstraintSpec, materializedView, properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+                materializedView.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
             }
 
             // labels.location

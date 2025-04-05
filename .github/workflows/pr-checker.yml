@@ -63,6 +63,8 @@ jobs:
   title-check:
     runs-on: ubuntu-latest
     needs: sync-checker
+    if: >
+      !startsWith(github.event.pull_request.title, 'Revert ')
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_NUMBER: ${{ github.event.number }}
@@ -85,9 +87,11 @@ jobs:
           
           if [[ "${GITHUB_HEAD_REF}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
             gh pr view ${BACKPORT_SOURCE_PR} -R ${REPO} --json body -q .body > source_body.txt
-            sed -ie '/Bugfix cherry-pick branch check/,$d' source_body.txt
-            cat source_body.txt > tmp_body.txt
-            mv tmp_body.txt body.txt
+            if grep -q 'Bugfix cherry-pick branch check'; then
+              sed -ie '/Bugfix cherry-pick branch check/,$d' source_body.txt
+              cat source_body.txt > tmp_body.txt
+              mv tmp_body.txt body.txt
+            fi
           fi
           
           sed -i "s#\[ \] This is a backport pr#\[x\] This is a backport pr#g" body.txt
@@ -106,10 +110,9 @@ jobs:
             exit 1
           fi
 
-      - name: update body
+      - name: check backport option
         if: >
           github.base_ref != 'main' && github.event.action != 'opened' &&
-          !contains(github.event.pull_request.title, 'Revert') &&
           !contains(toJson(github.event.pull_request.body), '[x] This is a backport pr') &&
           !contains(toJson(github.event.pull_request.body), '[ ] This is a backport pr')
 
@@ -121,16 +124,16 @@ jobs:
     needs: title-check
     runs-on: ubuntu-latest
     if: >
-      (startsWith(github.event.pull_request.title, '[BugFix]') ||
-       startsWith(github.event.pull_request.title, '[Enhancement]') ||
-       startsWith(github.event.pull_request.title, '[Doc]') ||
-       startsWith(github.event.pull_request.title, '[UT]')) &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
+      (
+        startsWith(github.event.pull_request.title, '[BugFix]') ||
+        startsWith(github.event.pull_request.title, '[Enhancement]') ||
+        startsWith(github.event.pull_request.title, '[Doc]') ||
+        startsWith(github.event.pull_request.title, '[UT]')
+      ) && !contains(github.event.pull_request.title, 'cherry-pick') && !contains(github.event.pull_request.title, 'backport')
     strategy:
       fail-fast: false
       matrix:
-        version: [ '3.4', '3.3', '3.2', '3.1', '3.0' ]
+        version: ['3.5', '3.4', '3.3', '3.2', '3.1']
     steps:
       - name: add ${{ matrix.version }} label
         if: contains(toJson(github.event.pull_request.body), format('[x] {0}', matrix.version))
@@ -164,6 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       !startsWith(github.event.pull_request.title, '[Doc]') &&
+      !startsWith(github.event.pull_request.title, 'Revert ') &&
       (github.base_ref == 'main' || !startsWith(github.head_ref, 'mergify/bp/') || github.event.action != 'opened')
     steps:
       - name: Format Check
@@ -251,3 +255,20 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
+
+  backport-feature-enhancement-check:
+    runs-on: [ self-hosted, normal ]
+    needs: sync-checker
+    if: >
+      github.event.action != 'synchronize' &&
+      github.base_ref != 'main' &&
+      (startsWith(github.event.pull_request.title, '[Feature]') || startsWith(github.event.pull_request.title, '[Enhancement]')) &&
+      !contains(github.event.pull_request.labels.*.name, 'backport_approval')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: CHECK NECESSARY
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/check-pr-backport-review-necessary.sh

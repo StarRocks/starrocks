@@ -60,7 +60,7 @@ public:
     void TearDown() override {}
 
 protected:
-    using Int32RF = ComposedRuntimeFilter<TYPE_INT>;
+    using Int32RF = ComposedRuntimeBloomFilter<TYPE_INT>;
 
     StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
 
@@ -811,7 +811,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
 
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->get_bloom_filter()->init(10);
+    rf->get_membership_filter()->init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {
@@ -844,10 +844,10 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
                                     {"col3", TYPE_INT_DESC, 3},        {"col4", TYPE_INT_DESC, 4},
                                     {"col5", TYPE_INT_DESC, 5},        {""}};
 
-    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_INT>());
+    auto* rf = _pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->bloom_filter().init(10);
+    rf->membership_filter().init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {
@@ -4248,6 +4248,80 @@ TEST_F(FileReaderTest, plain_string_decode) {
     }
 
     EXPECT_EQ(2, total_row_nums);
+}
+
+TEST_F(FileReaderTest, test_filter_to_dict_decoder) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string file_path = "./be/test/formats/parquet/test_data/big_string_dict_with_plain_code.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC},
+                                    {"c1", TYPE_INT_DESC},
+                                    {"c2", TYPE_VARCHAR_DESC},
+                                    {"c3", TYPE_VARCHAR_ARRAY_DESC},
+                                    {""}};
+
+    std::set<int32_t> in_oprands{1, 100};
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
+    std::vector<ExprContext*> expr_ctxs;
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+    auto ctx = _create_file_random_read_context(file_path, slot_descs);
+    ctx->conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(file_path);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 2) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 100000, '0000000001', ['1','','0']]");
+            ASSERT_EQ(chunk->debug_row(1), "[100, 99901, '', []]");
+        }
+    }
+
+    EXPECT_EQ(2, total_row_nums);
+}
+
+TEST_F(FileReaderTest, test_data_page_v2) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+
+    const std::string file_path = "./be/test/formats/parquet/test_data/data_page_v2_test.parquet";
+    Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"name", TYPE_VARCHAR_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file_path, slot_descs);
+    auto file_reader = _create_file_reader(file_path);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        // for (int i = 0; i < chunk->num_rows(); i++) {
+        //     std::cout << chunk->debug_row(i) << std::endl;
+        // }
+        if (chunk->num_rows() == 4) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 'a']");
+            ASSERT_EQ(chunk->debug_row(1), "[2, 'b']");
+            ASSERT_EQ(chunk->debug_row(2), "[3, 'c']");
+            ASSERT_EQ(chunk->debug_row(3), "[4, 'd']");
+        }
+    }
+    EXPECT_EQ(4, total_row_nums);
 }
 
 } // namespace starrocks::parquet

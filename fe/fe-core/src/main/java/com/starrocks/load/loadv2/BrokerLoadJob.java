@@ -359,18 +359,19 @@ public class BrokerLoadJob extends BulkLoadJob {
                 WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, System.currentTimeMillis());
                 return;
             }
-            boolean shouldRetry = retryTime > 0 && txnStatusChangeReason.contains("timeout")
-                    && (LoadErrorUtils.isTimeoutFromLoadingTaskExecution(txnStatusChangeReason) || isTimeout());
-            if (!shouldRetry) {
+
+            FailMsg failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason);
+            boolean needRetry = isRetryable(failMsg);
+            if (!needRetry) {
                 // record attachment in load job
                 unprotectUpdateLoadingStatus(txnState);
                 // cancel load job
-                unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason), true);
+                unprotectedExecuteCancel(failMsg, true);
                 return;
             }
 
-            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason + ". Retry again");
-            LOG.warn("Retry timeout load jobs. job: {}, remaining retryTime: {}", id, retryTime);
+            failMsg.setMsg(txnStatusChangeReason + ". Retry again");
+            LOG.warn("Retry load job. job: {}, remaining retryTime: {}", id, retryTime);
             retryTime--;
             unprotectedClearTasksBeforeRetry(failMsg);
             try {

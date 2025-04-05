@@ -123,6 +123,20 @@ void Operator::close(RuntimeState* state) {
         _init_rf_counters(false);
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
         _runtime_bloom_filter_num_counter->set((int64_t)rf_bloom_filters->size());
+
+        if (!rf_bloom_filters->descriptors().empty()) {
+            std::string rf_desc = "";
+            for (const auto& [filter_id, desc] : rf_bloom_filters->descriptors()) {
+                rf_desc += "<" + std::to_string(filter_id) + ": ";
+                if (desc != nullptr && desc->runtime_filter(0) != nullptr) {
+                    rf_desc += to_string(desc->runtime_filter(0)->type());
+                } else {
+                    rf_desc += "NULL";
+                }
+                rf_desc += "> ";
+            }
+            _common_metrics->add_info_string("RuntimeFilterDesc", rf_desc);
+        }
     }
 
     // Pipeline do not need the built in total time counter
@@ -251,8 +265,8 @@ void Operator::_init_rf_counters(bool init_bloom) {
     if (_runtime_in_filter_num_counter == nullptr) {
         _runtime_in_filter_num_counter =
                 ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-        _runtime_bloom_filter_num_counter = ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeBloomFilterNum",
-                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        _runtime_bloom_filter_num_counter =
+                ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeFilterNum", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");

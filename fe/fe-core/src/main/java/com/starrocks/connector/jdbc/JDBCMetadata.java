@@ -32,6 +32,7 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
@@ -154,7 +155,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         try (Connection connection = getConnection()) {
             return Lists.newArrayList(schemaResolver.listSchemas(connection));
         } catch (SQLException e) {
@@ -163,9 +164,9 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String name) {
+    public Database getDb(ConnectContext context, String name) {
         try {
-            if (listDbNames().contains(name)) {
+            if (listDbNames(context).contains(name)) {
                 return new Database(0, name);
             } else {
                 return null;
@@ -176,7 +177,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         try (Connection connection = getConnection()) {
             try (ResultSet resultSet = schemaResolver.getTables(connection, dbName)) {
                 ImmutableList.Builder<String> list = ImmutableList.builder();
@@ -192,7 +193,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         JDBCTableName jdbcTable = new JDBCTableName(null, dbName, tblName);
         return tableInstanceCache.get(jdbcTable,
                 k -> {

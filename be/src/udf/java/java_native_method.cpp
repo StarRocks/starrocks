@@ -15,10 +15,13 @@
 #include "udf/java/java_native_method.h"
 
 #include <new>
+#include <type_traits>
 
+#include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
@@ -42,6 +45,19 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const ArrayColumn& column) {
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.offsets().get_data().data());
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.elements_column().get());
+        return Status::OK();
+    }
+
+    Status do_visit(const MapColumn& column) {
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.offsets().get_data().data());
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.keys_column().get());
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.values_column().get());
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_data().data());
@@ -56,6 +72,61 @@ public:
 private:
     size_t _idx = 0;
     jlong* _jarr = nullptr;
+};
+
+class GetColumnLogicalTypeVistor : public ColumnVisitorAdapter<GetColumnLogicalTypeVistor> {
+public:
+    GetColumnLogicalTypeVistor(LogicalType* result) : ColumnVisitorAdapter(this), _result(result) {}
+
+    Status do_visit(const NullableColumn& column) { return column.data_column()->accept(this); }
+
+    Status do_visit(const BinaryColumn& column) {
+        *_result = TYPE_VARCHAR;
+        return Status::OK();
+    }
+
+    Status do_visit(const ArrayColumn& column) {
+        *_result = TYPE_ARRAY;
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const FixedLengthColumn<T>& column) {
+        if constexpr (std::is_same_v<T, uint8_t>) {
+            *_result = TYPE_BOOLEAN;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, int8_t>) {
+            *_result = TYPE_TINYINT;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, int16_t>) {
+            *_result = TYPE_SMALLINT;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            *_result = TYPE_INT;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            *_result = TYPE_BIGINT;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, int128_t>) {
+            *_result = TYPE_LARGEINT;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, float>) {
+            *_result = TYPE_FLOAT;
+            return Status::OK();
+        } else if constexpr (std::is_same_v<T, double>) {
+            *_result = TYPE_DOUBLE;
+            return Status::OK();
+        }
+        return Status::NotSupported("unsupported UDF type");
+    }
+
+    template <typename T>
+    Status do_visit(const T& column) {
+        return Status::NotSupported("unsupported UDF type");
+    }
+
+private:
+    LogicalType* _result;
 };
 
 jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize) {
@@ -78,10 +149,31 @@ jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong colum
     return reinterpret_cast<jlong>(binary_column->get_bytes().data());
 }
 
+void JavaNativeMethods::resize(JNIEnv* env, jclass clazz, jlong columnAddr, jint size) {
+    auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
+    column->resize(size);
+}
+
+jint JavaNativeMethods::getColumnLogicalType(JNIEnv* env, jclass clazz, jlong columnAddr) {
+    auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
+    LogicalType type;
+    GetColumnLogicalTypeVistor vistor(&type);
+    auto status = column->accept(&vistor);
+    if (!status.ok()) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"), status.to_string().c_str());
+    }
+    return type;
+}
+
 jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
     auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
+    if (!column->is_nullable()) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
+                      fmt::format("result column should be nullable column").c_str());
+        return nullptr;
+    }
     // return fixed array size
-    int array_size = 3;
+    int array_size = 4;
     auto jarr = env->NewLongArray(array_size);
     jlong array[array_size];
     GetColumnAddrVistor vistor(array);

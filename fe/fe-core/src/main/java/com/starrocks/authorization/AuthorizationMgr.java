@@ -36,6 +36,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -78,8 +79,6 @@ public class AuthorizationMgr {
 
     protected AuthorizationProvider provider;
 
-    protected GlobalStateMgr globalStateMgr;
-
     protected Map<UserIdentity, UserPrivilegeCollectionV2> userToPrivilegeCollection;
     protected Map<Long, RolePrivilegeCollectionV2> roleIdToPrivilegeCollection;
 
@@ -113,8 +112,7 @@ public class AuthorizationMgr {
         roleLock = new ReentrantReadWriteLock();
     }
 
-    public AuthorizationMgr(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
-        this.globalStateMgr = globalStateMgr;
+    public AuthorizationMgr(AuthorizationProvider provider) {
         this.provider = provider;
         pluginId = this.provider.getPluginId();
         pluginVersion = this.provider.getPluginVersion();
@@ -244,7 +242,7 @@ public class AuthorizationMgr {
                                             List<String> tokens, boolean isGrant) throws PrivilegeException {
         List<PEntryObject> object;
         if (tokens != null) {
-            object = Collections.singletonList(provider.generateObject(objectType, tokens, globalStateMgr));
+            object = Collections.singletonList(provider.generateObject(objectType, tokens));
         } else {
             object = Arrays.asList(new PEntryObject[] {null});
         }
@@ -258,17 +256,17 @@ public class AuthorizationMgr {
         List<PEntryObject> objects = new ArrayList<>();
         if (ObjectType.TABLE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
-                    Lists.newArrayList("*", "*", "*"), globalStateMgr));
+                    Lists.newArrayList("*", "*", "*")));
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.VIEW.equals(objectType)
                 || ObjectType.MATERIALIZED_VIEW.equals(objectType)
                 || ObjectType.DATABASE.equals(objectType)
                 || ObjectType.PIPE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
-                    Lists.newArrayList("*", "*"), globalStateMgr));
+                    Lists.newArrayList("*", "*")));
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.USER.equals(objectType)) {
-            objects.add(provider.generateUserObject(objectType, null, globalStateMgr));
+            objects.add(provider.generateUserObject(objectType, null));
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.RESOURCE.equals(objectType)
                 || ObjectType.CATALOG.equals(objectType)
@@ -276,19 +274,17 @@ public class AuthorizationMgr {
                 || ObjectType.STORAGE_VOLUME.equals(objectType)
                 || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
-                    Lists.newArrayList("*"), globalStateMgr));
+                    Lists.newArrayList("*")));
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.FUNCTION.equals(objectType)) {
             objects.add(provider.generateFunctionObject(objectType,
                     PrivilegeBuiltinConstants.ALL_DATABASE_ID,
-                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
-                    globalStateMgr));
+                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
             objects.add(provider.generateFunctionObject(objectType,
                     PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
-                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
-                    globalStateMgr));
+                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.SYSTEM.equals(objectType)) {
             collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
@@ -387,7 +383,7 @@ public class AuthorizationMgr {
         try {
             UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(userIdentity);
             collection.grant(type, privilegeTypes, objects, isGrant);
-            globalStateMgr.getEditLog().logUpdateUserPrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
             invalidateUserInCache(userIdentity);
         } finally {
@@ -411,7 +407,7 @@ public class AuthorizationMgr {
             Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             rolePrivCollectionModified.put(roleId, collection);
 
-            globalStateMgr.getEditLog().logUpdateRolePrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateRolePrivilege(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             unlockForRoleUpdate();
@@ -447,7 +443,7 @@ public class AuthorizationMgr {
         try {
             UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(userIdentity);
             collection.revoke(objectType, privilegeTypes, objects);
-            globalStateMgr.getEditLog().logUpdateUserPrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
             invalidateUserInCache(userIdentity);
         } finally {
@@ -470,7 +466,7 @@ public class AuthorizationMgr {
             Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             rolePrivCollectionModified.put(roleId, collection);
 
-            globalStateMgr.getEditLog().logUpdateRolePrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateRolePrivilege(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             unlockForRoleUpdate();
@@ -527,7 +523,7 @@ public class AuthorizationMgr {
                 roleReadUnlock();
             }
 
-            globalStateMgr.getEditLog().logUpdateUserPrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
                     user, userPrivilegeCollection, provider.getPluginId(), provider.getPluginVersion());
             invalidateUserInCache(user);
             LOG.info("grant role {} to user {}", Joiner.on(", ").join(parentRoleName), user);
@@ -602,7 +598,7 @@ public class AuthorizationMgr {
             // write journal to update privilege collections of both role & parent role
             RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
-            globalStateMgr.getEditLog().logUpdateRolePrivilege(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateRolePrivilege(info);
             LOG.info("grant role {}[{}] to role {}[{}]", parentRoleName,
                     Joiner.on(", ").join(parentRoleName), roleName, roleId);
         } finally {
@@ -640,7 +636,7 @@ public class AuthorizationMgr {
             } finally {
                 roleReadUnlock();
             }
-            globalStateMgr.getEditLog().logUpdateUserPrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
                     user, collection, provider.getPluginId(), provider.getPluginVersion());
             invalidateUserInCache(user);
             LOG.info("revoke role {} from user {}", roleNameList.toString(), user);
@@ -690,7 +686,7 @@ public class AuthorizationMgr {
             // write journal to update privilege collections of both role & parent role
             RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
-            globalStateMgr.getEditLog().logUpdateRolePrivilege(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateRolePrivilege(info);
             invalidateRolesInCacheRoleUnlocked(roleId);
             LOG.info("revoke role {}[{}] from role {}[{}]",
                     parentRoleNameList.toString(), parentRoleIdList.toString(), roleName, roleId);
@@ -715,22 +711,21 @@ public class AuthorizationMgr {
         }
     }
 
-    protected boolean checkAction(
-            PrivilegeCollectionV2 collection, ObjectType objectType, PrivilegeType privilegeType, List<String> objectNames)
-            throws PrivilegeException {
+    protected boolean checkAction(PrivilegeCollectionV2 collection, ObjectType objectType,
+                                  PrivilegeType privilegeType, List<String> objectNames) throws PrivilegeException {
         if (objectNames == null) {
             return provider.check(objectType, privilegeType, null, collection);
         } else {
-            PEntryObject object = provider.generateObject(
-                    objectType, objectNames, globalStateMgr);
+            PEntryObject object = provider.generateObject(objectType, objectNames);
             return provider.check(objectType, privilegeType, object, collection);
         }
     }
 
-    public boolean canExecuteAs(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser) {
+    public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
         try {
-            PrivilegeCollectionV2 collection = mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject object = provider.generateUserObject(ObjectType.USER, impersonateUser, globalStateMgr);
+            PrivilegeCollectionV2 collection = mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds());
+            PEntryObject object = provider.generateUserObject(ObjectType.USER, impersonateUser);
             return provider.check(ObjectType.USER, PrivilegeType.IMPERSONATE, object, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception in canExecuteAs() user[{}]", impersonateUser, e);
@@ -1181,7 +1176,7 @@ public class AuthorizationMgr {
                     return;
                 }
 
-                long roleId = globalStateMgr.getNextId();
+                long roleId = GlobalStateMgr.getCurrentState().getNextId();
                 RolePrivilegeCollectionV2 collection = new RolePrivilegeCollectionV2(
                         roleName, stmt.getComment(),
                         RolePrivilegeCollectionV2.RoleFlags.REMOVABLE, RolePrivilegeCollectionV2.RoleFlags.MUTABLE);
@@ -1193,7 +1188,7 @@ public class AuthorizationMgr {
             roleIdToPrivilegeCollection.putAll(rolePrivCollectionModified);
             roleNameToId.putAll(roleNameToBeCreated);
 
-            globalStateMgr.getEditLog().logUpdateRolePrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateRolePrivilege(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("created role {}[{}]", stmt.getRoles().toString(), roleNameToBeCreated.values());
         } finally {
@@ -1225,7 +1220,7 @@ public class AuthorizationMgr {
             rolePrivCollectionModified.values().forEach(
                     rolePrivilegeCollection -> rolePrivilegeCollection.setComment(stmt.getComment()));
 
-            globalStateMgr.getEditLog().logUpdateRolePrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateRolePrivilege(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             roleWriteUnlock();
@@ -1285,7 +1280,7 @@ public class AuthorizationMgr {
             roleIdToPrivilegeCollection.keySet().removeAll(rolePrivCollectionModified.keySet());
             roleNameToBeDropped.forEach(roleNameToId.keySet()::remove);
 
-            globalStateMgr.getEditLog().logDropRole(
+            GlobalStateMgr.getCurrentState().getEditLog().logDropRole(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("dropped role {}[{}]",
                     stmt.getRoles().toString(), rolePrivCollectionModified.keySet().toString());
@@ -1403,7 +1398,7 @@ public class AuthorizationMgr {
                 roleReadUnlock();
             }
 
-            globalStateMgr.getEditLog().logUpdateUserPrivilege(
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
                     user, collection, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("grant role {} to user {}", roleName, user);
         } finally {
@@ -1478,20 +1473,21 @@ public class AuthorizationMgr {
         return roleId;
     }
 
-    public PEntryObject generateObject(ObjectType objectType, List<String> objectTokenList) throws PrivilegeException {
+    public PEntryObject generateObject(ObjectType objectType, List<String> objectTokenList)
+            throws PrivilegeException {
         if (objectTokenList == null) {
             return null;
         }
-        return this.provider.generateObject(objectType, objectTokenList, globalStateMgr);
+        return this.provider.generateObject(objectType, objectTokenList);
     }
 
     public PEntryObject generateUserObject(ObjectType objectType, UserIdentity user) throws PrivilegeException {
-        return this.provider.generateUserObject(objectType, user, globalStateMgr);
+        return this.provider.generateUserObject(objectType, user);
     }
 
     public PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId)
             throws PrivilegeException {
-        return this.provider.generateFunctionObject(objectType, databaseId, functionId, globalStateMgr);
+        return this.provider.generateFunctionObject(objectType, databaseId, functionId);
     }
 
     /**
@@ -1505,7 +1501,7 @@ public class AuthorizationMgr {
         try {
             // 1. remove invalidate object of users
             for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> userPrivEntry : userToPrivilegeCollection.entrySet()) {
-                userPrivEntry.getValue().removeInvalidObject(globalStateMgr);
+                userPrivEntry.getValue().removeInvalidObject();
             }
 
             // 2. remove invalidate roles of users
@@ -1529,7 +1525,7 @@ public class AuthorizationMgr {
             roleWriteLock();
             try {
                 for (Map.Entry<Long, RolePrivilegeCollectionV2> rolePrivEntry : roleIdToPrivilegeCollection.entrySet()) {
-                    rolePrivEntry.getValue().removeInvalidObject(globalStateMgr);
+                    rolePrivEntry.getValue().removeInvalidObject();
                 }
             } finally {
                 roleWriteUnlock();
@@ -1685,7 +1681,6 @@ public class AuthorizationMgr {
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         // 1 json for myself
         AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
-        ret.globalStateMgr = globalStateMgr;
         ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
         ret.initBuiltinRolesAndUsers();
 

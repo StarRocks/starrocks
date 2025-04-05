@@ -123,6 +123,9 @@ private:
 
     Status _get_column_predicates(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
 
+    Status _build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root, PredicateParser* parser,
+                                       ColumnPredicatePtrs& col_preds_owner);
+
     friend struct ColumnRangeBuilder;
     friend class ConjunctiveTestFixture;
 

@@ -67,7 +67,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.PrimitiveType;
@@ -195,6 +194,7 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
@@ -228,6 +228,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -348,7 +349,7 @@ public class GlobalStateMgr {
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
 
-    private FrontendNodeType feType;
+    private volatile FrontendNodeType feType;
 
     // The time when this node becomes leader.
     private long dominationStartTimeMs;
@@ -454,7 +455,7 @@ public class GlobalStateMgr {
     private final TaskManager taskManager;
     private final InsertOverwriteJobMgr insertOverwriteJobMgr;
 
-    private final LocalMetastore localMetastore;
+    private LocalMetastore localMetastore;
     private final GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -473,6 +474,8 @@ public class GlobalStateMgr {
     private final CompactionControlScheduler compactionControlScheduler;
 
     private final WarehouseManager warehouseMgr;
+
+    private final HistoricalNodeMgr historicalNodeMgr;
 
     private final ConfigRefreshDaemon configRefreshDaemon;
 
@@ -493,7 +496,7 @@ public class GlobalStateMgr {
     private LockManager lockManager;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
-    private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
+    private final BaseSlotManager slotManager;
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
     private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
@@ -594,6 +597,10 @@ public class GlobalStateMgr {
 
     public LocalMetastore getLocalMetastore() {
         return localMetastore;
+    }
+
+    public void setLocalMetastore(LocalMetastore localMetastore) {
+        this.localMetastore = localMetastore;
     }
 
     public TemporaryTableMgr getTemporaryTableMgr() {
@@ -697,7 +704,7 @@ public class GlobalStateMgr {
         this.tabletStatMgr = new TabletStatMgr();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
-        this.authorizationMgr = new AuthorizationMgr(this, new DefaultAuthorizationProvider());
+        this.authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
 
         this.resourceGroupMgr = new ResourceGroupMgr();
 
@@ -744,6 +751,7 @@ public class GlobalStateMgr {
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManager();
+        this.historicalNodeMgr = new HistoricalNodeMgr();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
@@ -768,8 +776,10 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
+            this.slotManager = new SlotManager(resourceUsageMonitor);
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
+            this.slotManager = new SlotManager(resourceUsageMonitor);
         }
 
         this.lockManager = new LockManager();
@@ -1014,6 +1024,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public HistoricalNodeMgr getHistoricalNodeMgr() {
+        return historicalNodeMgr;
     }
 
     public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
@@ -1587,6 +1601,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
+                .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1669,12 +1684,7 @@ public class GlobalStateMgr {
      */
     private void onReloadTables() {
         TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        for (String dbName : dbNames) {
-            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
-            if (db == null) {
-                continue;
-            }
+        for (Database db : localMetastore.getIdToDb().values()) {
             for (Table table : db.getTables()) {
                 try {
                     table.onReload();
@@ -1691,11 +1701,8 @@ public class GlobalStateMgr {
     }
 
     private void processMvRelatedMeta() {
-        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-
         long startMillis = System.currentTimeMillis();
-        for (String dbName : dbNames) {
-            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+        for (Database db : localMetastore.getIdToDb().values()) {
             for (MaterializedView mv : db.getMaterializedViews()) {
                 mv.onReload();
             }
@@ -1815,6 +1822,7 @@ public class GlobalStateMgr {
                 warehouseMgr.save(imageWriter);
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
+                historicalNodeMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2291,6 +2299,10 @@ public class GlobalStateMgr {
         return checkpointController;
     }
 
+    public void setCheckpointController(CheckpointController checkpointController) {
+        this.checkpointController = checkpointController;
+    }
+
     public void setLeader(LeaderInfo info) {
         nodeMgr.setLeader(info);
     }
@@ -2451,10 +2463,10 @@ public class GlobalStateMgr {
         return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
-    public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
+    public void refreshExternalTable(ConnectContext context, RefreshTableStmt stmt) throws DdlException {
         TableName tableName = stmt.getTableName();
         List<String> partitionNames = stmt.getPartitions();
-        refreshExternalTable(tableName, partitionNames);
+        refreshExternalTable(context, tableName, partitionNames);
         refreshOthersFeTable(tableName, partitionNames, true);
     }
 
@@ -2535,17 +2547,17 @@ public class GlobalStateMgr {
                 || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable();
     }
 
-    public void refreshExternalTable(TableName tableName, List<String> partitions) {
+    public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
         String tblName = tableName.getTbl();
-        Database db = metadataMgr.getDb(catalogName, tableName.getDb());
+        Database db = metadataMgr.getDb(context, catalogName, tableName.getDb());
         if (db == null) {
             throw new StarRocksConnectorException("db: " + tableName.getDb() + " not exists");
         }
 
         Table table;
-        table = metadataMgr.getTable(catalogName, dbName, tblName);
+        table = metadataMgr.getTable(context, catalogName, dbName, tblName);
         if (table == null) {
             throw new StarRocksConnectorException("table %s.%s.%s not exists", catalogName, dbName,
                     tblName);
@@ -2704,7 +2716,7 @@ public class GlobalStateMgr {
         }
     }
 
-    public SlotManager getSlotManager() {
+    public BaseSlotManager getSlotManager() {
         return slotManager;
     }
 

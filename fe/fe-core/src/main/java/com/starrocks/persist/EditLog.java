@@ -458,6 +458,11 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayDropBackend(be);
                     break;
                 }
+                case OperationType.OP_UPDATE_HISTORICAL_NODE: {
+                    UpdateHistoricalNodeLog log = (UpdateHistoricalNodeLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayUpdateHistoricalNode(log);
+                    break;
+                }
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.data();
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
@@ -1053,6 +1058,11 @@ public class EditLog {
                     globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
                 }
+                case OperationType.OP_UPDATE_TABLE_STORAGE_INFOS: {
+                    TableStorageInfos tableStorageInfos = (TableStorageInfos) journal.data();
+                    globalStateMgr.getStorageVolumeMgr().replayUpdateTableStorageInfos(tableStorageInfos);
+                    break;
+                }
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.data();
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
@@ -1452,6 +1462,10 @@ public class EditLog {
 
     public void logDropBackend(Backend be) {
         logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
+    }
+
+    public void logUpdateHistoricalNode(UpdateHistoricalNodeLog log) {
+        logEdit(OperationType.OP_UPDATE_HISTORICAL_NODE, log);
     }
 
     public void logAddFrontend(Frontend fe) {
@@ -2030,6 +2044,10 @@ public class EditLog {
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
+
+    public void logUpdateTableStorageInfos(TableStorageInfos tableStorageInfos) {
+        logEdit(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos);
     }
 
     public void logReplicationJob(ReplicationJob replicationJob) {

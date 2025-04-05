@@ -509,13 +509,11 @@ void CacheEnv::try_release_resource_before_core_dump() {
 
     if (_page_cache != nullptr && need_release("data_cache")) {
         _page_cache->set_capacity(0);
-        LOG(INFO) << "release storage page cache memory";
     }
     if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
         // TODO: Currently, block cache don't support shutdown now,
         //  so here will temporary use update_mem_quota instead to release memory.
         (void)_block_cache->update_mem_quota(0, false);
-        LOG(INFO) << "release block cache";
     }
 }
 
@@ -602,6 +600,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         query_rpc_threads = CpuInfo::num_cores();
     }
     _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
+
+    int datacache_rpc_threads = config::internal_service_datacache_rpc_thread_num;
+    if (datacache_rpc_threads <= 0) {
+        datacache_rpc_threads = CpuInfo::num_cores();
+    }
+    _datacache_rpc_pool =
+            new PriorityThreadPool("datacache_rpc", datacache_rpc_threads, std::numeric_limits<uint32_t>::max());
 
     // The _load_rpc_pool now handles routine load RPC and table function RPC.
     RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc
@@ -857,6 +862,10 @@ void ExecEnv::stop() {
         _query_rpc_pool->shutdown();
     }
 
+    if (_datacache_rpc_pool) {
+        _datacache_rpc_pool->shutdown();
+    }
+
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
     }
@@ -925,6 +934,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
+    SAFE_DELETE(_datacache_rpc_pool);
     _load_rpc_pool.reset();
     _workgroup_manager->destroy();
     _workgroup_manager.reset();
@@ -1032,35 +1042,31 @@ void ExecEnv::try_release_resource_before_core_dump() {
 
     if (_workgroup_manager != nullptr && need_release("connector_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
-        LOG(INFO) << "close connector scan executor";
     }
     if (_workgroup_manager != nullptr && need_release("olap_scan_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
-        LOG(INFO) << "close olap scan executor";
     }
     if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
         _thread_pool->shutdown();
-        LOG(INFO) << "shutdown non-pipeline scan thread pool";
     }
     if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
         _pipeline_prepare_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline prepare thread pool";
     }
     if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
         _pipeline_sink_io_pool->shutdown();
-        LOG(INFO) << "shutdown pipeline sink io thread pool";
     }
     if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
         _query_rpc_pool->shutdown();
-        LOG(INFO) << "shutdown query rpc thread pool";
+    }
+    if (_datacache_rpc_pool != nullptr && need_release("datacache_rpc_thread_pool")) {
+        _datacache_rpc_pool->shutdown();
+        LOG(INFO) << "shutdown datacache rpc thread pool";
     }
     if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
         _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
-        LOG(INFO) << "stop task worker pool for publish version";
     }
     if (_workgroup_manager != nullptr && need_release("wg_driver_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
-        LOG(INFO) << "stop worker group driver executor";
     }
 }
 

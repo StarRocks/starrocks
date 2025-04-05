@@ -52,10 +52,10 @@ public class RefreshTableStatementAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
-            if (metadataMgr.getDb(catalogName, dbName) == null) {
+            if (metadataMgr.getDb(context, catalogName, dbName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName);
             }
-            if (metadataMgr.getTable(catalogName, dbName, tblName) == null) {
+            if (metadataMgr.getTable(context, catalogName, dbName, tblName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
             }
 

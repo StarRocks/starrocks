@@ -46,6 +46,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -105,7 +106,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
+    public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
         readLock();
         try {
             if (!MOCK_TABLE_MAP.containsKey(dbName)) {
@@ -122,7 +123,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         return new Database(idGen.getAndIncrement(), dbName);
     }
 
@@ -176,12 +177,12 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return new ArrayList<>(MOCK_TABLE_MAP.get(dbName).keySet());
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return new ArrayList<>(MOCK_TABLE_MAP.keySet());
     }
 

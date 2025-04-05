@@ -15,6 +15,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
@@ -38,13 +40,12 @@ import java.util.List;
 
 public class ShowBasicStatsMetaStmt extends ShowStmt {
 
-    public ShowBasicStatsMetaStmt(Predicate predicate) {
-        this(predicate, NodePosition.ZERO);
-    }
-
-    public ShowBasicStatsMetaStmt(Predicate predicate, NodePosition pos) {
+    public ShowBasicStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
+                                  LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
+        this.limitElement = limitElement;
+        this.orderByElements = orderByElements;
     }
 
     private static final ShowResultSetMetaData META_DATA =
@@ -57,11 +58,14 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
                     .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
                     .addColumn(new Column("ColumnStats", ScalarType.createVarcharType(128)))
+                    .addColumn(new Column("TabletStatsReportTime", ScalarType.createVarcharType(60)))
+                    .addColumn(new Column("TableHealthyMetrics", ScalarType.createVarcharType(128)))
+                    .addColumn(new Column("TableUpdateTime", ScalarType.createVarcharType(60)))
                     .build();
 
     public static List<String> showBasicStatsMeta(ConnectContext context,
                                                   BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
         long dbId = basicStatsMeta.getDbId();
         long tableId = basicStatsMeta.getTableId();
         List<String> columns = basicStatsMeta.getColumns();
@@ -94,25 +98,28 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
         row.set(6, (int) (basicStatsMeta.getHealthy() * 100) + "%");
         row.set(7, basicStatsMeta.getColumnStatsString());
+        row.set(8, basicStatsMeta.getTabletStatsReportTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        row.set(9, basicStatsMeta.getTableHealthyMetrics(table).toString());
+        row.set(10, StatisticUtils.getTableLastUpdateTime(table).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
         return row;
     }
 
     public static List<String> showExternalBasicStatsMeta(ConnectContext context,
                                                           ExternalBasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "", "");
         String catalogName = basicStatsMeta.getCatalogName();
         String dbName = basicStatsMeta.getDbName();
         String tableName = basicStatsMeta.getTableName();
 
         List<String> columns = basicStatsMeta.getColumns();
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
         }
         row.set(0, catalogName + "." + dbName);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
         }

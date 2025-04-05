@@ -273,6 +273,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_COMPUTE_NODE = 10202;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_UPDATE_HISTORICAL_NODE = 10210;
+
     // new operator for partition 10241 ~ 10260
     public static final short OP_ADD_PARTITION_V2 = 10241;
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
@@ -550,6 +553,9 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_STORAGE_VOLUME = 13103;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_UPDATE_TABLE_STORAGE_INFOS = 13104;
 
     // Pipe operations log
     @IgnorableOnReplayFailed

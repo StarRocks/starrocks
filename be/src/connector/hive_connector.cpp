@@ -266,7 +266,7 @@ Status HiveDataSource::_init_partition_values() {
 
     if (_enable_dynamic_prune_scan_range && _runtime_filters) {
         _init_rf_counters();
-        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_bloom_filter_eval_context);
+        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_membership_filter_eval_context);
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
             return Status::OK();
@@ -519,6 +519,15 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.datacache_skip_read_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
         _profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
+        _profile.datacache_read_peer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerCounter", TUnit::UNIT, prefix);
+        _profile.datacache_read_peer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_peer_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadPeerTimer", prefix);
+        _profile.datacache_skip_read_peer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadPeerCounter", TUnit::UNIT, prefix);
+        _profile.datacache_skip_read_peer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadPeerBytes", TUnit::BYTES, prefix);
         _profile.datacache_write_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteCounter", TUnit::UNIT, prefix);
         _profile.datacache_write_bytes =
@@ -566,18 +575,18 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
 void HiveDataSource::_init_rf_counters() {
     auto* root = _runtime_profile;
-    if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
+    if (runtime_membership_filter_eval_context.join_runtime_filter_timer == nullptr) {
         static const char* prefix = "DynamicPruneScanRange";
         ADD_COUNTER(root, prefix, TUnit::NONE);
-        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
+        runtime_membership_filter_eval_context.join_runtime_filter_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
+        runtime_membership_filter_eval_context.join_runtime_filter_hash_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_input_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterInputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_output_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_output_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterOutputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_eval_counter =
+        runtime_membership_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_CHILD_COUNTER(root, "JoinRuntimeFilterEvaluate", TUnit::UNIT, prefix);
     }
 }

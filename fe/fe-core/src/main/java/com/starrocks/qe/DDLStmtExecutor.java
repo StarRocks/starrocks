@@ -240,7 +240,7 @@ public class DDLStmtExecutor {
                 String dbName = stmt.getDbName();
                 boolean isForceDrop = stmt.isForceDrop();
                 try {
-                    context.getGlobalStateMgr().getMetadataMgr().dropDb(catalogName, dbName, isForceDrop);
+                    context.getGlobalStateMgr().getMetadataMgr().dropDb(context, catalogName, dbName, isForceDrop);
                 } catch (MetaNotFoundException e) {
                     if (stmt.isSetIfExists()) {
                         LOG.info("drop database[{}] which does not exist", dbName);
@@ -292,7 +292,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().createTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().createTable(context, stmt);
             });
             return null;
         }
@@ -308,7 +308,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().createTableLike(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().createTableLike(context, stmt);
             });
             return null;
         }
@@ -928,16 +928,18 @@ public class DDLStmtExecutor {
                 }
                 context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                // from current session, may execute analyze stmt
-                statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
-                        context.getSessionVariable().getStatisticCollectParallelism());
-                Thread thread = new Thread(() -> {
-                    statsConnectCtx.setThreadLocalInfo();
-                    StatisticExecutor statisticExecutor = new StatisticExecutor();
-                    analyzeJob.run(statsConnectCtx, statisticExecutor);
-                });
-                thread.start();
+                if (Config.enable_trigger_analyze_job_immediate) {
+                    ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                    // from current session, may execute analyze stmt
+                    statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                            context.getSessionVariable().getStatisticCollectParallelism());
+                    Thread thread = new Thread(() -> {
+                        statsConnectCtx.setThreadLocalInfo();
+                        StatisticExecutor statisticExecutor = new StatisticExecutor();
+                        analyzeJob.run(statsConnectCtx, statisticExecutor);
+                    });
+                    thread.start();
+                }
             });
             return null;
         }
@@ -952,7 +954,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRefreshTableStatement(RefreshTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().refreshExternalTable(stmt);
+                context.getGlobalStateMgr().refreshExternalTable(context, stmt);
             });
             return null;
         }

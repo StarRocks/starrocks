@@ -24,6 +24,7 @@ import com.nimbusds.jwt.SignedJWT;
 
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
+import java.util.Arrays;
 
 public class OpenIdConnectVerifier {
 
@@ -31,8 +32,8 @@ public class OpenIdConnectVerifier {
                               String userName,
                               JWKSet jwkSet,
                               String principalFiled,
-                              String requiredIssuer,
-                              String requiredAudience) throws AuthenticationException {
+                              String[] requiredIssuer,
+                              String[] requiredAudience) throws AuthenticationException {
         try {
             OpenIdConnectVerifier.verifyJWT(idToken, jwkSet);
             SignedJWT signedJWT = SignedJWT.parse(idToken);
@@ -47,11 +48,13 @@ public class OpenIdConnectVerifier {
                 throw new AuthenticationException("Login name " + userName + " is not matched to user " + jwtUserName);
             }
 
-            if (requiredIssuer != null && !requiredIssuer.isEmpty() && !requiredIssuer.equals(claims.getIssuer())) {
+            if (requiredIssuer != null && requiredIssuer.length != 0 &&
+                    !Arrays.asList(requiredIssuer).contains(claims.getIssuer())) {
                 throw new AuthenticationException("Issuer (iss) field " + claims.getIssuer() + " is invalid");
             }
 
-            if (requiredAudience != null && !requiredAudience.isEmpty() && !claims.getAudience().contains(requiredAudience)) {
+            if (requiredAudience != null && requiredAudience.length != 0 &&
+                    !Arrays.stream(requiredAudience).anyMatch(claims.getAudience()::contains)) {
                 throw new AuthenticationException("Audience (aud) field " + claims.getAudience() + " is invalid");
             }
         } catch (Exception e) {

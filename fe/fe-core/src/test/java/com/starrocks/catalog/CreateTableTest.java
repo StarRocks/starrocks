@@ -34,6 +34,9 @@
 
 package com.starrocks.catalog;
 
+import com.google.api.client.util.Lists;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.constraint.UniqueConstraint;
@@ -42,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
@@ -2262,6 +2266,40 @@ public class CreateTableTest {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Partition column[dt] could not be null but contains null " +
                     "value in partition[p1]."));
+        }
+    }
+
+    @Test
+    public void testChosenBackendIdBySeqWhenDiskOffline() {
+        List<Backend> backends = Lists.newArrayList();
+        Backend be0 = new Backend(10000, "127.0.0.1", 9050);
+        DiskInfo disk = new DiskInfo("/path");
+        disk.setState(DiskInfo.DiskState.ONLINE);
+        be0.setDisks(ImmutableMap.of("/path", disk));
+        backends.add(be0);
+        Backend be1 = new Backend(10001, "127.0.0.2", 9050);
+        be1.setDisks(ImmutableMap.of("/path", disk));
+        backends.add(be1);
+        Backend be2 = new Backend(10002, "127.0.0.3", 9050);
+        DiskInfo disk2 = new DiskInfo("/path");
+        disk2.setState(DiskInfo.DiskState.OFFLINE);
+        be2.setDisks(ImmutableMap.of("/path", disk2));
+        backends.add(be2);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Backend> getAvailableBackends() {
+                return backends;
+            }
+        };
+
+        try {
+            LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+            Deencapsulation.invoke(metastore, "chosenBackendIdBySeq", 3, HashMultimap.create());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Current available backends: [10000,10001]"));
+            Assert.assertTrue(e.getMessage().contains("backends without enough disk space: [10002]"));
         }
     }
 }

@@ -1345,7 +1345,7 @@ public class PlanFragmentBuilder {
                     paimonScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
-                paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
+                paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), node.getLimit());
                 HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
@@ -2849,6 +2849,26 @@ public class PlanFragmentBuilder {
                         joinProperty.buildExpr(context);
                         joinNode.setUkfkProperty(joinProperty);
                     }
+                }
+                // set skew join, this is used by runtime filter
+                PhysicalHashJoinOperator physicalHashJoinOperator = (PhysicalHashJoinOperator) node;
+                boolean isSkewJoin = physicalHashJoinOperator.getSkewColumn() != null;
+                if (isSkewJoin) {
+                    HashJoinNode hashJoinNode = (HashJoinNode) joinNode;
+                    hashJoinNode.setSkewJoin(isSkewJoin);
+                    if (physicalHashJoinOperator.getSkewJoinFriend().isPresent()) {
+                        PhysicalHashJoinOperator skewJoinFriend = physicalHashJoinOperator.getSkewJoinFriend().get();
+                        if (distributionMode == JoinNode.DistributionMode.BROADCAST &&
+                                context.getJoinNodeMap().containsKey(skewJoinFriend)) {
+                            HashJoinNode skewJoinFriendNode = context.getJoinNodeMap().get(skewJoinFriend);
+                            // let them know each other
+                            hashJoinNode.setSkewJoinFriend(skewJoinFriendNode);
+                            skewJoinFriendNode.setSkewJoinFriend(hashJoinNode);
+                        }
+                    }
+                    // right now skew broadcast join's hash code is same as skew shuffle join's
+                    // But we first visit shuffle join then visit broadcast join, so using JoinNodeMap here is safe
+                    context.getJoinNodeMap().put(physicalHashJoinOperator, hashJoinNode);
                 }
             } else if (node instanceof PhysicalMergeJoinOperator) {
                 joinNode = new MergeJoinNode(

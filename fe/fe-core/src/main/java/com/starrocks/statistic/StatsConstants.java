@@ -37,6 +37,7 @@ public class StatsConstants {
     public static final int STATISTIC_DATA_VERSION_V2 = 10;
     public static final int STATISTIC_MULTI_COLUMN_VERSION = 12;
     public static final int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
+    public static final int STATISTIC_PARTITION_VERSION_V2 = 20;
 
 
 
@@ -56,6 +57,7 @@ public class StatsConstants {
                     .add(STATISTIC_DATA_VERSION_V2)
                     .add(STATISTIC_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_QUERY_MULTI_COLUMN_VERSION)
+                    .add(STATISTIC_PARTITION_VERSION_V2)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
@@ -111,6 +113,11 @@ public class StatsConstants {
 
     public static final String TABLE_PROPERTY_SEPARATOR = ",\n\"";
     public static final String COLUMN_ID_SEPARATOR = "#";
+
+    public static final String FULL_ONCE_TIMES = "full_once_times";
+    public static final String FULL_SCHEDULE_TIMES = "full_schedule_times";
+    public static final String SAMPLE_ONCE_TIMES = "sample_once_times";
+    public static final String SAMPLE_SCHEDULE_TIMES = "sample_schedule_times";
 
     public enum AnalyzeType {
         SAMPLE,

@@ -292,11 +292,12 @@ vectorized_functions = [
     [30131, 'character_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
     [30132, 'inet_aton', True, False, 'BIGINT', ['VARCHAR'], 'StringFunctions::inet_aton'],
 
-    [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
-    [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
+    [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower', 'StringFunctions::lower_prepare', 'StringFunctions::lower_close'],
+    [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower', 'StringFunctions::lower_prepare', 'StringFunctions::lower_close'],
 
-    [30150, 'upper', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
-    [30151, 'ucase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
+
+    [30150, 'upper', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper', 'StringFunctions::upper_prepare', 'StringFunctions::upper_close'],
+    [30151, 'ucase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper', 'StringFunctions::upper_prepare', 'StringFunctions::upper_close'],
 
     [30160, 'reverse', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
 

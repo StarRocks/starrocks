@@ -183,7 +183,7 @@ public class StarRocksAssert {
         DropDbStmt dropDbStmt =
                     (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database if exists `" + dbName + "`;", ctx);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(ctx, dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         } catch (MetaNotFoundException e) {
             if (!dropDbStmt.isSetIfExists()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_DB_DROP_EXISTS, dbName);
@@ -760,7 +760,7 @@ public class StarRocksAssert {
     public StarRocksAssert dropDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
                     (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database " + dbName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(ctx, dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         return this;
     }
 

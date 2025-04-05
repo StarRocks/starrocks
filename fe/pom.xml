@@ -71,7 +71,7 @@ under the License.
         <paimon.version>1.0.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.7.1</iceberg.version>
-        <staros.version>3.4-rc5</staros.version>
+        <staros.version>3.4-rc6</staros.version>
         <jetty.version>10.0.24</jetty.version>
     </properties>
 
@@ -755,7 +755,17 @@ under the License.
                         <groupId>ch.qos.reload4j</groupId>
                         <artifactId>reload4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
+                    </exclusion>
                 </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-hdfs</artifactId>
+                <version>${hadoop.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
@@ -962,6 +972,10 @@ under the License.
                     <exclusion>
                         <groupId>org.apache.zookeeper</groupId>
                         <artifactId>zookeeper</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.hadoop</groupId>
+                        <artifactId>hadoop-hdfs</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1334,6 +1348,10 @@ under the License.
                     <exclusion>
                         <groupId>com.nimbusds</groupId>
                         <artifactId>nimbus-jose-jwt</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.sun.jersey</groupId>
+                        <artifactId>jersey-bundle</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

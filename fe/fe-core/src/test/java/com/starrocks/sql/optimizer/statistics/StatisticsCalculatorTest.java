@@ -289,7 +289,7 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalIcebergTableScan() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table icebergTable = globalStateMgr.getMetadataMgr().getTable("iceberg0", "partitioned_db", "t1");
+        Table icebergTable = globalStateMgr.getMetadataMgr().getTable(connectContext, "iceberg0", "partitioned_db", "t1");
         List<Column> columns = icebergTable.getColumns();
 
         Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
@@ -358,11 +358,6 @@ public class StatisticsCalculatorTest {
         new Expectations() {
             {
                 cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
-                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
-                            0, 0, 30);
-                minTimes = 0;
-
-                cachedStatisticStorage.getColumnStatistic(table, "id_date");
                 result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
                             0, 0, 30);
                 minTimes = 0;
