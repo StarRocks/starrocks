@@ -124,6 +124,13 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void removeAnalyzeJob(long id) {
+        if (id == -1) {
+            List<Long> keysToRemove = new ArrayList<>(analyzeJobMap.keySet());
+            for (Long key : keysToRemove) {
+                AnalyzeJob job = analyzeJobMap.remove(key);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(job);
+            }
+        }
         if (analyzeJobMap.containsKey(id)) {
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(analyzeJobMap.remove(id));
         }
@@ -338,7 +345,7 @@ public class AnalyzeMgr implements Writable {
 
     public long getExistUpdateRows(Long tableId) {
         BasicStatsMeta existInfo =  basicStatsMetaMap.get(tableId);
-        return existInfo == null ? 0 : existInfo.getUpdateRows();
+        return existInfo == null ? 0 : existInfo.getTotalRows();
     }
 
     public Map<StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {

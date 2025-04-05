@@ -23,6 +23,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "common/config.h"
 #include "exec/avro_test.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
@@ -168,8 +169,12 @@ TEST_F(AvroAddBinaryColumnTest, test_add_object) {
 
     auto st = add_binary_column(column.get(), t, "f_object", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
-    ASSERT_EQ(R"(['{"boolean_type": true, "long_type": 4294967296, "double_type": 1.234567}'])",
-              column->debug_string());
+    if (config::avro_ignore_union_type_tag) {
+        ASSERT_EQ(R"(['{"boolean_type":true,"long_type":4294967296,"double_type":1.234567}'])", column->debug_string());
+    } else {
+        ASSERT_EQ(R"(['{"boolean_type": true, "long_type": 4294967296, "double_type": 1.234567}'])",
+                  column->debug_string());
+    }
 }
 
 TEST_F(AvroAddBinaryColumnTest, test_add_array) {
@@ -195,7 +200,11 @@ TEST_F(AvroAddBinaryColumnTest, test_add_array) {
 
     auto st = add_binary_column(column.get(), t, "f_array", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
-    ASSERT_EQ(R"(['[4294967297, 4294967298]'])", column->debug_string());
+    if (config::avro_ignore_union_type_tag) {
+        ASSERT_EQ(R"(['[4294967297,4294967298]'])", column->debug_string());
+    } else {
+        ASSERT_EQ(R"(['[4294967297, 4294967298]'])", column->debug_string());
+    }
 }
 
 TEST_F(AvroAddBinaryColumnTest, test_add_map) {
@@ -221,7 +230,11 @@ TEST_F(AvroAddBinaryColumnTest, test_add_map) {
 
     auto st = add_binary_column(column.get(), t, "f_map", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
-    ASSERT_EQ(R"(['{"ele1": 4294967297, "ele2": 4294967298}'])", column->debug_string());
+    if (config::avro_ignore_union_type_tag) {
+        ASSERT_EQ(R"(['{"ele1":4294967297,"ele2":4294967298}'])", column->debug_string());
+    } else {
+        ASSERT_EQ(R"(['{"ele1": 4294967297, "ele2": 4294967298}'])", column->debug_string());
+    }
 }
 
 } // namespace starrocks

@@ -1354,14 +1354,29 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         OlapTable olapTable = (OlapTable) table;
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        boolean isTempPartition = clause.isTempPartition();
+        boolean isDropAll = clause.isDropAll();
+        long dbId = db.getId();
+        long tableId = olapTable.getId();
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
+
+        if (isDropAll && isTempPartition) {
+            olapTable.dropAllTempPartitions();
+            DropPartitionsInfo info =
+                    new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), null, true);
+            editLog.logDropPartitions(info);
+            LOG.info("succeed in dropping all partitions, is temp : {}, is force : {}", isTempPartition,
+                    clause.isForceDrop());
+            return;
+        }
+
         if (!partitionInfo.isRangePartition() && partitionInfo.getType() != PartitionType.LIST) {
             throw new DdlException("Alter table [" + olapTable.getName() + "] failed. Not a partitioned table");
         }
-        boolean isTempPartition = clause.isTempPartition();
 
         List<String> existPartitions = Lists.newArrayList();
         List<String> notExistPartitions = Lists.newArrayList();
@@ -1430,9 +1445,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("fail to refresh materialized views when dropping partition", e);
             }
         }
-        long dbId = db.getId();
-        long tableId = olapTable.getId();
-        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
 
         if (clause.getPartitionName() != null) {
             String partitionName = clause.getPartitionName();
@@ -1473,12 +1485,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try {
             LOG.info("Begin to unprotect drop partitions. db = " + info.getDbId()
                     + " table = " + info.getTableId()
-                    + " partitionNames = " + info.getPartitionNames());
+                    + " partitionNames = " + info.getPartitionNames()
+                    + " isTempPartition = " + info.isTempPartition()
+                    + " isForceDrop = " + info.isForceDrop()
+                    + " isDropAll = " + info.isDropAll());
             List<String> partitionNames = info.getPartitionNames();
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
             boolean isTempPartition = info.isTempPartition();
             long dbId = info.getDbId();
             boolean isForceDrop = info.isForceDrop();
+            boolean isDropAll = info.isDropAll();
+            if (isDropAll && isTempPartition) {
+                olapTable.dropAllTempPartitions();
+                return;
+            }
             partitionNames.stream().forEach(partitionName -> {
                 if (isTempPartition) {
                     olapTable.dropTempPartition(partitionName, true);
@@ -3658,6 +3678,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+                String spec = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
+                tableProperty.setTimeDriftConstraintSpec(spec);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3703,6 +3731,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("Invalid partition retention condition");
             }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            String spec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+            PropertyAnalyzer.analyzeTimeDriftConstraint(spec, table, properties);
+            results.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             try {

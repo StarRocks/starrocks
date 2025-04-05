@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
+keywords: ['ssl', 'tls']
 ---
 
 # SSL Authentication

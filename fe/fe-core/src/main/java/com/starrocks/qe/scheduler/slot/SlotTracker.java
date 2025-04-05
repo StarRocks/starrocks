@@ -14,9 +14,15 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -24,6 +30,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,13 +51,93 @@ public class SlotTracker {
 
     private final Map<TUniqueId, LogicalSlot> pendingSlots = new HashMap<>();
     private final Map<TUniqueId, LogicalSlot> allocatedSlots = new HashMap<>();
-
-    private int numAllocatedSlots = 0;
-
+    private final long warehouseId;
     private final List<Listener> listeners;
+    private final SlotSelectionStrategy slotSelectionStrategy;
+    private int numAllocatedSlots = 0;
+    private Optional<String> warehouseName = Optional.empty();
 
+    public SlotTracker(ResourceUsageMonitor resourceUsageMonitor, long warehouseId) {
+        this.warehouseId = warehouseId;
+        this.slotSelectionStrategy = createSlotSelectionStrategy(resourceUsageMonitor);
+        this.listeners = ImmutableList.of(slotSelectionStrategy,
+                new SlotListenerForPipelineDriverAllocator());
+    }
+
+    @VisibleForTesting
     public SlotTracker(List<Listener> listeners) {
+        this.warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         this.listeners = listeners;
+        if (listeners.isEmpty()) {
+            this.slotSelectionStrategy = createSlotSelectionStrategy(GlobalStateMgr.getCurrentState().getResourceUsageMonitor());
+        } else {
+            Preconditions.checkArgument(!listeners.isEmpty());
+            Preconditions.checkArgument(listeners.get(0) instanceof SlotSelectionStrategy);
+            this.slotSelectionStrategy = (SlotSelectionStrategy) listeners.get(0);
+        }
+    }
+
+    private SlotSelectionStrategy createSlotSelectionStrategy(ResourceUsageMonitor resourceUsageMonitor) {
+        final boolean enableQueryQueue = QueryQueueOptions.isEnableQueryQueue(warehouseId);
+        if (enableQueryQueue) {
+            return new SlotSelectionStrategyV2(this.warehouseId);
+        } else {
+            return new DefaultSlotSelectionStrategy(
+                    resourceUsageMonitor::isGlobalResourceOverloaded, resourceUsageMonitor::isGroupResourceOverloaded);
+        }
+    }
+
+    public String getWarehouseName() {
+        if (warehouseName.isEmpty()) {
+            Warehouse warehouse = QueryQueueOptions.getWarehouse(this.warehouseId);
+            this.warehouseName = Optional.of(warehouse.getName());
+        }
+        return warehouseName.orElse("");
+    }
+
+    public long getQueuePendingLength() {
+        return pendingSlots.size();
+    }
+
+    public long getAllocatedLength() {
+        return allocatedSlots.size();
+    }
+
+    public Optional<Integer> getMaxRequiredSlots() {
+        return pendingSlots.values().stream()
+                .map(LogicalSlot::getNumPhysicalSlots)
+                .max(Integer::compareTo);
+    }
+
+    public Optional<Integer> getSumRequiredSlots() {
+        return pendingSlots.values().stream()
+                .map(LogicalSlot::getNumPhysicalSlots)
+                .reduce(Integer::sum);
+    }
+
+    public Optional<Integer> getMaxSlots() {
+        return getOptsV2().map(QueryQueueOptions.V2::getTotalSlots);
+    }
+
+    public Optional<Integer> getRemainSlots() {
+        return getMaxSlots().map(s -> Math.max(0, s - numAllocatedSlots));
+    }
+
+    public long getMaxQueueQueueLength() {
+        return QueryQueueOptions.getQueryQueueMaxQueuedQueries(warehouseId);
+    }
+
+    public long getMaxQueuePendingTimeSecond() {
+        return QueryQueueOptions.getQueryQueuePendingTimeoutSecond(warehouseId);
+    }
+
+    private Optional<QueryQueueOptions.V2> getOptsV2() {
+        if (slotSelectionStrategy == null || !(slotSelectionStrategy instanceof SlotSelectionStrategyV2)) {
+            return Optional.empty();
+        }
+        SlotSelectionStrategyV2 strategyV2 = (SlotSelectionStrategyV2) slotSelectionStrategy;
+        strategyV2.updateOptionsPeriodically();
+        return Optional.ofNullable(strategyV2.getOpts()).map(QueryQueueOptions::v2);
     }
 
     /**
@@ -60,7 +147,7 @@ public class SlotTracker {
      */
     public boolean requireSlot(LogicalSlot slot) {
         if (GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() &&
-                pendingSlots.size() >= GlobalVariable.getQueryQueueMaxQueuedQueries()) {
+                pendingSlots.size() >= QueryQueueOptions.getQueryQueueMaxQueuedQueries(slot.getWarehouseId())) {
             return false;
         }
 
@@ -135,6 +222,10 @@ public class SlotTracker {
         return slot;
     }
 
+    public Collection<LogicalSlot> peakSlotsToAllocate() {
+        return slotSelectionStrategy.peakSlotsToAllocate(this);
+    }
+
     /**
      * Peak all the expired slots.
      *
@@ -161,6 +252,11 @@ public class SlotTracker {
         return slotsOrderByExpiredTime.iterator().next().getExpiredPendingTimeMs();
     }
 
+    public double getEarliestQueryWaitTimeSecond() {
+        return slots.values().stream().map(LogicalSlot::getStartTimeMs).min(Long::compareTo)
+                .map(t -> (System.currentTimeMillis() - t) / 1000.0).orElse(0.0);
+    }
+
     public Collection<LogicalSlot> getSlots() {
         return slots.values();
     }
@@ -173,6 +269,10 @@ public class SlotTracker {
         return numAllocatedSlots;
     }
 
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     public interface Listener {
         void onRequireSlot(LogicalSlot slot);
 
@@ -181,4 +281,22 @@ public class SlotTracker {
         void onReleaseSlot(LogicalSlot slot);
     }
 
+    private static class SlotListenerForPipelineDriverAllocator implements SlotTracker.Listener {
+        private final PipelineDriverAllocator pipelineDriverAllocator = new PipelineDriverAllocator();
+
+        @Override
+        public void onRequireSlot(LogicalSlot slot) {
+            // Do nothing.
+        }
+
+        @Override
+        public void onAllocateSlot(LogicalSlot slot) {
+            pipelineDriverAllocator.allocate(slot);
+        }
+
+        @Override
+        public void onReleaseSlot(LogicalSlot slot) {
+            pipelineDriverAllocator.release(slot);
+        }
+    }
 }

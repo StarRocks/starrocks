@@ -97,6 +97,16 @@ public class TabletStatMgr extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        // update interval
+        if (getInterval() != Config.tablet_stat_update_interval_second * 1000) {
+            setInterval(Config.tablet_stat_update_interval_second * 1000);
+        }
+
+        // for testing statistic behavior
+        if (!Config.enable_sync_tablet_stats) {
+            return;
+        }
+
         updateLocalTabletStat();
         updateLakeTabletStat();
 
@@ -243,7 +253,9 @@ public class TabletStatMgr extends FrontendDaemon {
     private void adjustStatUpdateRows(long tableId, long totalRowCount) {
         BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
         if (meta != null) {
-            meta.setUpdateRows(totalRowCount);
+            meta.setTotalRows(totalRowCount);
+            meta.resetDeltaRows();
+            meta.updateTabletStatsReportTime();
         }
     }
 

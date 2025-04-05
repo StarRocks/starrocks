@@ -878,6 +878,24 @@ bool TabletUpdates::_check_status_msg(std::string_view msg) {
     return has_memory && (has_exceed_limit || has_alloc_failed);
 }
 
+bool TabletUpdates::_retry_times_limit() {
+    const size_t base_interval = config::retry_apply_interval_second;
+    const size_t max_interval = 600;
+    const size_t max_retries = max_interval / base_interval;
+    const size_t failed_retries = _apply_failed_time;
+
+    size_t total_duration = 0;
+
+    if (failed_retries <= max_retries) {
+        total_duration = failed_retries * (base_interval + base_interval * failed_retries) / 2;
+    } else {
+        const size_t sum_base = max_retries * (base_interval + base_interval * max_retries) / 2;
+        total_duration = sum_base + (failed_retries - max_retries) * max_interval;
+    }
+
+    return total_duration < config::retry_apply_timeout_second;
+}
+
 bool TabletUpdates::_is_retryable(Status& status) {
     switch (status.code()) {
     case TStatusCode::OK:
@@ -885,8 +903,10 @@ bool TabletUpdates::_is_retryable(Status& status) {
     case TStatusCode::MEM_ALLOC_FAILED:
     case TStatusCode::TIMEOUT:
         return true;
+    case TStatusCode::CORRUPTION:
+        return false;
     default:
-        return _check_status_msg(status.message());
+        return _check_status_msg(status.message()) || _retry_times_limit();
     }
 }
 
@@ -963,6 +983,8 @@ DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
 DEFINE_FAIL_POINT(tablet_internal_error_code_but_memory_limit);
+DEFINE_FAIL_POINT(inconsistent_rowset_stats_not_found);
+DEFINE_FAIL_POINT(inconsistent_rowset_stats_out_bound);
 
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -1012,8 +1034,8 @@ void TabletUpdates::do_apply() {
         if (config::enable_retry_apply && _is_retryable(apply_st) && !apply_st.ok()) {
             //reset pk index, reset rowset_update_states, reset compaction_state
             _reset_apply_status(*version_info_apply);
-            auto time_point =
-                    std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
+            size_t interval_seconds = std::min((size_t)600, config::retry_apply_interval_second * _apply_failed_time);
+            auto time_point = std::chrono::steady_clock::now() + std::chrono::seconds(interval_seconds);
             StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
             std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
                                                   _tablet.tablet_id(), apply_st.to_string());
@@ -1023,9 +1045,11 @@ void TabletUpdates::do_apply() {
         } else if (_is_breakpoint(apply_st)) {
             // apply stopped, clean states and quit.
             _reset_apply_status(*version_info_apply);
+            _apply_failed_time = 0;
             LOG(INFO) << "apply stopped, clean states and quit tablet id: " << _tablet.tablet_id();
             break;
         } else {
+            _apply_failed_time = 0;
             if (!apply_st.ok()) {
                 std::string msg = strings::Substitute("apply tablet: $0 failed, status: $1", _tablet.tablet_id(),
                                                       apply_st.to_string());
@@ -1183,7 +1207,7 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
             st = manager->set_cached_delta_column_group(_tablet.data_dir()->get_meta(),
                                                         TabletSegmentId(tablet_id, dcg.first), dcg.second);
             if (!st.ok()) {
-                failure_handler("set_cached_delta_column_group failed", st);
+                failure_handler("set_cached_delta_column_group failed", Status::Corruption(st.message()));
                 return apply_st;
             }
         }
@@ -1194,8 +1218,12 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
             st = manager->set_cached_del_vec(tsid, delvec_pair.second);
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_cache_del_vec_failed, {
+                st = Status::InternalError("inject tablet_apply_cache_del_vec_failed");
+                manager->clear_cached_del_vec({tsid});
+            });
             if (!st.ok()) {
-                failure_handler("set_cached_del_vec failed", st);
+                failure_handler("set_cached_del_vec failed", Status::Corruption(st.message()));
                 return apply_st;
             }
             // try to set empty dcg cache, for improving latency when reading
@@ -1222,11 +1250,8 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
         _apply_version_changed.notify_all();
     }
 
-    st = index.on_commited();
-    if (!st.ok()) {
-        failure_handler("primary index on_commit failed", st);
-        return apply_st;
-    }
+    WARN_IF_ERROR(index.on_commited(),
+                  fmt::format("primary index on commited failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
 
     _update_total_stats(version_info.rowsets, nullptr, nullptr);
@@ -1623,13 +1648,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     manager->update_state_cache().remove(state_entry);
     int64_t t_index = MonotonicMillis();
 
-    // NOTE:
-    // If the apply fails at the following stages, an intolerable error must be returned right now.
-    // Because the metadata may have already been persisted.
-    // If you need to return a tolerable error, please make sure the following:
-    //   1. The latest meta should be roll back.
-    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
-    //   3. The rowset stats maybe invalid, need to recalculate
     span->AddEvent("gen_delvec");
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -1685,7 +1703,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                         _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(),
                         version.major_number());
                 LOG(ERROR) << msg;
-                failure_handler(msg, TStatusCode::INTERNAL_ERROR, false);
+                failure_handler(msg, TStatusCode::CORRUPTION, false);
                 return apply_st;
             }
             if (VLOG_IS_ON(1)) {
@@ -1698,28 +1716,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         }
 
         idx++;
-
-        // Update the stats of affected rowsets.
-        std::lock_guard lg(_rowset_stats_lock);
-        auto iter = _rowset_stats.upper_bound(rssid);
-        iter--;
-        if (iter == _rowset_stats.end()) {
-            string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1 $2",
-                                             _tablet.tablet_id(), rssid);
-            DCHECK(false) << msg;
-            LOG(ERROR) << msg;
-        } else if (rssid >= iter->first + iter->second->num_segments) {
-            string msg = strings::Substitute("inconsistent rowset_stats, tablet=$0 rssid=$1 >= $2", _tablet.tablet_id(),
-                                             rssid, iter->first + iter->second->num_segments);
-            DCHECK(false) << msg;
-            LOG(ERROR) << msg;
-        } else {
-            iter->second->num_dels += new_delete.second.size();
-            _calc_compaction_score(iter->second.get());
-            DCHECK_LE(iter->second->num_dels, iter->second->num_rows);
-        }
     }
-    new_deletes.clear();
     StarRocksMetrics::instance()->update_del_vector_deletes_total.increment(total_del);
     StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
@@ -1765,6 +1762,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             failure_handler(msg, st.code(), false);
             return apply_st;
         }
+        // NOTE:
+        // If the apply fails at the following stages, an Corruption error must be returned right now.
+        // Because the metadata may have already been persisted.
+
         // put delvec in cache
         TabletSegmentId tsid;
         tsid.tablet_id = tablet_id;
@@ -1778,7 +1779,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: set cached delvec failed: $0 $1",
                                                       st.to_string(), _debug_string(false));
-                failure_handler(msg, st.code(), false);
+                failure_handler(msg, TStatusCode::CORRUPTION, false);
                 return apply_st;
             }
             // try to set empty dcg cache, for improving latency when reading
@@ -1791,7 +1792,30 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     }
 
     {
+        // Update the stats of affected rowsets.
         std::lock_guard lg(_rowset_stats_lock);
+        for (auto& new_delete : new_deletes) {
+            uint32_t rssid = new_delete.first;
+            auto iter = _rowset_stats.upper_bound(rssid);
+            iter--;
+            FAIL_POINT_TRIGGER_EXECUTE(inconsistent_rowset_stats_not_found, { iter = _rowset_stats.end(); });
+            FAIL_POINT_TRIGGER_EXECUTE(inconsistent_rowset_stats_out_bound,
+                                       { rssid = iter->first + iter->second->num_segments + 1; });
+            if (iter == _rowset_stats.end()) {
+                string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1",
+                                                 _tablet.tablet_id(), rssid);
+                LOG(ERROR) << msg;
+            } else if (rssid >= iter->first + iter->second->num_segments) {
+                string msg = strings::Substitute("inconsistent rowset_stats, tablet=$0 rssid=$1 >= $2",
+                                                 _tablet.tablet_id(), rssid, iter->first + iter->second->num_segments);
+                LOG(ERROR) << msg;
+            } else {
+                iter->second->num_dels += new_delete.second.size();
+                _calc_compaction_score(iter->second.get());
+                DCHECK_LE(iter->second->num_dels, iter->second->num_rows);
+            }
+        }
+
         auto iter = _rowset_stats.find(rowset_id);
         if (iter == _rowset_stats.end()) {
             string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rowsetid=$1",
@@ -1802,13 +1826,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             iter->second->row_size = full_row_size;
         }
     }
-
-    st = index.on_commited();
-    if (!st.ok()) {
-        std::string msg = strings::Substitute("primary index on_commit failed: $0", st.to_string());
-        failure_handler(msg, st.code(), false);
-        return apply_st;
-    }
+    new_deletes.clear();
+    WARN_IF_ERROR(index.on_commited(), fmt::format("primary index on_commit failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
@@ -2437,7 +2456,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                 FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_upsert_failed,
                                            { st = Status::InternalError("inject tablet_apply_index_upsert_failed"); });
                 if (!st.ok()) {
-                    failure_handler(strings::Substitute("_apply_compaction_commit error: index isnert failed: $0 $1",
+                    failure_handler(strings::Substitute("_apply_compaction_commit error: index insert failed: $0 $1",
                                                         st.to_string(), debug_string()),
                                     st.code());
                     return apply_st;
@@ -2493,12 +2512,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
-    // NOTE:
-    // If the apply fails at the following stages, an intolerable error must be returned right now.
-    // Because the metadata may have already been persisted.
-    // If you need to return a tolerable error, please make sure the following:
-    //   1. The latest meta should be roll back.
-    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
     {
         std::lock_guard wl(_lock);
         if (_edit_version_infos.empty()) {
@@ -2514,6 +2527,10 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
             failure_handler(msg, st.code());
             return apply_st;
         }
+        // NOTE:
+        // If the apply fails at the following stages, an CORRUPTION error must be returned right now.
+        // Because the metadata may have already been persisted.
+
         // 4. put delvec in cache
         TabletSegmentId tsid;
         tsid.tablet_id = _tablet.tablet_id();
@@ -2527,7 +2544,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_compaction_commit error: set cached delvec failed: $0 $1",
                                                       st.to_string(), _debug_string(false));
-                failure_handler(msg, st.code());
+                failure_handler(msg, TStatusCode::CORRUPTION);
                 return apply_st;
             }
             // try to set empty dcg cache, for improving latency when reading
@@ -2539,12 +2556,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         _apply_version_changed.notify_all();
     }
 
-    st = index.on_commited();
-    if (!st.ok()) {
-        std::string msg = strings::Substitute("primary index on_commit failed: $0", st.to_string());
-        failure_handler(msg, st.code());
-        return apply_st;
-    }
+    WARN_IF_ERROR(index.on_commited(),
+                  fmt::format("primary index on commited failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     {
@@ -2597,7 +2610,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                 max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id),
                 st.ok() ? "" : st.message());
         LOG(ERROR) << msg << debug_string();
-        failure_handler(msg + _debug_version_info(true), TStatusCode::INTERNAL_ERROR);
+        failure_handler(msg + _debug_version_info(true), TStatusCode::CORRUPTION);
         DCHECK(st.ok()) << msg;
     }
     return apply_st;
@@ -5837,6 +5850,7 @@ Status TabletUpdates::compaction_random(MemTracker* mem_tracker) {
 
 void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_apply) {
     auto manager = StorageEngine::instance()->update_manager();
+    _apply_failed_time++;
     if (version_info_apply.deltas.size() > 0) {
         // 1. remove rowset_update_state
         uint32_t rowset_id = version_info_apply.deltas[0];

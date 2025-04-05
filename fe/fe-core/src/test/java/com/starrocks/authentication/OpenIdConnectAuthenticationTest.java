@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
@@ -32,6 +33,9 @@ import java.io.InputStream;
 import java.text.ParseException;
 
 public class OpenIdConnectAuthenticationTest {
+
+    private final String[] emptyAudience = {};
+    private final String[] emptyIssuer = {};
 
     static class MockJwkMgr extends JwkMgr {
         @Override
@@ -61,7 +65,7 @@ public class OpenIdConnectAuthenticationTest {
         GlobalStateMgr.getCurrentState().setJwkMgr(new MockJwkMgr());
 
         OpenIdConnectAuthenticationProvider provider =
-                new OpenIdConnectAuthenticationProvider("jwks.json", "preferred_username", "", "");
+                new OpenIdConnectAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
         provider.analyzeAuthOption(new UserIdentity("harbor", "%"),
                 new UserAuthOption("", null, null, true, NodePosition.ZERO));
         String openIdConnectJson = getOpenIdConnect("oidc.json");
@@ -70,7 +74,7 @@ public class OpenIdConnectAuthenticationTest {
         serializer.writeInt1(0);
         serializer.writeLenEncodedString(openIdConnectJson);
         try {
-            provider.authenticate("harbor", "%", serializer.toArray(), null, null);
+            provider.authenticate(new ConnectContext(), "harbor", "%", serializer.toArray(), null, null);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -83,7 +87,7 @@ public class OpenIdConnectAuthenticationTest {
         JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
 
         try {
-            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor", jwkSet, "preferred_username", "", "");
+            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor", jwkSet, "preferred_username", emptyIssuer, emptyAudience);
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("JWT with kid JKA9Gjuzv--loolRTY_pBN19sUF1Mf8naxOwvb0mgKQ is invalid"));
@@ -97,7 +101,7 @@ public class OpenIdConnectAuthenticationTest {
 
         try {
             JWKSet jwkSet = mockJwkMgr.getJwkSet("error-jwks.json");
-            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor", jwkSet, "preferred_username", "", "");
+            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor", jwkSet, "preferred_username", emptyIssuer, emptyAudience);
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("Cannot find public key for kid"));
@@ -112,14 +116,15 @@ public class OpenIdConnectAuthenticationTest {
 
         try {
             OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "preferred_username", "http://localhost:38080/realms/master", "12345");
+                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master",
+                            "foo"}, new String[] {"12345", "56789"});
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
 
         try {
             OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "xxx", "http://localhost:38080/realms/master", "12345");
+                    jwkSet, "xxx", new String[] {"http://localhost:38080/realms/master"}, new String[] {"12345"});
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("Can not get specified principal xxx"));
@@ -127,7 +132,7 @@ public class OpenIdConnectAuthenticationTest {
 
         try {
             OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "sub", "http://localhost:38080/realms/master", "12345");
+                    jwkSet, "sub", new String[] {"http://localhost:38080/realms/master"}, new String[] {"12345"});
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(
@@ -136,7 +141,7 @@ public class OpenIdConnectAuthenticationTest {
 
         try {
             OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "preferred_username", "foo", "12345");
+                    jwkSet, "preferred_username", new String[] {"foo", "foo1"}, new String[] {"12345"});
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("Issuer (iss) field http://localhost:38080/realms/master is invalid"));
@@ -144,7 +149,7 @@ public class OpenIdConnectAuthenticationTest {
 
         try {
             OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "preferred_username", "http://localhost:38080/realms/master", "foo");
+                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master"}, new String[] {"foo", "56789"});
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("Audience (aud) field [12345] is invalid"));

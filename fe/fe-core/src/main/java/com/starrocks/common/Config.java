@@ -1328,7 +1328,7 @@ public class Config extends ConfigBase {
      * whether backup materialized views in backing databases. If not, will skip backing materialized views.
      */
     @ConfField(mutable = true)
-    public static boolean enable_backup_materialized_view = true;
+    public static boolean enable_backup_materialized_view = false;
 
     /**
      * Whether to display all task runs or only the newest task run in ShowMaterializedViews command to be
@@ -1499,8 +1499,11 @@ public class Config extends ConfigBase {
      * update interval of tablet stat
      * All frontends will get tablet stat from all backends at each interval
      */
-    @ConfField
-    public static int tablet_stat_update_interval_second = 300;  // 5 min
+    @ConfField(mutable = true)
+    public static long tablet_stat_update_interval_second = 300;  // 5 min
+
+    @ConfField(mutable = true, comment = "for testing statistics behavior")
+    public static boolean enable_sync_tablet_stats = true;
 
     @ConfField(mutable = true, comment = "time interval to collect tablet info from backend")
     public static long tablet_collect_interval_seconds = 60;
@@ -1948,8 +1951,15 @@ public class Config extends ConfigBase {
     /**
      * statistic collect flag
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Whether to enable periodic analyze job, " +
+            "including auto analyze job and analyze jobs created by user")
     public static boolean enable_statistic_collect = true;
+
+    @ConfField(mutable = true, comment = "enable auto collect internal statistics in the background")
+    public static boolean enable_auto_collect_statistics = true;
+
+    @ConfField(mutable = true, comment = "trigger task immediately after creating analyze job")
+    public static boolean enable_trigger_analyze_job_immediate = true;
 
     /**
      * whether to automatically collect statistics on temporary tables
@@ -2015,7 +2025,7 @@ public class Config extends ConfigBase {
      * The collect thread work interval
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_interval_sec = 5L * 60L; // 5m
+    public static long statistic_collect_interval_sec = 10L * 60L; // 10m
 
     @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
     public static long statistic_predicate_columns_persist_interval_sec = 60L;
@@ -2127,12 +2137,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "max columns size of full analyze predicate columns instead of sample all columns")
     public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
-
-    /**
-     * Max row count in statistics collect per query
-     */
-    @ConfField(mutable = true)
-    public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
 
     /**
      * The row number of sample collect, default 20w rows
@@ -2846,6 +2850,9 @@ public class Config extends ConfigBase {
     public static String lake_background_warehouse = "default_warehouse";
 
     @ConfField(mutable = true)
+    public static String statistics_collect_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
 
     @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
@@ -3515,18 +3522,18 @@ public class Config extends ConfigBase {
     public static String oidc_principal_field = "sub";
 
     /**
-     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
-     * The iss field in the JWT identifies the principal that issued the JWT.
+     * Specifies a list of string. One of that must match the value of the JWT’s issuer (iss) field in order to consider
+     * this JWT valid. The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
-    public static String oidc_required_issuer = "";
+    public static String[] oidc_required_issuer = {};
 
     /**
-     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
-     * The aud field in the JWT identifies the recipients that the JWT is intended for.
+     * Specifies a list of strings. For a JWT to be considered valid, the value of its 'aud' (Audience) field must match
+     * at least one of these strings.
      */
     @ConfField(mutable = false)
-    public static String oidc_required_audience = "";
+    public static String[] oidc_required_audience = {};
 
     /**
      * The name of the group provider. If there are multiple, separate them with commas.
@@ -3563,4 +3570,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 60;
+
+    /**
+     * Whether to enable tracing historical nodes when cluster scale
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_trace_historical_node = false;
 }
