@@ -175,9 +175,9 @@ TEST(ArrayConverterTest, test_hive_read_string01) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
-    options.array_hive_collection_delimiter = '_';
-    options.array_hive_nested_level = 1;
-    options.array_hive_mapkey_delimiter = '\003';
+    options.hive_collection_delimiter = '_';
+    options.hive_nested_level = 1;
+    options.hive_mapkey_delimiter = '\003';
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -213,9 +213,9 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
-    options.array_hive_collection_delimiter = '_';
-    options.array_hive_nested_level = 1;
-    options.array_hive_mapkey_delimiter = '\003';
+    options.hive_collection_delimiter = '_';
+    options.hive_nested_level = 1;
+    options.hive_mapkey_delimiter = '\003';
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -243,9 +243,9 @@ TEST(ArrayConverterTest, test_hive_read_string03) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
-    options.array_hive_collection_delimiter = '_';
-    options.array_hive_nested_level = 1;
-    options.array_hive_mapkey_delimiter = ':';
+    options.hive_collection_delimiter = '_';
+    options.hive_nested_level = 1;
+    options.hive_mapkey_delimiter = ':';
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -285,9 +285,9 @@ TEST(ArrayConverterTest, test_hive_read_string04) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
-    options.array_hive_collection_delimiter = '\002';
-    options.array_hive_nested_level = 1;
-    options.array_hive_mapkey_delimiter = '\003';
+    options.hive_collection_delimiter = '\002';
+    options.hive_nested_level = 1;
+    options.hive_mapkey_delimiter = '\003';
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -308,9 +308,9 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
-    options.array_hive_collection_delimiter = '\002';
-    options.array_hive_nested_level = 1;
-    options.array_hive_mapkey_delimiter = ':';
+    options.hive_collection_delimiter = '\002';
+    options.hive_nested_level = 1;
+    options.hive_mapkey_delimiter = ':';
 
     {
         // ARRAY<ARRAY<TINYINT>>
@@ -382,6 +382,42 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         EXPECT_TRUE(arr2.is_null());
     }
     {
+        // ARRAY<STRUCT<TINYINT,VARCHAR>>
+        TypeDescriptor t(TYPE_ARRAY);
+        t.children.emplace_back(TYPE_STRUCT);
+        t.children.back().children.emplace_back(TYPE_TINYINT);
+        t.children.back().children.emplace_back(TYPE_VARCHAR);
+        t.children.back().field_names.emplace_back("field1");
+        t.children.back().field_names.emplace_back("field2");
+        auto conv = csv::get_hive_converter(t, true);
+        auto col = ColumnHelper::create_column(t, true);
+
+        // [{"field1":10,"field2":""}, {"field1":-1,"field2":"apple"},{"field1":null,"field2":null},null]
+        EXPECT_TRUE(conv->read_string(col.get(), "10:\002-1:apple\002\\N:\\N\002\\N", options));
+        EXPECT_EQ(1, col->size());
+
+        auto arr = col->get(0).get_array();
+
+        // {"field1":10,"field2":""}
+        DatumStruct datum0 = arr[0].get_struct();
+        EXPECT_EQ(10, datum0[0].get_int8());
+        EXPECT_EQ("", datum0[1].get_slice());
+
+        // {"field1":-1,"field2":"apple"}
+        DatumStruct datum1 = arr[1].get_struct();
+        EXPECT_EQ(-1, datum1[0].get_int8());
+        EXPECT_EQ("apple", datum1[1].get_slice());
+
+        // {"field1":null,"field2":null}
+        DatumStruct datum2 = arr[2].get_struct();
+        EXPECT_TRUE(datum2[0].is_null());
+        EXPECT_TRUE(datum2[1].is_null());
+
+        // null
+        auto datum3 = arr[3];
+        EXPECT_TRUE(datum3.is_null());
+    }
+    {
         // ARRAY<VARCHAR>
         TypeDescriptor t(TYPE_ARRAY);
         t.children.emplace_back(TYPE_VARCHAR);
@@ -446,8 +482,8 @@ TEST(ArrayConverterTest, test_get_collection_delimiter) {
 
     // Start to check, ignore first element in separators, because array delimiter start from second element.
     for (size_t i = 1, nested_array_level = 1; i < separators.size(); i++) {
-        char delimiter = HiveTextArrayReader::get_collection_delimiter(DEFAULT_COLLECTION_DELIMITER,
-                                                                       DEFAULT_MAPKEY_DELIMITER, nested_array_level++);
+        char delimiter = get_collection_delimiter(DEFAULT_COLLECTION_DELIMITER,
+                                                  DEFAULT_MAPKEY_DELIMITER, nested_array_level++);
         EXPECT_EQ(delimiter, separators[i]);
     }
 }

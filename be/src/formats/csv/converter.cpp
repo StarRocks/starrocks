@@ -27,6 +27,7 @@
 #include "formats/csv/nullable_converter.h"
 #include "formats/csv/numeric_converter.h"
 #include "formats/csv/string_converter.h"
+#include "formats/csv/struct_converter.h"
 #include "formats/csv/varbinary_converter.h"
 #include "runtime/types.h"
 
@@ -60,7 +61,8 @@ static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, cons
     case TYPE_DATETIME:
         return std::make_unique<DatetimeConverter>();
     case TYPE_ARRAY: {
-        auto c = get_converter(t.children[0], true);
+        auto c =
+                is_hive ? get_hive_converter(t.children[0], true) : get_converter(t.children[0], true);
         if (c == nullptr) {
             // For hive, if array's element converter is nullptr, we use DefaultValueConverter instead
             // For broker load, if array's element converter is nullptr, we return nullptr directly, to avoid NPE
@@ -87,6 +89,19 @@ static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, cons
         }
         return std::make_unique<MapConverter>(std::move(key_con), std::move(value_con));
     }
+    case TYPE_STRUCT: {
+        // Only implement the logic for struct when the type is Hive.
+        // Because if the type is not hive can use json to read.
+        if (is_hive) {
+            std::vector<std::unique_ptr<Converter>> child_converters;
+            for (size_t i = 0; i < t.children.size(); i++) {
+                auto child_converter = get_hive_converter(t.children[i], true);
+                child_converters.emplace_back(std::move(child_converter));
+            }
+            return std::make_unique<StructConverter>(std::move(child_converters));
+        }
+        return nullptr;
+    }
     default:
         break;
     }
@@ -107,6 +122,40 @@ std::unique_ptr<Converter> get_hive_converter(const TypeDescriptor& type_desc, b
         return std::make_unique<DefaultValueConverter>();
     }
     return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
+}
+
+char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter,
+                                     size_t nested_array_level) {
+    DCHECK(nested_array_level >= 1 && nested_array_level <= 153);
+
+    // tmp maybe negative, dont use size_t.
+    // 1 (\001) means default 1D array collection delimiter.
+    int32_t tmp = 1;
+
+    if (nested_array_level == 1) {
+        // If level is 1, use collection_delimiter directly.
+        return collection_delimiter;
+    } else if (nested_array_level == 2) {
+        // If level is 2, use mapkey_delimiter directly.
+        return mapkey_delimiter;
+    } else if (nested_array_level <= 7) {
+        // [3, 7] -> [4, 8]
+        tmp = static_cast<int32_t>(nested_array_level) + (4 - 3);
+    } else if (nested_array_level == 8) {
+        // [8] -> [11]
+        tmp = 11;
+    } else if (nested_array_level <= 21) {
+        // [9, 21] -> [14, 26]
+        tmp = static_cast<int32_t>(nested_array_level) + (14 - 9);
+    } else if (nested_array_level <= 25) {
+        // [22, 25] -> [28, 31]
+        tmp = static_cast<int32_t>(nested_array_level) + (28 - 22);
+    } else if (nested_array_level <= 153) {
+        // [26, 153] -> [-128, -1]
+        tmp = static_cast<int32_t>(nested_array_level) + (-128 - 26);
+    }
+
+    return static_cast<char>(tmp);
 }
 
 } // namespace starrocks::csv
