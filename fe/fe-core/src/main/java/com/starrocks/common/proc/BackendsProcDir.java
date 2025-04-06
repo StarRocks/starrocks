@@ -39,7 +39,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.gson.Gson;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -193,7 +192,7 @@ public class BackendsProcDir implements ProcDirInterface {
 
             backendInfo.add(backend.getHeartbeatErrMsg());
             backendInfo.add(backend.getVersion());
-            backendInfo.add(new Gson().toJson(backend.getBackendStatus()));
+            backendInfo.add(backend.getBackendStatusJson());
 
             // data total
             long dataTotalB = backend.getDataTotalCapacityB();
