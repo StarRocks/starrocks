@@ -3088,6 +3088,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static long binlog_max_size = Long.MAX_VALUE; // no limit
 
+    @ConfField
+    public static double flat_json_null_factor = 0.3;
+
+    @ConfField
+    public static double flat_json_sparsity_factory = 0.9;
+
+    @ConfField
+    public static int flat_json_column_max = 100;
+
     /**
      * Enable check if the cluster is under safe mode or not
      **/
