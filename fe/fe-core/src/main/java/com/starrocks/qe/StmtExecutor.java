@@ -87,6 +87,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.RuntimeProfileParser;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -2978,8 +2979,15 @@ public class StmtExecutor {
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
-    private boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+    protected boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+        boolean isPreQuerySQL = false;
+        try {
+            isPreQuerySQL = SqlUtils.isPreQuerySQL(parsedStmt);
+        } catch (Exception e) {
+            LOG.warn("check isPreQuerySQL failed", e);
+        }
         return !isInternalStmt
+                && !isPreQuerySQL
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
     }
