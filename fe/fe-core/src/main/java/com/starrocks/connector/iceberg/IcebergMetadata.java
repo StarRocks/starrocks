@@ -107,6 +107,7 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
@@ -1167,10 +1168,12 @@ public class IcebergMetadata implements ConnectorMetadata {
             transaction.commitTransaction();
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         } catch (Exception e) {
-            List<String> toDeleteFiles = dataFiles.stream()
-                    .map(TIcebergDataFile::getPath)
-                    .collect(Collectors.toList());
-            icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
+            if (!(e instanceof CommitStateUnknownException)) {
+                List<String> toDeleteFiles = dataFiles.stream()
+                        .map(TIcebergDataFile::getPath)
+                        .collect(Collectors.toList());
+                icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
+            }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
         } finally {
