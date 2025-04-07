@@ -130,11 +130,11 @@ ANALYZE FULL TABLE partitions_multi_column_2 WITH SYNC MODE;
 -- result:
 test_list_partition_selectivity.partitions_multi_column_2	analyze	status	OK
 -- !result
-function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1=1 ', 'c1-->[1.0, 2.0, 0.0, 1.0, 2.0]')
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1=1 ', 'c1-->[1.0, 2.0, 0.0, 4.0, 2.0]')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1<3 ', 'c1-->[1.0, 2.0, 0.75, 1.0, 2.0]')
+function: assert_explain_costs_contains('SELECT * FROM partitions_multi_column_2 WHERE c1=1 and p1<3 ', 'c1-->[1.0, 2.0, 0.75, 4.0, 2.0]')
 -- result:
 None
 -- !result
