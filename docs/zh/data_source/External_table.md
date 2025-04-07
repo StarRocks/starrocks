@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # 外部表
 
-StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前，除 StarRocks 外部外，其他外部表功能已经。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前，除 StarRocks 外部表外，其他外部表功能已经废弃。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 > **NOTICE**
 >
