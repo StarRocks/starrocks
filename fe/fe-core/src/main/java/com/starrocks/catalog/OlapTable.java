@@ -360,7 +360,7 @@ public class OlapTable extends Table {
 
         for (Index index : indexes) {
             Set<ColumnId> columnIdsSetForIndex = index.getColumns().stream().collect(Collectors.toSet());
-            if (columnIdsSetForSchema.containsAll​(columnIdsSetForIndex)) {
+            if (columnIdsSetForSchema.containsAll(columnIdsSetForIndex)) {
                 hitIndexes.add(index);
             }
         }
