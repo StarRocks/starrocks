@@ -134,4 +134,22 @@ TEST_F(SIMDTest, count_nonzero_int32) {
     EXPECT_EQ(30u, SIMD::count_nonzero(numbers));
 }
 
+TEST_F(SIMDTest, contains_nonzero_bit) {
+    std::vector<uint8_t> nums;
+    for (int i = 0; i < 1000; i++) {
+        nums.emplace_back(0);
+    }
+    EXPECT_FALSE(SIMD::contains_nonzero_bit(nums.data(), nums.size()));
+
+    // non-zero in non-SIMD check tail part.
+    nums.emplace_back(8);
+    EXPECT_TRUE(SIMD::contains_nonzero_bit(nums.data(), nums.size()));
+
+    // non-zero in SIMD check part.
+    for (int i = 0; i < 1000; i++) {
+        nums.emplace_back(0);
+    }
+    EXPECT_TRUE(SIMD::contains_nonzero_bit(nums.data(), nums.size()));
+}
+
 } // namespace starrocks
