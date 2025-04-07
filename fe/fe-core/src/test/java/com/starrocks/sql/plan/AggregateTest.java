@@ -3011,5 +3011,37 @@ public class AggregateTest extends PlanTestBase {
         assertNotContains(plan, " 1:AGGREGATE (update finalize)\n" +
                 "  |  output: count(DISTINCT 2: k2), array_agg(DISTINCT 2: k2)\n" +
                 "  |  group by: 1: k1");
+
+        // right plan is cte with 3 AGG, and use null-safe join to merge result
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 6: k1 <=> 8: k1");
+
+        assertContains(plan, "|----12:AGGREGATE (update finalize)\n" +
+                "  |    |  output: array_agg(9: k2)\n" +
+                "  |    |  group by: 8: k1\n" +
+                "  |    |  \n" +
+                "  |    11:AGGREGATE (merge serialize)\n" +
+                "  |    |  group by: 8: k1, 9: k2\n" +
+                "  |    |  \n" +
+                "  |    10:EXCHANGE\n" +
+                "  |    \n" +
+                "  6:AGGREGATE (update finalize)\n" +
+                "  |  output: count(7: k2)\n" +
+                "  |  group by: 6: k1\n" +
+                "  |  \n" +
+                "  5:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 6: k1, 7: k2\n" +
+                "  |  \n" +
+                "  4:EXCHANGE");
+
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 07\n" +
+                "    RANDOM");
     }
 }
