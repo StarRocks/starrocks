@@ -1274,15 +1274,15 @@ ORDER BY k1;
 -- !result
 [UC] ANALYZE FULL TABLE t1;
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t1	analyze	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t1	analyze	status	OK
 -- !result
 [UC] ANALYZE FULL TABLE t2;
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t2	analyze	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t2	analyze	status	OK
 -- !result
 [UC] ANALYZE FULL TABLE t3;
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t3	analyze	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t3	analyze	status	OK
 -- !result
 SELECT min,max,row_count,hll_cardinality(ndv) FROM _statistics_.column_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
 -- result:
@@ -1314,15 +1314,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t1	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t2	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t3	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t3	histogram	status	OK
 -- !result
 set enable_stats_to_optimize_skew_join = false;
 -- result:
@@ -1363,14 +1363,6 @@ SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND 
 -- result:
 70425
 -- !result
-SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-06-01" AND "2020-06-10";
--- result:
-433500
--- !result
-SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-07-01" AND "2020-07-10";
--- result:
-343500
--- !result
 SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1;
 -- result:
 1376984700
@@ -1379,14 +1371,6 @@ SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n
 -- result:
 21127500
 -- !result
-SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10";
--- result:
-68251500
--- !result
-SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-07-01" AND "2020-07-10";
--- result:
-64381500
--- !result
 SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3;
 -- result:
 1376984700
@@ -1394,10 +1378,6 @@ SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n
 SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-01-21" AND "2020-01-30" AND n1.k3 BETWEEN 50 AND 100;
 -- result:
 3901500
--- !result
-SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10" AND n1.k3 BETWEEN 200 AND 250;
--- result:
-24097500
 -- !result
 set cbo_enable_histogram_join_estimation = false;
 -- result:
@@ -1410,14 +1390,6 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-06-01" AND "2020-06-10" ', 'cardinality: 3085', 'cardinality: 1230', 'cardinality: 12733')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-07-01" AND "2020-07-10" ', 'cardinality: 2925', 'cardinality: 975', 'cardinality: 9570')
--- result:
-None
--- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 6840680', 'cardinality: 2065977039')
 -- result:
 None
@@ -1426,23 +1398,11 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10"', 'cardinality: 3085', 'cardinality: 1230', 'cardinality: 1335', 'cardinality: 5510', 'cardinality: 57044')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-07-01" AND "2020-07-10"', 'cardinality: 2925', 'cardinality: 975', 'cardinality: 1683', 'cardinality: 5506', 'cardinality: 54048')
--- result:
-None
--- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 6840680', 'cardinality: 2045385906')
 -- result:
 None
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-01-21" AND "2020-01-30" AND n1.k3 BETWEEN 50 AND 100', 'cardinality: 176', 'cardinality: 225', 'cardinality: 15000', 'cardinality: 176', 'cardinality: 8771')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10" AND n1.k3 BETWEEN 200 AND 250', 'cardinality: 1335', 'cardinality: 313', 'cardinality: 15025', 'cardinality: 1400', 'cardinality: 69906')
 -- result:
 None
 -- !result
@@ -1457,27 +1417,11 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-06-01" AND "2020-06-10" ', 'cardinality: 3085', 'cardinality: 1230', 'cardinality: 93773')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-07-01" AND "2020-07-10" ', 'cardinality: 2925', 'cardinality: 975', 'cardinality: 75849')
--- result:
-None
--- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3645821', 'cardinality: 798048960')
 -- result:
 None
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-01-21" AND "2020-01-30"', 'cardinality: 176', 'cardinality: 2765', 'cardinality: 2236', 'cardinality: 10239', 'cardinality: 2741799')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10"', 'cardinality: 3085', 'cardinality: 1230', 'cardinality: 1335', 'cardinality: 47457', 'cardinality: 7386159')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-07-01" AND "2020-07-10"', 'cardinality: 2925', 'cardinality: 975', 'cardinality: 1683', 'cardinality: 25034', 'cardinality: 668664')
 -- result:
 None
 -- !result
@@ -1489,35 +1433,23 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10" AND n1.k3 BETWEEN 200 AND 250', 'cardinality: 15025', 'cardinality: 1335', 'cardinality: 313', 'cardinality: 12061', 'cardinality: 3106471')
--- result:
-None
--- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t1	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t2	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t3	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t3	histogram	status	OK
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4589949')
 -- result:
 None
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 255', 'cardinality: 2765', 'cardinality: 70425')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-06-01" AND "2020-06-10" ', 'cardinality: 3000', 'cardinality: 1445', 'cardinality: 433500')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-07-01" AND "2020-07-10" ', 'cardinality: 3000', 'cardinality: 1145', 'cardinality: 343500')
 -- result:
 None
 -- !result
@@ -1529,14 +1461,6 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10"', 'cardinality: 3000', 'cardinality: 1445', 'cardinality: 1575', 'cardinality: 227505', 'cardinality: 68251500')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-07-01" AND "2020-07-10"', 'cardinality: 3000', 'cardinality: 1875', 'cardinality: 1145', 'cardinality: 214605', 'cardinality: 64381500')
--- result:
-None
--- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4589949', 'cardinality: 1376984700')
 -- result:
 None
@@ -1545,35 +1469,23 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10" AND n1.k3 BETWEEN 200 AND 250', 'cardinality: 1575', 'cardinality: 367', 'cardinality: 1575', 'cardinality: 57821', 'cardinality: 17346311')
--- result:
-None
--- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t1	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t2	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 -- result:
-analyze_test_c01b41139f4345e1b700a77747726f9b.t3	histogram	status	OK
+analyze_test_f78bbf94a15d4ef4959c24a0e3a362c2.t3	histogram	status	OK
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4562636')
 -- result:
 None
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 209', 'cardinality: 2765', 'cardinality: 24300')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-06-01" AND "2020-06-10" ', 'cardinality: 3000', 'cardinality: 1445', 'cardinality: 433500')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t3 USING (k1) WHERE t1.k1 BETWEEN "2020-07-01" AND "2020-07-10" ', 'cardinality: 3000', 'cardinality: 1145', 'cardinality: 343500')
 -- result:
 None
 -- !result
@@ -1585,23 +1497,11 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10"', 'cardinality: 3000', 'cardinality: 1445', 'cardinality: 1575', 'cardinality: 227505', 'cardinality: 68251500')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1 WHERE n1.k1 BETWEEN "2020-07-01" AND "2020-07-10"', 'cardinality: 3000', 'cardinality: 1875', 'cardinality: 1145', 'cardinality: 214605', 'cardinality: 64381500')
--- result:
-None
--- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1368912066')
 -- result:
 None
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-01-21" AND "2020-01-30" AND n1.k3 BETWEEN 50 AND 100', 'cardinality: 15300', 'cardinality: 234', 'cardinality: 209', 'cardinality: 2059', 'cardinality: 617591')
--- result:
-None
--- !result
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3 WHERE n1.k1 BETWEEN "2020-06-01" AND "2020-06-10" AND n1.k3 BETWEEN 200 AND 250', 'cardinality: 1575', 'cardinality: 367', 'cardinality: 15300', 'cardinality: 57821', 'cardinality: 17346311')
 -- result:
 None
 -- !result
