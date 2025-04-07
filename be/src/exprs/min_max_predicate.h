@@ -74,6 +74,7 @@ public:
         //   2. res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
         // but they can not be compiled into SIMD instructions.
 
+        // Use lambdas to make the compiler to better analyze code within smaller scopes, thereby ensuring vectorization.
         auto check_range = [](uint8_t* __restrict__ local_res, const CppType* __restrict__ local_values,
                               const size_t local_size, const CppType min_value, const CppType max_value) {
             for (int i = 0; i < local_size; i++) {

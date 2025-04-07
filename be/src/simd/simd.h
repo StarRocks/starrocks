@@ -29,10 +29,15 @@
 
 namespace SIMD {
 
-// Count the number of zeros of 8-bit integers.
 template <typename T>
-inline typename std::enable_if<std::is_same<T, int8_t>::value || std::is_same<T, uint8_t>::value, size_t>::type
-count_zero(const T* data, size_t size) {
+concept Integer8BitType = std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>;
+
+template <typename T>
+concept Integer32BitType = std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>;
+
+// Count the number of zeros of 8-bit integers.
+template <Integer8BitType T>
+inline size_t count_zero(const T* data, size_t size) {
     size_t count = 0;
     const T* end = data + size;
 
@@ -53,7 +58,7 @@ count_zero(const T* data, size_t size) {
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
                                        << 48u));
     }
-#elif defined(__ARM_NEON) && defined(__aarch64__) && defined(__POPCNT__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
     const T* end16 = data + (size / 16 * 16);
     for (; data < end16; data += 16) {
         uint8x16_t vdata = vld1q_u8(data);
@@ -72,9 +77,8 @@ count_zero(const T* data, size_t size) {
 }
 
 // Count the number of zeros of 32-bit integers.
-template <typename T>
-inline typename std::enable_if<std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value, size_t>::type
-count_zero(const T* data, size_t size) {
+template <Integer32BitType T>
+inline size_t count_zero(const T* data, size_t size) {
     size_t count = 0;
     const T* end = data + size;
 
@@ -96,7 +100,7 @@ count_zero(const T* data, size_t size) {
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 12)), zero16))))
                                        << 12u));
     }
-#elif defined(__ARM_NEON) && defined(__aarch64__) && defined(__POPCNT__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
     const T* end4 = data + (size / 4 * 4);
     for (; data < end4; data += 4) {
         uint32x4_t vdata = vld1q_u32(data);
@@ -230,6 +234,42 @@ inline bool contain_nonzero(const Container& list, size_t start, size_t count) {
                   "only 8-bit integral types are supported");
     size_t pos = find_nonzero(list, start, count);
     return pos < list.size() && pos < start + count;
+}
+
+/// NOTE that `contains_nonzero_bit` is different from `contain_nonzero`.
+/// - `contains_nonzero_bit` returns true if any element of data is not zero.
+/// - `contain_nonzero` returns true if any element of data is **ONE**.
+template <Integer8BitType T>
+inline bool contains_nonzero_bit(const T* data, size_t size) {
+    const T* end = data + size;
+
+#if defined(__SSE2__) && defined(__POPCNT__)
+    constexpr size_t W = 32;
+    const T* end32 = data + (size / W * W);
+    for (; data < end32; data += W) {
+        const __m256i vdata = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
+        if (!_mm256_testz_si256(vdata, vdata)) {
+            return true;
+        }
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    constexpr size_t W = 16;
+    const T* end16 = data + (size / W * W);
+    for (; data < end16; data += W) {
+        uint8x16_t vdata = vld1q_u8(data);
+        if (vmaxvq_u8(vdata) != 0) {
+            return true;
+        }
+    }
+#endif
+
+    for (; data < end; ++data) {
+        if (*data != 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 #if defined(__ARM_NEON) && defined(__aarch64__)

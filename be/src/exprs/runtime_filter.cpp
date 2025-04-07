@@ -17,11 +17,6 @@
 #include "types/logical_type_infra.h"
 #include "util/compression/stream_compression.h"
 
-#if defined(__ARM_NEON) && defined(__aarch64__)
-#include <arm_acle.h>
-#include <arm_neon.h>
-#endif
-
 namespace starrocks {
 
 // ------------------------------------------------------------------------------------
