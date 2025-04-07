@@ -91,7 +91,7 @@ insert into external_t select * from other_table;
 * 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致。
 * 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上。
 
-## (Deprecated) 更多数据库（JDBC）的外部表
+## (已弃用) 更多数据库（JDBC）的外部表
 
 自 2.3.0 版本起，StarRocks 支持通过外部表的方式查询支持 JDBC 的数据库，无需将数据导入至 StarRocks，即可实现对这类数据库的极速分析。本文介绍如何在 StarRocks 创建外部表，查询支持 JDBC 的数据库中的数据。
 
@@ -315,7 +315,7 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 * 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
 * 查询 JDBC 外部表时，不支持下推函数。
 
-## (Deprecated) Elasticsearch 外部表
+## (已弃用) Elasticsearch 外部表
 
 如要查询 Elasticsearch 中的数据，需要在 StarRocks 中创建 Elasticsearch 外部表，并将外部表与待查询的 Elasticsearch 表建立映射。StarRocks 与 Elasticsearch 都是目前流行的分析系统。StarRocks 擅长大规模分布式计算，且支持通过外部表查询 Elasticsearch。Elasticsearch 擅长全文检索。两者结合提供了一个更完善的 OLAP 解决方案。
 
@@ -572,7 +572,7 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 * 支持查询使用 HTTP Basic 认证的 Elasticsearch 集群。
 * 一些通过 StarRocks 的查询会比直接请求 Elasticsearch 会慢很多，比如 count 相关查询。这是因为 Elasticsearch 内部会直接读取满足条件的文档个数相关的元数据，不需要对真实的数据进行过滤操作，使得 count 的速度非常快。
 
-## (Deprecated) Hive 外部表
+## (已弃用) Hive 外部表
 
 使用 Hive 外部表前，确保服务器上已安装 JDK 1.8。
 
@@ -800,7 +800,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 
 3. 重启 FE，BE。
 
-## (Deprecated) Iceberg 外部表
+## (已弃用) Iceberg 外部表
 
 如要查询 Iceberg 数据，需要在 StarRocks 中创建 Iceberg 外部表，并将外部表与需要查询的 Iceberg 表建立映射。
 
@@ -981,7 +981,7 @@ StarRocks 不支持查询以下类型的数据： TIMESTAMPTZ、STRUCT 和 MAP�
 select count(*) from iceberg_tbl;
 ~~~
 
-## (Deprecated) Hudi 外部表
+## (已弃用) Hudi 外部表
 
 从 2.2.0 版本开始，StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在 StarRock 创建外表，查询 Hudi 中的数据。
 
@@ -1099,7 +1099,7 @@ PROPERTIES (
 SELECT COUNT(*) FROM hudi_tbl;
 ~~~
 
-## (Deprecated) MySQL 外部表
+## (已弃用) MySQL 外部表
 
 星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过更新表或者主键表实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
 
