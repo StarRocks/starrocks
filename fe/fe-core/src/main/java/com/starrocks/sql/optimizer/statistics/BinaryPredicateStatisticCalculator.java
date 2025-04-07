@@ -331,9 +331,14 @@ public class BinaryPredicateStatisticCalculator {
                 setMinValue(intersect.getLow()).
                 setDistinctValuesCount(intersect.getDistinctValues());
 
+        boolean enableJoinHistogram =
+                ConnectContext.get() != null &&
+                        ConnectContext.get().getSessionVariable() != null &&
+                        ConnectContext.get().getSessionVariable().isCboEnableHistogramJoinEstimation();
+
         double rowCount;
         Optional<Histogram> hist = updateHistWithJoin(leftColumnStatistic, leftColumn.getType(), rightColumnStatistic,
-                rightColumn.getType(), ConnectContext.get().getSessionVariable().isCboEnableHistogramJoinEstimation());
+                rightColumn.getType(), enableJoinHistogram);
         if (hist.isEmpty()) {
             double selectivity = 1.0 /
                     max(1, max(leftColumnStatistic.getDistinctValuesCount(), rightColumnStatistic.getDistinctValuesCount()));
