@@ -4,12 +4,13 @@ displayed_sidebar: docs
 
 # 外部表
 
-StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、StarRocks、Elasticsearch、Apache Hive™、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前，除 StarRocks 外部外，其他外部表功能已经。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 > **NOTICE**
 >
 > * 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
 > * 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md)。
+> * 从 3.2.9、3.3.1 版本起，对于查询 Oracle 和 SQLServer 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
 
 从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见 [Data Cache](data_cache.md)。
 
@@ -90,7 +91,7 @@ insert into external_t select * from other_table;
 * 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致。
 * 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上。
 
-## 更多数据库（JDBC）的外部表
+## (Deprecated) 更多数据库（JDBC）的外部表
 
 自 2.3.0 版本起，StarRocks 支持通过外部表的方式查询支持 JDBC 的数据库，无需将数据导入至 StarRocks，即可实现对这类数据库的极速分析。本文介绍如何在 StarRocks 创建外部表，查询支持 JDBC 的数据库中的数据。
 
