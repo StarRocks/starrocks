@@ -65,13 +65,22 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             return true;
         }
 
+        // if have multiple distinct functions and their distinct input cols are not exactly same
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
+        if (distinctCols.isEmpty()) {
+            return true;
+        }
 
-        // all distinct function use the same distinct columns, we use the split rule to rewrite
-        // but if split rule doesn't rewrite it,like table has one tablet property, in such case we still use RewriteMultiDistinctRule
-        return distinctCols.isEmpty() ||
+        // If have multiple distinct functions and their distinct input cols are exactly same, but split Agg rule can't handle it
+        // such as table has one tablet property
+        if (Utils.hasMultipleDistinctFuncShareSameDistinctColumns(agg.getAggregations().values()) &&
                 !Utils.couldGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(),
-                        input.inputAt(0).getOp());
+                        input.inputAt(0).getOp())) {
+            return true;
+        }
+
+        // all distinct function use the same distinct columns and split rule can handle it, we use the split rule to rewrite
+        return false;
     }
 
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {

@@ -2997,7 +2997,7 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testOneTabletMultiDistinctFunctionWithSingleDistinctColAndOneGroupby() throws Exception {
+    public void testOneTabletMultiDistinctFunctionHasSingleDistinctColAndOneGroupBy() throws Exception {
         String sql = "select\n" +
                 "  t1.k1\n" +
                 "  , count(distinct k2) \n" +
