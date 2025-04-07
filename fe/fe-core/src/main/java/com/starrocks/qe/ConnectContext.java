@@ -1482,6 +1482,6 @@ public class ConnectContext {
     }
 
     public void setCurrentThreadId(long currentThreadId) {
-        this.currentThreadId.set(currentThreadId);
+        this.currentThreadId = new AtomicLong(currentThreadId);
     }
 }
