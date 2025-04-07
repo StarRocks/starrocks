@@ -15,7 +15,6 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
-import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -39,13 +38,14 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.text.ParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class SecurityIntegrationTest {
+    private final MockTokenUtils mockTokenUtils = new MockTokenUtils();
+
     @Test
     public void testProperty() {
         Map<String, String> properties = new HashMap<>();
@@ -74,15 +74,8 @@ public class SecurityIntegrationTest {
     }
 
     @Test
-    public void testAuthentication() throws DdlException, AuthenticationException, IOException {
-        GlobalStateMgr.getCurrentState().setJwkMgr(new JwkMgr() {
-            @Override
-            public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
-                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
-                InputStream jwksInputStream = new FileInputStream(path + "/" + jwksUrl);
-                return JWKSet.load(jwksInputStream);
-            }
-        });
+    public void testAuthentication() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
@@ -95,7 +88,7 @@ public class SecurityIntegrationTest {
 
         Config.authentication_chain = new String[] {"native", "oidc2"};
 
-        String idToken = getOpenIdConnect("oidc.json");
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         MysqlCodec.writeInt1(outputStream, 1);
         MysqlCodec.writeLenEncodedString(outputStream, idToken);
@@ -140,15 +133,8 @@ public class SecurityIntegrationTest {
     }
 
     @Test
-    public void testGroupProvider() throws DdlException, AuthenticationException, IOException {
-        GlobalStateMgr.getCurrentState().setJwkMgr(new JwkMgr() {
-            @Override
-            public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
-                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
-                InputStream jwksInputStream = new FileInputStream(path + "/" + jwksUrl);
-                return JWKSet.load(jwksInputStream);
-            }
-        });
+    public void testGroupProvider() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
         properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
@@ -172,7 +158,7 @@ public class SecurityIntegrationTest {
         groupProvider.put(FileGroupProvider.GROUP_FILE_URL, "file_group");
         authenticationMgr.replayCreateGroupProvider("file_group_provider", groupProvider);
 
-        String idToken = getOpenIdConnect("oidc.json");
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         MysqlCodec.writeInt1(outputStream, 1);
         MysqlCodec.writeLenEncodedString(outputStream, idToken);
