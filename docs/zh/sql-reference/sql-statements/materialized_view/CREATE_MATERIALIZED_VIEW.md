@@ -283,12 +283,16 @@ AS
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+- `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会更新至物化视图。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+  > **注意**
+  >
+  > `excluded_trigger_tables` 和 `excluded_refresh_tables` 的区别为：
+  >   `excluded_trigger_tables`控制的是是否触发刷新，而不控制在刷新时是否参与。例如物化视图是A、B两个表join所得，`exclued_trigger_table` 包含表A, 一段时间内表A更新了分区 [1,2,3], 但因为它是 `exclued_trigger_table`，因此没有触发物化视图的刷新。此时表B更新了分区[3]，物化视图触发了刷新，会刷新[1,2,3]三个分区。在这里可以看到，`exclued_trigger_table`只是控制是否触发刷新。A表的更新虽然不能触发物化视图刷新，但当B表的更新触发物化视图刷新时，A表更新的分区也会被加入至刷新任务中。
+  >   `excluded_refresh_tables`控制的是是否参与刷新。上述例子中，如A表同时存在于`exclued_trigger_table`和`excluded_refresh_tables`中时，当B表更新触发了物化视图刷新时，只会刷新分区[3]。
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。
 - `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
-- `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会触发该表的数据刷新到物化视图。通常需要与属性 `excluded_trigger_tables` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
-
   > **注意**
   >
   > Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
