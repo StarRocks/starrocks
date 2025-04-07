@@ -384,11 +384,10 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visit(ScalarOperator scalarOperator, CommonSubScalarOperatorCollectorContext context) {
-            if (Config.max_scalar_operator_optimize_depth > 0 &&
-                    scalarOperator.getDepth() > Config.max_scalar_operator_optimize_depth) {
-                return 0;
-            }
-            if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
+            // To avoid stack overflow if the operator tree is too deep(eg: contains too many `or` functions), set a limit
+            // to the depth of the operator tree.
+            if (scalarOperator.getDepth() > Config.max_scalar_operator_optimize_depth ||
+                    scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
 
