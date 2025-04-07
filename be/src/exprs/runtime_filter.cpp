@@ -291,32 +291,6 @@ void Bitset<LT>::insert(const CppType& value) {
     _bitset[group] |= (1 << index_in_group);
 }
 
-template <typename T>
-concept Integer8BitType = std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>;
-
-template <Integer8BitType T>
-inline bool contains_nonzero_bit(const T* data, size_t size) {
-    const T* end = data + size;
-
-#if defined(__ARM_NEON) && defined(__aarch64__)
-    const T* end16 = data + (size / 16 * 16);
-    for (; data < end16; data += 16) {
-        uint8x16_t vdata = vld1q_u8(data);
-        if (vmaxvq_u8(vdata) != 0) {
-            return true;
-        }
-    }
-#endif
-
-    for (; data < end; ++data) {
-        if (*data != 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 template <LogicalType LT>
 bool Bitset<LT>::contains_range(const CppType& min_value, const CppType& max_value) const {
     if (min_value > _max_value || max_value < _min_value || min_value > max_value) {
@@ -367,7 +341,7 @@ bool Bitset<LT>::contains_range(const CppType& min_value, const CppType& max_val
     }
 
     if (min_group + 1 <= max_group - 1) {
-        return contains_nonzero_bit(_bitset.data() + min_group + 1, max_group - min_group - 1);
+        return SIMD::contains_nonzero_bit(_bitset.data() + min_group + 1, max_group - min_group - 1);
     }
     return false;
 }
