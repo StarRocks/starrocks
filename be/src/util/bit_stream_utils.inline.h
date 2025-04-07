@@ -109,6 +109,26 @@ inline void BitWriter::PutVlqInt(uint32_t v) {
     PutAligned<uint8_t>(v & 0x7F, 1);
 }
 
+inline void BitWriter::PutZigZagVlqInt(int32_t v) {
+    uint32_t u_v = ::arrow::util::SafeCopy<uint32_t>(v);
+    u_v = (u_v << 1) ^ static_cast<uint32_t>(v >> 31);
+    PutVlqInt(u_v);
+}
+
+inline void BitWriter::PutVlqInt(uint64_t v) {
+    while ((v & 0xFFFFFFFFFFFFFF80ULL) != 0ULL) {
+        PutAligned<uint8_t>(static_cast<uint8_t>((v & 0x7F) | 0x80), 1);
+        v >>= 7;
+    }
+    PutAligned<uint8_t>(static_cast<uint8_t>(v & 0x7F), 1);
+}
+
+inline void BitWriter::PutZigZagVlqInt(int64_t v) {
+    uint64_t u_v = ::arrow::util::SafeCopy<uint64_t>(v);
+    u_v = (u_v << 1) ^ static_cast<uint64_t>(v >> 63);
+    PutVlqInt(u_v);
+}
+
 inline BitReader::BitReader(const uint8_t* buffer, int buffer_len) : buffer_(buffer), max_bytes_(buffer_len) {
     int num_bytes = std::min(8, max_bytes_);
     memcpy(&buffered_values_, buffer_ + byte_offset_, num_bytes);
@@ -224,6 +244,41 @@ inline bool BitReader::GetVlqInt(uint32_t* v) {
     }
 
     return false;
+}
+
+inline bool BitReader::GetZigZagVlqInt(int32_t* v) {
+    uint32_t u;
+    if (!GetVlqInt(&u)) return false;
+    u = (u >> 1) ^ (~(u & 1) + 1);
+    *v = static_cast<int32_t>(u);
+    return true;
+}
+
+inline bool BitReader::GetVlqInt(uint64_t* v) {
+    uint64_t tmp = 0;
+
+    for (int i = 0; i < MAX_VLQ_BYTE_LEN_INT64; i++) {
+        uint8_t byte = 0;
+        if (PREDICT_FALSE(!GetAligned<uint8_t>(1, &byte))) {
+            return false;
+        }
+        tmp |= static_cast<uint64_t>(byte & 0x7F) << (7 * i);
+
+        if ((byte & 0x80) == 0) {
+            *v = tmp;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+inline bool BitReader::GetZigZagVlqInt(int64_t* v) {
+    uint64_t u;
+    if (!GetVlqInt(&u)) return false;
+    u = (u >> 1) ^ (~(u & 1) + 1);
+    *v = static_cast<int64_t>(u);
+    return true;
 }
 
 template <typename UINT_T>

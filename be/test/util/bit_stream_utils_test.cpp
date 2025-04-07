@@ -34,6 +34,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 // Must come before gtest.h.
@@ -233,6 +234,51 @@ TEST(TestBitStreamUtil, TestUint64) {
     uint64_t v4;
     reader.GetValue(16, &v4);
     ASSERT_EQ(v4, 126);
+}
+
+TEST(TestBitStreamUtil, TestVLQ) {
+    {
+        std::vector<int32_t> values = {0, std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::min()};
+        for (int i = 0; i < 30; i++) {
+            values.push_back((1 << i) - 1);
+            values.push_back(-((1 << i) - 1));
+            values.push_back(-((1 << i) + 1));
+        }
+        faststring buffer(1);
+        BitWriter writer(&buffer);
+        for (auto v : values) {
+            writer.PutZigZagVlqInt(v);
+        }
+
+        BitReader reader(buffer.data(), buffer.size());
+        for (auto v : values) {
+            int32_t val = 0;
+            bool result = reader.GetZigZagVlqInt(&val);
+            EXPECT_TRUE(result);
+            EXPECT_EQ(val, v);
+        }
+    }
+    {
+        std::vector<int64_t> values = {0, std::numeric_limits<int64_t>::max(), std::numeric_limits<int64_t>::min()};
+        for (int i = 0; i < 62; i++) {
+            values.push_back((1 << i) - 1);
+            values.push_back(-((1 << i) - 1));
+            values.push_back(-((1 << i) + 1));
+        }
+        faststring buffer(1);
+        BitWriter writer(&buffer);
+        for (auto v : values) {
+            writer.PutZigZagVlqInt(v);
+        }
+
+        BitReader reader(buffer.data(), buffer.size());
+        for (auto v : values) {
+            int64_t val = 0;
+            bool result = reader.GetZigZagVlqInt(&val);
+            EXPECT_TRUE(result);
+            EXPECT_EQ(val, v);
+        }
+    }
 }
 
 TEST(TestBitStreamUtil, BatchedBitReaderGetBytes) {

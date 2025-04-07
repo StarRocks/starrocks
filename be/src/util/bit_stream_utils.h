@@ -76,6 +76,17 @@ public:
     // For more details on vlq: en.wikipedia.org/wiki/Variable-length_quantity
     void PutVlqInt(uint32_t v);
 
+    // Writes an int zigzag encoded.
+    void PutZigZagVlqInt(int32_t v);
+
+    // Write a Vlq encoded int64 to the buffer.  Returns false if there was not enough room.
+    // The value is written byte aligned.
+    // For more details on vlq: en.wikipedia.org/wiki/Variable-length_quantity
+    void PutVlqInt(uint64_t v);
+
+    // Writes an int64 zigzag encoded.
+    void PutZigZagVlqInt(int64_t v);
+
     // Get the index to the next aligned byte and advance the underlying buffer by num_bytes.
     size_t GetByteIndexAndAdvance(int num_bytes) {
         uint8_t* ptr = GetNextBytePtr(num_bytes);
@@ -129,6 +140,17 @@ public:
     // beginning of a byte. Return false if there were not enough bytes in the buffer.
     bool GetVlqInt(uint32_t* v);
 
+    // Reads a zigzag encoded int `into` v.
+    bool GetZigZagVlqInt(int32_t* v);
+
+    // Reads a vlq encoded int64 from the stream.  The encoded int must start at
+    // the beginning of a byte. Return false if there were not enough bytes in
+    // the buffer.
+    bool GetVlqInt(uint64_t* v);
+
+    // Reads a zigzag encoded int64 `into` v.
+    bool GetZigZagVlqInt(int64_t* v);
+
     // Returns the number of bytes left in the stream, not including the current byte (i.e.,
     // there may be an additional fraction of a byte).
     int bytes_left() const { return max_bytes_ - (byte_offset_ + BitUtil::Ceil(bit_offset_, 8)); }
@@ -144,6 +166,7 @@ public:
 
     // Maximum byte length of a vlq encoded int
     static const int MAX_VLQ_BYTE_LEN = 5;
+    static const int MAX_VLQ_BYTE_LEN_INT64 = 10;
 
     bool is_initialized() const { return buffer_ != nullptr; }
 
