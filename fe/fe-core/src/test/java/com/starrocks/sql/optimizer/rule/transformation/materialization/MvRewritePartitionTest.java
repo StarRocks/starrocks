@@ -672,8 +672,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
                                 PCompensateExpect.create("a.id_date!='1991-03-30'", false),
                                 // with partition expressions && partition expressions can be pruned
-                                PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, false),
-                                PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, false),
+                                PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
+                                PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
                                 PCompensateExpect.create("date_trunc('day', a.id_date)='1991-03-30'", false, true),
                                 PCompensateExpect.create("date_trunc('day', a.id_date)>='1991-03-30'", true, true),
                                 PCompensateExpect.create("subdate(a.id_date, interval 1 day)='1991-03-29'", false, true),
@@ -692,8 +692,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
                                 PCompensateExpect.create("a.id_date!='1991-03-30'", false),
                                 // with partition expressions && partition expressions can be pruned
-                                PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, false),
-                                PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, false),
+                                PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
+                                PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
                                 PCompensateExpect.create("date_trunc('day', a.id_date)='1991-03-30'", false, true),
                                 PCompensateExpect.create("date_trunc('day', a.id_date)>='1991-03-30'", true, true),
                                 PCompensateExpect.create("subdate(a.id_date, interval 1 day)='1991-03-29'", false, true),
