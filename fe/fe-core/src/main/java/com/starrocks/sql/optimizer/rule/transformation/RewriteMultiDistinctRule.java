@@ -68,7 +68,10 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
 
         // all distinct function use the same distinct columns, we use the split rule to rewrite
-        return distinctCols.isEmpty();
+        // but if split rule doesn't rewrite it,like table has one tablet property, in such case we still use RewriteMultiDistinctRule
+        return distinctCols.isEmpty() ||
+                !Utils.couldGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(),
+                        input.inputAt(0).getOp());
     }
 
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {

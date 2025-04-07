@@ -2995,4 +2995,21 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 2: v2, 3: v3\n" +
                 "  |  having: 2: v2 + 2 + 5: sum > 0");
     }
+
+    @Test
+    public void testOneTabletMultiDistinctFunctionWithSingleDistinctColAndOneGroupby() throws Exception {
+        String sql = "select\n" +
+                "  t1.k1\n" +
+                "  , count(distinct k2) \n" +
+                "  , array_agg(distinct k2)\n" +
+                "from\n" +
+                "  db1.tbl1 t1\n" +
+                "group by\n" +
+                "  k1\n" +
+                "  ;";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, " 1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(DISTINCT 2: k2), array_agg(DISTINCT 2: k2)\n" +
+                "  |  group by: 1: k1");
+    }
 }
