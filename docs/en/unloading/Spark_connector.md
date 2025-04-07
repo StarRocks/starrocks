@@ -825,14 +825,11 @@ In this example, both partition pruning and bucket pruning are performed. Theref
    | k    | b    | dt                  | v    |
    +------+------+---------------------+------+
    |    1 |   11 | 2022-01-02 08:00:00 |  111 |
-   |    1 |   11 | 2022-01-02 08:00:00 |  111 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
-   |    2 |   22 | 2022-02-02 08:00:00 |  222 |
-   |    3 |   33 | 2022-03-02 08:00:00 |  333 |
    +------+------+---------------------+------+
-   7 rows in set (0.01 sec)
+   4 rows in set (0.01 sec)
    ```
 
 3. Run the following command, in which you use the `starrocks.filter.query` parameter to specify a filter condition `k=1` for prefix index filtering, in the Spark directory to create a DataFrame named `df` on the `mytable` table which belongs to the `test` database:
