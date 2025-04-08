@@ -188,13 +188,21 @@ public class ConnectProcessor {
     }
 
     public static long getThreadAllocatedBytes(long threadId) {
-        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
-        if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
-            com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
-
-            return casted.getThreadAllocatedBytes(threadId);
+        try {
+            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+            if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+                com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
+                if (casted.isThreadAllocatedMemoryEnabled() && casted.isThreadAllocatedMemorySupported()) {
+                    long allocatedBytes = casted.getThreadAllocatedBytes(threadId);
+                    if (allocatedBytes != -1) {
+                        return allocatedBytes;
+                    }
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
         }
-        return 0;
     }
 
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
