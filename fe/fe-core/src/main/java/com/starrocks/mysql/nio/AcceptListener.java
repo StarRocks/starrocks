@@ -97,7 +97,6 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         Pair<Boolean, String> registerResult = connectScheduler.registerConnection(context);
                         if (registerResult.first) {
                             connection.setCloseListener(streamConnection -> connectScheduler.unregisterConnection(context));
-                            MysqlProto.sendResponsePacket(context);
                         } else {
                             context.getState().setError(registerResult.second);
                             MysqlProto.sendResponsePacket(context);
@@ -108,6 +107,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         if (result.state() != NegotiateState.OK) {
                             throw new AfterConnectedException(result.state().getMsg());
                         }
+
+                        MysqlProto.sendResponsePacket(context);
 
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);
