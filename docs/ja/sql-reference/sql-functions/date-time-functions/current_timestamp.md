@@ -12,7 +12,17 @@ displayed_sidebar: docs
 
 ```Haskell
 DATETIME CURRENT_TIMESTAMP()
+DATETIME CURRENT_TIMESTAMP(INT p)
 ```
+
+## パラメータ
+
+`p`: 任意指定で、秒の後に保持する桁数を指定します。範囲は [1,6] の INT 値でなければなりません。`select now(0)` は `select now()` と同等です。
+
+## 戻り値
+
+- `p` が指定されていない場合、この関数は秒単位の精度で DATETIME 値を返します。
+- `p` が指定されている場合、この関数は指定された精度の日付と時刻の値を返します。
 
 ## Examples
 
