@@ -90,23 +90,23 @@ PROPERTIES (
 insert into target_table select * from source where event_day = '2020-01-01';
 -- result:
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=1, init_stats_sample_job=true}', '100%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=1, tableRowCountInStatistics=250000, totalPartitionCount=1, unhealthyPartitionCount=1, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=0, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=1, init_stats_sample_job=true}', '100%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=1, tableRowCountInStatistics=250000, totalPartitionCount=1, unhealthyPartitionCount=1, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=0, deltaRowCount=0]']]
+None
 -- !result
 insert into target_table select * from source where event_day >= '2022-01-01';
 -- result:
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=2, init_stats_sample_job=true}', '100%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=1, tableRowCountInStatistics=900000, totalPartitionCount=4, unhealthyPartitionCount=4, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=0, deltaRowCount=650000\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=2, init_stats_sample_job=true}', '100%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=1, tableRowCountInStatistics=900000, totalPartitionCount=4, unhealthyPartitionCount=4, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=0, deltaRowCount=650000]']]
+None
 -- !result
 insert into target_table select * from source;
 -- result:
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, init_stats_sample_job=true}', '0%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=1, tableRowCountInStatistics=1150000, totalPartitionCount=5, unhealthyPartitionCount=5, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=900000, deltaRowCount=1800000\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, init_stats_sample_job=true}', '0%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=1, tableRowCountInStatistics=1150000, totalPartitionCount=5, unhealthyPartitionCount=5, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=900000, deltaRowCount=1800000]']]
+None
 -- !result
 ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
 -- result:
@@ -116,9 +116,9 @@ shell: sleep 5
 0
 
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, init_stats_sample_job=true}', '56%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=2050001, tableRowCountInStatistics=1150000, totalPartitionCount=5, unhealthyPartitionCount=4, unhealthyPartitionRowCount=1800000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=900001, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, init_stats_sample_job=true}', '56%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=2050001, tableRowCountInStatistics=1150000, totalPartitionCount=5, unhealthyPartitionCount=4, unhealthyPartitionRowCount=1800000, unhealthyPartitionDataSize=181KB, updatePartitionRowCountForCalc=900001, deltaRowCount=0]']]
+None
 -- !result
 ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "true");
 -- result:
@@ -131,9 +131,9 @@ shell: sleep 7
 0
 
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=1}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=2050001, tableRowCountInStatistics=2050001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=1}', '100%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=2050001, tableRowCountInStatistics=2050001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+None
 -- !result
 drop all analyze job;
 -- result:
@@ -159,9 +159,9 @@ shell: sleep 7
 0
 
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=4100001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '100%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=4100001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+None
 -- !result
 drop all analyze job;
 -- result:
@@ -187,9 +187,9 @@ shell: sleep 7
 0
 
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '97%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=4200001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=100000, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '97%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=4200001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=123KB, updatePartitionRowCountForCalc=100000, deltaRowCount=0]']]
+None
 -- !result
 drop all analyze job;
 -- result:
@@ -207,9 +207,9 @@ shell: sleep 5
 0
 
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, init_stats_sample_job=true}', '97%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=4450001, tableRowCountInStatistics=4350000, totalPartitionCount=6, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=100001, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, init_stats_sample_job=true}', '97%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=4450001, tableRowCountInStatistics=4350000, totalPartitionCount=6, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=123KB, updatePartitionRowCountForCalc=100001, deltaRowCount=0]']]
+None
 -- !result
 insert into target_table select * from source;
 -- result:
@@ -227,9 +227,9 @@ shell: sleep 7
 0
 
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, statistic_exclude_pattern=.*?, sample_schedule_times=1}', '100%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=5600001, tableRowCountInStatistics=5600001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, statistic_exclude_pattern=^(?!.*test_statistic_behavior).*$, sample_schedule_times=1}', '100%', '(k1,SAMPLE),(event_day,SAMPLE)', '[tableRowCount=5600001, tableRowCountInStatistics=5600001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+None
 -- !result
 drop all analyze job;
 -- result:
@@ -271,9 +271,9 @@ shell: sleep 7
 0
 
 -- !result
-function: show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'")
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=4, full_schedule_times=3, sample_schedule_times=1}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=11200001, tableRowCountInStatistics=11200001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
-[['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=4, full_schedule_times=3, sample_schedule_times=1}', '100%', '(k1,FULL),(event_day,FULL)', '[tableRowCount=11200001, tableRowCountInStatistics=11200001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=0KB, updatePartitionRowCountForCalc=1, deltaRowCount=0]']]
+None
 -- !result
 drop stats target_table;
 -- result:
