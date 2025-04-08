@@ -50,6 +50,11 @@
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <guava.version>32.0.1-jre</guava.version>
         <jetty.version>10.0.24</jetty.version>
+        <parquet.version>1.15.1</parquet.version>
+        <airlift.version>0.27</airlift.version>
+        <avro.version>1.11.4</avro.version>
+        <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
+        <kryo.version>4.0.2</kryo.version>
     </properties>
 
     <dependencyManagement>
@@ -338,6 +343,41 @@
                 <version>${jetty.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-hadoop-bundle</artifactId>
+                <version>${parquet.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-avro</artifactId>
+                <version>${parquet.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro</artifactId>
+                <version>${avro.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>aircompressor</artifactId>
+                <version>${airlift.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>${luben.zstd.jni.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.esotericsoftware</groupId>
+                <artifactId>kryo-shaded</artifactId>
+                <version>${kryo.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
