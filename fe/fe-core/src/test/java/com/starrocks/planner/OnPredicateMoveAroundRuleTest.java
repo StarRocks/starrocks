@@ -40,9 +40,6 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
     @MethodSource("complexPredicateCases")
     void testComplexPredicateCases(String sql, String expect) throws Exception {
         String plan = getFragmentPlan(sql);
-        if (!plan.contains(expect)) {
-            System.out.println(sql);
-        }
         assertContains(plan, expect);
     }
 
