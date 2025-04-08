@@ -1711,7 +1711,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             GlobalVariable.setEnableQueryQueueSelect(true);
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select count(1) from lineitem");
             assertThatThrownBy(() -> manager.maybeWait(connectContext, coordinator))
-                    .isInstanceOf(StarRocksException.class)
+                    .isInstanceOf(UserException.class)
                     .hasMessageContaining("Failed to allocate resource to query: pending timeout");
         }
 
