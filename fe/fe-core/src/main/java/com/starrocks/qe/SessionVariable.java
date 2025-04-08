@@ -574,6 +574,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
     public static final String ENABLE_PAIMON_NATIVE_WRITER = "enable_paimon_native_writer";
     public static final String PAIMON_NATIVE_COMMIT_USER = "paimon_native_commit_user";
+    public static final String PAIMON_FORCE_NATIVE_READER = "paimon_force_native_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -2183,6 +2184,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_NATIVE_COMMIT_USER)
     private String paimonNativeCommitUser = "";
 
+    @VariableMgr.VarAttr(name = PAIMON_FORCE_NATIVE_READER)
+    private boolean paimonForceNativeReader = false;
+
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
@@ -2944,6 +2948,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getPaimonNativeCommitUser() {
         return paimonNativeCommitUser;
+    }
+
+    public boolean getPaimonForceNativeReader() {
+        return paimonForceNativeReader;
     }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {

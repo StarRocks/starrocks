@@ -38,6 +38,7 @@ import org.apache.paimon.table.source.RawFile;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -125,7 +126,7 @@ public class PaimonScanNodeTest {
     }
 
     @Test
-    public void testSplitRawFileScanRange(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+    public void testSplitRawFileScanRange(@Mocked PaimonTable table, @Mocked RawFile rawFile) throws IOException {
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
         writer.writeInt(0, 2000);
@@ -159,7 +160,7 @@ public class PaimonScanNodeTest {
     }
 
     @Test
-    public void testAddSplitScanRangeLocations(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+    public void testAddSplitScanRangeLocations(@Mocked PaimonTable table, @Mocked RawFile rawFile) throws IOException {
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
         writer.writeInt(0, 2000);

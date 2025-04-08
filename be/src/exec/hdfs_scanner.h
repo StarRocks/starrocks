@@ -80,6 +80,7 @@ struct HdfsScanStats {
     int64_t column_read_ns = 0;
     int64_t column_convert_ns = 0;
     int64_t reader_init_ns = 0;
+    int64_t cast_chunk_ns = 0;
 
     // parquet only!
     // read & decode
@@ -152,6 +153,7 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* expr_filter_timer = nullptr;
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
+    RuntimeProfile::Counter* cast_chunk_timer = nullptr;
 
     RuntimeProfile::Counter* datacache_read_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_bytes = nullptr;
@@ -275,6 +277,12 @@ struct HdfsScannerParams {
     int64_t connector_max_split_size = 0;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    // paimon table path
+    std::string paimon_table_path;
+    // paimon split info
+    std::string paimon_split_info;
+    // paimon schema id
+    int64_t paimon_schema_id;
 };
 
 struct HdfsScannerContext {

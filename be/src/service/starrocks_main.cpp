@@ -145,6 +145,13 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+    std::string libraryPath =
+            std::string(std::getenv("STARROCKS_HOME")) + "/lib/paimon/libpaimon_orc_file_format.so.2.0.0";
+    void* handle = dlopen(libraryPath.c_str(), RTLD_LAZY | RTLD_GLOBAL);
+    if (!handle) {
+        std::cerr << "dlopen error: " << dlerror() << std::endl;
+    }
+
     // S2 will crashes when deserialization fails and FLAGS_s2debug was true.
     FLAGS_s2debug = false;
 

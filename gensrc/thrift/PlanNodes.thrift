@@ -437,6 +437,18 @@ struct THdfsScanRange {
 
     // min/max value of slots
     35: optional map<i32, Exprs.TExprMinMaxValue> min_max_values;
+
+    // whether to use paimon native scanner to read data of paimon table
+    36: optional bool use_paimon_native_reader
+
+    // paimon table path
+    37: optional string paimon_table_path
+
+    // paimon schema id
+    38: optional i64 paimon_schema_id
+
+    // paimon split info for org.apache.paimon.table.source.DataSplit.serialize
+    39: optional binary paimon_split_info_binary
 }
 
 struct TBinlogScanRange {

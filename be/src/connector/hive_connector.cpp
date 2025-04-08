@@ -24,6 +24,7 @@
 #include "exec/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
+#include "exec/paimon/paimon_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -505,6 +506,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+    _profile.cast_chunk_timer = ADD_TIMER(_runtime_profile, "CastChunkTime");
 
     {
         static const char* prefix = "SharedBuffered";
@@ -751,6 +753,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_paimon_native_reader = false;
+    if (scan_range.__isset.use_paimon_native_reader) {
+        use_paimon_native_reader = scan_range.use_paimon_native_reader;
+        scanner_params.paimon_split_info = scan_range.paimon_split_info_binary;
+        scanner_params.paimon_schema_id = scan_range.paimon_schema_id;
+        scanner_params.paimon_table_path = scan_range.paimon_table_path;
+    }
     bool use_odps_jni_reader = false;
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
@@ -776,6 +785,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
+    } else if (use_paimon_native_reader) {
+        scanner = new PaimonScanner();
     } else if (use_hudi_jni_reader) {
         scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
