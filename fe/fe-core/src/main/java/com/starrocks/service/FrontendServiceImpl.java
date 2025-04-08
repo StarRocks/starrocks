@@ -150,6 +150,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -196,6 +197,7 @@ import com.starrocks.thrift.TColumnStatsUsageReq;
 import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
+import com.starrocks.thrift.TConnectionInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
@@ -262,11 +264,17 @@ import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
+import com.starrocks.thrift.TGetWarehouseMetricsRequest;
+import com.starrocks.thrift.TGetWarehouseMetricsRespone;
+import com.starrocks.thrift.TGetWarehouseQueriesRequest;
+import com.starrocks.thrift.TGetWarehouseQueriesResponse;
 import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
+import com.starrocks.thrift.TListConnectionRequest;
+import com.starrocks.thrift.TListConnectionResponse;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
@@ -343,6 +351,7 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
@@ -2930,7 +2939,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TReleaseSlotResponse releaseSlot(TReleaseSlotRequest request) throws TException {
-        GlobalStateMgr.getCurrentState().getSlotManager().releaseSlotAsync(request.getSlot_id());
+        long warehouseId = request.getWarehouse_id();
+        TUniqueId slotId = request.getSlot_id();
+        GlobalStateMgr.getCurrentState().getSlotManager().releaseSlotAsync(warehouseId, slotId);
 
         TStatus tstatus = new TStatus(OK);
         TReleaseSlotResponse res = new TReleaseSlotResponse();
@@ -3216,5 +3227,54 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetKeywordsResponse getKeywords(TGetKeywordsRequest request) throws TException {
         return InformationSchemaDataSource.generateKeywordsResponse(request);
+    }
+
+    @Override
+    public TGetWarehouseMetricsRespone getWarehouseMetrics(TGetWarehouseMetricsRequest request) throws TException {
+        return WarehouseQueryQueueMetrics.build(request);
+    }
+
+    @Override
+    public TGetWarehouseQueriesResponse getWarehouseQueries(TGetWarehouseQueriesRequest request) throws TException {
+        return WarehouseQueryQueueMetrics.build(request);
+    }
+
+    @Override
+    public TListConnectionResponse listConnections(TListConnectionRequest request) {
+        TListConnectionResponse response = new TListConnectionResponse();
+
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(request.getAuth_info());
+        String forUser = request.getFor_user();
+        boolean showFull = request.isSetShow_full();
+
+        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
+                .listConnection(context, forUser);
+        long nowMs = System.currentTimeMillis();
+        for (ConnectContext.ThreadInfo info : threadInfos) {
+            List<String> row = info.toRow(nowMs, showFull);
+            if (row != null) {
+                TConnectionInfo tConnectionInfo = getTConnectionInfo(row);
+                response.addToConnections(tConnectionInfo);
+            }
+        }
+
+        return response;
+    }
+
+    @NotNull
+    private static TConnectionInfo getTConnectionInfo(List<String> row) {
+        TConnectionInfo tConnectionInfo = new TConnectionInfo();
+        tConnectionInfo.setConnection_id(row.get(0));
+        tConnectionInfo.setUser(row.get(1));
+        tConnectionInfo.setHost(row.get(2));
+        tConnectionInfo.setDb(row.get(3));
+        tConnectionInfo.setCommand(row.get(4));
+        tConnectionInfo.setConnection_start_time(row.get(5));
+        tConnectionInfo.setTime(row.get(6));
+        tConnectionInfo.setState(row.get(7));
+        tConnectionInfo.setInfo(row.get(8));
+        tConnectionInfo.setIsPending(row.get(9));
+        return tConnectionInfo;
     }
 }

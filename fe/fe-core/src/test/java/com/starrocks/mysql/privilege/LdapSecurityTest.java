@@ -18,7 +18,6 @@ import com.starrocks.mysql.security.LdapSecurity;
 import org.junit.Assert;
 import org.junit.Test;
 
-
 public class LdapSecurityTest {
 
     public LdapSecurity ldapSecurity;
@@ -53,5 +52,15 @@ public class LdapSecurityTest {
         String input = "cn=admin,dc=example,dc=com";
         String escaped = ldapSecurity.escapeLdapValue(input);
         Assert.assertEquals(input, escaped);
+    }
+
+    @Test
+    public void testConnectionFail() {
+        Assert.assertFalse(LdapSecurity.checkPassword("cn=admin,dc=example,dc=com", "12345", "localhost", 389));
+        Assert.assertFalse(LdapSecurity.checkPasswordByRoot("admin", "", "localhost", 389,
+                "cn=admin,dc=example,dc=com", "", "cn=admin,dc=example,dc=com", ""));
+
+        Assert.assertFalse(LdapSecurity.checkPasswordByRoot("admin", "12345", "localhost", 389,
+                "cn=admin,dc=example,dc=com", "12345", "cn=admin,dc=example,dc=com", ""));
     }
 }

@@ -2842,7 +2842,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropAnalyzeJobStatement(StarRocksParser.DropAnalyzeJobStatementContext context) {
-        return new DropAnalyzeJobStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        long id = context.ALL() != null ? -1 : Long.parseLong(context.INTEGER_VALUE().getText());
+        return new DropAnalyzeJobStmt(id, createPos(context));
     }
 
     @Override
@@ -4944,6 +4945,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean temp = context.TEMPORARY() != null;
         boolean force = context.FORCE() != null;
         boolean exists = context.EXISTS() != null;
+        boolean dropAll = context.ALL() != null;
         Identifier identifier = null;
         StarRocksParser.IdentifierContext identifierContext = context.identifier();
         if (identifierContext != null) {
@@ -4964,6 +4966,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.where != null) {
             Expr whereExpr = (Expr) visitIfPresent(context.where);
             return new DropPartitionClause(exists, whereExpr, temp, force, createPos(context));
+        } else if (dropAll) {
+            return new DropPartitionClause(temp, force, dropAll, createPos(context));
         } else {
             if (CollectionUtils.isNotEmpty(identifierList)) {
                 List<String> partitionNames = identifierList.stream().map(i -> i.getValue()).collect(toList());
@@ -8346,20 +8350,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitUserWithHostAndBlanket(StarRocksParser.UserWithHostAndBlanketContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentity(user.getValue(), host.getValue(), true, createPos(context), false);
+        return new UserIdentity(user.getValue(), host.getValue(), true, false, createPos(context));
     }
 
     @Override
     public ParseNode visitUserWithHost(StarRocksParser.UserWithHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentity(user.getValue(), host.getValue(), false, createPos(context), false);
+        return new UserIdentity(user.getValue(), host.getValue(), false, false, createPos(context));
     }
 
     @Override
     public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString());
-        return new UserIdentity(user.getValue(), "%", false, createPos(context), false);
+        return new UserIdentity(user.getValue(), "%", false, false, createPos(context));
     }
 
     @Override

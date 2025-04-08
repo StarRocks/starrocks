@@ -360,7 +360,7 @@ public class OlapTable extends Table {
 
         for (Index index : indexes) {
             Set<ColumnId> columnIdsSetForIndex = index.getColumns().stream().collect(Collectors.toSet());
-            if (columnIdsSetForSchema.containsAll​(columnIdsSetForIndex)) {
+            if (columnIdsSetForSchema.containsAll(columnIdsSetForIndex)) {
                 hitIndexes.add(index);
             }
         }
@@ -3464,6 +3464,10 @@ public class OlapTable extends Table {
         if (!Strings.isNullOrEmpty(foreignKeyConstraint) && hasForeignKeyConstraints()) {
             properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
                     ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
+        }
+        String timeDriftConstraintSpec = tableProperties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(timeDriftConstraintSpec)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
         }
         return properties;
     }

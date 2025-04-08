@@ -46,7 +46,7 @@ under the License.
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.14.0</parquet.version>
+        <parquet.version>1.15.1</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
@@ -755,6 +755,10 @@ under the License.
                         <groupId>ch.qos.reload4j</groupId>
                         <artifactId>reload4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1344,6 +1348,10 @@ under the License.
                     <exclusion>
                         <groupId>com.nimbusds</groupId>
                         <artifactId>nimbus-jose-jwt</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.sun.jersey</groupId>
+                        <artifactId>jersey-bundle</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

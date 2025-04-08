@@ -452,6 +452,9 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
         }
     }
 
+    size_t ignore_max = _total_rows * _min_json_sparsity_factory;
+    ignore_max = _total_rows > ignore_max ? _total_rows - ignore_max : 0;
+    size_t check_batch = std::max(ignore_max, (size_t)config::vector_chunk_size);
     for (size_t i = 0; i < row_count; ++i) {
         if (col->is_null(i)) {
             continue;
@@ -470,6 +473,30 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
         }
 
         _visit_json_paths(vslice, _path_root.get(), mark_row + i);
+
+        // we required the hit-rate of the path >= _min_json_sparsity_factor, so the max number of missed rows is (1 - _min_json_sparsity_factor) * total_rows.
+        // if the number of missed rows exceeds (1 - _min_json_sparsity_factor) * total_rows, then the path must not be extracted.
+        if (((mark_row + i) % check_batch) == 0) {
+            size_t hits_min = mark_row + i > ignore_max ? mark_row + i - ignore_max : 0;
+            _clean_sparsity_path(_path_root.get(), hits_min);
+        }
+    }
+}
+
+void JsonPathDeriver::_clean_sparsity_path(JsonFlatPath* node, size_t check_hits_min) {
+    for (auto& [key, child] : node->children) {
+        _clean_sparsity_path(child.get(), check_hits_min);
+    }
+    auto iter = node->children.begin();
+    while (iter != node->children.end()) {
+        auto desc = _derived_maps[iter->second.get()];
+        if (desc.hits < check_hits_min) {
+            node->remain = true;
+            _derived_maps.erase(iter->second.get());
+            iter = node->children.erase(iter);
+        } else {
+            iter++;
+        }
     }
 }
 
