@@ -126,6 +126,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail finishedDetail = queryDetails.get(1);
         Assert.assertEquals(QueryDetail.QueryMemState.FINISHED, finishedDetail.getState());
         Assert.assertEquals(sql, finishedDetail.getSql());
+        Assert.assertTrue(finishedDetail.getQueryFeMemory() > 0);
 
         Config.enable_collect_query_detail_info = old;
     }

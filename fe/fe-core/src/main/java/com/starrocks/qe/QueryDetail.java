@@ -87,7 +87,7 @@ public class QueryDetail implements Serializable {
     private String digest;
     private String catalog;
 
-    private long queryFeMemory;
+    private long queryFeMemory = 0;
 
     public QueryDetail() {
     }
@@ -372,5 +372,9 @@ public class QueryDetail implements Serializable {
 
     public void setQueryFeMemory(long queryFeMemory) {
         this.queryFeMemory = queryFeMemory;
+    }
+
+    public long getQueryFeMemory() {
+        return queryFeMemory;
     }
 }
