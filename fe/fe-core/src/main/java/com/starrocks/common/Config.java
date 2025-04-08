@@ -1977,8 +1977,15 @@ public class Config extends ConfigBase {
     /**
      * statistic collect flag
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Whether to enable periodic analyze job, " +
+            "including auto analyze job and analyze jobs created by user")
     public static boolean enable_statistic_collect = true;
+
+    @ConfField(mutable = true, comment = "enable auto collect internal statistics in the background")
+    public static boolean enable_auto_collect_statistics = true;
+
+    @ConfField(mutable = true, comment = "trigger task immediately after creating analyze job")
+    public static boolean enable_trigger_analyze_job_immediate = true;
 
     /**
      * whether to automatically collect statistics on temporary tables
@@ -2156,12 +2163,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "max columns size of full analyze predicate columns instead of sample all columns")
     public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
-
-    /**
-     * Max row count in statistics collect per query
-     */
-    @ConfField(mutable = true)
-    public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
 
     /**
      * The row number of sample collect, default 20w rows

@@ -1552,6 +1552,7 @@ createAnalyzeStatement
 
 dropAnalyzeJobStatement
     : DROP ANALYZE INTEGER_VALUE
+    | DROP ALL ANALYZE JOB
     ;
 
 showAnalyzeStatement
