@@ -192,7 +192,7 @@ public class ConnectProcessor {
             ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
             if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
                 com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
-                if (casted.isThreadAllocatedMemoryEnabled() && casted.isThreadAllocatedMemorySupported()) {
+                if (casted.isThreadAllocatedMemorySupported() && casted.isThreadAllocatedMemoryEnabled()) {
                     long allocatedBytes = casted.getThreadAllocatedBytes(threadId);
                     if (allocatedBytes != -1) {
                         return allocatedBytes;
