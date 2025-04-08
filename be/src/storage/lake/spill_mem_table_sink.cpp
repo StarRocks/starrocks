@@ -63,7 +63,7 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
 
 Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
     // Try to preallocate from current block first.
-    if (_block == nullptr || !_block->preallocate(block_size)) {
+    if (_block == nullptr) {
         // Freeze current block firstly.
         RETURN_IF_ERROR(_freeze_current_block());
         // Acquire new block.
