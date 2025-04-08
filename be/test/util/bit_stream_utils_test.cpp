@@ -282,19 +282,33 @@ TEST(TestBitStreamUtil, TestVLQ) {
 }
 
 TEST(TestBitStreamUtil, TestGetBatch) {
-    faststring buffer(1);
-    BitWriter writer(&buffer);
-    const int N = 128;
-    for (int i = 0; i < N; i++) {
-        writer.PutValue(i, 8);
-    }
-    writer.Flush();
+    auto f = [](int BASE, int N, int BW) {
+        faststring buffer(1);
+        BitWriter writer(&buffer);
+        ASSERT_TRUE((1 << BW) >= (BASE + 2 * N)) << "BW: " << BW << " BASE: " << BASE << " N: " << N;
+        for (int i = 0; i < 2 * N; i++) {
+            writer.PutValue(BASE + i, BW);
+        }
+        writer.Flush();
 
-    BitReader reader(buffer.data(), buffer.size());
-    std::vector<int> data(N);
-    ASSERT_TRUE(reader.GetBatch(8, data.data(), N));
-    for (int i = 0; i < N; i++) {
-        ASSERT_EQ(data[i], i);
+        BitReader reader(buffer.data(), buffer.size());
+        std::vector<int> data(N);
+        EXPECT_TRUE(reader.GetBatch(BW, data.data(), N));
+        for (int i = 0; i < N; i++) {
+            EXPECT_EQ(data[i], i + BASE);
+        }
+        EXPECT_TRUE(reader.GetBatch(BW, data.data(), N));
+        for (int i = 0; i < N; i++) {
+            EXPECT_EQ(data[i], i + BASE + N);
+        }
+    };
+
+    for (int bw = 9; bw < 20; bw++) {
+        for (int bwi = 0; bwi < 10; bwi++) {
+            for (int ni = 0; ni < 10; ni++) {
+                f(1 << (bw - 7), 64 - ni, bw + bwi);
+            }
+        }
     }
 }
 
