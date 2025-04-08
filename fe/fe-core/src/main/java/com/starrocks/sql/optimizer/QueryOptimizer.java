@@ -807,8 +807,11 @@ public class QueryOptimizer extends Optimizer {
 
         if (context.getSessionVariable().getSemiJoinDeduplicateMode() !=
                 SemiJoinDeduplicateRule.DISABLE_PUSH_DOWN_DISTINCT) {
+            if (pushAggFlag) {
+                deriveLogicalProperty(tree);
+            }
             // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
-            if (!joinReorder) {
+            if (!joinReorder && !FeConstants.runningUnitTest) {
                 logicalJoinReorder(tree, rootTaskContext);
             }
             SemiJoinDeduplicateRule rule = new SemiJoinDeduplicateRule();
@@ -827,17 +830,15 @@ public class QueryOptimizer extends Optimizer {
     }
 
     private void logicalJoinReorder(OptExpression tree, TaskContext rootTaskContext) {
-        if (!FeConstants.runningUnitTest) {
-            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
-            scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
-            deriveLogicalProperty(tree);
-            tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
-            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-            deriveLogicalProperty(tree);
-            Utils.calculateStatistics(tree, context);
-        }
+        scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+        deriveLogicalProperty(tree);
+        tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
+        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        Utils.calculateStatistics(tree, context);
     }
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {

@@ -37,14 +37,14 @@ import java.util.Optional;
 /**
  * for distinct(t1.c1) from( t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c1 = t3.c1)
  * t1 is the driving table, t2 and t3 is used to filter t1
- * so we can rewrite it into t1 join t3 on t1.c1 = t2.c1 join t3 on t1.c1 = t3.c1
+ * so we can rewrite it into t1 join t2 on t1.c1 = t2.c1 join t3 on t1.c1 = t3.c1
  */
 public class JoinReorderDrivingTable extends JoinOrder {
     private Optional<OptExpression> bestPlanRoot = Optional.empty();
     // for t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c1 = t3.c1
     // if t1 is driving table, then expressionMap will be: {t2.c1: t1.c1} after handle t1 join t2
-    // when t3 join (t1 join t2), we will rewrite t2.c1 = t3.c1 into t1.c1 = t3.c1 using expressionMap
-    // then expressionMap will be: {t3:c1: t1.c1}, {t2.c1: t1:c1}
+    // when t3 join (t1 join t2), we will rewrite t2.c1 = t3.c1 into t1.c1 = t3.c1 using expressionMap firstly
+    // then insert {t3:c1: t1.c1} into expressionMap
     private Map<ColumnRefOperator, ScalarOperator> expressionMap = new HashMap<>();
 
     public JoinReorderDrivingTable(OptimizerContext context) {
@@ -71,6 +71,9 @@ public class JoinReorderDrivingTable extends JoinOrder {
     @Override
     protected void enumerate() {
         List<GroupInfo> atoms = joinLevels.get(1).groups;
+        if (atoms.size() > context.getSessionVariable().getJoinReorderDrivingTableMaxElement()) {
+            return;
+        }
 
         // 1. find the driving table
         GroupInfo drivingTable = null;
@@ -102,32 +105,28 @@ public class JoinReorderDrivingTable extends JoinOrder {
         int usedNum = 1;
         GroupInfo leftGroup = atoms.get(0); // driving table
         used[0] = true;
-        int next = 1;
 
-        while (next < atomSize) {
-            if (used[next]) {
-                next++;
-                continue;
-            }
-
-            int bestIndex = -1;
-            for (int i = next; i < atomSize; i++) {
+        while (true) {
+            int nextIndex = -1;
+            // find the first atom which can be joined with leftGroup
+            for (int i = 1; i < atomSize; i++) {
                 if (!used[i] && canBuildInnerJoinPredicate(leftGroup, atoms.get(i))) {
-                    bestIndex = i;
+                    nextIndex = i;
                     break;
                 }
             }
 
-            if (bestIndex == -1) {
+            // if all used or no join predicate can be built, break
+            if (nextIndex == -1) {
                 break;
             }
 
-            used[bestIndex] = true;
-            GroupInfo rightGroup = atoms.get(bestIndex);
+            used[nextIndex] = true;
+            GroupInfo rightGroup = atoms.get(nextIndex);
 
-            // avoid same table join
+            // avoid self join
             if (isSameTableJoin(leftGroup, rightGroup)) {
-                continue;
+                return;
             }
 
             // if right table output more then one column, like t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c2= t3.c2
@@ -158,10 +157,13 @@ public class JoinReorderDrivingTable extends JoinOrder {
             ColumnRefOperator left = null;
             ColumnRefOperator right = null;
             for (ScalarOperator child : onPredicate.get(0).getChildren()) {
+                // just support col op col right now for simply
                 if (!(child instanceof ColumnRefOperator colRef)) {
                     return;
                 }
                 // if col is replaced already, use replaced column
+                // like case above, when dealing with left group join t3  on t2.c1 = t3.c1
+                // t2.c1 should be replaced with t1.c1
                 if (expressionMap.containsKey(colRef)) {
                     colRef = (ColumnRefOperator) expressionMap.get(colRef);
                 }
@@ -188,7 +190,7 @@ public class JoinReorderDrivingTable extends JoinOrder {
                 });
             }
 
-            // rewrite on predicate
+            // rewrite on-predicate
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionMap, false);
             ScalarOperator newOnPredicate = rewriter.rewrite(newJoinOperator.getOnPredicate());
 
@@ -216,7 +218,6 @@ public class JoinReorderDrivingTable extends JoinOrder {
             leftGroup.lowestExprCost = joinExpr.get().cost;
 
             usedNum++;
-            next = 1;
         }
 
         if (usedNum == atoms.size()) {
