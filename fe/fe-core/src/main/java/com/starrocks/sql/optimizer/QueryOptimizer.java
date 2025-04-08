@@ -562,7 +562,6 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
 
         pruneTables(tree, rootTaskContext, requiredColumns);
-        distinctJoinRewrite(scheduler, tree, rootTaskContext);
 
         scheduler.rewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
@@ -651,6 +650,8 @@ public class QueryOptimizer extends Optimizer {
         if (sessionVariable.getEnableArrayDistinctAfterAggOpt()) {
             scheduler.rewriteOnce(tree, rootTaskContext, new ArrayDistinctAfterAggRule());
         }
+
+        distinctJoinRewrite(scheduler, tree, rootTaskContext);
 
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
