@@ -454,6 +454,7 @@
                         "administration/management/Scale_up_down",
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
+                        "administration/management/cluster_snapshot",
                         {
                             "type": "category",
                             "label": "Monitor and Alert",
