@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -179,5 +181,28 @@ public class DeltaLakeTable extends Table {
                 fullSchema.size(), 0, tableName, dbName);
         tTableDescriptor.setDeltaLakeTable(tDeltaLakeTable);
         return tTableDescriptor;
+    }
+
+    public String getTableIdentifier() {
+        String uuid = this.deltaSnapshot.getMetadata().getId();
+        return Joiner.on(":").join(tableName, uuid == null ? "" : uuid);
+    }
+
+    @Override
+    public int hashCode() {
+        return com.google.common.base.Objects.hashCode(getCatalogName(), dbName, getTableIdentifier());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof DeltaLakeTable otherTable)) {
+            return false;
+        }
+
+        String catalogName = getCatalogName();
+        String tableIdentifier = getTableIdentifier();
+        return Objects.equal(catalogName, otherTable.getCatalogName()) &&
+                Objects.equal(dbName, otherTable.dbName) &&
+                Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 }
