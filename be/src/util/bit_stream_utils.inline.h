@@ -175,24 +175,11 @@ inline bool BitReader::GetValue(int num_bits, T* v) {
 
 template <typename T>
 inline bool BitReader::GetBatch(int num_bits, T* v, int num_values) {
-    int i = 0;
-    for (; i < num_values && bit_offset_ != 0; ++i) {
+    // note(yanz): not quite efficient. actually arrow has a better implmentation
+    for (int i = 0; i < num_values; ++i) {
         if (PREDICT_FALSE(!GetValue(num_bits, v + i))) {
             return false;
         }
-    }
-    if (i < num_values) {
-        DCHECK(bit_offset_ == 0);
-        int expected_values = num_values - i;
-        auto ret = BitPackingAdapter::UnpackValues(num_bits, buffer_ + byte_offset_, max_bytes_ - byte_offset_,
-                                                   expected_values, v + i);
-        if (ret.second != expected_values) {
-            return false;
-        }
-        size_t bits_read = expected_values * num_bits;
-        byte_offset_ += bits_read / 8;
-        bit_offset_ += bits_read % 8;
-        BufferValues();
     }
     return true;
 }
