@@ -113,6 +113,7 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
@@ -1260,5 +1261,30 @@ public class ShowExecutorTest {
         List<String> row2 = resultSet.getResultRows().get(1);
         Assert.assertEquals("[0, test1, test1, test1, -1, NULL, NULL]", row1.toString());
         Assert.assertEquals("[1, test2, test2, test2, -1, 'hello', \"hello\"=\"world\", \"ni\"=\"hao\"]", row2.toString());
+    }
+
+    @Test
+    public void testShouldMarkIdleCheck() {
+        StmtExecutor stmtExecutor = new StmtExecutor(new ConnectContext(),
+                SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("SET NAMES utf8mb4", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertTrue(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("SET password = 'xxx'", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertTrue(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("show users", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("admin set frontend config('proc_profile_cpu_enable' = 'true')",
+                        SqlModeHelper.MODE_DEFAULT)));
     }
 }
