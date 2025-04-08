@@ -289,6 +289,7 @@ When you read data by using Flink SQL, take note of the following points:
 - Predicate pushdown is supported. For example, if your query contains a filter condition `char_1 <> 'A' and int_1 = -126`, the filter condition will be pushed down to the Flink connector and transformed into a statement that can be executed by StarRocks before the query is run. You do not need to perform extra configurations.
 - The LIMIT statement is not supported.
 - StarRocks does not support the checkpointing mechanism. As a result, data consistency cannot be guaranteed if the read task fails.
+- The order of the fields in the created table must be the same as in the StarRocks table.
 
 ### Read data using Flink DataStream
 
