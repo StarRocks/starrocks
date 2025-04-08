@@ -26,6 +26,10 @@
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
+#ifdef __AVX2__
+#include <emmintrin.h>
+#include <immintrin.h>
+#endif
 
 namespace SIMD {
 
@@ -243,7 +247,7 @@ template <Integer8BitType T>
 inline bool contains_nonzero_bit(const T* data, size_t size) {
     const T* end = data + size;
 
-#if defined(__SSE2__)
+#if defined(__AVX2__)
     constexpr size_t W = 32;
     const T* end32 = data + (size / W * W);
     for (; data < end32; data += W) {
