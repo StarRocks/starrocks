@@ -729,7 +729,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(startTime);
     }
 
-    @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME),
+            @ConstantFunction(name = "current_timestamp", argTypes = {INT}, returnType = DATETIME)
+    })
     public static ConstantOperator now(ConstantOperator fsp) throws AnalysisException {
         int fspVal = fsp.getInt();
         if (fspVal == 0) {
