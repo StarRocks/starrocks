@@ -43,7 +43,8 @@ public class InnerToSemiRule extends TransformationRule {
             return Lists.newArrayList(input);
         }
 
-
+        // here we borrow taskContext's requiredColumns to pass multi join node's output columns
+        // and set it back when we are done
         ColumnRefSet columnRefSet = input.getChildOutputColumns(0);
         ColumnRefSet back = context.getTaskContext().getRequiredColumns();
         context.getTaskContext().setRequiredColumns(columnRefSet);
@@ -51,39 +52,41 @@ public class InnerToSemiRule extends TransformationRule {
         OptExpression newChild = new ReorderJoinRule().rewrite_for_distinct_join(input.inputAt(0), context);
         context.getTaskContext().setRequiredColumns(back);
 
-        newChild = rewriteInnerToSemi(newChild, true);
+        newChild = rewriteInnerToSemi(newChild);
         input.setChild(0, newChild);
 
         return Lists.newArrayList(input);
     }
 
-    private OptExpression rewriteInnerToSemi(OptExpression opt, boolean parentIsInnerOrDistinct) {
+    private OptExpression rewriteInnerToSemi(OptExpression opt) {
+        // rewrite the multi join tree
         if (opt.getOp() instanceof LogicalJoinOperator joinOperator) {
             if (!joinOperator.getJoinHint().isEmpty() || joinOperator.getPredicate() != null) {
                 return opt;
             }
 
+            // only support inner->semi
             if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN) {
-                if (parentIsInnerOrDistinct) {
-                    List<OptExpression> children = opt.getInputs();
-                    for (int i = 0; i < children.size(); i++) {
-                        OptExpression child = children.get(i);
-                        if (!opt.getOutputColumns().isIntersect(child.getOutputColumns())) {
-                            if (i == 0) {
-                                joinOperator = new LogicalJoinOperator(JoinOperator.RIGHT_SEMI_JOIN,
-                                        joinOperator.getOnPredicate());
-                            } else {
-                                joinOperator = new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
-                                        joinOperator.getOnPredicate());
-                            }
-
-                            opt = OptExpression.create(joinOperator, opt.getInputs());
-                            break;
+                List<OptExpression> children = opt.getInputs();
+                for (int i = 0; i < children.size(); i++) {
+                    OptExpression child = children.get(i);
+                    // if child's output doesn't intersect with parent
+                    // which means this child is only used to filter the other child
+                    if (!opt.getOutputColumns().isIntersect(child.getOutputColumns())) {
+                        if (i == 0) {
+                            joinOperator = new LogicalJoinOperator(JoinOperator.RIGHT_SEMI_JOIN,
+                                    joinOperator.getOnPredicate());
+                        } else {
+                            joinOperator = new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
+                                    joinOperator.getOnPredicate());
                         }
+
+                        opt = OptExpression.create(joinOperator, opt.getInputs());
+                        break;
                     }
                 }
                 for (int i = 0; i < opt.getInputs().size(); i++) {
-                    opt.getInputs().set(i, rewriteInnerToSemi(opt.getInputs().get(i), true));
+                    opt.getInputs().set(i, rewriteInnerToSemi(opt.getInputs().get(i)));
                 }
             }
         }

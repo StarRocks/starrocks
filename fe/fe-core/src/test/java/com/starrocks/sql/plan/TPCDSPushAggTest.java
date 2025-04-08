@@ -30,7 +30,7 @@ import java.util.stream.Stream;
 public class TPCDSPushAggTest extends TPCDS1TTestBase {
     @BeforeAll
     public static void beforeAll() {
-        FeConstants.unitTestView = false;
+        FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
     }
 
