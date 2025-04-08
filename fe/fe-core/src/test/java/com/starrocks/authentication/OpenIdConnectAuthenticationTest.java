@@ -24,51 +24,21 @@ import com.starrocks.sql.parser.NodePosition;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.text.ParseException;
-
 public class OpenIdConnectAuthenticationTest {
 
     private final String[] emptyAudience = {};
     private final String[] emptyIssuer = {};
-
-    static class MockJwkMgr extends JwkMgr {
-        @Override
-        public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
-            String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
-            InputStream jwksInputStream = new FileInputStream(path + "/" + jwksUrl);
-            return JWKSet.load(jwksInputStream);
-        }
-    }
-
-    private String getOpenIdConnect(String fileName) throws IOException {
-        String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
-        File file = new File(path + "/" + fileName);
-        BufferedReader reader = new BufferedReader(new FileReader(file));
-
-        StringBuilder sb = new StringBuilder();
-        String tempStr;
-        while ((tempStr = reader.readLine()) != null) {
-            sb.append(tempStr);
-        }
-
-        return sb.toString();
-    }
+    private final MockTokenUtils mockTokenUtils = new MockTokenUtils();
 
     @Test
-    public void testAuthentication() throws AuthenticationException, IOException {
-        GlobalStateMgr.getCurrentState().setJwkMgr(new MockJwkMgr());
+    public void testAuthentication() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         OpenIdConnectAuthenticationProvider provider =
                 new OpenIdConnectAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
         provider.analyzeAuthOption(new UserIdentity("harbor", "%"),
                 new UserAuthOption("", null, null, true, NodePosition.ZERO));
-        String openIdConnectJson = getOpenIdConnect("oidc.json");
+        String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
 
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         serializer.writeInt1(0);
@@ -82,8 +52,8 @@ public class OpenIdConnectAuthenticationTest {
 
     @Test
     public void testFake() throws Exception {
-        String openIdConnectJson = getOpenIdConnect("fake-oidc.json");
-        MockJwkMgr mockJwkMgr = new MockJwkMgr();
+        String openIdConnectJson = mockTokenUtils.getOpenIdConnect("fake-oidc.json");
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
         JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
 
         try {
@@ -96,8 +66,8 @@ public class OpenIdConnectAuthenticationTest {
 
     @Test
     public void testErrorJwks() throws Exception {
-        String openIdConnectJson = getOpenIdConnect("oidc.json");
-        MockJwkMgr mockJwkMgr = new MockJwkMgr();
+        String openIdConnectJson = mockTokenUtils.getOpenIdConnect("oidc.json");
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
 
         try {
             JWKSet jwkSet = mockJwkMgr.getJwkSet("error-jwks.json");
@@ -110,8 +80,8 @@ public class OpenIdConnectAuthenticationTest {
 
     @Test
     public void testIssuerAndAudience() throws Exception {
-        String openIdConnectJson = getOpenIdConnect("oidc.json");
-        MockJwkMgr mockJwkMgr = new MockJwkMgr();
+        String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
         JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
 
         try {
@@ -153,6 +123,29 @@ public class OpenIdConnectAuthenticationTest {
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("Audience (aud) field [12345] is invalid"));
+        }
+    }
+
+    @Test
+    public void testExpiry() throws Exception {
+
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        try {
+            String unexpiredToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+            OpenIdConnectVerifier.verify(unexpiredToken, "harbor",
+                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master"}, new String[] {"12345"});
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+
+        try {
+            String unexpiredToken = mockTokenUtils.generateTestOIDCToken(-60L);
+            OpenIdConnectVerifier.verify(unexpiredToken, "harbor",
+                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master"}, new String[] {"12345"});
+        } catch (AuthenticationException e) {
+            Assert.assertTrue(e.getMessage().contains("JWT expired at"));
         }
     }
 }
