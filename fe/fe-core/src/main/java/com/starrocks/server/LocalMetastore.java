@@ -1725,7 +1725,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (version != null) {
             partition.updateVisibleVersion(version);
         }
-
+        if (shardGroupId != 0) {
+            LOG.info("Binding shardGroup: {} to partition: {}.", shardGroupId, partitionId);
+        }
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
