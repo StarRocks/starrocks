@@ -34,7 +34,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.validate.InputDependenciesChecker;
 import org.apache.commons.collections4.CollectionUtils;
@@ -290,13 +289,12 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
             return newBotPredicate;
         }
         Map<ColumnRefOperator, ScalarOperator> colRefMap = Maps.newHashMap();
-        splitter.getConstCols().stream().forEach(e -> colRefMap.put(e.getColumnRef(), e.getScalarOp()));
+        splitter.getConstCols().forEach(e -> colRefMap.put(e.getColumnRef(), e.getScalarOp()));
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(colRefMap);
         newBotPredicate = rewriter.rewrite(newBotPredicate);
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        newBotPredicate = scalarRewriter.rewrite(newBotPredicate, ImmutableList.of(new NormalizePredicateRule()));
+        newBotPredicate = scalarRewriter.rewrite(newBotPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
         return newBotPredicate;
-
     }
 
     protected class ProjectionSplitter {
