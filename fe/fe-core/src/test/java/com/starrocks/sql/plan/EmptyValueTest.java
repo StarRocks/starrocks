@@ -49,6 +49,73 @@ public class EmptyValueTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneEmptyJoinWithAssociate() throws Exception {
+        String sql = "WITH shipment_data AS (\n" +
+                "    SELECT\n" +
+                "        L_RECEIPTDATE,\n" +
+                "        L_ORDERKEY,\n" +
+                "        L_SUPPKEY,\n" +
+                "        L_COMMENT,\n" +
+                "        L_SHIPMODE,\n" +
+                "        L_QUANTITY,\n" +
+                "        L_SHIPINSTRUCT\n" +
+                "    FROM\n" +
+                "        lineitem_partition\n" +
+                "    WHERE \n" +
+                "        L_SHIPDATE BETWEEN '1995-03-09' AND '1995-03-09'\n" +
+                "        AND L_PARTKEY IS NOT NULL\n" +
+                "),\n" +
+                "supplier_data AS (\n" +
+                "    SELECT \n" +
+                "        L_COMMENT,\n" +
+                "        L_RETURNFLAG \n" +
+                "    FROM \n" +
+                "        lineitem_partition\n" +
+                "    WHERE \n" +
+                "        L_SHIPDATE = '2020-01-01'\n" +
+                "        AND L_LINESTATUS = 'O'\n" +
+                "),\n" +
+                "part_data AS (\n" +
+                "    SELECT \n" +
+                "        L_PARTKEY,\n" +
+                "        L_LINENUMBER,\n" +
+                "        L_DISCOUNT \n" +
+                "    FROM \n" +
+                "        lineitem_partition\n" +
+                "    WHERE \n" +
+                "        L_SHIPMODE = 'AIR'\n" +
+                "),\n" +
+                "customer_data AS (\n" +
+                "    SELECT\n" +
+                "        L_SUPPKEY,\n" +
+                "        L_TAX,\n" +
+                "        L_EXTENDEDPRICE\n" +
+                "    FROM\n" +
+                "        lineitem_partition\n" +
+                "    WHERE\n" +
+                "        L_RETURNFLAG = 'N'\n" +
+                ")\n" +
+                "SELECT\n" +
+                "    shipment_data.L_RECEIPTDATE,\n" +
+                "    shipment_data.L_ORDERKEY,\n" +
+                "    supplier_data.L_RETURNFLAG,\n" +
+                "    part_data.L_DISCOUNT\n" +
+                "FROM\n" +
+                "    shipment_data\n" +
+                "    LEFT JOIN customer_data ON customer_data.L_SUPPKEY = shipment_data.L_SUPPKEY\n" +
+                "    LEFT JOIN supplier_data ON supplier_data.L_COMMENT = shipment_data.L_COMMENT\n" +
+                "    LEFT JOIN part_data ON part_data.L_PARTKEY = CAST(shipment_data.L_SHIPMODE AS INT)\n" +
+                "        AND part_data.L_LINENUMBER = CAST(shipment_data.L_QUANTITY AS INT)\n" +
+                "        AND part_data.L_DISCOUNT = CAST(shipment_data.L_SHIPINSTRUCT AS DOUBLE)\n" +
+                "WHERE\n" +
+                "    supplier_data.L_RETURNFLAG != 'R'\n" +
+                "    OR part_data.L_DISCOUNT != 0.05\n";
+
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "other predicates: (43: L_RETURNFLAG != 'R') OR (58: L_DISCOUNT != 0.05)");
+    }
+
+    @Test
     public void testPartitionOtherJoin() throws Exception {
         String sql = "select L_PARTKEY, t0.v2 from lineitem_partition p " +
                 "left outer join t0 on p.L_ORDERKEY = t0.v2 where L_SHIPDATE = '2000-01-01' ";
