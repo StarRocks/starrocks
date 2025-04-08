@@ -14,12 +14,14 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
@@ -94,6 +96,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
@@ -4171,6 +4174,14 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
     }
+
+    private static final MockUp<DeltaLakeTable> mock = new MockUp<DeltaLakeTable>() {
+        @Mock
+        String getTableIdentifier() {
+            String uuid = UUID.randomUUID().toString();
+            return Joiner.on(":").join("tbl", uuid);
+        }
+    };
 
     @Test
     public void createDeltaLakeMV() throws Exception {
