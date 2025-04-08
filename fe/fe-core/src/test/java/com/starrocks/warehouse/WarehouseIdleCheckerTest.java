@@ -36,7 +36,7 @@ public class WarehouseIdleCheckerTest {
 
         Config.warehouse_idle_check_enable = true;
 
-        IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+        IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus(true);
         Assert.assertFalse(idleStatus.isClusterIdle);
         Assert.assertEquals(2, idleStatus.warehouses.size());
         for (int i = 0; i < idleStatus.warehouses.size(); i++) {
@@ -58,7 +58,7 @@ public class WarehouseIdleCheckerTest {
         warehouseManager.addWarehouse(warehouse);
 
         long now = System.currentTimeMillis();
-        IdleStatus idleStatus1 = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+        IdleStatus idleStatus1 = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus(true);
         Assert.assertTrue(idleStatus1.isClusterIdle);
         IdleStatus.WarehouseStatus warehouseStatus1 = idleStatus1.warehouses.stream()
                 .filter(w -> w.id == 1).findAny().get();
@@ -69,7 +69,7 @@ public class WarehouseIdleCheckerTest {
         Thread.sleep(sleepTimeMs);
         warehouse.resumeSelf();
 
-        IdleStatus idleStatus2 = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+        IdleStatus idleStatus2 = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus(true);
         Assert.assertTrue(idleStatus2.isClusterIdle);
         IdleStatus.WarehouseStatus warehouseStatus2 = idleStatus2.warehouses.stream()
                 .filter(w -> w.id == 1).findAny().get();
