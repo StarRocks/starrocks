@@ -511,7 +511,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
-        refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
