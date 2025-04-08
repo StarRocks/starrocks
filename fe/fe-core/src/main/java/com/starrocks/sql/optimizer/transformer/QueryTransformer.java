@@ -590,6 +590,13 @@ public class QueryTransformer {
 
             LogicalRepeatOperator repeatOperator =
                     new LogicalRepeatOperator(repeatOutput, repeatColumnRefList, groupingIds);
+
+            // constant group-by column in grouping-set should not propagate upwards, since repeat operator
+            // would output NULL values for this constant group-by column and projection operator upon
+            // aggregate operator would substitute this values with constant values mistakenly, so NULL values
+            // is eliminated.
+            groupByColumnRefs.forEach(groupByCol ->
+                    groupingTranslations.getColumnRefToConstOperators().remove(groupByCol));
             subOpt = new OptExprBuilder(repeatOperator, Lists.newArrayList(subOpt), groupingTranslations);
         }
 
