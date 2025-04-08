@@ -53,7 +53,7 @@ private:
 };
 
 Status BlockSpillOutputDataStream::_prepare_block(RuntimeState* state, size_t write_size) {
-    if (_cur_block == nullptr || !_cur_block->preallocate(write_size)) {
+    if (_cur_block == nullptr) {
         // flush current block firstly
         RETURN_IF_ERROR(flush());
         // TODO: add profile for acquire block

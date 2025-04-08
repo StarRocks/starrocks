@@ -53,8 +53,6 @@ public:
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
-    virtual bool preallocate(size_t write_size) = 0;
-
     void inc_num_rows(size_t num_rows) { _num_rows += num_rows; }
 
     void set_affinity_group(BlockAffinityGroup affinity_group) { _affinity_group = affinity_group; }

@@ -69,7 +69,7 @@ public:
 
     Status flush();
 
-    bool pre_allocate(size_t allocate_size) {
+    bool try_acquire_sizes(size_t allocate_size) {
         if (_data_size + allocate_size <= _acquired_data_size) {
             return true;
         }
@@ -121,6 +121,8 @@ Status FileBlockContainer::close() {
 }
 
 Status FileBlockContainer::append_data(const std::vector<Slice>& data, size_t total_size) {
+    auto* dir = _dir.get();
+    RETURN_IF(!try_acquire_sizes(total_size), DISK_ACQUIRE_ERROR(total_size, dir));
     RETURN_IF_ERROR(_writable_file->appendv(data.data(), data.size()));
     _data_size += total_size;
     return Status::OK();
@@ -190,8 +192,6 @@ public:
         return fmt::format("FileBlock[container={}]", _container->path());
 #endif
     }
-
-    bool preallocate(size_t write_size) override { return _container->pre_allocate(write_size); }
 
 private:
     FileBlockContainerPtr _container;
