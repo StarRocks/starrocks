@@ -129,6 +129,9 @@ public:
     template <typename T>
     bool GetValue(int num_bits, T* v);
 
+    template <typename T>
+    bool GetBatch(int num_bits, T* v, int num_values);
+
     // Reads a 'num_bytes'-sized value from the buffer and stores it in 'v'. T needs to be a
     // little-endian native type and big enough to store 'num_bytes'. The value is assumed
     // to be byte-aligned so the stream will be advanced to the start of the next byte
@@ -159,16 +162,21 @@ public:
     int position() const { return byte_offset_ * 8 + bit_offset_; }
 
     // Rewind the stream by 'num_bits' bits
-    void Rewind(int num_bits);
+    bool Rewind(int num_bits);
+
+    // Advance the stream by 'num_bits' bits
+    bool Advance(int num_bits);
 
     // Seek to a specific bit in the buffer
-    void SeekToBit(uint stream_position);
+    bool SeekToBit(uint stream_position);
 
     // Maximum byte length of a vlq encoded int
     static const int MAX_VLQ_BYTE_LEN = 5;
     static const int MAX_VLQ_BYTE_LEN_INT64 = 10;
 
     bool is_initialized() const { return buffer_ != nullptr; }
+
+    void reset(const uint8_t* buffer, int buffer_len);
 
 private:
     // Used by SeekToBit() and GetValue() to fetch the

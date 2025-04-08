@@ -281,6 +281,23 @@ TEST(TestBitStreamUtil, TestVLQ) {
     }
 }
 
+TEST(TestBitStreamUtil, TestGetBatch) {
+    faststring buffer(1);
+    BitWriter writer(&buffer);
+    const int N = 128;
+    for (int i = 0; i < N; i++) {
+        writer.PutValue(i, 8);
+    }
+    writer.Flush();
+
+    BitReader reader(buffer.data(), buffer.size());
+    std::vector<int> data(N);
+    ASSERT_TRUE(reader.GetBatch(8, data.data(), N));
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(data[i], i);
+    }
+}
+
 TEST(TestBitStreamUtil, BatchedBitReaderGetBytes) {
     uint8_t data[4] = {0x8, 0x1, 0x0, 0x0};
 
