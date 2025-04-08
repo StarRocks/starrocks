@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -158,7 +159,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
 
         // if one tablet, prefer to use MultiFun, which only has one global agg without exchange
         LogicalProperty inputLogicalProperty = input.getLogicalProperty();
-        if (inputLogicalProperty.oneTabletProperty().supportOneTabletOpt) {
+        if (inputLogicalProperty.oneTabletProperty().supportOneTabletOpt && (!FeConstants.runningUnitTest)) {
             return false;
         }
 
