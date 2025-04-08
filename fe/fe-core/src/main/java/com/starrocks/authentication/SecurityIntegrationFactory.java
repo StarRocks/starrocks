@@ -24,6 +24,7 @@ import java.util.Map;
 public class SecurityIntegrationFactory {
     private static final ImmutableSortedSet<String> SUPPORTED_AUTH_MECHANISM =
             ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
+                    .add(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name())
                     .add(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name())
                     .build();
 
@@ -38,7 +39,9 @@ public class SecurityIntegrationFactory {
         checkSecurityIntegrationIsSupported(type);
 
         SecurityIntegration securityIntegration = null;
-        if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name())) {
+        if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name())) {
+            securityIntegration = new SimpleLDAPSecurityIntegration(name, propertyMap);
+        } else if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name())) {
             securityIntegration = new OIDCSecurityIntegration(name, propertyMap);
         }
         Preconditions.checkArgument(securityIntegration != null);
