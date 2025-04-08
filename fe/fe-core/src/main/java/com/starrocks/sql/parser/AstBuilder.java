@@ -8347,20 +8347,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitUserWithHostAndBlanket(StarRocksParser.UserWithHostAndBlanketContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentity(user.getValue(), host.getValue(), true, createPos(context), false);
+        return new UserIdentity(user.getValue(), host.getValue(), true, false, createPos(context));
     }
 
     @Override
     public ParseNode visitUserWithHost(StarRocksParser.UserWithHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentity(user.getValue(), host.getValue(), false, createPos(context), false);
+        return new UserIdentity(user.getValue(), host.getValue(), false, false, createPos(context));
     }
 
     @Override
     public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString());
-        return new UserIdentity(user.getValue(), "%", false, createPos(context), false);
+        return new UserIdentity(user.getValue(), "%", false, false, createPos(context));
     }
 
     @Override

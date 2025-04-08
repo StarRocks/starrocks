@@ -1935,6 +1935,30 @@ struct TListSessionsResponse {
     2: optional list<TSessionInfo> sessions;
 }
 
+struct TListConnectionRequest {
+    1: optional TAuthInfo auth_info;
+    2: optional string for_user;
+    3: optional bool show_full;
+}
+
+struct TConnectionInfo {
+    1: optional string connection_id;
+    2: optional string user;
+    3: optional string host;
+    4: optional string db;
+    5: optional string command;
+    6: optional string connection_start_time;
+    7: optional string time;
+    8: optional string state;
+    9: optional string info;
+    10: optional string isPending;
+}
+
+struct TListConnectionResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TConnectionInfo> connections;
+}
+
 struct TGetKeysRequest {
 }
 
@@ -2190,6 +2214,8 @@ service FrontendService {
 
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
+
+    TListConnectionResponse listConnections(1: TListConnectionRequest request)
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 
