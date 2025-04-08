@@ -64,10 +64,10 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(lambda_expr->prepare(state, context));
     {
         // remove lambda arguments and common sub exprs from _initial_required_slots
-        for (auto id: extract_ctx.all_lambda_arguments) {
+        for (auto id : extract_ctx.all_lambda_arguments) {
             _initial_required_slots.erase(id);
         }
-        for (auto id: extract_ctx.all_common_sub_expr_ids) {
+        for (auto id : extract_ctx.all_common_sub_expr_ids) {
             _initial_required_slots.erase(id);
         }
     }
