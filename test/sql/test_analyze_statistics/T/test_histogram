@@ -67,6 +67,8 @@ ORDER BY k1;
 [UC] ANALYZE FULL TABLE t2;
 [UC] ANALYZE FULL TABLE t3;
 SELECT min,max,row_count,hll_cardinality(ndv) FROM _statistics_.column_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
+SELECT min,max,row_count,hll_cardinality(ndv) FROM _statistics_.column_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
+SELECT min,max,row_count,hll_cardinality(ndv) FROM _statistics_.column_statistics WHERE table_name = 'analyze_test_${uuid0}.t3' and column_name = 'k1';
 
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 WHERE k1="2020-01-02"', 'cardinality: 152')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 WHERE k1="2020-01-10"', 'cardinality: 152')
@@ -78,10 +80,10 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t2 WHERE k1="202
 -- with histogram
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
-[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
--- SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
--- SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k2';
--- SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
+[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t3' and column_name = 'k1';
 
 set enable_stats_to_optimize_skew_join = false;
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 WHERE k2=120', 'cardinality: 181')
@@ -115,13 +117,16 @@ set cbo_enable_histogram_join_estimation = true;
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 3645821')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 176', 'cardinality: 2765', 'cardinality: 10239')
 
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3645821', 'cardinality: 798048960')
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3645821', 'cardinality: 1064520058')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3645821', 'cardinality: 847111987')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3645821', 'cardinality: 1156602757')
 
 -- more mcvs lead to better estimations.
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t3' and column_name = 'k1';
 
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4589949')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 255', 'cardinality: 2765', 'cardinality: 70425')
@@ -132,10 +137,13 @@ function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n
 -- more buckets also lead to better estimations.
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
-[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
+[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t3' and column_name = 'k1';
 
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4562636')
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 209', 'cardinality: 2765', 'cardinality: 24300')
 
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1368790800')
-function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1368912066')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1173989056')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1446330752')
