@@ -4175,15 +4175,16 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
     }
 
+    private static final MockUp<DeltaLakeTable> mock = new MockUp<DeltaLakeTable>() {
+        @Mock
+        String getTableIdentifier() {
+            String uuid = UUID.randomUUID().toString();
+            return Joiner.on(":").join("tbl", uuid);
+        }
+    };
+
     @Test
     public void createDeltaLakeMV() throws Exception {
-        new MockUp<DeltaLakeTable>() {
-            @Mock
-            public String getTableIdentifier() {
-                String uuid = UUID.randomUUID().toString();
-                return Joiner.on(":").join("tbl", uuid);
-            }
-        };
         starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
                 " refresh manual" +
                 " as select * from deltalake_catalog.deltalake_db.tbl");
