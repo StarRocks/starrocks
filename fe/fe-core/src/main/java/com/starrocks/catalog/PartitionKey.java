@@ -557,12 +557,9 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
 
     @Override
     public int hashCode() {
-        int code = 1;
-        for (LiteralExpr expr : keys) {
-            code += code * 31 + Objects.hash(expr);
-        }
+        int code = Objects.hash(keys);
         for (PrimitiveType type : types) {
-            code += code * 31 + Objects.hash(type.toString());
+            code += code * 31 + Objects.hash(type.getDescription());
         }
         return code;
     }
