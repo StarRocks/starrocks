@@ -195,10 +195,11 @@ public class DeltaLakeTable extends Table {
 
     @Override
     public boolean equals(Object other) {
-        if (!(other instanceof DeltaLakeTable otherTable)) {
+        if (!(other instanceof DeltaLakeTable)) {
             return false;
         }
 
+        DeltaLakeTable otherTable = (DeltaLakeTable) other;
         String catalogName = getCatalogName();
         String tableIdentifier = getTableIdentifier();
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
