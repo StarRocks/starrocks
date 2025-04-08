@@ -301,9 +301,10 @@ void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
         g_lake_warmup_tablet_processing_count << -1;
     }
     g_lake_warmup_tablet_fail_count << 1;
+    VLOG(3) << "Fail to warm up tablet: " << tablet_id << ", status: " << status;
 }
 
-void TabletWarmupManager::done_warmup(int64_t tablet_id, bool report) {
+void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report) {
     std::unique_ptr<WarmupContext> ctx;
     {
         std::scoped_lock lock(_mutex_inprogress);
@@ -322,18 +323,19 @@ void TabletWarmupManager::done_warmup(int64_t tablet_id, bool report) {
         std::scoped_lock lock(_mutex_batch_report);
         _tablet_id_report.insert(static_cast<uint64_t>(tablet_id));
         g_lake_warmup_tablet_success_count << 1;
+        VLOG(3) << "Successfully warm up tablet: " << tablet_id << ", level: " << level << ".";
     }
 }
 
 void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
     if (version <= 1) {
-        done_warmup(tablet_id, false /* report */);
+        done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, false /* report */);
         return;
     }
 
     staros::WarmupLevel warmup_level = staros_worker_warmup_level();
     if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
-        done_warmup(tablet_id, false /* report */);
+        done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, false /* report */);
         return;
     }
 
@@ -347,7 +349,7 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         return;
     }
     if (warmup_level == staros::WarmupLevel::WARMUP_META) {
-        done_warmup(tablet_id, true /* report */);
+        done_warmup(tablet_id, warmup_level, true /* report */);
         return;
     }
     // check stop point
@@ -382,7 +384,7 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         return;
     }
     if (warmup_level == staros::WarmupLevel::WARMUP_INDEX) {
-        done_warmup(tablet_id, true /* report */);
+        done_warmup(tablet_id, warmup_level, true /* report */);
         reader->close();
         return;
     }
@@ -416,7 +418,7 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
 
     reader->close();
 
-    done_warmup(tablet_id, true /* report */);
+    done_warmup(tablet_id, warmup_level, true /* report */);
 }
 
 void TabletWarmupManager::batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids) {

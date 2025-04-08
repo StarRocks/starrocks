@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "storage/fixed_fifo_cache.h"
+#include "worker.pb.h"
 
 namespace staros::starlet {
 struct ShardInfo;
@@ -95,7 +96,7 @@ private:
     void batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids);
     void do_warmup_tablet(int64_t tablet_id, int64_t version);
     void abort_warmup(int64_t tablet_id, Status status);
-    void done_warmup(int64_t tablet_id, bool report);
+    void done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report);
 
     static int64_t get_partition_id_from_shard_info(staros::starlet::ShardInfo& info);
 
