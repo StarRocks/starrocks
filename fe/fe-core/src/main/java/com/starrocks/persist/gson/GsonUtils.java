@@ -76,6 +76,7 @@ import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.LDAPGroupProvider;
 import com.starrocks.authentication.OIDCSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.authentication.UnixGroupProvider;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
@@ -352,7 +353,8 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
-                    .registerSubtype(OIDCSecurityIntegration.class, "OIDCSecurityIntegration");
+                    .registerSubtype(OIDCSecurityIntegration.class, "OIDCSecurityIntegration")
+                    .registerSubtype(SimpleLDAPSecurityIntegration.class, "SimpleLDAPSecurityIntegration");
 
     private static final RuntimeTypeAdapterFactory<GroupProvider> GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(GroupProvider.class, "clazz")

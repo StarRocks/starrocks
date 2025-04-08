@@ -25,7 +25,15 @@ import org.json.JSONObject;
 public class AuthPlugin {
     private static final PlainPasswordAuthenticationProvider PLAIN_PASSWORD_AUTHENTICATION_PROVIDER =
             new PlainPasswordAuthenticationProvider();
-    private static final LDAPAuthProviderForNative LDAP_AUTH_PROVIDER = new LDAPAuthProviderForNative();
+
+    private static final LDAPAuthProviderForNative LDAP_AUTH_PROVIDER = new LDAPAuthProviderForNative(
+            Config.authentication_ldap_simple_server_host,
+            Config.authentication_ldap_simple_server_port,
+            Config.authentication_ldap_simple_bind_root_dn,
+            Config.authentication_ldap_simple_bind_root_pwd,
+            Config.authentication_ldap_simple_bind_base_dn,
+            Config.authentication_ldap_simple_user_search_attr);
+
     private static final Pattern COMMA_SPLIT = Pattern.compile("\\s*,\\s*");
     public enum Server {
         MYSQL_NATIVE_PASSWORD,

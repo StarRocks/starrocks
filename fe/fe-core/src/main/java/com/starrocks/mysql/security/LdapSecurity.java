@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.mysql.security;
 
 import com.google.common.base.Strings;
@@ -33,14 +32,13 @@ public class LdapSecurity {
     private static final Logger LOG = LogManager.getLogger(LdapSecurity.class);
 
     //bind to ldap server to check password
-    public static boolean checkPassword(String dn, String password) {
+    public static boolean checkPassword(String dn, String password, String ldapServerHost, int ldapServerPort) {
         if (Strings.isNullOrEmpty(password)) {
             LOG.warn("empty password is not allowed for simple authentication");
             return false;
         }
 
-        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
-                Config.authentication_ldap_simple_server_port);
+        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(ldapServerHost, ldapServerPort);
         Hashtable<String, String> env = new Hashtable<>();
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
         env.put(Context.SECURITY_CREDENTIALS, password);
@@ -70,34 +68,42 @@ public class LdapSecurity {
     //1. bind ldap server by root dn
     //2. search user
     //3. if match exactly one, check password
-    public static boolean checkPasswordByRoot(String user, String password) {
-        if (Strings.isNullOrEmpty(Config.authentication_ldap_simple_bind_root_pwd)) {
+    public static boolean checkPasswordByRoot(String user,
+                                              String password,
+                                              String ldapServerHost,
+                                              int ldapServerPort,
+                                              String ldapBindRootDN,
+                                              String ldapBindRootPwd,
+                                              String ldapBindBaseDN,
+                                              String ldapSearchFilter) {
+        if (Strings.isNullOrEmpty(ldapBindRootPwd)) {
             LOG.warn("empty password is not allowed for simple authentication");
             return false;
         }
 
-        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
-                Config.authentication_ldap_simple_server_port);
+        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(ldapServerHost, ldapServerPort);
         Hashtable<String, String> env = new Hashtable<>();
         //dn contains '=', so we should use ' or " to wrap the value in config file
-        String rootDN = Config.authentication_ldap_simple_bind_root_dn;
+        String rootDN = ldapBindRootDN;
         rootDN = trim(rootDN, "\"");
         rootDN = trim(rootDN, "'");
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
-        env.put(Context.SECURITY_CREDENTIALS, Config.authentication_ldap_simple_bind_root_pwd);
+        env.put(Context.SECURITY_CREDENTIALS, ldapBindRootPwd);
         env.put(Context.SECURITY_PRINCIPAL, rootDN);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, url);
 
         DirContext ctx = null;
         try {
-            String baseDN = Config.authentication_ldap_simple_bind_base_dn;
+            String baseDN = ldapBindBaseDN;
             baseDN = trim(baseDN, "\"");
             baseDN = trim(baseDN, "'");
-            ctx = new InitialDirContext(env);
             SearchControls sc = new SearchControls();
             sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
-            String searchFilter = "(" + Config.authentication_ldap_simple_user_search_attr + "=" + user + ")";
+            // Escapes special characters in user input to prevent LDAP injection
+            String safeUser = escapeLdapValue(user);
+            String searchFilter = "(" + Config.authentication_ldap_simple_user_search_attr + "=" + safeUser + ")";
+            ctx = new InitialDirContext(env);
             NamingEnumeration<SearchResult> results = ctx.search(baseDN, searchFilter, sc);
 
             String userDN = null;
@@ -122,7 +128,7 @@ public class LdapSecurity {
                 return false;
             }
 
-            return checkPassword(userDN, password);
+            return checkPassword(userDN, password, ldapServerHost, ldapServerPort);
         } catch (Exception e) {
             LOG.warn("call ldap exception ", e);
         } finally {
@@ -148,5 +154,19 @@ public class LdapSecurity {
             }
         }
         return src;
+    }
+
+    public static String escapeLdapValue(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        value = value.replace("\\", "\\5c");
+        value = value.replace("*", "\\2a");
+        value = value.replace("(", "\\28");
+        value = value.replace(")", "\\29");
+        value = value.replace("|", "\\7c");
+        value = value.replace("\\u0000", "\\00");
+        return value;
     }
 }
