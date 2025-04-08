@@ -472,7 +472,7 @@ StatusOr<std::unique_ptr<ZeroCopyInputStream>> CacheInputStream::try_peek() {
                 if (_enable_populate_cache) {
                     // TODO check
                     _populate_to_cache((const char*)sb->buffer.data() + block_offset - sb->offset, block_offset,
-                                       std::min(load_size, sb->offset + sb->size - _offset), sb);
+                                       sb->offset + sb->size - block_offset, sb);
                 }
                 return std::move(zero_copy_stream);
             }
@@ -513,7 +513,7 @@ StatusOr<std::unique_ptr<ZeroCopyInputStream>> CacheInputStream::try_peek() {
         if (_enable_block_buffer) {
             block.offset = block_offset;
             _block_map[block_id] = block;
-            auto zero_copy_stream = std::make_unique<BlockBufferAsZeroCopyInputStream>(block, shift, load_size);
+            auto zero_copy_stream = std::make_unique<BlockBufferAsZeroCopyInputStream>(_block_map.at(block_id), shift, load_size);
             return std::move(zero_copy_stream);
         }
 
@@ -532,7 +532,7 @@ StatusOr<std::unique_ptr<ZeroCopyInputStream>> CacheInputStream::try_peek() {
 
             _deduplicate_shared_buffer(sb);
             if (_enable_populate_cache) {
-                _populate_to_cache((char*)buffer, block_offset, std::min(load_size, sb->offset + sb->size - _offset), sb);
+                _populate_to_cache((char*)buffer, block_offset, sb->offset + sb->size - block_offset, sb);
             }
 
             if (_enable_cache_io_adaptor) {

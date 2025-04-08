@@ -98,10 +98,11 @@ StatusOr<size_t> CompressedInputStream::fill(void* data, size_t length, size_t l
         // TODO deal with not ok
         if (ret.ok()) {
             auto zero_copy_stream = std::move(ret.value());
+            int read_size = 0;
             size_t input_bytes_read = 0;
             size_t output_bytes_written = 0;
             const char* input_data = nullptr;
-            int read_size = 0;
+            size_t input_bytes = 0;
 
             while (output_len && zero_copy_stream->next(reinterpret_cast<const void**>(&input_data), &read_size)) {
                 Slice compressed_data = Slice(input_data, read_size);
@@ -111,10 +112,10 @@ StatusOr<size_t> CompressedInputStream::fill(void* data, size_t length, size_t l
                                                           &_stream_end));
                 output_len -= output_bytes_written;
                 output_bytes += output_bytes_written;
-                read_size += input_bytes_read;
+                input_bytes += input_bytes_read;
                 DCHECK(output_len == 0 || input_bytes_read == read_size);
             }
-            RETURN_IF_ERROR(_source_stream->skip(read_size));
+            RETURN_IF_ERROR(_source_stream->skip(input_bytes));
         } else {
             return ret.status();
         }

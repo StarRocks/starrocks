@@ -172,13 +172,15 @@ class BlockBufferAsZeroCopyInputStream : public ZeroCopyInputStream {
 public:
     BlockBufferAsZeroCopyInputStream(const CacheInputStream::BlockBuffer& bb, size_t off, size_t size) {
         _bb = std::make_unique<butil::IOBufAsZeroCopyInputStream>(bb.buffer.const_raw_buf());
-        _bb->Skip(off);
+        [[maybe_unused]] bool ret = _bb->Skip(off);
+        DCHECK(ret);
         _limit = size - off;
     }
     bool next(const void** data, int* size) {
         if (_limit > 0) {
-            _bb->Next(data, size);
-            _limit -= (size_t)size;
+            [[maybe_unused]] bool ret = _bb->Next(data, size);
+            DCHECK(ret);
+            _limit -= (size_t)(*size);
             return true;
         }
         return false;
