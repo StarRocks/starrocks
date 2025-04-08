@@ -10,10 +10,10 @@ displayed_sidebar: docs
 
 创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../information_schema/information_schema.md) 中的 [`tasks`](../../information_schema/tasks.md) 和 [`task_runs`](../../information_schema/task_runs.md) 来查看异步物化视图的构建状态。
 
-> **注意**
->
-> - 只有拥有基表所在数据库的 CREATE MATERIALIZED VIEW 权限的用户才可以创建物化视图。
-> - 自 v3.4.0 起，StarRocks 存算分离集群支持同步物化视图。
+:::note
+- 只有拥有基表所在数据库的 CREATE MATERIALIZED VIEW 权限的用户才可以创建物化视图。
+- 自 v3.4.0 起，StarRocks 存算分离集群支持同步物化视图。
+:::
 
 StarRocks 自 v2.4 起支持异步物化视图。异步物化视图与先前版本中的同步物化视图区别主要体现在以下方面：
 
@@ -104,9 +104,9 @@ SELECT select_expr[, select_expr ...]
 SELECT * FROM <mv_name> [_SYNC_MV_];
 ```
 
-> **注意**
->
-> 目前，StarRocks 会自动为同步物化视图中的列生成名称。您为同步物化视图中的列指定的 Alias 将无法生效。
+:::note
+目前，StarRocks 会自动为同步物化视图中的列生成名称。您为同步物化视图中的列指定的 Alias 将无法生效。
+:::
 
 ### 同步物化视图查询自动改写
 
@@ -161,9 +161,9 @@ AS
 - 总长度不能超过 64 个字符。
 - 视图名大小写敏感。
 
-> **注意**
->
-> 同一张基表可以创建多个异步物化视图，但同一数据库内的异步物化视图名称不可重复。
+:::note
+同一张基表可以创建多个异步物化视图，但同一数据库内的异步物化视图名称不可重复。
+:::
 
 **COMMENT**（选填）
 
@@ -173,9 +173,9 @@ AS
 
 异步物化视图的分桶方式，包括哈希分桶和随机分桶（自 3.1 版本起）。如不指定该参数，StarRocks 使用随机分桶方式，并自动设置分桶数量。
 
-> **说明**
->
-> 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::info
+创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::
 
 - **哈希分桶**：
 
@@ -214,9 +214,9 @@ AS
 
 **refresh_scheme**（选填）
 
-> **说明**
->
-> 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::note
+创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+:::
 
 物化视图的刷新方式。该参数支持如下值：
 
@@ -259,13 +259,12 @@ AS
 
 有关多列分区表达式的详细指导，参考 [示例五](#示例)。
 
-> **注意**
->
-> 自 v3.3.3 起，StarRocks 支持创建基于 List 分区策略的异步物化视图。
->
-> - 您可以基于使用 List 分区或表达式分区策略创建的表来创建 List 分区的物化视图。
-> - 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
-> - 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
+:::note
+自 v3.3.3 起，StarRocks 支持创建基于 List 分区策略的异步物化视图。
+- 您可以基于使用 List 分区或表达式分区策略创建的表来创建 List 分区的物化视图。
+- 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
+- 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
+:::
 
 **order_by_expression**（选填）
 
@@ -357,9 +356,9 @@ AS
   - **半结构化类型**：ARRAY、JSON、MAP（自 v3.1 起）、STRUCT（自 v3.1 起）
   - **其他类型**：BITMAP、HLL
 
-> **说明**
->
-> 自 v2.4.5 起支持 BITMAP、HLL 以及 PERCENTILE。
+:::note
+自 v2.4.5 起支持 BITMAP、HLL 以及 PERCENTILE。
+:::
 
 - 基于 StarRocks 外部数据目录（External Catalog）创建的异步物化视图支持以下数据类型：
 
