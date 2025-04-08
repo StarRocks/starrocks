@@ -1558,7 +1558,7 @@ CONF_mInt32(merge_commit_txn_state_poll_interval_ms, "2000");
 CONF_mInt32(merge_commit_txn_state_poll_max_fail_times, "2");
 
 // ignore union type tag in avro kafka routine load
-CONF_mBool(avro_ignore_union_type_tag, "false");
+CONF_mBool(avro_ignore_union_type_tag, "true");
 
 // default batch size for simdjson lib
 CONF_mInt32(json_parse_many_batch_size, "1000000");
