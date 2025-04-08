@@ -1586,7 +1586,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
     }
 
-<<<<<<< HEAD
     private static class MockFrontendServiceClient extends FrontendService.Client {
         private final FrontendService.Iface frontendService = new FrontendServiceImpl(null);
 
@@ -1710,7 +1709,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         fe.handleHbResponse(hbResponse, false);
     }
 
-=======
     @Test
     public void testTimeoutCheck() throws Exception {
         GlobalVariable.setQueryQueuePendingTimeoutSecond(1);
@@ -1730,5 +1728,4 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             manager.maybeWait(connectContext, coordinator);
         }
     }
->>>>>>> d1cbc8a48d ([BugFix] avoid checking query_queue_pending_timeout_second when disabled (#57719))
 }
