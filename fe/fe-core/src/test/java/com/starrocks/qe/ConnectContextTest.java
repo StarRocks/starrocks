@@ -124,11 +124,6 @@ public class ConnectContextTest {
         // Session variable
         Assert.assertNotNull(ctx.getSessionVariable());
 
-        // connect scheduler
-        Assert.assertNull(ctx.getConnectScheduler());
-        ctx.setConnectScheduler(connectScheduler);
-        Assert.assertNotNull(ctx.getConnectScheduler());
-
         // connection id
         ctx.setConnectionId(101);
         Assert.assertEquals(101, ctx.getConnectionId());

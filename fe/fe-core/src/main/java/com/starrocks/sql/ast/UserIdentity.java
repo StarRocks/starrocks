@@ -86,14 +86,14 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     }
 
     public UserIdentity(boolean ephemeral, String user, String host) {
-        this(user, host, false, NodePosition.ZERO, ephemeral);
+        this(user, host, false, ephemeral, NodePosition.ZERO);
     }
 
     public UserIdentity(String user, String host, boolean isDomain) {
-        this(user, host, isDomain, NodePosition.ZERO, false);
+        this(user, host, isDomain, false, NodePosition.ZERO);
     }
 
-    public UserIdentity(String user, String host, boolean isDomain, NodePosition pos, boolean ephemeral) {
+    public UserIdentity(String user, String host, boolean isDomain, boolean ephemeral, NodePosition pos) {
         this.pos = pos;
         this.user = user;
         this.host = Strings.emptyToNull(host);
@@ -110,7 +110,8 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     }
 
     public static UserIdentity fromThrift(TUserIdentity tUserIdent) {
-        return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
+        return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain,
+                tUserIdent.is_ephemeral, NodePosition.ZERO);
     }
 
     public static UserIdentity createEphemeralUserIdent(String user, String host) {
@@ -216,8 +217,6 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         }
         return sb.toString();
     }
-
-
 
     @Override
     public void gsonPostProcess() throws IOException {

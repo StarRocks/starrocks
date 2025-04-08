@@ -87,7 +87,6 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         context.setThreadLocalInfo();
                         LOG.info("Connection scheduled to worker thread {}. remote={}, connectionId={}",
                                 Thread.currentThread().getId(), remoteAddr, connectionId);
-                        context.setConnectScheduler(connectScheduler);
 
                         // authenticate check failed.
                         result = MysqlProto.negotiate(context);

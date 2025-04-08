@@ -41,6 +41,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.ArrayList;
@@ -83,8 +84,12 @@ public class SessionAction extends WebBaseAction {
     private void appendSessionInfo(StringBuilder buffer) {
         buffer.append("<h2>Session Info</h2>");
 
+        ConnectContext context = ConnectContext.get();
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(UserIdentity.ROOT);
+
         List<ConnectContext.ThreadInfo> threadInfos =
-                ExecuteEnv.getInstance().getScheduler().listConnection("root", null);
+                ExecuteEnv.getInstance().getScheduler().listConnection(context, null);
         List<List<String>> rowSet = Lists.newArrayList();
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
