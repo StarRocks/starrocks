@@ -27,6 +27,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -153,6 +154,12 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         // respect skew int
         if (context.getSessionVariable().isCboCteReuse() && agg.hasSkew() && !agg.getGroupingKeys().isEmpty()) {
             return true;
+        }
+
+        // if one tablet, prefer to use MultiFun, which only has one global agg without exchange
+        LogicalProperty inputLogicalProperty = input.getLogicalProperty();
+        if (inputLogicalProperty.oneTabletProperty().supportOneTabletOpt) {
+            return false;
         }
 
         if (context.getSessionVariable().isCboCteReuse() &&
