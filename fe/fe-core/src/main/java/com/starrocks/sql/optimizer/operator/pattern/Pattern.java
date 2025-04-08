@@ -32,6 +32,7 @@ public class Pattern {
             .add(OperatorType.LOGICAL_OLAP_SCAN)
             .add(OperatorType.LOGICAL_HIVE_SCAN)
             .add(OperatorType.LOGICAL_ICEBERG_SCAN)
+            .add(OperatorType.LOGICAL_DELTALAKE_SCAN)
             .add(OperatorType.LOGICAL_HUDI_SCAN)
             .add(OperatorType.LOGICAL_FILE_SCAN)
             .add(OperatorType.LOGICAL_SCHEMA_SCAN)
