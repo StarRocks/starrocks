@@ -47,6 +47,19 @@ int64_t PaimonFileStatus::GetModificationTime() const {
     return _last_mod_time;
 }
 
+PaimonBasicFileStatus::PaimonBasicFileStatus(const std::string& path, bool is_dir)
+        : path_(std::move(path)), is_dir_(is_dir) {}
+
+PaimonBasicFileStatus::~PaimonBasicFileStatus() = default;
+
+std::string PaimonBasicFileStatus::GetPath() const {
+    return path_;
+}
+
+bool PaimonBasicFileStatus::IsDir() const {
+    return is_dir_;
+}
+
 PaimonFileStatus::PaimonFileStatus(uint64_t len, int64_t last_modification_time, bool is_dir, std::string path)
         : _len(len), _last_mod_time(last_modification_time), _is_dir(is_dir), _path(std::move(path)) {}
 
@@ -166,14 +179,18 @@ paimon::Status PaimonFileSystem::Rename(const std::string& src, const std::strin
 
 paimon::Result<std::unique_ptr<paimon::FileStatus>> PaimonFileSystem::GetFileStatus(const std::string& path) const {
     VLOG(10) << "Get path status for " << path;
+    if (const auto st = _fs->path_exists(path); !st.ok()) {
+        if (st.is_not_found()) {
+            return paimon::Status::NotExist(fmt::format("Path {} is not exist.", path));
+        }
+        return paimon::Status::IOError(
+                fmt::format("Get file status for {} failed, reason: {}", path, st.detailed_message()));
+    }
     auto st = _fs->is_directory(path);
     if (!st.ok()) {
         return paimon::Status::IOError(
                 fmt::format("Get file status but failed to check whether path {} is directory or not, reason: {}", path,
                             st.status().detailed_message()));
-    }
-    if (st.value()) {
-        return paimon::Status::IOError("Cannot fetch directory's status.");
     }
     auto st1 = _fs->get_file_size(path);
     if (!st1.ok()) {
@@ -188,33 +205,80 @@ paimon::Result<std::unique_ptr<paimon::FileStatus>> PaimonFileSystem::GetFileSta
     return std::make_unique<PaimonFileStatus>(st1.value(), st2.value(), st.value(), path);
 }
 
-paimon::Status PaimonFileSystem::ListFileStatus(
-        const std::string& directory, std::vector<std::string>* files, std::vector<std::string>* subdirs,
-        std::vector<std::unique_ptr<paimon::FileStatus>>* file_status_list) const {
-    VLOG(10) << "List file status for " << directory;
-    if (files == nullptr || subdirs == nullptr || file_status_list == nullptr) {
-        return paimon::Status::IOError("files or subdirs or file_status_list are null.");
+paimon::Status PaimonFileSystem::ListDir(
+        const std::string& dir, std::vector<std::unique_ptr<paimon::BasicFileStatus>>* file_status_list) const {
+    if (dir.empty()) {
+        return paimon::Status::IOError("dir is empty.");
     }
-    auto status = _fs->iterate_dir2(directory, [this, &files, &subdirs, &file_status_list](DirEntry dir_entry) -> bool {
-        std::string filename(dir_entry.name.begin(), dir_entry.name.end());
+    VLOG(10) << "List Dir status for " << dir;
+    const auto st = _fs->is_directory(dir);
+    if (!st.ok()) {
+        return paimon::Status::IOError(
+                fmt::format("Failed to check {} is directory or not, reason: {}", dir, st.status().detailed_message()));
+    }
+    if (!st.value()) {
+        return paimon::Status::IOError(fmt::format("Cannot get status for {}, because it is not a directory.", dir));
+    }
+
+    if (file_status_list == nullptr) {
+        file_status_list = new std::vector<std::unique_ptr<paimon::BasicFileStatus>>();
+    }
+    const auto status = _fs->iterate_dir2(dir, [this, &file_status_list](const DirEntry& dir_entry) -> bool {
+        const std::string filename(dir_entry.name.begin(), dir_entry.name.end());
         if (filename.size() != dir_entry.name.size()) {
             // that means file name contains delimiter character which will cause a failure cast.
             return false;
         }
-        if (dir_entry.is_dir) {
-            subdirs->emplace_back(filename);
-        } else {
-            files->emplace_back(filename);
-            auto res = GetFileStatus(filename);
-            if (res.ok()) {
-                file_status_list->emplace_back(std::move(res).value());
-            }
-        }
+        file_status_list->emplace_back(
+                std::make_unique<PaimonBasicFileStatus>(filename, dir_entry.is_dir.value_or(false)));
         return true;
     });
     if (!status.ok()) {
         return paimon::Status::IOError(
-                fmt::format("Failed to list file status for {}, reason: {}", directory, status.detailed_message()));
+                fmt::format("Failed to get status for {}, reason: {}", dir, status.detailed_message()));
+    }
+    return paimon::Status::OK();
+}
+
+paimon::Status PaimonFileSystem::ListFileStatus(
+        const std::string& path, std::vector<std::unique_ptr<paimon::FileStatus>>* file_status_list) const {
+    if (path.empty()) {
+        return paimon::Status::IOError("path is empty.");
+    }
+    VLOG(10) << "List file status for " << path;
+    const auto st = _fs->is_directory(path);
+    if (!st.ok()) {
+        return paimon::Status::IOError(fmt::format("Failed to check {} is directory or not, reason: {}", path,
+                                                   st.status().detailed_message()));
+    }
+
+    if (file_status_list == nullptr) {
+        file_status_list = new std::vector<std::unique_ptr<paimon::FileStatus>>();
+    }
+    if (st.value()) {
+        // path is directory
+        const auto status = _fs->iterate_dir2(path, [this, &file_status_list](const DirEntry& dir_entry) -> bool {
+            const std::string filename(dir_entry.name.begin(), dir_entry.name.end());
+            if (filename.size() != dir_entry.name.size()) {
+                // that means file name contains delimiter character which will cause a failure cast.
+                return false;
+            }
+            if (auto res = GetFileStatus(filename); res.ok()) {
+                file_status_list->emplace_back(std::move(res).value());
+            }
+            return true;
+        });
+        if (!status.ok()) {
+            return paimon::Status::IOError(
+                    fmt::format("Failed to list file status for {}, reason: {}", path, status.detailed_message()));
+        }
+    } else {
+        auto res = GetFileStatus(path);
+        if (!res.ok() && !res.status().IsNotExist()) {
+            return paimon::Status::IOError(fmt::format("Failed to get file status for {}, reason: {}", path,
+                                                       res.status().detail()->ToString()));
+        }
+        file_status_list->emplace_back(std::move(res).value());
     }
     return paimon::Status::OK();
 }

@@ -57,6 +57,19 @@ private:
     std::unique_ptr<WritableFile> _file;
 };
 
+class PaimonBasicFileStatus : public paimon::BasicFileStatus {
+public:
+    PaimonBasicFileStatus(const std::string& path, bool is_dir);
+    ~PaimonBasicFileStatus() override;
+
+    bool IsDir() const override;
+    std::string GetPath() const override;
+
+private:
+    std::string path_;
+    bool is_dir_;
+};
+
 class PaimonFileStatus : public paimon::FileStatus {
 public:
     PaimonFileStatus(uint64_t len, int64_t last_modification_time, bool is_dir, std::string path);
@@ -84,8 +97,9 @@ public:
     paimon::Status Rename(const std::string& src, const std::string& dst) const override;
     paimon::Status Delete(const std::string& path, bool recursive) const override;
     paimon::Result<std::unique_ptr<paimon::FileStatus>> GetFileStatus(const std::string& path) const override;
-    paimon::Status ListFileStatus(const std::string& directory, std::vector<std::string>* files,
-                                  std::vector<std::string>* subdirs,
+    paimon::Status ListDir(const std::string& dir,
+                           std::vector<std::unique_ptr<paimon::BasicFileStatus>>* file_status_list) const override;
+    paimon::Status ListFileStatus(const std::string& path,
                                   std::vector<std::unique_ptr<paimon::FileStatus>>* file_status_list) const override;
     paimon::Result<bool> Exists(const std::string& path) const override;
 
