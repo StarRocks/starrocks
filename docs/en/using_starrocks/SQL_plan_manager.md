@@ -51,7 +51,7 @@ CREATE [GLOBAL] BASELINE [ON <BindSQL>] USING <PlanSQL>
 
 - `GLOBAL`: (Optional) Creates a global-level Baseline.
 - `BindSQL`: (Optional) The specific query to be bound to the Baseline (execution plan) query. If this parameter is not specified, the Baseline query is bound to itself and use its own query plan.
-- `PlanSQL`: The query used to define the execution.
+- `PlanSQL`: The query used to define the execution plan.
 
 **Examples**:
 
