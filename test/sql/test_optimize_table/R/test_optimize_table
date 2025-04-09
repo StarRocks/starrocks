@@ -81,7 +81,6 @@ alter table t distributed by random buckets 10;
 E: (5064, 'Getting analyzing error. Detail message: Random distribution table already supports automatic scaling and does not require optimization.')
 -- !result
 
-<<<<<<< HEAD
 
 
 
@@ -300,8 +299,7 @@ select * from t;
 3	2020-08-01
 2	2020-07-01
 -- !result
-=======
->>>>>>> 056a4fe487 ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (backport #57005) (#57583))
+
 -- name: test_change_partial_partition_distribution
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
