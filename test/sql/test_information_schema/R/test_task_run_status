@@ -48,6 +48,9 @@ SELECT count(1) FROM information_schema.task_runs WHERE task_name = '${task_name
 -- result:
 2
 -- !result
+admin set frontend config('enable_task_run_fe_evaluation'='false');
+-- result:
+-- !result
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
 -- result:
 cb42f73d-0692-11ef-b551-926f0eb983e6

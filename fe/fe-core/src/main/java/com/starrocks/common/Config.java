@@ -406,6 +406,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable the task history archive feature")
     public static boolean enable_task_history_archive = true;
 
+    @ConfField(mutable = true)
+    public static boolean enable_task_run_fe_evaluation = true;
+
     /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.

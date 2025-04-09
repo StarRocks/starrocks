@@ -477,6 +477,12 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+// Pagination cursor for request segmentation
+struct TRequestPagination {
+    1: optional i64 offset
+    2: optional i64 limit
+}
+
 // Arguments to showTasks/ShowTaskRuns
 struct TGetTasksParams {
     1: optional string db
@@ -487,6 +493,8 @@ struct TGetTasksParams {
     4: optional string query_id
     // task's state
     5: optional string state
+
+    6: optional TRequestPagination pagination
 }
 
 struct TTaskInfo {
