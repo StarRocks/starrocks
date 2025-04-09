@@ -150,7 +150,7 @@ public class ExecPlan {
     public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
     }
-    
+
     public Map<Integer, PlanFragment> getSplitProduceFragments() {
         return splitProduceFragments;
     }
@@ -174,6 +174,18 @@ public class ExecPlan {
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
         optExpression.getOp().setPlanNodeId(id);
         optExpressions.put(id, optExpression);
+    }
+
+    public static void assignOperatorIds(OptExpression root) {
+        IdGenerator<PlanNodeId> operatorIdGenerator = PlanNodeId.createGenerator();
+        assignOperatorIds(root, operatorIdGenerator);
+    }
+
+    private static void assignOperatorIds(OptExpression root, IdGenerator<PlanNodeId> operatorIdGenerator) {
+        root.getOp().setOperatorId(operatorIdGenerator.getNextId().asInt());
+        for (OptExpression child : root.getInputs()) {
+            assignOperatorIds(child, operatorIdGenerator);
+        }
     }
 
     public OptExpression getOptExpression(int planNodeId) {
