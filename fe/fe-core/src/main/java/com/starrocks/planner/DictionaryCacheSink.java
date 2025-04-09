@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
@@ -131,9 +132,9 @@ public class DictionaryCacheSink extends DataSink {
     private TOlapTableSchemaParam buildTSchema() {
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(),
                                         dictionary.getCatalogName(), dictionary.getDbName());
-        String queryableObject = dictionary.getQueryableObject();
+        TableName queryableObject = dictionary.getQueryableObject();
         Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(),
-                                        dictionary.getCatalogName(), dictionary.getDbName(), queryableObject);
+                                        queryableObject.getCatalog(), queryableObject.getDb(), queryableObject.getTbl());
         Preconditions.checkNotNull(tbl);
 
         TupleDescriptor tupleDescriptor = new TupleDescriptor(TupleId.createGenerator().getNextId());

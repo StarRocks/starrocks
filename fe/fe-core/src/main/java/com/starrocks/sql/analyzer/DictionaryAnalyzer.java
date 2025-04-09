@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -47,14 +48,16 @@ public class DictionaryAnalyzer {
                 throw new SemanticException("invalid catalog");
             }
 
-            String queryableObject = statement.getQueryableObject();
+            TableName queryableObject = statement.getQueryableObject();
+            queryableObject.normalization(context);
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, context.getDatabase());
             if (db == null) {
                 throw new SemanticException("USE a Database before CREATE DICTIONARY");
             }
             
             Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                                getTable(context, catalogName, context.getDatabase(), queryableObject);
+                                getTable(context, queryableObject.getCatalog(), queryableObject.getDb(),
+                                        queryableObject.getTbl());
             if (tbl == null) {
                 throw new SemanticException(queryableObject + " does not exist");
             }
