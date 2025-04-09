@@ -2030,8 +2030,7 @@ public class DatabaseTransactionMgr {
         updateTransactionMetrics(transactionState);
     }
 
-    public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds)
-            throws StarRocksException {
+    public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
         Database db = globalStateMgr.getLocalMetastore().getDb(stateBatch.getDbId());
         if (db == null) {
             stateBatch.writeLock();
