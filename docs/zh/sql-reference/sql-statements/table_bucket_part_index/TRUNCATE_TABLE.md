@@ -11,7 +11,7 @@ displayed_sidebar: docs
 ## 语法
 
 ```sql
-TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)]
+TRUNCATE TABLE [db.]tbl[ PARTITION(PartitionName1, PartitionName2, ...)]
 ```
 
 说明：
@@ -30,8 +30,8 @@ TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)]
     TRUNCATE TABLE example_db.tbl;
     ```
 
-2. 清空表 tbl 的 p1 和 p2 分区。
+2. 清空表 tbl 的 PartitionName1 和 PartitionName2 分区。
 
     ```sql
-    TRUNCATE TABLE tbl PARTITION(p1, p2);
+    TRUNCATE TABLE tbl PARTITION(PartitionName1, PartitionName2);
     ```
