@@ -71,7 +71,8 @@ public class JoinReorderDrivingTable extends JoinOrder {
     @Override
     protected void enumerate() {
         List<GroupInfo> atoms = joinLevels.get(1).groups;
-        if (atoms.size() > context.getSessionVariable().getJoinReorderDrivingTableMaxElement()) {
+        if (atoms.size() > context.getSessionVariable().getJoinReorderDrivingTableMaxElement()
+                || atoms.size() <= 2) {
             return;
         }
 
