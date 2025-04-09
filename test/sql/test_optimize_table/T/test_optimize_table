@@ -129,19 +129,6 @@ show create table `t#t`;
 alter table `t#t` distributed by hash(k) buckets 20;
 function: wait_optimize_table_finish()
 show create table `t#t`;
-<<<<<<< HEAD
-=======
-admin set frontend config ('enable_online_optimize_table'='false');
-alter table `t#t` distributed by hash(k) buckets 30;
-function: wait_optimize_table_finish()
-show create table `t#t`;
-admin set frontend config ('enable_online_optimize_table'='true');
-
--- name: test_cancel_optimize
-create table t(k int) distributed by hash(k) buckets 10;
-alter table t distributed by hash(k);
-cancel alter table optimize from t;
-function: wait_optimize_table_finish(expect_status="CANCELLED")
 
 -- name: test_optimize_duplicate_partitions
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -171,4 +158,3 @@ alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202006,p2020
 function: wait_optimize_table_finish()
 show temporary partitions from duplicate_table_with_null_partition;
 show partitions from duplicate_table_with_null_partition;
->>>>>>> 056a4fe487 ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (backport #57005) (#57583))
