@@ -210,6 +210,9 @@ public class TaskRunHistoryTable {
             predicates.add(" task_state = " + Strings.quote(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
+        if (params.isSetPagination() && params.getPagination().getLimit() > 0) {
+            sql += " LIMIT " + params.getPagination().getLimit();
+        }
 
         List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);

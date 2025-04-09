@@ -26,6 +26,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
@@ -99,7 +100,7 @@ public class TaskRunsSystemTable extends SystemTable {
 
     @Override
     public boolean supportFeEvaluation() {
-        return true;
+        return Config.enable_task_run_fe_evaluation;
     }
 
     @Override
