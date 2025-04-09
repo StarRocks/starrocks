@@ -16,38 +16,6 @@
         <odps.version>0.48.7-public</odps.version>
     </properties>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-api</artifactId>
-                <version>1.7.36</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
-                <version>2.15.2</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>arrow-vector</artifactId>
-                <version>18.1.0</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>arrow-memory-netty</artifactId>
-                <version>18.1.0</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>arrow-compression</artifactId>
-                <version>18.1.0</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
     <dependencies>
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -120,19 +88,16 @@
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-vector</artifactId>
-            <version>18.1.0</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-memory-netty</artifactId>
-            <version>18.1.0</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-compression</artifactId>
-            <version>18.1.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.commons</groupId>
