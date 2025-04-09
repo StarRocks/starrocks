@@ -543,6 +543,8 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## 类型映射关系
 
+当前只支持了非嵌套的 Array 和 Map 的输入类型
+
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
 | BOOLEAN        | java.lang.Boolean |
@@ -553,6 +555,8 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 | FLOAT          | java.lang.Float   |
 | DOUBLE         | java.lang.Double  |
 | STRING/VARCHAR | java.lang.String  |
+| ARRAY          | java.util.List    |
+| Map            | java.util.Map     |
 
 ## 参数配置
 
