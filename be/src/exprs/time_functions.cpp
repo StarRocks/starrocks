@@ -1715,6 +1715,59 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
 }
 
 template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_timezone(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 3);
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
+    ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> timezone_column(columns[2]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row) || format_column.is_null(row) || timezone_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        auto format = format_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP || format.empty()) {
+            result.append_null();
+            continue;
+        }
+
+        std::string timezone = timezone_column.value(row).to_string();
+        cctz::time_zone timezone_obj;
+        TimezoneUtils::find_cctz_time_zone(timezone, timezone_obj);
+
+        DateTimeValue dtv;
+        if (!dtv.from_unixtime(date, timezone_obj)) {
+            result.append_null();
+            continue;
+        }
+        // use lambda to avoid adding method for TimeFunctions.
+        if (format.size > DEFAULT_DATE_FORMAT_LIMIT) {
+            result.append_null();
+            continue;
+        }
+
+        std::string new_fmt = convert_format(format);
+
+        char buf[128];
+        if (!dtv.to_format_string((const char*)new_fmt.c_str(), new_fmt.size(), buf)) {
+            result.append_null();
+            continue;
+        }
+        result.append(Slice(buf));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format(FunctionContext* context,
                                                             const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
@@ -1724,6 +1777,11 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format(FunctionContext* con
         return _t_from_unix_with_format_const<TIMESTAMP_TYPE>(format_content, context, columns);
     }
     return _t_from_unix_with_format_general<TIMESTAMP_TYPE>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_timezone(FunctionContext* context,
+                                                                              const starrocks::Columns& columns) {
+    return _t_from_unix_with_format_timezone<TYPE_BIGINT>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_64(FunctionContext* context,
