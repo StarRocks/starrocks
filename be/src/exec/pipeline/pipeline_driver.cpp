@@ -330,6 +330,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         (maybe_chunk.value()->num_rows() > 0 ||
                          (maybe_chunk.value()->owner_info().is_last_chunk() && !next_op->ignore_empty_eos()))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
+                        size_t chunk_bytes = maybe_chunk.value()->bytes_usage();
                         if (UNLIKELY(row_num > runtime_state->chunk_size())) {
                             return Status::InternalError(
                                     fmt::format("Intermediate chunk size must not be greater than {}, actually {} "
@@ -352,6 +353,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         if (row_num > 0L) {
                             COUNTER_UPDATE(curr_op->_pull_row_num_counter, row_num);
                             COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
+                            COUNTER_UPDATE(curr_op->_pull_chunk_bytes_counter, chunk_bytes);
                             COUNTER_UPDATE(next_op->_push_chunk_num_counter, 1);
                             COUNTER_UPDATE(next_op->_push_row_num_counter, row_num);
                         }
