@@ -15,7 +15,6 @@
 #pragma once
 
 #include "exec/schema_scanner.h"
-#include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 
@@ -25,9 +24,6 @@ public:
     ~SchemaDummyScanner() override;
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
-
-private:
-    static SchemaScanner::ColumnDesc _s_dummy_columns[];
 };
 
 } // namespace starrocks
