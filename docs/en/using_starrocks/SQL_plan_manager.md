@@ -131,7 +131,7 @@ After binding the execution plan, StarRocks will automatically rewrite the corre
 
 Check the original SQL and execution plan:
 
-```SQL
+```Plain
 mysql> EXPLAIN SELECT t1.v2, t2.v3 FROM t1, t2 WHERE t1.v2 = t2.v2 AND t1.v1 > 20;
 +-----------------------------------------+
 | Explain String                          |
@@ -194,7 +194,7 @@ Time: 0.013s
 
 Enable SQL Plan Manager query rewrite and check if the original query is rewritten by the Baseline:
 
-```SQL
+```Plain
 mysql> show session variables like "%enable_sql_plan_manager_rewrite%";
 +---------------------------------+-------+
 | Variable_name                   | Value |
@@ -260,7 +260,7 @@ Compared to automatic binding, manual binding offers greater flexibility but req
 #### Baseline Creation Process
 
 1. Execute `CREATE BASELINE` to obtain the `BindSQL` to be bound and the execution plan query `PlanSQL`.
-2. Parameterize `BindSQL`: Replace literal values or expressions with SQL Plan Manager functions. For example, replace `id > 200` with `id > _spm_const_var(0)`, where parameter `0` is a placeholder ID used to confirm the position of the expression in `BindSQL` and `PlanSQL`. For more SQL Plan Manager functions, see [SQL Plan Manager Functions](sql-plan-manager-functions).
+2. Parameterize `BindSQL`: Replace literal values or expressions with SQL Plan Manager functions. For example, replace `id > 200` with `id > _spm_const_var(0)`, where parameter `0` is a placeholder ID used to confirm the position of the expression in `BindSQL` and `PlanSQL`. For more SQL Plan Manager functions, see [SQL Plan Manager Functions](#sql-plan-manager-functions).
 3. Bind placeholders in `PlanSQL`: Locate the position of placeholders in `PlanSQL` and replace them with the original expressions.
 4. Use the optimizer to optimize `PlanSQL` and obtain the query plan.
 5. Serialize the query plan into SQL with Hints.
@@ -268,7 +268,7 @@ Compared to automatic binding, manual binding offers greater flexibility but req
 
 #### Query Rewrite Process
 
-The query rewrite logic is similar to the `PREPRARE` statement.
+The query rewrite logic is similar to the `PREPARE` statement.
 1. Execute the query.
 2. Normalize the query into an SQL fingerprint.
 3. Use the SQL fingerprint to find the Baseline (match against the `BindSQL` of the Baseline).
@@ -360,7 +360,7 @@ group by i_item_id;
 
 Check if the query is rewritten by the Baseline:
 
-```SQL
+```Plain
 mysql> show baseline\G;
 ***************************[ 1. row ]***************************
 Id            | 436115
