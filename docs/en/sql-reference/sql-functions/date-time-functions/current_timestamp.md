@@ -19,7 +19,7 @@ DATETIME CURRENT_TIMESTAMP(INT p)
 
 ## Parameters
 
-`p`: optional, the specified precision, that is, the number of digits to retain after seconds. It must be an INT value within the range of [1,6]. `select now(0)` is equivalent to `select now()`.
+`p`: optional, the specified precision, that is, the number of digits to retain after seconds. It must be an INT value within the range of [1,6]. `select current_timestamp(0)` is equivalent to `select current_timestamp()`.
 
 ## Return value
 
