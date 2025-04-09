@@ -81,7 +81,12 @@ public class InnerToSemiRule extends TransformationRule {
                                     joinOperator.getOnPredicate());
                         }
 
+                        if (opt.getOp().getProjection() != null) {
+                            joinOperator.setProjection(opt.getOp().getProjection());
+                        }
+
                         opt = OptExpression.create(joinOperator, opt.getInputs());
+
                         break;
                     }
                 }

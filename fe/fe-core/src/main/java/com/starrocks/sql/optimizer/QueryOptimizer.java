@@ -359,6 +359,7 @@ public class QueryOptimizer extends Optimizer {
             deriveLogicalProperty(tree);
             scheduler.rewriteOnce(tree, rootTaskContext, new InnerToSemiRule());
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            tree.clearStatsAndInitOutputInfo();
             deriveLogicalProperty(tree);
         }
     }
