@@ -21,6 +21,7 @@ SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 SELECT count(1) FROM information_schema.task_runs WHERE task_name = '${task_name}';
 
+admin set frontend config('enable_task_run_fe_evaluation'='false');
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
 SELECT count(1) FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
 SELECT count(1) FROM information_schema.task_runs WHERE query_id= '${query_id}';
