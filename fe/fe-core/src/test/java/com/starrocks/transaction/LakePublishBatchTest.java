@@ -393,4 +393,61 @@ public class LakePublishBatchTest {
         Assert.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
         Assert.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
     }
+
+    @Test
+    public void testVersionInconsistentInBatch() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId8 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label8",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter8 = globalTransactionMgr.commitTransaction(db.getId(), transactionId8, transTablets1,
+                Lists.newArrayList(), null);
+
+        long transactionId9 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label9",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter9 = globalTransactionMgr.commitTransaction(db.getId(), transactionId9, transTablets1,
+                Lists.newArrayList(), null);
+
+        long transactionId10 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label10",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter10 = globalTransactionMgr.commitTransaction(db.getId(), transactionId10, transTablets1,
+                Lists.newArrayList(), null);
+
+        DatabaseTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                getDatabaseTransactionMgr(db.getId());
+
+        TransactionState state8 = mgr.getTransactionState(transactionId8);
+        TransactionState state9 = mgr.getTransactionState(transactionId9);
+        TransactionState state10 = mgr.getTransactionState(transactionId10);
+
+        // mock the version in batch is not consistent with visible version
+        TransactionStateBatch transactionStateBatch = new TransactionStateBatch(List.of(state9, state10));
+        mgr.finishTransactionBatch(transactionStateBatch, null);
+        Assert.assertFalse(waiter8.await(10, TimeUnit.SECONDS));
+        Assert.assertFalse(waiter9.await(10, TimeUnit.SECONDS));
+
+        // mock the version is not consistent in one batch
+        transactionStateBatch = new TransactionStateBatch(List.of(state8, state10));
+        mgr.finishTransactionBatch(transactionStateBatch, null);
+        Assert.assertFalse(waiter8.await(10, TimeUnit.SECONDS));
+        Assert.assertFalse(waiter9.await(10, TimeUnit.SECONDS));
+        Assert.assertFalse(waiter10.await(10, TimeUnit.SECONDS));
+    }
 }
