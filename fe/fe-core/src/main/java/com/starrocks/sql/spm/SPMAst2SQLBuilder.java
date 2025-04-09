@@ -78,7 +78,7 @@ public class SPMAst2SQLBuilder {
         hash |= tables.size();
         hash <<= 14;
         long tableHash = tables.stream().sorted().reduce(1L, (a, b) -> 31 * a + b);
-        tableHash &= (1L << 15) - 1;
+        tableHash &= (1L << 14) - 1;
         hash |= tableHash;
         return hash;
     }
