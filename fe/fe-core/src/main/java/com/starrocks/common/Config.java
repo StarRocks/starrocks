@@ -3542,6 +3542,72 @@ public class Config extends ConfigBase {
     public static String[] oidc_required_audience = {};
 
     /**
+     * The authorization URL. The URL a user’s browser will be redirected to in order to begin the OAuth2 authorization process
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_auth_server_url = "";
+
+    /**
+     * The URL of the endpoint on the authorization server which StarRocks uses to obtain an access token
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_token_server_url = "";
+
+    /**
+     * The public identifier of the StarRocks client.
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_client_id = "";
+
+    /**
+     * The secret used to authorize StarRocks client with the authorization server.
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_client_secret = "";
+
+    /**
+     * The URL to redirect to after OAuth2 authentication is successful.
+     * OAuth2 will send the authorization_code to this URL.
+     * Normally it should be configured as http://starrocks-fe-url:fe-http-port/api/oauth2
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_redirect_url = "";
+
+    /**
+     * Maximum duration of the authorization connection wait time. Default is 5m.
+     */
+    @ConfField(mutable = false)
+    public static Long oauth2_connect_wait_timeout = 300L;
+
+    /**
+     * The URL to a JWKS service or a local file in the conf dir
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_jwks_url = "";
+
+    /**
+     * String to identify the field in the JWT that identifies the subject of the JWT.
+     * The default value is sub.
+     * The value of this field must be the same as the user specified when logging into StarRocks.
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_principal_field = "sub";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
+     * The iss field in the JWT identifies the principal that issued the JWT.
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_required_issuer = "";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
+     * The aud field in the JWT identifies the recipients that the JWT is intended for.
+     */
+    @ConfField(mutable = false)
+    public static String oauth2_required_audience = "";
+
+    /**
      * The name of the group provider. If there are multiple, separate them with commas.
      */
     @ConfField(mutable = true)

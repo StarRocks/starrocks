@@ -17,6 +17,8 @@ package com.starrocks.mysql.privilege;
 import com.google.re2j.Pattern;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.LDAPAuthProviderForNative;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
+import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.Config;
@@ -39,7 +41,8 @@ public class AuthPlugin {
     public enum Server {
         MYSQL_NATIVE_PASSWORD,
         AUTHENTICATION_LDAP_SIMPLE,
-        AUTHENTICATION_OPENID_CONNECT;
+        AUTHENTICATION_OPENID_CONNECT,
+        AUTHENTICATION_OAUTH2;
 
         public AuthenticationProvider getProvider(String authString) {
             AuthPlugin.Server authPlugin = this;
@@ -53,19 +56,57 @@ public class AuthPlugin {
                 }
 
                 case AUTHENTICATION_OPENID_CONNECT -> {
-                    if (authString == null) {
-                        authString = "{}";
-                    }
-                    JSONObject authStringJSON = new JSONObject(authString);
-                    String jwksUrl = authStringJSON.optString("jwks_url", Config.oidc_jwks_url);
-                    String principalFiled = authStringJSON.optString("principal_field", Config.oidc_principal_field);
-                    String requiredIssuer = authStringJSON.optString("required_issuer",
+                    JSONObject authStringJSON = new JSONObject(authString == null ? "{}" : authString);
+
+                    String jwksUrl = authStringJSON.optString(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL,
+                            Config.oidc_jwks_url);
+                    String principalFiled = authStringJSON.optString(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD,
+                            Config.oidc_principal_field);
+                    String requiredIssuer = authStringJSON.optString(OpenIdConnectAuthenticationProvider.OIDC_REQUIRED_ISSUER,
                             String.join(",", Config.oidc_required_issuer));
-                    String requiredAudience = authStringJSON.optString("required_audience",
+                    String requiredAudience = authStringJSON.optString(OpenIdConnectAuthenticationProvider.OIDC_REQUIRED_AUDIENCE,
                             String.join(",", Config.oidc_required_audience));
 
                     return new OpenIdConnectAuthenticationProvider(jwksUrl, principalFiled,
                             COMMA_SPLIT.split(requiredIssuer.trim()), COMMA_SPLIT.split(requiredAudience.trim()));
+                }
+
+                case AUTHENTICATION_OAUTH2 -> {
+                    JSONObject authStringJSON = new JSONObject(authString == null ? "{}" : authString);
+
+                    String oauth2AuthServerUrl = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_AUTH_SERVER_URL,
+                            Config.oauth2_auth_server_url);
+                    String oauth2TokenServerUrl = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_TOKEN_SERVER_URL,
+                            Config.oauth2_token_server_url);
+                    String oauth2RedirectUrl = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_REDIRECT_URL,
+                            Config.oauth2_redirect_url);
+                    String oauth2ClientId = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_CLIENT_ID,
+                            Config.oauth2_client_id);
+                    String oauth2ClientSecret = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_CLIENT_SECRET,
+                            Config.oauth2_client_secret);
+                    String oidcJwksUrl = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_JWKS_URL,
+                            Config.oauth2_jwks_url);
+                    String oidcPrincipalField = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_PRINCIPAL_FIELD,
+                            Config.oauth2_principal_field);
+                    String oidcRequiredIssuer = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_REQUIRED_ISSUER,
+                            Config.oauth2_required_issuer);
+                    String oidcRequiredAudience = authStringJSON.optString(OAuth2AuthenticationProvider.OAUTH2_REQUIRED_AUDIENCE,
+                            Config.oauth2_required_audience);
+                    Long oauthConnectWaitTimeout = authStringJSON.optLong(
+                            OAuth2AuthenticationProvider.OAUTH2_CONNECT_WAIT_TIMEOUT,
+                            Config.oauth2_connect_wait_timeout);
+
+                    return new OAuth2AuthenticationProvider(new OAuth2Context(
+                            oauth2AuthServerUrl,
+                            oauth2TokenServerUrl,
+                            oauth2RedirectUrl,
+                            oauth2ClientId,
+                            oauth2ClientSecret,
+                            oidcJwksUrl,
+                            oidcPrincipalField,
+                            COMMA_SPLIT.split(oidcRequiredIssuer.trim()),
+                            COMMA_SPLIT.split(oidcRequiredAudience.trim()),
+                            oauthConnectWaitTimeout));
                 }
             }
 
@@ -76,7 +117,8 @@ public class AuthPlugin {
     public enum Client {
         MYSQL_NATIVE_PASSWORD,
         MYSQL_CLEAR_PASSWORD,
-        AUTHENTICATION_OPENID_CONNECT_CLIENT;
+        AUTHENTICATION_OPENID_CONNECT_CLIENT,
+        AUTHENTICATION_OAUTH2_CLIENT;
 
         @Override
         public String toString() {
@@ -92,7 +134,17 @@ public class AuthPlugin {
             return Client.MYSQL_CLEAR_PASSWORD.toString();
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_OPENID_CONNECT.toString())) {
             return Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString();
+        } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_OAUTH2.toString())) {
+            return Client.AUTHENTICATION_OAUTH2_CLIENT.toString();
         }
         return null;
+    }
+
+    public static boolean isStarRocksCustomAuthPlugin(String pluginName) {
+        if (AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString().equalsIgnoreCase(pluginName)) {
+            return true;
+        } else {
+            return false;
+        }
     }
 }

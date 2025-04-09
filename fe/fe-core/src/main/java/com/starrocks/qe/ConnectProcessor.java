@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -93,6 +94,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -343,6 +345,20 @@ public class ConnectProcessor {
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
+
+                if (ctx.getOAuth2Context() != null && ctx.getAuthToken() == null) {
+                    OAuth2Context oAuth2Context = ctx.getOAuth2Context();
+                    String authUrl = oAuth2Context.authServerUrl() +
+                            "?response_type=code" +
+                            "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
+                            "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
+                            "?connectionId=" + ctx.getConnectionId() +
+                            "&scope=openid";
+
+                    ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                    return;
+                }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);
