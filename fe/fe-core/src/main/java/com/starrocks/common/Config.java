@@ -1948,6 +1948,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_planner_scalar_rewrite_num = 100000;
 
+    @ConfField(mutable = true, comment = "The max depth that scalar operator optimization can be applied")
+    public static int max_scalar_operator_optimize_depth = 256;
+
     /**
      * statistic collect flag
      */
