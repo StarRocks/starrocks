@@ -106,3 +106,9 @@ FROM table1 t1
 LEFT JOIN[broadcast] table2 t2
 ON t1.id = t2.id
 AND array_length(array_map(x -> x + array_length(t2.arr_str), t1.arr_largeint)) >= 2;
+
+WITH `CTE` AS (
+    SELECT TRUE AS bool_1, TRUE AS bool_2, TRUE AS bool_3, ["a"] AS arr
+    UNION ALL
+    SELECT TRUE AS bool_1, TRUE AS bool_2, TRUE AS bool_3, ["a"] AS arr
+) SELECT ARRAY_MAP((arg)->`bool_1` AND `bool_2` AND `bool_3`, arr), ARRAY_MAP((arg)->`bool_1` AND `bool_3` AND `bool_2`, arr) FROM `CTE`;
