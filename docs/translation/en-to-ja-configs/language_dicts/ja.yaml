@@ -1,7 +1,9 @@
 FEs: FE
 BEs: BE
-distributed architecture: 分散アーキテクチャ
-distributed-architecture: 分散アーキテクチャ
+activerecord: &my_value 'test'
+activemodel: *my_value
+distributed architecture: &da 分散アーキテクチャ
+distributed-architecture: *da
 Data loading: データロード
 Data unloading: データアンロード
 load: ロード
