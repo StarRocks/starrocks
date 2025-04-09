@@ -28,7 +28,12 @@ Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPoo
     RETURN_IF_ERROR(cancel_func());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     _context->progress.update(100);
-    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    if (_context->no_write_txnlog) {
+        // return txn_log to caller later
+        _context->txn_log = txn_log;
+    } else {
+        RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    }
     VLOG(2) << "CloudNative Index compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
             << ", statistics: " << _context->stats->to_json_stats();
     return Status::OK();
