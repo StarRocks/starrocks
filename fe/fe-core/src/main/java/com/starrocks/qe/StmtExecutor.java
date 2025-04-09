@@ -705,8 +705,7 @@ public class StmtExecutor {
                                 }
 
                                 if (context instanceof ArrowFlightSqlConnectContext) {
-                                    isAsync = true;
-                                    tryProcessProfileAsync(execPlan, i);
+                                    isAsync = tryProcessProfileAsync(execPlan, i);
                                 } else if (context.isProfileEnabled()) {
                                     isAsync = tryProcessProfileAsync(execPlan, i);
                                     if (parsedStmt.isExplain() &&
@@ -1023,7 +1022,19 @@ public class StmtExecutor {
         }
     }
 
+    /**
+     * Try to process profile async without exception.
+     */
     private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+        try {
+            return processProfileAsync(plan, retryIndex);
+        } catch (Exception e) {
+            LOG.warn("process profile async failed", e);
+            return false;
+        }
+    }
+
+    private boolean processProfileAsync(ExecPlan plan, int retryIndex) {
         if (coord == null) {
             return false;
         }
@@ -1614,7 +1625,14 @@ public class StmtExecutor {
                                 analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(),
                                 analyzeType,
+<<<<<<< HEAD
                                 StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+=======
+                                StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties(),
+                                analyzeTypeDesc.getStatsTypes(),
+                                analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null),
+>>>>>>> 89d347f645 ([BugFix] Ensure async profile not to throw exception to void affecting query's final result (#57616))
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
                         false);
@@ -2257,22 +2275,36 @@ public class StmtExecutor {
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
-            LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
+            LOG.warn("DML statement({}) process failed.", originStmt.originStmt, t);
             throw t;
         } finally {
             boolean isAsync = false;
+<<<<<<< HEAD
             if (context.isProfileEnabled()) {
                 isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                     handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
+=======
+            try {
+                if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
+                    isAsync = tryProcessProfileAsync(execPlan, 0);
+                    if (parsedStmt.isExplain() &&
+                            StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                        handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
+                                profile, null, context.getSessionVariable().getColorExplainOutput()));
+                    }
                 }
-            }
-            if (isAsync) {
-                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                        context.getSessionVariable().getProfileTimeout() * 1000L);
-            } else {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            } catch (Exception e) {
+                LOG.warn("Failed to process profile async", e);
+            } finally {
+                if (isAsync) {
+                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                } else {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+>>>>>>> 89d347f645 ([BugFix] Ensure async profile not to throw exception to void affecting query's final result (#57616))
+                }
             }
         }
     }
@@ -2885,14 +2917,18 @@ public class StmtExecutor {
             }
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
-            if (context.isProfileEnabled()) {
-                tryProcessProfileAsync(plan, 0);
-                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                        context.getSessionVariable().getProfileTimeout() * 1000L);
-            } else {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            try {
+                if (context.isProfileEnabled()) {
+                    tryProcessProfileAsync(plan, 0);
+                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                } else {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
+                recordExecStatsIntoContext();
+            } catch (Exception e) {
+                LOG.warn("Failed to unregister query", e);
             }
-            recordExecStatsIntoContext();
         }
     }
 
