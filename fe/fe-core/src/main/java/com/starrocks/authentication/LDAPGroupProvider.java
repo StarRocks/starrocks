@@ -15,6 +15,8 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
@@ -28,6 +30,11 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.naming.Context;
@@ -75,19 +82,55 @@ public class LDAPGroupProvider extends GroupProvider {
      */
     public static final String LDAP_USER_SEARCH_ATTR = "ldap_user_search_attr";
 
+    /**
+     * Control the refresh frequency of ldap group
+     */
+    public static final String LDAP_CACHE_REFRESH_INTERVAL = "ldap_cache_refresh_interval";
+
     public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(Arrays.asList(
             LDAP_LDAP_CONN_URL,
             LDAP_PROP_ROOT_DN_KEY,
             LDAP_PROP_ROOT_PWD_KEY,
             LDAP_PROP_BASE_DN_KEY));
 
+    /**
+     * Used to refresh the ldap group cache. All ldap group providers share the same thread pool.
+     */
+    private static final ScheduledExecutorService SCHEDULER =
+            Executors.newScheduledThreadPool(Config.group_provider_refresh_thread_num);
+
+    /**
+     * Cache user-to-group mapping
+     */
+    private Map<String, Set<String>> userToGroupCache = new ConcurrentHashMap<>();
+
+    /**
+     * The current ldap group provider is registered to the scheduling task in the thread pool.
+     * which is mainly used to cancel the periodic scheduling when the group provider is destroyed.
+     */
+    private ScheduledFuture<?> scheduleTask;
+
     public LDAPGroupProvider(String name, Map<String, String> properties) {
         super(name, properties);
     }
 
     @Override
+    public void init() throws DdlException {
+        scheduleTask = SCHEDULER.scheduleAtFixedRate(this::refreshGroups, 0, getLdapCacheRefreshInterval(), TimeUnit.SECONDS);
+    }
+
+    @Override
+    public void destory() {
+        scheduleTask.cancel(true);
+    }
+
+    @Override
     public Set<String> getGroup(UserIdentity userIdentity) {
-        Set<String> groups = new HashSet<>();
+        return userToGroupCache.getOrDefault(userIdentity.getUser(), Set.of());
+    }
+
+    public void refreshGroups() {
+        Map<String, Set<String>> groups = new ConcurrentHashMap<>();
         try {
             DirContext ctx = createDirContextOnConnection(getLdapBindRootDn(), getLdapBindRootPwd());
             UserNameExtractInterface userNameExtractInterface = getUserNameExtractInterface();
@@ -95,17 +138,20 @@ public class LDAPGroupProvider extends GroupProvider {
             if (getLdapGroupFilter() != null) {
                 SearchControls searchControls = new SearchControls();
                 searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-                NamingEnumeration<SearchResult> results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
+                NamingEnumeration<SearchResult> results =
+                        ctx.search(getLdapBaseDn(), getLdapGroupFilter(),
+                                searchControls);
                 while (results.hasMore()) {
                     SearchResult result = results.next();
                     Attributes attributes = result.getAttributes();
-                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface, userIdentity);
+                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
                 }
             } else if (getLdapGroupDn() != null) {
                 for (String ldapGroupDN : getLdapGroupDn()) {
                     Attributes attributes = ctx.getAttributes(ldapGroupDN,
-                            new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
-                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface, userIdentity);
+                            new String[] {getLdapGroupIdentifierAttr(),
+                                    getLDAPGroupMemberAttr()});
+                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
                 }
             } else {
                 LOG.warn("Neither ldap_group_filter nor ldap_group_dn exists");
@@ -115,16 +161,27 @@ public class LDAPGroupProvider extends GroupProvider {
             LOG.error("LDAP group search failed", e);
         }
 
-        return groups;
+        this.userToGroupCache = groups;
     }
 
-    private void matchUserAndUpdateGroups(Set<String> groups, Attributes attributes,
-                                          UserNameExtractInterface userNameExtractInterface, UserIdentity userIdentity)
+    private void matchUserAndUpdateGroups(Map<String, Set<String>> groups,
+                                          Attributes attributes,
+                                          UserNameExtractInterface userNameExtractInterface)
             throws NamingException {
         Attribute ldapGroupIdentifierAttr = attributes.get(getLdapGroupIdentifierAttr());
         String groupName = (String) ldapGroupIdentifierAttr.get();
-        if (isMatchUser(attributes, userNameExtractInterface, userIdentity.getUser())) {
-            groups.add(groupName);
+
+        Attribute memberAttribute = attributes.get(getLDAPGroupMemberAttr());
+        if (memberAttribute == null) {
+            return;
+        }
+
+        NamingEnumeration<?> e = memberAttribute.getAll();
+        while (e.hasMore()) {
+            String memberDN = (String) e.next();
+            String extractUserName = userNameExtractInterface.extract(memberDN);
+            groups.putIfAbsent(extractUserName, new HashSet<>());
+            groups.get(extractUserName).add(groupName);
         }
     }
 
@@ -173,25 +230,6 @@ public class LDAPGroupProvider extends GroupProvider {
         }
 
         return userNameExtractInterface;
-    }
-
-    private boolean isMatchUser(Attributes attributes, UserNameExtractInterface userNameExtractInterface, String user)
-            throws NamingException {
-        Attribute memberAttribute = attributes.get(getLDAPGroupMemberAttr());
-        if (memberAttribute == null) {
-            return false;
-        }
-
-        NamingEnumeration<?> e = memberAttribute.getAll();
-        while (e.hasMore()) {
-            String memberDN = (String) e.next();
-            String extractUserName = userNameExtractInterface.extract(memberDN);
-            if (user.equalsIgnoreCase(extractUserName)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     @Override
@@ -279,6 +317,10 @@ public class LDAPGroupProvider extends GroupProvider {
 
     public String getLdapUserSearchAttr() {
         return properties.get(LDAP_USER_SEARCH_ATTR);
+    }
+
+    public Long getLdapCacheRefreshInterval() {
+        return Long.parseLong(properties.getOrDefault(LDAP_CACHE_REFRESH_INTERVAL, "300"));
     }
 
     private void validateIntegerProp(Map<String, String> propertyMap, String key, int min, int max)
