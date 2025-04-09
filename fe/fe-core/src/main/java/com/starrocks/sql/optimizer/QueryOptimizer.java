@@ -807,11 +807,12 @@ public class QueryOptimizer extends Optimizer {
 
         if (context.getSessionVariable().getSemiJoinDeduplicateMode() !=
                 SemiJoinDeduplicateRule.DISABLE_PUSH_DOWN_DISTINCT) {
+            // if agg push down, we need to call derive firstly
             if (pushAggFlag) {
                 deriveLogicalProperty(tree);
             }
             // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
-            if (!joinReorder && !FeConstants.runningUnitTest) {
+            if (!joinReorder && FeConstants.enableJoinReorderInLogicalPhase) {
                 logicalJoinReorder(tree, rootTaskContext);
             }
             SemiJoinDeduplicateRule rule = new SemiJoinDeduplicateRule();

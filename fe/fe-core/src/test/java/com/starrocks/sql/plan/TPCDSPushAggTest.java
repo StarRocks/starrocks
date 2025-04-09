@@ -30,14 +30,18 @@ import java.util.stream.Stream;
 public class TPCDSPushAggTest extends TPCDS1TTestBase {
     @BeforeAll
     public static void beforeAll() {
-        FeConstants.runningUnitTest = true;
+        FeConstants.unitTestView = false;
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
+        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
     }
 
     @AfterAll
     public static void afterAll() {
         FeConstants.unitTestView = true;
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
+        connectContext.getSessionVariable().setEnableInnerJoinToSemi(true);
+        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(0);
     }
 
     private String check(int mode, String sql, int aggNum) throws Exception {
