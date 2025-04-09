@@ -379,6 +379,8 @@ public class PlanFragmentBuilder {
     }
 
     private static ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
+        ExecPlan.assignOperatorIds(execPlan.getPhysicalPlan());
+
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
             fragment.createDataSink(resultSinkType);
