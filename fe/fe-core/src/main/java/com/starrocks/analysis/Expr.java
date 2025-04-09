@@ -913,7 +913,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         // may be null.
         // NOTE that all the types of the related member variables must implement hashCode() and equals().
         if (id == null) {
-            int result = 31 * Objects.hashCode(type) + Objects.hashCode(opcode);
+            int result = 31 * Objects.hashCode(type) + Objects.hashCode(opcode.getValue());
             for (Expr child : children) {
                 result = 31 * result + Objects.hashCode(child);
             }
