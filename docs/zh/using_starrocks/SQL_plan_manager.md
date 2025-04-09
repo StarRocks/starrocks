@@ -51,7 +51,7 @@ CREATE [GLOBAL] BASELINE [ON <BindSQL>] USING <PlanSQL>
 
 - `GLOBAL`：（可选）创建全局级别的 Baseline。
 - `BindSQL`：（可选）要绑定到 Baseline（执行计划）查询的具体查询。如果未指定此参数，Baseline 查询将绑定到自身并使用其自己的查询计划。
-- `PlanSQL`：用于定义执行的查询。
+- `PlanSQL`：用于定义执行计划的查询。
 
 **示例**：
 
