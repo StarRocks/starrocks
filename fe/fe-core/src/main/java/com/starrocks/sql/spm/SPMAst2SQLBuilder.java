@@ -101,7 +101,11 @@ public class SPMAst2SQLBuilder {
         @Override
         public String visitTable(TableRelation node, Void outerScope) {
             if (node.getTable() != null) {
-                tables.add(node.getTable().getId());
+                if (node.getTable().isNativeTable()) {
+                    tables.add(node.getTable().getId());
+                } else {
+                    tables.add((long) node.getTable().getTableIdentifier().hashCode());
+                }
             }
             return super.visitTable(node, outerScope);
         }

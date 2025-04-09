@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
@@ -133,7 +134,11 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
     public Boolean visitTable(TableRelation node, ParseNode node2) {
         TableRelation other = cast(node2);
         if (node.getTable() != null && other.getTable() != null) {
-            return node.getTable().getId() == other.getTable().getId();
+            if (node.getTable().isNativeTable() && other.getTable().isNativeTable()) {
+                return node.getTable().getId() == other.getTable().getId();
+            } else {
+                return StringUtils.equals(node.getTable().getTableIdentifier(), other.getTable().getTableIdentifier());
+            }
         } else if (node.getTable() == null && other.getTable() == null) {
             return node.getName().equals(other.getName());
         }
