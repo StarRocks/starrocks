@@ -115,7 +115,7 @@ You can also set it in the hint of the INSERT OVERWRITE statement to allow it ta
 Example:
 
 ```SQL
-INSERT /*+set_var(dynamic_overwrite = false)*/ OVERWRITE insert_wiki_edit
+INSERT /*+set_var(dynamic_overwrite = true)*/ OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
