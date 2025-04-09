@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -383,10 +384,12 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visit(ScalarOperator scalarOperator, CommonSubScalarOperatorCollectorContext context) {
-            if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
+            // To avoid stack overflow if the operator tree is too deep(eg: contains too many `or` functions), set a limit
+            // to the depth of the operator tree.
+            if (scalarOperator.getDepth() > Config.max_scalar_operator_optimize_depth ||
+                    scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
-
 
             if (scalarOperator instanceof LambdaFunctionOperator) {
                 context.currentLambdaArguments.addAll(((LambdaFunctionOperator) scalarOperator).getRefColumns());
