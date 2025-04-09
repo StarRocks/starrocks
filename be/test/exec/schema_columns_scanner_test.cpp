@@ -20,6 +20,8 @@
 #include <tuple>
 #include <vector>
 
+#include "exec/schema_scanner/schema_dummy_scanner.h"
+
 namespace starrocks {
 class SchemaColumnsScannerTest : public ::testing::Test {};
 
@@ -47,4 +49,15 @@ TEST_F(SchemaColumnsScannerTest, test_to_decimal_to_type_string) {
         ASSERT_EQ(actual_type_string, type_string);
     }
 }
+
+TEST_F(SchemaColumnsScannerTest, test_dummy_schema_scanner) {
+    SchemaDummyScanner scanner;
+    SchemaScannerParam params;
+    ObjectPool pool;
+    ASSERT_TRUE(scanner.init(&params, &pool).ok());
+    bool eos = false;
+    ASSERT_TRUE(scanner.get_next(nullptr, &eos).ok());
+    ASSERT_TRUE(eos);
+}
+
 } // namespace starrocks
