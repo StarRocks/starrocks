@@ -24,6 +24,7 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -146,7 +147,7 @@ public class IcebergRESTCatalogTest {
             }
         };
 
-        List<String> tables = metadata.listTableNames("db");
+        List<String> tables = metadata.listTableNames(new ConnectContext(), "db");
         Assert.assertEquals(2, tables.size());
         Assert.assertEquals(tables, Lists.newArrayList("tbl1", "view1"));
     }
@@ -156,7 +157,7 @@ public class IcebergRESTCatalogTest {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
         new MockUp<IcebergMetadata>() {
             @Mock
-            Table getTable(String dbName, String tblName) {
+            Table getTable(ConnectContext context, String dbName, String tblName) {
                 return new IcebergView(1, "iceberg_rest_catalog", "db", "view",
                         Lists.newArrayList(), "mocked", "iceberg_rest_catalog", "db",
                         "location");

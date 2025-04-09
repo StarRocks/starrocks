@@ -27,12 +27,10 @@
     <name>starrocks-java-extensions</name>
 
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.version>1.8</java.version>
+        <java.version>17</java.version>
         <hikaricp.version>3.4.5</hikaricp.version>
-        <compiler-plugin.version>3.8.1</compiler-plugin.version>
+        <compiler-plugin.version>3.13.0</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
         <hadoop.version>3.4.1</hadoop.version>
@@ -51,6 +49,13 @@
         <slf4j.version>1.7.36</slf4j.version>
         <arrow.version>17.0.0</arrow.version>
         <jackson.version>2.15.2</jackson.version>
+        <guava.version>32.0.1-jre</guava.version>
+        <jetty.version>10.0.24</jetty.version>
+        <parquet.version>1.15.1</parquet.version>
+        <airlift.version>0.27</airlift.version>
+        <avro.version>1.11.4</avro.version>
+        <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
+        <kryo.version>4.0.2</kryo.version>
     </properties>
 
     <dependencyManagement>
@@ -298,7 +303,6 @@
                 <scope>test</scope>
             </dependency>
             <!-- junit -->
-
             <!-- jackson -->
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
@@ -326,6 +330,89 @@
                 <version>${arrow.version}</version>
             </dependency>
             <!-- apache arrow -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-client</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-server</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-io</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-webapp</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-servlet</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-util</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-util-ajax</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-hadoop-bundle</artifactId>
+                <version>${parquet.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-avro</artifactId>
+                <version>${parquet.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro</artifactId>
+                <version>${avro.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>aircompressor</artifactId>
+                <version>${airlift.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>${luben.zstd.jni.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.esotericsoftware</groupId>
+                <artifactId>kryo-shaded</artifactId>
+                <version>${kryo.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -336,8 +423,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${compiler-plugin.version}</version>
                 <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
+                    <release>${java.version}</release>
                     <encoding>${project.build.sourceEncoding}</encoding>
                 </configuration>
             </plugin>

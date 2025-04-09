@@ -1051,12 +1051,17 @@ modifyCommentClause
     : COMMENT '=' string
     ;
 
+optimizeRange
+    : BETWEEN start=string AND end=string
+    ;
+
 optimizeClause
     : partitionNames?
       keyDesc?
       partitionDesc?
       orderByDesc?
       distributionDesc?
+      optimizeRange?
      ;
 
 addColumnClause
@@ -1184,6 +1189,7 @@ dropPartitionClause
     : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
     | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
     | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
+    | DROP ALL TEMPORARY PARTITIONS FORCE?
     ;
 
 truncatePartitionClause
@@ -1361,18 +1367,19 @@ createAnalyzeStatement
 
 dropAnalyzeJobStatement
     : DROP ANALYZE INTEGER_VALUE
+    | DROP ALL ANALYZE JOB
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)?
+    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META (WHERE expression)?
+    : SHOW STATS META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META (WHERE expression)?
+    : SHOW HISTOGRAM META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 killAnalyzeStatement

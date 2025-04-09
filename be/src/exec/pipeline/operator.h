@@ -299,7 +299,7 @@ protected:
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
-    RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+    RuntimeMembershipFilterEvalContext _bloom_filter_eval_context;
 
     spill::OperatorMemoryResourceManager _mem_resource_manager;
 
@@ -319,6 +319,7 @@ protected:
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;
     RuntimeProfile::Counter* _pull_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _pull_row_num_counter = nullptr;
+    RuntimeProfile::Counter* _pull_chunk_bytes_counter = nullptr;
     RuntimeProfile::Counter* _runtime_in_filter_num_counter = nullptr;
     RuntimeProfile::Counter* _runtime_bloom_filter_num_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_timer = nullptr;

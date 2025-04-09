@@ -16,14 +16,13 @@ package com.starrocks.authentication;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.StarRocksFE;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
@@ -45,10 +44,7 @@ import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -97,7 +93,7 @@ public class AuthenticationMgr {
         } catch (AuthenticationException e) {
             throw new RuntimeException("should not happened!", e);
         }
-        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString());
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
@@ -167,21 +163,6 @@ public class AuthenticationMgr {
     }
 
     /**
-     * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
-     * but some external system, like LDAP, return default max connection number
-     * @param currUserIdentity user identity of current connection
-     * @return max connection number of the user
-     */
-    public long getMaxConn(UserIdentity currUserIdentity) {
-        if (currUserIdentity.isEphemeral()) {
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
-        } else {
-            String userName = currUserIdentity.getUser();
-            return getMaxConn(userName);
-        }
-    }
-
-    /**
      * Get max connection number based on plain username, the user should be an internal user,
      * if the user doesn't exist in SR, it will throw an exception.
      * @param userName plain username saved in SR
@@ -190,7 +171,7 @@ public class AuthenticationMgr {
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            throw new SemanticException("Unknown user: " + userName);
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
@@ -482,54 +463,6 @@ public class AuthenticationMgr {
         return userToAuthenticationInfo;
     }
 
-    private Class<?> authClazz = null;
-    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
-    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
-
-    public boolean isSupportKerberosAuth() {
-        if (!Config.enable_authentication_kerberos) {
-            LOG.error("enable_authentication_kerberos need to be set to true");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_principal.isEmpty()) {
-            LOG.error("authentication_kerberos_service_principal must be set in config");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
-            LOG.error("authentication_kerberos_service_key_tab must be set in config");
-            return false;
-        }
-
-        if (authClazz == null) {
-            try {
-                File jarFile = new File(KRB5_AUTH_JAR_PATH);
-                if (!jarFile.exists()) {
-                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
-                    return false;
-                } else {
-                    ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[] {
-                                    jarFile.toURL()
-                            },
-                            getClass().getClassLoader()
-                    );
-                    authClazz = Class.forName(AuthenticationMgr.KRB5_AUTH_CLASS_NAME, true, loader);
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to load {}", AuthenticationMgr.KRB5_AUTH_CLASS_NAME, e);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public Class<?> getAuthClazz() {
-        return authClazz;
-    }
-
     public void saveV2(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
@@ -709,14 +642,16 @@ public class AuthenticationMgr {
     }
 
     public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
-        this.nameToGroupProviderMap.remove(stmt.getName());
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
+        groupProvider.destory();
 
         GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
     }
 
     public void replayDropGroupProvider(String name) {
-        this.nameToGroupProviderMap.remove(name);
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
+        groupProvider.destory();
     }
 
     public List<GroupProvider> getAllGroupProviders() {

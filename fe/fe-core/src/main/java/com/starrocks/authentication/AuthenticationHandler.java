@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
@@ -61,9 +62,12 @@ public class AuthenticationHandler {
                         LOG.debug("cannot find user {}@{}", user, remoteHost);
                     } else {
                         try {
-                            AuthenticationProvider provider =
-                                    AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-                            provider.authenticate(user, remoteHost, authResponse, randomString, matchedUserIdentity.getValue());
+                            AuthenticationProvider provider = AuthenticationProviderFactory.create(
+                                    matchedUserIdentity.getValue().getAuthPlugin(),
+                                    matchedUserIdentity.getValue().getAuthString());
+                            Preconditions.checkState(provider != null);
+                            provider.authenticate(context, user, remoteHost, authResponse, randomString,
+                                    matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
 
                             groupProviderName = List.of(Config.group_provider);
@@ -81,7 +85,7 @@ public class AuthenticationHandler {
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
+                        provider.authenticate(context, user, remoteHost, authResponse, randomString, userAuthenticationInfo);
                         // the ephemeral user is identified as 'username'@'auth_mechanism'
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
 
@@ -117,6 +121,10 @@ public class AuthenticationHandler {
         if (!authenticatedUser.isEphemeral()) {
             context.setCurrentRoleIds(authenticatedUser);
             context.setAuthDataSalt(randomString);
+
+            UserProperty userProperty =
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(authenticatedUser.getUser());
+            context.updateByUserProperty(userProperty);
         }
         context.setQualifiedUser(user);
 

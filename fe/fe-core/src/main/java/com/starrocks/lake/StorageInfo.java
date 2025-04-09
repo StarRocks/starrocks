@@ -51,6 +51,10 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         return storeInfo;
     }
 
+    public void setFilePathInfo(FilePathInfo filePathInfo) {
+        this.storeInfo = filePathInfo;
+    }
+
     public FileCacheInfo getCacheInfo() {
         return cacheInfo;
     }

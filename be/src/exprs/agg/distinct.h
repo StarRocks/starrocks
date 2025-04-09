@@ -357,9 +357,10 @@ struct DistinctAggregateStateV2<LT, SumLT, StringLTGuard<LT>> : public DistinctA
 template <LogicalType LT, LogicalType SumLT,
           template <LogicalType X, LogicalType Y, typename = guard::Guard> class TDistinctAggState,
           AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class TDistinctAggregateFunction : public AggregateFunctionBatchHelper<
-                                           TDistinctAggState<LT, SumLT>,
-                                           TDistinctAggregateFunction<LT, SumLT, TDistinctAggState, DistinctType, T>> {
+class TDistinctAggregateFunction final
+        : public AggregateFunctionBatchHelper<
+                  TDistinctAggState<LT, SumLT>,
+                  TDistinctAggregateFunction<LT, SumLT, TDistinctAggState, DistinctType, T>> {
 public:
     using ColumnType = RunTimeColumnType<LT>;
 
@@ -524,16 +525,16 @@ public:
 };
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DistinctAggregateFunction final
-        : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T> {};
+using DistinctAggregateFunction =
+        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DistinctAggregateFunctionV2 final
-        : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T> {};
+using DistinctAggregateFunctionV2 =
+        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DecimalDistinctAggregateFunction final
-        : public TDistinctAggregateFunction<LT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T> {};
+using DecimalDistinctAggregateFunction =
+        TDistinctAggregateFunction<LT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T>;
 
 // now we only support String
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {

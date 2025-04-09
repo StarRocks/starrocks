@@ -32,6 +32,7 @@
 #include "exprs/agg/covariance.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/ds_hll_count_distinct.h"
+#include "exprs/agg/ds_theta_count_distinct.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
@@ -97,9 +98,9 @@ public:
     static AggregateFunctionPtr MakeCountAggregateFunction();
 
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
+    static auto MakeCountDistinctAggregateFunction();
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
+    static auto MakeCountDistinctAggregateFunctionV2();
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -193,6 +194,9 @@ public:
     static AggregateFunctionPtr MakeHllSketchAggregateFunction();
 
     template <LogicalType T>
+    static AggregateFunctionPtr MakeThetaSketchAggregateFunction();
+
+    template <LogicalType T>
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
@@ -282,12 +286,12 @@ AggregateFunctionPtr AggregateFactory::MakeWindowfunnelAggregateFunction() {
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunction() {
+auto AggregateFactory::MakeCountDistinctAggregateFunction() {
     return std::make_shared<DistinctAggregateFunction<LT, AggDistinctType::COUNT>>();
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
+auto AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<LT, AggDistinctType::COUNT>>();
 }
 
@@ -400,6 +404,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
     return std::make_shared<HllSketchAggregateFunction<LT>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeThetaSketchAggregateFunction() {
+    return std::make_shared<ThetaSketchAggregateFunction<LT>>();
 }
 
 template <LogicalType LT>

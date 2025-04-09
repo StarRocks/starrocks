@@ -70,10 +70,12 @@ import org.roaringbitmap.RoaringBitmap;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -771,8 +773,11 @@ public class Utils {
         return false;
     }
 
-    // without distinct function, the common distinctCols is an empty list.
-    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+    // 1. without distinct function, the common distinctCols is an empty list.
+    // 2. If has some distinct function, but distinct columns are not exactly same, ruturn Optional.empty
+    // 3. If has some distinct function and distinct columns are exactly same or only one distinct function, return Optional.of(distinctCols)
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(
+            Collection<CallOperator> aggCallOperators) {
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
         for (CallOperator callOperator : aggCallOperators) {
             if (callOperator.isDistinct()) {
@@ -787,6 +792,28 @@ public class Utils {
             }
         }
         return Optional.of(Lists.newArrayList(distinctChildren));
+    }
+
+    // like select array_agg(distinct LO_REVENUE), count(distinct LO_REVENUE) will return true
+    public static Boolean hasMultipleDistinctFuncShareSameDistinctColumns(Collection<CallOperator> aggCallOperators) {
+        List<CallOperator> distinctFuncs =
+                aggCallOperators.stream().filter(CallOperator::isDistinct).collect(Collectors.toList());
+        if (distinctFuncs.size() <= 1) {
+            return false;
+        }
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : aggCallOperators) {
+            if (distinctChildren.isEmpty()) {
+                distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+            } else {
+                Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
@@ -982,5 +1009,25 @@ public class Utils {
         }
 
         return null;
+    }
+
+    public static Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> separateEqualityPredicates(
+            ScalarOperator predicate) {
+        List<ScalarOperator> conjunctivePredicates = extractConjuncts(predicate);
+        Map<ColumnRefOperator, ConstantOperator> columnConstMap = new HashMap<>();
+        List<ScalarOperator> otherPredicates = new ArrayList<>();
+
+        for (ScalarOperator op : conjunctivePredicates) {
+            if (ScalarOperator.isColumnEqualConstant(op)) {
+                BinaryPredicateOperator binaryOp = (BinaryPredicateOperator) op;
+                ColumnRefOperator column = (ColumnRefOperator) binaryOp.getChild(0);
+                ConstantOperator constant = (ConstantOperator) binaryOp.getChild(1);
+                columnConstMap.put(column, constant);
+            } else {
+                otherPredicates.add(op);
+            }
+        }
+
+        return new Pair<>(columnConstMap, otherPredicates);
     }
 }

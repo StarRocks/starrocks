@@ -87,6 +87,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.RuntimeProfileParser;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -711,8 +712,7 @@ public class StmtExecutor {
                                 }
 
                                 if (context instanceof ArrowFlightSqlConnectContext) {
-                                    isAsync = true;
-                                    tryProcessProfileAsync(execPlan, i);
+                                    isAsync = tryProcessProfileAsync(execPlan, i);
                                 } else if (context.isProfileEnabled()) {
                                     isAsync = tryProcessProfileAsync(execPlan, i);
                                     if (parsedStmt.isExplain() &&
@@ -972,7 +972,7 @@ public class StmtExecutor {
                 createTemporaryTableStmt.setSessionId(context.getSessionId());
                 return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
             } else {
-                return context.getGlobalStateMgr().getMetadataMgr().createTable(stmt.getCreateTableStmt());
+                return context.getGlobalStateMgr().getMetadataMgr().createTable(context, stmt.getCreateTableStmt());
             }
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
@@ -1036,7 +1036,19 @@ public class StmtExecutor {
         }
     }
 
+    /**
+     * Try to process profile async without exception.
+     */
     private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+        try {
+            return processProfileAsync(plan, retryIndex);
+        } catch (Exception e) {
+            LOG.warn("process profile async failed", e);
+            return false;
+        }
+    }
+
+    private boolean processProfileAsync(ExecPlan plan, int retryIndex) {
         if (coord == null) {
             return false;
         }
@@ -1154,7 +1166,7 @@ public class StmtExecutor {
                 final String hostName = context.getProxyHostName();
                 killCtx = ProxyContextManager.getInstance().getContext(hostName, (int) id);
             } else {
-                killCtx = context.getConnectScheduler().getContext(id);
+                killCtx = ExecuteEnv.getInstance().getScheduler().getContext(id);
             }
             if (killCtx == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
@@ -1468,7 +1480,7 @@ public class StmtExecutor {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         TableName tableName = analyzeStmt.getTableName();
         Database db =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -1626,9 +1638,9 @@ public class StmtExecutor {
                                 analyzeStmt.getProperties(),
                                 analyzeTypeDesc.getStatsTypes(),
                                 analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null),
-                                analyzeStatus,
-                                // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                                false);
+                        analyzeStatus,
+                        // Sync load cache, auto-populate column statistic cache after Analyze table manually
+                        false);
             }
         }
     }
@@ -1636,7 +1648,7 @@ public class StmtExecutor {
     private void handleDropStatsStmt() {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
         TableName tableName = dropStatsStmt.getTableName();
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
@@ -1668,7 +1680,7 @@ public class StmtExecutor {
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
         TableName tableName = dropHistogramStmt.getTableName();
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
@@ -1704,12 +1716,12 @@ public class StmtExecutor {
 
     private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
                                                      String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -2231,7 +2243,7 @@ public class StmtExecutor {
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
         TableName tableName = insertStmt.getTableName();
         Database db =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -2271,23 +2283,28 @@ public class StmtExecutor {
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
-            LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
+            LOG.warn("DML statement({}) process failed.", originStmt.originStmt, t);
             throw t;
         } finally {
             boolean isAsync = false;
-            if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
-                isAsync = tryProcessProfileAsync(execPlan, 0);
-                if (parsedStmt.isExplain() &&
-                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
-                            profile, null, context.getSessionVariable().getColorExplainOutput()));
+            try {
+                if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
+                    isAsync = tryProcessProfileAsync(execPlan, 0);
+                    if (parsedStmt.isExplain() &&
+                            StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                        handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
+                                profile, null, context.getSessionVariable().getColorExplainOutput()));
+                    }
                 }
-            }
-            if (isAsync) {
-                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                        context.getSessionVariable().getProfileTimeout() * 1000L);
-            } else {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            } catch (Exception e) {
+                LOG.warn("Failed to process profile async", e);
+            } finally {
+                if (isAsync) {
+                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                } else {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
             }
         }
     }
@@ -2332,7 +2349,7 @@ public class StmtExecutor {
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
@@ -2666,17 +2683,26 @@ public class StmtExecutor {
                 long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
                         context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
 
-                if (visibleWaiter.await(publishWaitMs, TimeUnit.MILLISECONDS)) {
-                    txnStatus = TransactionStatus.VISIBLE;
-                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                    // collect table-level metrics
-                    TableMetricsEntity entity =
-                            TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
-                    entity.counterInsertLoadFinishedTotal.increase(1L);
-                    entity.counterInsertLoadRowsTotal.increase(loadedRows);
-                    entity.counterInsertLoadBytesTotal.increase(loadedBytes);
-                } else {
-                    txnStatus = TransactionStatus.COMMITTED;
+                txnStatus = TransactionStatus.COMMITTED;
+                final long waitInterval = 300;
+                while (publishWaitMs > 0) {
+                    if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
+                        break;
+                    }
+
+                    if (visibleWaiter.await(Math.min(publishWaitMs, waitInterval), TimeUnit.MILLISECONDS)) {
+                        txnStatus = TransactionStatus.VISIBLE;
+                        MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                        // collect table-level metrics
+                        TableMetricsEntity entity =
+                                TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
+                        entity.counterInsertLoadFinishedTotal.increase(1L);
+                        entity.counterInsertLoadRowsTotal.increase(loadedRows);
+                        entity.counterInsertLoadBytesTotal.increase(loadedBytes);
+                        break;
+                    } else {
+                        publishWaitMs -= Math.min(publishWaitMs, waitInterval);
+                    }
                 }
             }
         } catch (Throwable t) {
@@ -2772,7 +2798,7 @@ public class StmtExecutor {
                         "",
                         coord.getTrackingUrl());
             }
-        } catch (StarRocksException e) {
+        } catch (Exception e) {
             LOG.warn("Record info of insert load with error {}", e.getMessage(), e);
             errMsg = "Record info of insert load with error " + e.getMessage();
         }
@@ -2892,14 +2918,18 @@ public class StmtExecutor {
             }
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
-            if (context.isProfileEnabled()) {
-                tryProcessProfileAsync(plan, 0);
-                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                        context.getSessionVariable().getProfileTimeout() * 1000L);
-            } else {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            try {
+                if (context.isProfileEnabled()) {
+                    tryProcessProfileAsync(plan, 0);
+                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                } else {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
+                recordExecStatsIntoContext();
+            } catch (Exception e) {
+                LOG.warn("Failed to unregister query", e);
             }
-            recordExecStatsIntoContext();
         }
     }
 
@@ -2986,8 +3016,15 @@ public class StmtExecutor {
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
-    private boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+    protected boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+        boolean isPreQuerySQL = false;
+        try {
+            isPreQuerySQL = SqlUtils.isPreQuerySQL(parsedStmt);
+        } catch (Exception e) {
+            LOG.warn("check isPreQuerySQL failed", e);
+        }
         return !isInternalStmt
+                && !isPreQuerySQL
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
     }

@@ -91,6 +91,7 @@ class TFileBrokerServiceClient;
 template <class T>
 class ClientCache;
 class HeartbeatFlags;
+class DiagnoseDaemon;
 
 namespace pipeline {
 class DriverExecutor;
@@ -322,6 +323,7 @@ public:
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
+    PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
@@ -381,6 +383,8 @@ public:
 
     void try_release_resource_before_core_dump();
 
+    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
+
 private:
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
@@ -407,6 +411,7 @@ private:
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
+    PriorityThreadPool* _datacache_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
     std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
@@ -449,6 +454,7 @@ private:
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+    DiagnoseDaemon* _diagnose_daemon = nullptr;
 };
 
 template <>

@@ -83,6 +83,10 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// Whether abort the process if a large memory allocation is detected which the requested
+// size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
+CONF_mBool(abort_on_large_memory_allocation, "false");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -485,16 +489,24 @@ CONF_mInt32(load_rpc_slow_log_frequency_threshold_seconds, "60");
 // Whether to enable load diagnose. The diagnosis is initiated by OlapTableSink when meeting brpc timeout
 // from LoadChannel. It will send rpc to LoadChannel to check the status.
 CONF_mBool(enable_load_diagnose, "true");
-// If the rpc timeout exceeds this threshold, then diagnostics will be performed every time a timeout occurs;
-// if it is below this threshold, diagnostics will be performed once every 20 timeouts. This is used to avoid
-// frequent diagnostics for real-time loads which have a smaller brpc timeout.
-CONF_mInt32(load_diagnose_small_rpc_timeout_threshold_ms, "60000");
 // The timeout of the diagnosis rpc sent from OlapTableSink to LoadChannel
 CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "2000");
+// If the rpc timeout exceeds this threshold, then profile diagnostics will be performed every time
+// a timeout occurs; if it is below this threshold, diagnostics will be performed once every 20 timeouts.
+// This is used to avoid frequent diagnostics for real-time loads which have a smaller brpc timeout.
+CONF_mInt32(load_diagnose_rpc_timeout_profile_threshold_ms, "60000");
+// If the rpc timeout exceeds this threshold, then stack trace diagnostics will be enabled.
+// OlapTableSink will send stack trace request to the target BE.
+CONF_mInt32(load_diagnose_rpc_timeout_stack_trace_threshold_ms, "600000");
 // Used in load fail point. The brpc timeout used to simulate brpc exception "[E1008]Reached timeout"
 CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
 // Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
 CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
+// Used in load fail point. The block time to simulate waiting secondary replica spends much time
+CONF_mInt32(load_fp_tablets_channel_wait_secondary_replica_block_ms, "-1");
+
+// The interval for performing stack trace to control the frequency.
+CONF_mInt64(diagnose_stack_trace_interval_ms, "1800000");
 
 CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
@@ -601,10 +613,14 @@ CONF_Int32(update_memory_limit_percent, "60");
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
 
-// if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
-// the failed apply task will retry after `retry_apply_interval_second`
+// If enable_retry_apply is set to true, the system will attempt retries when apply fails.
+// Retry scenarios for apply operations include the following cases:
+//   1. ​Retry indefinitely for explicitly retryable errors (e.g., memory limits)
+// ​  2. No retry for explicitly non-retryable errors (e.g., Corruption) → Directly enter error state
+// ​  3. Retry until timeout: If still failing after timeout duration → Enter error state
 CONF_mBool(enable_retry_apply, "true");
 CONF_mInt32(retry_apply_interval_second, "30");
+CONF_mInt32(retry_apply_timeout_second, "7200");
 
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -954,6 +970,7 @@ CONF_mBool(parquet_reader_bloom_filter_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
 CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
+CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
 
@@ -1165,6 +1182,7 @@ CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
+CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
 
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
@@ -1314,6 +1332,8 @@ CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 // enable read pindex by page
 CONF_mBool(enable_pindex_read_by_page, "true");
 
+// check need to rebuild pindex or not
+CONF_mBool(enable_rebuild_pindex_check, "true");
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
@@ -1426,7 +1446,7 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
-CONF_mBool(enable_json_flat, "true");
+CONF_mBool(enable_json_flat, "false");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
@@ -1591,7 +1611,7 @@ CONF_mInt64(load_spill_merge_max_thread, "16");
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 
 // ignore union type tag in avro kafka routine load
-CONF_mBool(avro_ignore_union_type_tag, "false");
+CONF_mBool(avro_ignore_union_type_tag, "true");
 
 // default batch size for simdjson lib
 CONF_mInt32(json_parse_many_batch_size, "1000000");
@@ -1607,4 +1627,6 @@ CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
+
+CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 } // namespace starrocks::config

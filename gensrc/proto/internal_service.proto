@@ -131,6 +131,10 @@ message PTransmitRuntimeFilterParams {
     // When merge node starts to broadcast this rf(millseconds since unix epoch).
     optional int64 broadcast_timestamp = 10;
     optional bool is_pipeline = 11;
+    // 12,13,14 only used for skew join optimization
+    optional bool is_skew_broadcast_join = 12;
+    optional PTypeDesc columnType = 13;
+    optional int32 skew_shuffle_filter_id = 14;
 };
 
 message PTransmitRuntimeFilterResult {
@@ -308,19 +312,24 @@ message PTabletWriterCancelRequest {
 message PTabletWriterCancelResult {
 };
 
-// TODO only diagnose from profile currently, and can support more diagnostic methods in the future
 message PLoadDiagnoseRequest {
     optional PUniqueId id = 1;
     optional int64 txn_id = 2;
     // whether to use profile as the diagnose method.
     // If true, will return the profile in the response
     optional bool profile = 3;
+    // whether to use stack trace as the diagnose method.
+    optional bool stack_trace = 4;
 };
 
 message PLoadDiagnoseResult {
-    // The result of the profile diagnose
+    // The result of the profile
     optional StatusPB profile_status = 1;
     optional bytes profile_data = 2;
+    // The result of stack trace. stack trace will be performed asynchronously
+    // and stored on the target BE. The Status::OK only indicates the target
+    // receives the request and will execute it.
+    optional StatusPB stack_trace_status = 3;
 };
 
 message PExecPlanFragmentRequest {
@@ -426,6 +435,17 @@ message PFetchDataResult {
     optional int64 packet_seq = 2;
     optional bool eos = 3;
     optional PQueryStatistics query_statistics = 4;
+};
+
+message PFetchDataCacheRequest {
+    optional int64 request_id = 1;
+    required bytes cache_key = 2;
+    optional int64 offset = 3;
+    optional int64 size = 4;
+};
+
+message PFetchDataCacheResponse {
+    required StatusPB status = 1;
 };
 
 message PTriggerProfileReportRequest {
@@ -691,6 +711,7 @@ service PInternalService {
     rpc exec_batch_plan_fragments(PExecBatchPlanFragmentsRequest) returns (PExecBatchPlanFragmentsResult);
     rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
     rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
+    rpc fetch_datacache(PFetchDataCacheRequest) returns (PFetchDataCacheResponse);
     rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);
     rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);

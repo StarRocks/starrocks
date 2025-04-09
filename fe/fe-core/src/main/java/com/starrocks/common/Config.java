@@ -38,6 +38,7 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.statistic.sample.NDVEstimator;
 
 import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
@@ -410,6 +411,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether enable the task history archive feature")
     public static boolean enable_task_history_archive = true;
+
+    @ConfField(mutable = true)
+    public static boolean enable_task_run_fe_evaluation = true;
 
     /**
      * The max keep time of some kind of jobs.
@@ -1327,7 +1331,7 @@ public class Config extends ConfigBase {
      * whether backup materialized views in backing databases. If not, will skip backing materialized views.
      */
     @ConfField(mutable = true)
-    public static boolean enable_backup_materialized_view = true;
+    public static boolean enable_backup_materialized_view = false;
 
     /**
      * Whether to display all task runs or only the newest task run in ShowMaterializedViews command to be
@@ -1498,8 +1502,11 @@ public class Config extends ConfigBase {
      * update interval of tablet stat
      * All frontends will get tablet stat from all backends at each interval
      */
-    @ConfField
-    public static int tablet_stat_update_interval_second = 300;  // 5 min
+    @ConfField(mutable = true)
+    public static long tablet_stat_update_interval_second = 300;  // 5 min
+
+    @ConfField(mutable = true, comment = "for testing statistics behavior")
+    public static boolean enable_sync_tablet_stats = true;
 
     @ConfField(mutable = true, comment = "time interval to collect tablet info from backend")
     public static long tablet_collect_interval_seconds = 60;
@@ -1911,35 +1918,6 @@ public class Config extends ConfigBase {
     public static String auth_token = "";
 
     /**
-     * If set to true and the jar that use to authentication is loaded in fe, kerberos authentication is supported.
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_authentication_kerberos = false;
-
-    /**
-     * If kerberos authentication is enabled, the configuration must be filled.
-     * like "starrocks-fe/<HOSTNAME>@STARROCKS.COM".
-     * <p>
-     * Service principal name (SPN) is sent to clients that attempt to authenticate using Kerberos.
-     * The SPN must be present in the database managed by the KDC server, and its key file
-     * needs to be exported and configured. See authentication_kerberos_service_key_tab for details.
-     */
-    @ConfField(mutable = true)
-    public static String authentication_kerberos_service_principal = "";
-
-    /**
-     * If kerberos authentication is enabled, the configuration must be filled.
-     * like "$HOME/path/to/your/starrocks-fe.keytab"
-     * <p>
-     * The keytab file for authenticating tickets received from clients.
-     * This file must exist and contain a valid key for the SPN or authentication of clients will fail.
-     * Export keytab file requires KDC administrator to operate.
-     * for example: ktadd -norandkey -k /path/to/starrocks-fe.keytab starrocks-fe/<HOSTNAME>@STARROCKS.COM
-     */
-    @ConfField(mutable = true)
-    public static String authentication_kerberos_service_key_tab = "";
-
-    /**
      * When set to true, we cannot drop user named 'admin' or grant/revoke role to/from user named 'admin',
      * except that we're root user.
      */
@@ -1973,11 +1951,21 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_planner_scalar_rewrite_num = 100000;
 
+    @ConfField(mutable = true, comment = "The max depth that scalar operator optimization can be applied")
+    public static int max_scalar_operator_optimize_depth = 256;
+
     /**
      * statistic collect flag
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Whether to enable periodic analyze job, " +
+            "including auto analyze job and analyze jobs created by user")
     public static boolean enable_statistic_collect = true;
+
+    @ConfField(mutable = true, comment = "enable auto collect internal statistics in the background")
+    public static boolean enable_auto_collect_statistics = true;
+
+    @ConfField(mutable = true, comment = "trigger task immediately after creating analyze job")
+    public static boolean enable_trigger_analyze_job_immediate = true;
 
     /**
      * whether to automatically collect statistics on temporary tables
@@ -2043,7 +2031,7 @@ public class Config extends ConfigBase {
      * The collect thread work interval
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_interval_sec = 5L * 60L; // 5m
+    public static long statistic_collect_interval_sec = 10L * 60L; // 10m
 
     @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
     public static long statistic_predicate_columns_persist_interval_sec = 60L;
@@ -2157,12 +2145,6 @@ public class Config extends ConfigBase {
     public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
 
     /**
-     * Max row count in statistics collect per query
-     */
-    @ConfField(mutable = true)
-    public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
-
-    /**
      * The row number of sample collect, default 20w rows
      */
     @ConfField(mutable = true)
@@ -2170,6 +2152,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static double statistics_min_sample_row_ratio = 0.01;
+
+    @ConfField(mutable = true, comment = "The NDV estimator: DUJ1/GEE/LINEAR/POLYNOMIAL")
+    public static String statistics_sample_ndv_estimator =
+            NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 
     /**
      * The partition size of sample collect, default 1k partitions
@@ -2551,6 +2537,8 @@ public class Config extends ConfigBase {
     public static boolean enable_query_cost_prediction = false;
     @ConfField(mutable = true)
     public static String query_cost_prediction_service_address = "http://localhost:5000";
+    @ConfField(mutable = false)
+    public static int query_cost_predictor_healthchk_interval = 30;
 
     @ConfField
     public static String feature_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -2866,6 +2854,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true)
+    public static String statistics_collect_warehouse = "default_warehouse";
 
     @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
@@ -3537,24 +3528,30 @@ public class Config extends ConfigBase {
     public static String oidc_principal_field = "sub";
 
     /**
-     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
-     * The iss field in the JWT identifies the principal that issued the JWT.
+     * Specifies a list of string. One of that must match the value of the JWT’s issuer (iss) field in order to consider
+     * this JWT valid. The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
-    public static String oidc_required_issuer = "";
+    public static String[] oidc_required_issuer = {};
 
     /**
-     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
-     * The aud field in the JWT identifies the recipients that the JWT is intended for.
+     * Specifies a list of strings. For a JWT to be considered valid, the value of its 'aud' (Audience) field must match
+     * at least one of these strings.
      */
     @ConfField(mutable = false)
-    public static String oidc_required_audience = "";
+    public static String[] oidc_required_audience = {};
 
     /**
      * The name of the group provider. If there are multiple, separate them with commas.
      */
     @ConfField(mutable = true)
     public static String[] group_provider = {};
+
+    /**
+     * Used to refresh the ldap group cache. All ldap group providers share the same thread pool.
+     */
+    @ConfField(mutable = false)
+    public static int group_provider_refresh_thread_num = 4;
 
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
@@ -3585,4 +3582,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 60;
+
+    /**
+     * Whether to enable tracing historical nodes when cluster scale
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_trace_historical_node = false;
 }

@@ -28,6 +28,7 @@ import com.starrocks.connector.CacheUpdateProcessor;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -119,6 +120,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
 
     private void refreshCatalogTable() {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        ConnectContext context = new ConnectContext();
         List<CatalogNameType> catalogNameTypes = Lists.newArrayList(cacheUpdateProcessors.keySet());
         for (CatalogNameType catalogNameType : catalogNameTypes) {
             String catalogName = catalogNameType.getCatalogName();
@@ -134,7 +136,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                 String tableName = cachedTableName.getTableName();
                 Table table;
                 try {
-                    table = metadataMgr.getTable(catalogName, dbName, tableName);
+                    table = metadataMgr.getTable(context, catalogName, dbName, tableName);
                 } catch (Exception e) {
                     LOG.warn("can't get table of {}.{}.{}，msg: ", catalogName, dbName, tableName, e);
                     continue;

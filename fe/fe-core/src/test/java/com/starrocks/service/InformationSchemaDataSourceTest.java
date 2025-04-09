@@ -22,7 +22,10 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
 import com.starrocks.thrift.TGetKeywordsRequest;
 import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
@@ -32,6 +35,10 @@ import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TGetWarehouseMetricsRequest;
+import com.starrocks.thrift.TGetWarehouseMetricsRespone;
+import com.starrocks.thrift.TGetWarehouseQueriesRequest;
+import com.starrocks.thrift.TGetWarehouseQueriesResponse;
 import com.starrocks.thrift.TKeywordInfo;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
@@ -422,5 +429,82 @@ public class InformationSchemaDataSourceTest {
                 .orElse(null);
         Assert.assertNotNull("USER keyword should be present", userKeyword);
         Assert.assertFalse("USER keyword should not be reserved", userKeyword.isReserved());
+    }
+
+    @Test
+    public void testGetApplicableRoles() throws Exception {
+        starRocksAssert.withEnableMV();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TGetApplicableRolesRequest req = new TGetApplicableRolesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetApplicableRolesResponse response = impl.getApplicableRoles(req);
+        List<TApplicableRolesInfo> rolesList = response.getRoles();
+
+        Assert.assertNotNull("Roles list should not be null", rolesList);
+        Assert.assertFalse("Roles list should not be empty", rolesList.isEmpty());
+
+        List<String> roleNames = rolesList.stream()
+                .map(TApplicableRolesInfo::getRole_name)
+                .collect(Collectors.toList());
+
+        Assert.assertTrue("Roles should contain 'root'", roleNames.contains("root"));
+
+        TApplicableRolesInfo adminRole = rolesList.stream()
+                .filter(r -> r.getRole_name().equals("root"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("root role should be present", adminRole);
+        Assert.assertEquals("User should be root", "root", adminRole.getUser());
+        Assert.assertEquals("Host should be %", "%", adminRole.getHost());
+        Assert.assertEquals("isGrantable should be NO", "NO", "NO");
+        Assert.assertEquals("isDefault should be NO", "NO", "NO");
+        Assert.assertEquals("isMandatory should be NO", "NO", "NO");
+    }
+
+    @Test
+    public void testWarehouseMetrics() throws Exception {
+        starRocksAssert.withEnableMV();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetWarehouseMetricsRequest req = new TGetWarehouseMetricsRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetWarehouseMetricsRespone response = impl.getWarehouseMetrics(req);
+        Assert.assertNull(response.getMetrics());
+
+        starRocksAssert.query("select * from information_schema.warehouse_metrics;")
+                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME " +
+                        "| 3: QUEUE_PENDING_LENGTH | 4: QUEUE_RUNNING_LENGTH | 5: MAX_PENDING_LENGTH " +
+                        "| 6: MAX_PENDING_TIME_SECOND | 7: EARLIEST_QUERY_WAIT_TIME | 8: MAX_REQUIRED_SLOTS " +
+                        "| 9: SUM_REQUIRED_SLOTS | 10: REMAIN_SLOTS | 11: MAX_SLOTS\n");
+    }
+
+    @Test
+    public void testWarehouseQueries() throws Exception {
+        starRocksAssert.withEnableMV();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetWarehouseQueriesRequest req = new TGetWarehouseQueriesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetWarehouseQueriesResponse response = impl.getWarehouseQueries(req);
+        Assert.assertTrue(response.getQueries().isEmpty());
+
+        starRocksAssert.query("select * from information_schema.warehouse_queries;")
+                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUERY_ID " +
+                        "| 4: STATE | 5: EST_COSTS_SLOTS | 6: ALLOCATE_SLOTS | 7: QUEUED_WAIT_SECONDS");
     }
 }

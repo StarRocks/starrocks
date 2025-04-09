@@ -18,6 +18,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
@@ -25,34 +26,32 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.nio.ByteBuffer;
 
 public class OpenIdConnectAuthenticationProvider implements AuthenticationProvider {
-    public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_OPENID_CONNECT.name();
-
     private final String jwksUrl;
     private final String principalFiled;
-    private final String requireIssuer;
-    private final String requireAudience;
+    private final String[] requiredIssuer;
+    private final String[] requiredAudience;
 
     public OpenIdConnectAuthenticationProvider(String jwksUrl, String principalFiled,
-                                               String requireIssuer, String requireAudience) {
+                                               String[] requiredIssuer, String[] requiredAudience) {
         this.jwksUrl = jwksUrl;
         this.principalFiled = principalFiled;
-        this.requireIssuer = requireIssuer;
-        this.requireAudience = requireAudience;
+        this.requiredIssuer = requiredIssuer;
+        this.requiredAudience = requiredAudience;
     }
 
     @Override
     public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
             throws AuthenticationException {
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name());
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
+        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
         return info;
     }
 
     @Override
-    public void authenticate(String user, String host, byte[] authResponse, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         try {
             ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
@@ -60,7 +59,8 @@ public class OpenIdConnectAuthenticationProvider implements AuthenticationProvid
             MysqlCodec.readInt1(authBuffer);
             byte[] idToken = MysqlCodec.readLenEncodedString(authBuffer);
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
-            OpenIdConnectVerifier.verify(new String(idToken), user, jwkSet, principalFiled, requireIssuer, requireAudience);
+            OpenIdConnectVerifier.verify(new String(idToken), user, jwkSet, principalFiled, requiredIssuer, requiredAudience);
+            context.setAuthToken(new String(idToken));
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }

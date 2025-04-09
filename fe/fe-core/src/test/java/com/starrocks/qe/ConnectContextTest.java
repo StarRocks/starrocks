@@ -124,11 +124,6 @@ public class ConnectContextTest {
         // Session variable
         Assert.assertNotNull(ctx.getSessionVariable());
 
-        // connect scheduler
-        Assert.assertNull(ctx.getConnectScheduler());
-        ctx.setConnectScheduler(connectScheduler);
-        Assert.assertNotNull(ctx.getConnectScheduler());
-
         // connection id
         ctx.setConnectionId(101);
         Assert.assertEquals(101, ctx.getConnectionId());
@@ -307,5 +302,20 @@ public class ConnectContextTest {
             ctx.resetErrorCode();
             Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
         }
+    }
+
+    @Test
+    public void testIsIdleLastFor() throws Exception {
+        ConnectContext context = new ConnectContext();
+        context.setCommand(MysqlCommand.COM_SLEEP);
+        context.setEndTime();
+
+        Thread.sleep(100);
+
+        Assert.assertTrue(context.isIdleLastFor(99));
+
+        context.setCommand(MysqlCommand.COM_QUERY);
+        context.setStartTime();
+        Assert.assertFalse(context.isIdleLastFor(99));
     }
 }

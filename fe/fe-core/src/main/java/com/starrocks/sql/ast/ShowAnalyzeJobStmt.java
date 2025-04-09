@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.authorization.AccessDeniedException;
@@ -37,13 +38,12 @@ import java.util.List;
 
 public class ShowAnalyzeJobStmt extends ShowStmt {
 
-    public ShowAnalyzeJobStmt(Predicate predicate) {
-        this(predicate, NodePosition.ZERO);
-    }
-
-    public ShowAnalyzeJobStmt(Predicate predicate, NodePosition pos) {
+    public ShowAnalyzeJobStmt(Predicate predicate, List<OrderByElement> orderByElements,
+                              LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
     }
 
     private static final ShowResultSetMetaData META_DATA =
@@ -70,7 +70,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
         if (!analyzeJob.isAnalyzeAllDb()) {
             String dbName = analyzeJob.getDbName();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(analyzeJob.getCatalogName(), dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, analyzeJob.getCatalogName(), dbName);
 
             if (db == null) {
                 throw new MetaNotFoundException("No found database: " + dbName);
@@ -80,8 +80,8 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(analyzeJob.getCatalogName(),
-                        dbName, tableName);
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getTable(context, analyzeJob.getCatalogName(), dbName, tableName);
 
                 if (table == null) {
                     throw new MetaNotFoundException("No found table: " + tableName);

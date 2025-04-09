@@ -62,7 +62,7 @@ protected:
 
     std::string cache_dir = "./starcache_module_test";
     std::shared_ptr<BlockCache> _block_cache;
-    std::shared_ptr<StarCacheModule> _cache;
+    std::shared_ptr<ObjectCache> _cache;
     ObjectCacheWriteOptions _write_opt;
     size_t _value_size = 256 * 1024;
     int64_t _mem_quota = 64 * 1024 * 1024;

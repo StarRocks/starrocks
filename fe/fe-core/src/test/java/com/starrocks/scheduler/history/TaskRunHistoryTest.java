@@ -25,6 +25,7 @@ import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TRequestPagination;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -150,6 +151,17 @@ public class TaskRunHistoryTest {
             }
         };
         history.lookupByTaskNames(dbName, taskNames);
+
+        // test for pagination argument
+        params.setPagination(new TRequestPagination());
+        params.getPagination().setLimit(100);
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_run_id = 'q1' LIMIT 100");
+            }
+        };
+        history.lookup(params);
     }
 
     @Test

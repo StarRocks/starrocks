@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -418,11 +419,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (!result.inputStringColumns.containsAny(onColumns)) {
             return result;
         }
+        onColumns.getStream().forEach(c -> disableRewriteStringColumns.union(c));
         result.outputStringColumns.clear();
         result.inputStringColumns.getStream().forEach(c -> {
-            if (onColumns.contains(c)) {
-                disableRewriteStringColumns.union(c);
-            } else {
+            if (!onColumns.contains(c)) {
                 result.outputStringColumns.union(c);
             }
         });
@@ -609,9 +609,20 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
-    private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(Table table, ColumnRefOperator column) {
+    private boolean banArrayColumnWithPredicate(PhysicalScanOperator scan, ColumnRefOperator column) {
+        return column.getType().isArrayType() &&
+                scan.getPredicate() != null && scan.getPredicate().getColumnRefs().contains(column);
+    }
+
+    private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(PhysicalScanOperator scan, Table table,
+                                                                         ColumnRefOperator column) {
         // Condition 1:
         if (!supportAndEnabledLowCardinality(column.getType())) {
+            return new Pair<>(false, Optional.empty());
+        }
+
+        // Condition 1.1:
+        if (banArrayColumnWithPredicate(scan, column)) {
             return new Pair<>(false, Optional.empty());
         }
 
@@ -668,7 +679,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(table, column);
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
             if (!res.first) {
                 continue;
             }
@@ -705,7 +716,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(table, column);
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
             if (!res.first) {
                 continue;
             }

@@ -72,7 +72,7 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
-                    bool enable_late_materialization, bool enable_partition_hash_join)
+                    bool enable_late_materialization, bool enable_partition_hash_join, bool is_skew_join)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -91,7 +91,8 @@ struct HashJoinerParam {
               _distribution_mode(distribution_mode),
               _mor_reader_mode(mor_reader_mode),
               _enable_late_materialization(enable_late_materialization),
-              _enable_partition_hash_join(enable_partition_hash_join) {}
+              _enable_partition_hash_join(enable_partition_hash_join),
+              _is_skew_join(is_skew_join) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -117,6 +118,7 @@ struct HashJoinerParam {
     const bool _mor_reader_mode;
     const bool _enable_late_materialization;
     const bool _enable_partition_hash_join;
+    const bool _is_skew_join;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -217,8 +219,8 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
-    pipeline::RuntimeBloomFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
-    pipeline::OptRuntimeBloomFilterBuildParams& get_runtime_bloom_filter_build_params() {
+    pipeline::RuntimeMembershipFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
+    pipeline::OpTRuntimeBloomFilterBuildParams& get_runtime_bloom_filter_build_params() {
         return _runtime_bloom_filter_build_params;
     }
 
@@ -243,6 +245,7 @@ public:
 
     const HashJoinBuildMetrics& build_metrics() { return *_build_metrics; }
     const HashJoinProbeMetrics& probe_metrics() { return *_probe_metrics; }
+    bool is_skew_join() const { return _is_skew_join; }
 
     size_t runtime_in_filter_row_limit() const { return 1024; }
 
@@ -440,8 +443,8 @@ private:
     const std::set<SlotId>& _probe_output_slots;
 
     pipeline::RuntimeInFilters _runtime_in_filters;
-    pipeline::RuntimeBloomFilters _build_runtime_filters;
-    pipeline::OptRuntimeBloomFilterBuildParams _runtime_bloom_filter_build_params;
+    pipeline::RuntimeMembershipFilters _build_runtime_filters;
+    pipeline::OpTRuntimeBloomFilterBuildParams _runtime_bloom_filter_build_params;
     bool _build_runtime_filters_from_planner;
 
     bool _is_push_down = false;
@@ -478,10 +481,11 @@ private:
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
     bool _enable_late_materialization = false;
-
     // probe side notify build observe
     pipeline::Observable _builder_observable;
     pipeline::Observable _probe_observable;
+
+    bool _is_skew_join = false;
 };
 
 } // namespace starrocks

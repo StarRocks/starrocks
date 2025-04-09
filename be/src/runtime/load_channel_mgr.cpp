@@ -34,6 +34,9 @@
 
 #include "runtime/load_channel_mgr.h"
 
+#include <brpc/controller.h>
+#include <butil/endpoint.h>
+
 #include <memory>
 
 #include "common/closure_guard.h"
@@ -290,9 +293,15 @@ void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRe
             response->mutable_profile_status()->set_status_code(TStatusCode::NOT_FOUND);
             response->mutable_profile_status()->add_error_msgs("can't find the load channel");
         }
+        if (request->has_stack_trace() && request->stack_trace()) {
+            response->mutable_stack_trace_status()->set_status_code(TStatusCode::NOT_FOUND);
+            response->mutable_stack_trace_status()->add_error_msgs("can't find the load channel");
+        }
     } else {
-        VLOG(2) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id();
-        channel->diagnose(request, response);
+        std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
+        VLOG(2) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
+                << ", remote: " << remote_ip;
+        channel->diagnose(remote_ip, request, response);
     }
 }
 

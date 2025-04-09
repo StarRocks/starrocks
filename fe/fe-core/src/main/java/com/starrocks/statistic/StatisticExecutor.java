@@ -479,6 +479,7 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
             statsConnectCtx.setStatisticsConnection(true);
+            statsConnectCtx.getSessionVariable().setWarehouseName(Config.statistics_collect_warehouse);
             statsJob.collect(statsConnectCtx, analyzeStatus);
             LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
@@ -546,12 +547,13 @@ public class StatisticExecutor {
                         basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                                 statsJob.getColumnNames(), statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
                                 statsJob.getProperties(), existUpdateRows);
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     } else {
                         basicStatsMeta = basicStatsMeta.clone();
                         basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                         basicStatsMeta.setProperties(statsJob.getProperties());
                         basicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
-                        basicStatsMeta.resetDeltaRows();
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     }
 
                     for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {

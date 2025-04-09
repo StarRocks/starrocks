@@ -15,7 +15,6 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
-import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -23,6 +22,7 @@ import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -39,13 +39,15 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.text.ParseException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class SecurityIntegrationTest {
+    private final MockTokenUtils mockTokenUtils = new MockTokenUtils();
+
     @Test
     public void testProperty() {
         Map<String, String> properties = new HashMap<>();
@@ -74,15 +76,8 @@ public class SecurityIntegrationTest {
     }
 
     @Test
-    public void testAuthentication() throws DdlException, AuthenticationException, IOException {
-        GlobalStateMgr.getCurrentState().setJwkMgr(new JwkMgr() {
-            @Override
-            public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
-                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
-                InputStream jwksInputStream = new FileInputStream(path + "/" + jwksUrl);
-                return JWKSet.load(jwksInputStream);
-            }
-        });
+    public void testAuthentication() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
@@ -92,10 +87,9 @@ public class SecurityIntegrationTest {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         authenticationMgr.createSecurityIntegration("oidc2", properties, true);
 
-
         Config.authentication_chain = new String[] {"native", "oidc2"};
 
-        String idToken = getOpenIdConnect("oidc.json");
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         MysqlCodec.writeInt1(outputStream, 1);
         MysqlCodec.writeLenEncodedString(outputStream, idToken);
@@ -140,15 +134,8 @@ public class SecurityIntegrationTest {
     }
 
     @Test
-    public void testGroupProvider() throws DdlException, AuthenticationException, IOException {
-        GlobalStateMgr.getCurrentState().setJwkMgr(new JwkMgr() {
-            @Override
-            public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
-                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
-                InputStream jwksInputStream = new FileInputStream(path + "/" + jwksUrl);
-                return JWKSet.load(jwksInputStream);
-            }
-        });
+    public void testGroupProvider() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
         properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
@@ -172,7 +159,7 @@ public class SecurityIntegrationTest {
         groupProvider.put(FileGroupProvider.GROUP_FILE_URL, "file_group");
         authenticationMgr.replayCreateGroupProvider("file_group_provider", groupProvider);
 
-        String idToken = getOpenIdConnect("oidc.json");
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         MysqlCodec.writeInt1(outputStream, 1);
         MysqlCodec.writeLenEncodedString(outputStream, idToken);
@@ -200,5 +187,50 @@ public class SecurityIntegrationTest {
         authenticationMgr.alterSecurityIntegration("oidc", alterProperties, true);
         Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
                 new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray(), null));
+    }
+
+    @Test
+    public void testLDAPSecurityIntegration() throws DdlException, AuthenticationException, IOException {
+        Map<String, String> properties = new HashMap<>();
+
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_DN, "cn=admin,dc=example,dc=com");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD, "");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_BASE_DN, "");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR, "");
+        SimpleLDAPSecurityIntegration ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
+
+        SimpleLDAPSecurityIntegration finalLdapSecurityIntegration = ldapSecurityIntegration;
+        Assert.assertThrows(SemanticException.class, finalLdapSecurityIntegration::checkProperty);
+
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_ldap_simple");
+        ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
+        Assert.assertNotNull(ldapSecurityIntegration.getAuthenticationProvider());
+        Assert.assertNotNull(SecurityIntegrationFactory.createSecurityIntegration("ldap", properties));
+
+        LDAPAuthProviderForNative ldapAuthProviderForNative =
+                (LDAPAuthProviderForNative) ldapSecurityIntegration.getAuthenticationProvider();
+
+        UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
+        userAuthenticationInfo.setAuthString("");
+        Assert.assertThrows(AuthenticationException.class, () ->
+                ldapAuthProviderForNative.authenticate(
+                        new ConnectContext(),
+                        "admin",
+                        "%",
+                        "x".getBytes(StandardCharsets.UTF_8),
+                        null,
+                        userAuthenticationInfo));
+
+        userAuthenticationInfo.setAuthString("cn=admin,dc=example,dc=com");
+        Assert.assertThrows(AuthenticationException.class, () ->
+                ldapAuthProviderForNative.authenticate(
+                        new ConnectContext(),
+                        "admin",
+                        "%",
+                        "x".getBytes(StandardCharsets.UTF_8),
+                        null,
+                        userAuthenticationInfo));
     }
 }

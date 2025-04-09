@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 public class PlainPasswordAuthenticationProvider implements AuthenticationProvider {
-    public static final String PLUGIN_NAME = "MYSQL_NATIVE_PASSWORD";
-
     /**
      * check password complexity if `enable_validate_password` is set
      * <p>
@@ -63,8 +63,19 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
 
         if (!Config.enable_password_reuse) {
-            AuthenticationHandler.authenticate(new ConnectContext(), userIdentity.getUser(), userIdentity.getHost(),
-                    password.getBytes(StandardCharsets.UTF_8), null);
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            Map.Entry<UserIdentity, UserAuthenticationInfo> userAuthenticationInfoEntry =
+                    authenticationMgr.getBestMatchedUserIdentity(userIdentity.getUser(), userIdentity.getHost());
+            if (userAuthenticationInfoEntry != null) {
+                try {
+                    authenticate(null, userIdentity.getUser(), userIdentity.getHost(),
+                            password.getBytes(StandardCharsets.UTF_8), null, userAuthenticationInfoEntry.getValue());
+                } catch (AuthenticationException e) {
+                    return;
+                }
+
+                throw new AuthenticationException("Can't reuse password");
+            }
         }
     }
 
@@ -83,15 +94,16 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
 
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(PLUGIN_NAME);
+        info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name());
         info.setPassword(passwordScrambled);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
+        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
         return info;
     }
 
     @Override
     public void authenticate(
+            ConnectContext context,
             String user,
             String host,
             byte[] remotePassword,
@@ -132,5 +144,10 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         } else {
             return MysqlPassword.checkPassword(originalPassword);
         }
+    }
+
+    @Override
+    public byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
+        return randomString;
     }
 }

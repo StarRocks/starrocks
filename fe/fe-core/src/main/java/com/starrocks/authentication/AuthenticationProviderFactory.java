@@ -14,31 +14,22 @@
 
 package com.starrocks.authentication;
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.common.Config;
-
-import java.util.Map;
+import com.starrocks.mysql.privilege.AuthPlugin;
 
 public class AuthenticationProviderFactory {
-    private static final Map<String, AuthenticationProvider> PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER =
-            ImmutableMap.<String, AuthenticationProvider>builder()
-                    .put(PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider())
-                    .put(LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative())
-                    .put(KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider())
-                    .put(OpenIdConnectAuthenticationProvider.PLUGIN_NAME, new OpenIdConnectAuthenticationProvider(
-                            Config.oidc_jwks_url,
-                            Config.oidc_principal_field,
-                            Config.oidc_required_issuer,
-                            Config.oidc_required_audience))
-                    .build();
+    private AuthenticationProviderFactory() {
+    }
 
-    private AuthenticationProviderFactory() {}
-
-    public static AuthenticationProvider create(String plugin) throws AuthenticationException {
-        if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(plugin)) {
-            throw new AuthenticationException("Cannot find " + plugin + " from "
-                + PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.keySet());
+    public static AuthenticationProvider create(String authPlugin, String authString) {
+        if (authPlugin == null) {
+            return null;
         }
-        return PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.get(plugin);
+
+        try {
+            AuthPlugin.Server authPluginServer = AuthPlugin.Server.valueOf(authPlugin);
+            return authPluginServer.getProvider(authString);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

@@ -63,7 +63,7 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
 
 Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
     // Try to preallocate from current block first.
-    if (_block == nullptr || !_block->preallocate(block_size)) {
+    if (_block == nullptr) {
         // Freeze current block firstly.
         RETURN_IF_ERROR(_freeze_current_block());
         // Acquire new block.
@@ -77,6 +77,11 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     _block_manager = block_manager;
     _writer = writer;
     _profile = profile;
+    if (_profile == nullptr) {
+        // use dummy profile
+        _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
+        _profile = _dummy_profile.get();
+    }
     _runtime_state = std::make_shared<RuntimeState>();
     _spiller_factory = spill::make_spilled_factory();
     std::string tracker_label = "LoadSpillMerge-" + std::to_string(_block_manager->tablet_id()) + "-" +

@@ -67,10 +67,6 @@ public class MysqlAuthPacket extends MysqlPacket {
         return database;
     }
 
-    public byte[] getRandomString() {
-        return randomString;
-    }
-
     public MysqlCapability getCapability() {
         return capability;
     }
@@ -79,12 +75,24 @@ public class MysqlAuthPacket extends MysqlPacket {
         return pluginName;
     }
 
+    public void setPluginName(String pluginName) {
+        this.pluginName = pluginName;
+    }
+
     public boolean isSSLConnRequest() {
         return capability.isSSL();
     }
 
     public Map<String, String> getConnectAttributes() {
         return connectAttributes;
+    }
+
+    public void setRandomString(byte[] randomString) {
+        this.randomString = randomString;
+    }
+
+    public byte[] getRandomString() {
+        return randomString;
     }
 
     @Override

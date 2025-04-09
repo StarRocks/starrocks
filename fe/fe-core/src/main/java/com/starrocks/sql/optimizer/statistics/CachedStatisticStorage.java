@@ -162,6 +162,36 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+    public void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId()) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
+        }
+
+        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
+        long tableId = table.getId();
+        for (String column : columns) {
+            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
+        }
+
+        try {
+            ColumnHistogramStatsCacheLoader loader = new ColumnHistogramStatsCacheLoader();
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ColumnStatsCacheKey, Optional<Histogram>> result = future.get();
+                histogramCache.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> histogramCache.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh histogram", e);
+        }
+    }
+
+    @Override
     public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
 
@@ -371,8 +401,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     /**
      *
      */
-    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<Long> partitions,
-                                                                  List<String> columns) {
+    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
 
         List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
         long tableId = table.getId();
@@ -414,12 +443,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             return null;
         }
 
-        long tableId = table.getId();
-        List<ColumnStatsCacheKey> cacheKeys = columns.stream()
-                .map(x -> new ColumnStatsCacheKey(tableId, x))
-                .collect(Collectors.toList());
         List<ColumnStatistic> columnStatistics = getColumnStatistics(table, columns);
-        Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, partitions, columns);
+        Map<String, PartitionStats> columnNDVForPartitions = getColumnNDVForPartitions(table, columns);
         if (MapUtils.isEmpty(columnNDVForPartitions)) {
             return null;
         }
@@ -439,8 +464,10 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     return null;
                 }
                 double distinctCount = partitionStats.getDistinctCount().get(partition);
+                double nullFraction = partitionStats.getNullFraction().get(partition);
                 ColumnStatistic newStats = ColumnStatistic.buildFrom(columnStatistic)
-                                .setDistinctValuesCount(distinctCount).build();
+                        .setDistinctValuesCount(distinctCount)
+                        .setNullsFraction(nullFraction).build();
                 newStatistics.add(newStats);
             }
             result.put(partition, newStatistics);
@@ -635,6 +662,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .put("HistogramStats", histogramCache.synchronous().estimatedSize())
                 .put("ConnectorTableStats", connectorTableCachedStatistics.synchronous().estimatedSize())
                 .put("ConnectorHistogramStats", connectorHistogramCache.synchronous().estimatedSize())
+                .put("MultiColumnCombinedStats", multiColumnStats.synchronous().estimatedSize())
                 .build();
     }
 

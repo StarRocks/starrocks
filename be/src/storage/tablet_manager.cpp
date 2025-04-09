@@ -1617,7 +1617,7 @@ void TabletManager::get_tablets_basic_infos(int64_t table_id, int64_t partition_
         for (auto& shard : _tablets_shards) {
             std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(shard);
             for (auto& tablet : all_tablets_by_shard) {
-                auto table_id_in_meta = tablet->tablet_meta()->table_id();
+                auto table_id_in_meta = tablet->belonged_table_id();
                 if ((table_id == -1 || table_id_in_meta == table_id) &&
                     (authorized_table_ids == nullptr ||
                      authorized_table_ids->find(table_id_in_meta) != authorized_table_ids->end())) {
