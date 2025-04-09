@@ -93,6 +93,8 @@ public:
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
 
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true);
+
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
