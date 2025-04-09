@@ -117,7 +117,7 @@ public class ApplyTuningGuideRule implements TreeRewriteRule {
                 OptExpression newChild = child.getOp().accept(this, child, context.getChild(i));
                 opt.setChild(i, newChild);
             }
-            List<TuningGuide> guideList = tuningGuides.getTuningGuides(context.getNodeId());
+            List<TuningGuide> guideList = tuningGuides.getTuningGuides(context.getOperatorId());
             OptExpression res = opt;
             if (guideList != null) {
                 for (TuningGuide guide : guideList) {
