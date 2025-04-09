@@ -5,7 +5,7 @@ sidebar_position: 11
 
 # [Preview] SQL Plan Manager
 
-本主题介绍 SQL Plan Manager 功能的基本概念和使用场景，以及如何使用 SQL Plan Manager 规范化查询计划。
+本文介绍 SQL Plan Manager 功能的基本概念和使用场景，以及如何使用 SQL Plan Manager 规范化查询计划。
 
 从 v3.5.0 开始，StarRocks 支持 SQL Plan Manager 功能。
 
