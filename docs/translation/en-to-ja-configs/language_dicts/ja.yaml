@@ -1,5 +1,7 @@
 FEs: FE
 BEs: BE
+distributed architecture: &da 分散アーキテクチャ
+distributed-architecture: *da
 Data loading: データロード
 Data unloading: データアンロード
 load: ロード
@@ -17,7 +19,11 @@ shared-data cluster: 共有データクラスタ
 shared-nothing cluster: 共有なしクラスタ
 zero-migration: ゼロマイグレーション
 native vectorized engine: ネイティブベクトル化エンジン
+vectorized query engine: ベクトル化クエリエンジン
 query federation/federated query: フェデレーションクエリ
+query plan: &qp クエリプラン
+query planning: *qp
+query analysis: *qp
 columnar storage: 列指向（カラムナ）ストレージ
 row storage: 行指向（ロウ）ストレージ
 intelligent materialized view: インテリジェントなマテリアライズドビュー
@@ -27,6 +33,8 @@ synchronous materialized view: 同期マテリアライズドビュー
 asynchronous materialized view: 非同期マテリアライズドビュー
 unified batch and streaming, batch-stream integrated: バッチストリーム統合
 high availability: 高可用性
+high concurrency: &hc 高い同時実行性
+high-concurrency: *hc
 high scalability: 高拡張性
 data ingestion: データ取り込み
 denormalized table/flat table: 非正規化テーブル
@@ -61,6 +69,9 @@ approximate distinct count: 近似重複排除カウント
 table schema: テーブルスキーマ
 sort key: ソートキー
 bucketing key: バケッティングキー
+List Partitioning: リストパーティション化
+secondary partitioning: セカンダリパーティション
+Range Partitioning: レンジパーティション化
 partitioning column: パーティション列
 partition key: パーティションキー
 random bucketing: ランダムバケット法
@@ -69,6 +80,7 @@ automatic partitioning: 自動パーティション化
 dynamic partitioning: 動的パーティション化
 expression partitioning: 式に基づくパーティション化
 list partitioning: リストパーティション化
+partition division: パーティション分割
 replica: レプリカ
 user profiling: ユーザープロファイリング
 user retention: ユーザーリテンション
@@ -85,7 +97,6 @@ approximation algorithm: 近似アルゴリズム
 nested query: ネストクエリ
 memory leak: メモリリーク
 memory bloat: メモリ肥大化
-secondary partitioning: セカンダリパーティション
 pruning: プルーニング
 partition file: パーティションファイル
 abstract syntax tree: 抽象構文ツリー
@@ -133,8 +144,6 @@ async refresh: 非同期リフレッシュ
 query acceleration: クエリアクセラレーション
 segment file: セグメントファイル
 Hybrid row-column storage: 行と列のハイブリッドストレージ
-List Partitioning: リストパーティション化
-Range Partitioning: レンジパーティション化
 Bitmap index: ビットマップインデックス
 Bloom filter index: ブルームフィルターインデックス
 shared-data: 共有データ
