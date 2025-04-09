@@ -33,7 +33,7 @@ displayed_sidebar: docs
 ### 语法
 
 ```SQL
-FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ])
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ] [, list_recursively])
 ```
 
 ### 参数说明
