@@ -17,6 +17,7 @@ package com.starrocks.epack.authentication;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
@@ -149,6 +150,18 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
             throw new AuthenticationException(String.format(
                     "external ldap authentication failure for user %s@%s with exception, error: %s",
                     user, host, e.getMessage()), e);
+        }
+
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        Set<Long> roleIds = authorizationMgr.getRoleMappingMetaMgr()
+                .getMappedRoleIdsForLdapUser(securityIntegrationName, user);
+        if (roleIds.isEmpty()) {
+            LOG.info("authenticate '{}' with security integration '{}' successfully," +
+                            " but cannot map any role, will try other auth mechanisms",
+                    user, securityIntegrationName);
+            throw new AuthenticationException("Cannot map any role ids for security integration");
+        } else {
+            context.setCurrentRoleIds(roleIds);
         }
     }
 }

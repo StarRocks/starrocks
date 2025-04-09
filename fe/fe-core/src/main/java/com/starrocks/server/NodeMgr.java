@@ -1285,6 +1285,8 @@ public class NodeMgr {
 
     public void resetFrontends() {
         frontends.clear();
+        frontendIds.clear();
+
         int fid = allocateNextFrontendId();
         Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
         frontends.put(self.getNodeName(), self);
@@ -1298,6 +1300,8 @@ public class NodeMgr {
 
     public void replayResetFrontends(Frontend frontend) {
         frontends.clear();
+        frontendIds.clear();
+
         frontends.put(frontend.getNodeName(), frontend);
         frontendIds.put(frontend.getFid(), frontend);
         // reset helper nodes

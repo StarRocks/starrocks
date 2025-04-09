@@ -16,7 +16,6 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
@@ -123,24 +122,6 @@ public class AuthenticationHandler {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
                         provider.authenticate(context, user, remoteHost, authResponse, randomString, userAuthenticationInfo);
-
-                        if (securityIntegration.getType().equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
-                            AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-                            Set<Long> roleIds = authorizationMgr.getRoleMappingMetaMgr()
-                                    .getMappedRoleIdsForLdapUser(securityIntegration.getName(), user);
-                            if (roleIds.isEmpty()) {
-                                LOG.info("authenticate '{}' with security integration '{}' successfully," +
-                                                " but cannot map any role, will try other auth mechanisms",
-                                        user, securityIntegration.getName());
-                                throw new AuthenticationException("Cannot map any role ids for security integration");
-                            } else {
-                                context.setCurrentRoleIds(roleIds);
-                                groupProviderName = securityIntegration.getGroupProviderName();
-                                if (groupProviderName == null) {
-                                    groupProviderName = List.of(Config.group_provider);
-                                }
-                            }
-                        }
 
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
                         groupProviderName = securityIntegration.getGroupProviderName();
