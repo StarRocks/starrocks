@@ -144,6 +144,17 @@ public class ExecPlan {
     public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
     }
+<<<<<<< HEAD
+=======
+
+    public Map<Integer, PlanFragment> getSplitProduceFragments() {
+        return splitProduceFragments;
+    }
+
+    public Map<PhysicalHashJoinOperator, HashJoinNode> getJoinNodeMap() {
+        return joinNodeMap;
+    }
+>>>>>>> 0a72bd1684 ([BugFix] Use operator id not node id for feedback (#57695))
 
     public OptExpression getPhysicalPlan() {
         return physicalPlan;
@@ -164,6 +175,18 @@ public class ExecPlan {
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
         optExpression.getOp().setPlanNodeId(id);
         optExpressions.put(id, optExpression);
+    }
+
+    public static void assignOperatorIds(OptExpression root) {
+        IdGenerator<PlanNodeId> operatorIdGenerator = PlanNodeId.createGenerator();
+        assignOperatorIds(root, operatorIdGenerator);
+    }
+
+    private static void assignOperatorIds(OptExpression root, IdGenerator<PlanNodeId> operatorIdGenerator) {
+        root.getOp().setOperatorId(operatorIdGenerator.getNextId().asInt());
+        for (OptExpression child : root.getInputs()) {
+            assignOperatorIds(child, operatorIdGenerator);
+        }
     }
 
     public OptExpression getOptExpression(int planNodeId) {
