@@ -1254,7 +1254,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
         UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8), null);
+                passwd.getBytes(StandardCharsets.UTF_8));
         // check INSERT action on table
         try {
             ConnectContext context = new ConnectContext();

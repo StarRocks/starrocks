@@ -20,6 +20,7 @@ package com.starrocks.mysql;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.OIDCSecurityIntegration;
+import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.AuthPlugin;
@@ -155,8 +156,8 @@ public class MysqlAuthPacketTest {
         //test security integration
         Map<String, String> properties = new HashMap<>();
         properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OIDCSecurityIntegration.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OIDCSecurityIntegration.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
         authenticationMgr.createSecurityIntegration("oidc", properties, true);

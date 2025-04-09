@@ -68,8 +68,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                     authenticationMgr.getBestMatchedUserIdentity(userIdentity.getUser(), userIdentity.getHost());
             if (userAuthenticationInfoEntry != null) {
                 try {
-                    authenticate(null, userIdentity.getUser(), userIdentity.getHost(),
-                            password.getBytes(StandardCharsets.UTF_8), null, userAuthenticationInfoEntry.getValue());
+                    authenticate(new ConnectContext(), userIdentity.getUser(), userIdentity.getHost(),
+                            password.getBytes(StandardCharsets.UTF_8), userAuthenticationInfoEntry.getValue());
                 } catch (AuthenticationException e) {
                     return;
                 }
@@ -107,8 +107,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             String user,
             String host,
             byte[] remotePassword,
-            byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
+        byte[] randomString = context.getAuthDataSalt();
         // The password sent by mysql client has already been scrambled(encrypted) using random string,
         // so we don't need to scramble it again.
         if (randomString != null) {
@@ -147,7 +147,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
-        return randomString;
+    public byte[] authSwitchRequestPacket(ConnectContext context, String user, String host) throws AuthenticationException {
+        return context.getAuthDataSalt();
     }
 }

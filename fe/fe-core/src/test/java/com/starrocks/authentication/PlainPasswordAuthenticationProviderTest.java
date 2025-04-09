@@ -74,23 +74,25 @@ public class PlainPasswordAuthenticationProviderTest {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
         String[] passwords = {"asdf123", "starrocks", "testtest"};
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
+        ctx.setAuthDataSalt(seed);
         for (String password : passwords) {
             UserAuthOption userAuthOption = new UserAuthOption(password, null, null, true, NodePosition.ZERO);
             UserAuthenticationInfo info = provider.analyzeAuthOption(testUser, userAuthOption);
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", scramble, seed, info);
+            provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", scramble, info);
         }
 
         // no password
         UserAuthenticationInfo info = provider.analyzeAuthOption(testUser, null);
-        provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", new byte[0], new byte[0], info);
+        ctx.setAuthDataSalt(new byte[0]);
+        provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", new byte[0], info);
         try {
+            ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
                     "xx".getBytes(StandardCharsets.UTF_8),
-                    "x".getBytes(StandardCharsets.UTF_8),
                     info);
             Assert.fail();
         } catch (AuthenticationException e) {
@@ -104,12 +106,12 @@ public class PlainPasswordAuthenticationProviderTest {
 
         info = provider.analyzeAuthOption(testUser, userAuthOption);
         try {
+            ctx.setAuthDataSalt(seed);
             provider.authenticate(
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
                     MysqlPassword.scramble(seed, "xx"),
-                    seed,
                     info);
             Assert.fail();
         } catch (AuthenticationException e) {
@@ -117,12 +119,12 @@ public class PlainPasswordAuthenticationProviderTest {
         }
 
         try {
+            ctx.setAuthDataSalt(seed);
             provider.authenticate(
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
                     MysqlPassword.scramble(seed, "bb"),
-                    seed,
                     info);
 
         } catch (AuthenticationException e) {
@@ -131,12 +133,12 @@ public class PlainPasswordAuthenticationProviderTest {
 
         try {
             byte[] remotePassword = "bb".getBytes(StandardCharsets.UTF_8);
+            ctx.setAuthDataSalt(null);
             provider.authenticate(
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
                     remotePassword,
-                    null,
                     info);
 
         } catch (AuthenticationException e) {
