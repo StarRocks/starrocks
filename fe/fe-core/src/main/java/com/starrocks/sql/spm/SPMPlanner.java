@@ -231,7 +231,8 @@ public class SPMPlanner {
                 Preconditions.checkState(!node.getChild(1).getChildren().isEmpty());
                 Preconditions.checkState(node.getChild(1).getChild(0) instanceof IntLiteral);
                 long spmId = ((IntLiteral) node.getChild(1).getChild(0)).getValue();
-                return placeholderValues.get(spmId).cast();
+                InPredicate value = placeholderValues.get(spmId).cast();
+                return new InPredicate(node.getChild(0), value.getListChildren(), node.isNotIn());
             }
             return super.visitExpression(node, context);
         }
