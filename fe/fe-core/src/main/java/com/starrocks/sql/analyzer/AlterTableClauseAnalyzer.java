@@ -455,7 +455,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 }
             }
 
-            List<Long> partitionIds = Lists.newArrayList();
+            Set<Long> partitionIds = Sets.newHashSet();
             for (String partitionName : partitionNameList) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {
@@ -463,7 +463,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 }
                 partitionIds.add(partition.getId());
             }
-            clause.setSourcePartitionIds(partitionIds);
+            clause.setSourcePartitionIds(Lists.newArrayList(partitionIds));
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
             clause.setTableOptimize(true);
