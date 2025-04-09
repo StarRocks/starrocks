@@ -17,7 +17,7 @@ DATETIME CURRENT_TIMESTAMP(INT p)
 
 ## パラメータ
 
-`p`: 任意指定で、秒の後に保持する桁数を指定します。範囲は [1,6] の INT 値でなければなりません。`select now(0)` は `select now()` と同等です。
+`p`: 任意指定で、秒の後に保持する桁数を指定します。範囲は [1,6] の INT 値でなければなりません。`select current_timestamp(0)` は `select current_timestamp()` と同等です。
 
 ## 戻り値
 
