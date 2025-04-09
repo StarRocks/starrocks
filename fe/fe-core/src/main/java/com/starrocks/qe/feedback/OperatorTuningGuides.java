@@ -30,27 +30,42 @@ public class OperatorTuningGuides {
 
     private final UUID originalQueryId;
 
-    private final Map<Integer, List<TuningGuide>> tuningGuides;
+    private final Map<Integer, OperatorGuideInfo> operatorIdToTuningGuideInfo;
 
     private final Cache<UUID, Long> optimizedRecords;
+
+    private static class OperatorGuideInfo {
+        private final List<TuningGuide> tuningGuides = Lists.newArrayList();
+        private final int nodeId;
+
+        public OperatorGuideInfo(int nodeId) {
+            this.nodeId = nodeId;
+        }
+    }
 
     public OperatorTuningGuides(UUID originalQueryId, long originalTimeCost) {
         this.originalQueryId = originalQueryId;
         this.originalTimeCost = originalTimeCost;
-        this.tuningGuides = Maps.newHashMap();
+        this.operatorIdToTuningGuideInfo = Maps.newHashMap();
         this.optimizedRecords = Caffeine.newBuilder().maximumSize(50).build();
     }
 
-    public void addTuningGuide(int nodeId, TuningGuide tuningGuide) {
-        tuningGuides.computeIfAbsent(nodeId, e -> Lists.newArrayList()).add(tuningGuide);
+    public void addTuningGuide(int nodeId, int operatorId, TuningGuide tuningGuide) {
+        OperatorGuideInfo operatorGuideInfo =
+                operatorIdToTuningGuideInfo.computeIfAbsent(operatorId, e -> new OperatorGuideInfo(nodeId));
+        operatorGuideInfo.tuningGuides.add(tuningGuide);
     }
 
-    public List<TuningGuide> getTuningGuides(int nodeId) {
-        return tuningGuides.get(nodeId);
+    public List<TuningGuide> getTuningGuides(int operatorId) {
+        OperatorGuideInfo guide = operatorIdToTuningGuideInfo.get(operatorId);
+        if (guide == null) {
+            return null;
+        }
+        return guide.tuningGuides;
     }
 
     public boolean isEmpty() {
-        return tuningGuides.isEmpty();
+        return operatorIdToTuningGuideInfo.isEmpty();
     }
 
     public long optimizedQueryCount() {
@@ -104,9 +119,9 @@ public class OperatorTuningGuides {
 
     public String getTuneGuidesInfo(boolean isFull) {
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<Integer, List<TuningGuide>> entry : tuningGuides.entrySet()) {
-            sb.append("PlanNode ").append(entry.getKey()).append(":").append("\n");
-            for (TuningGuide guide : entry.getValue()) {
+        for (Map.Entry<Integer, OperatorGuideInfo> entry : operatorIdToTuningGuideInfo.entrySet()) {
+            sb.append("PlanNode ").append(entry.getValue().nodeId).append(":").append("\n");
+            for (TuningGuide guide : entry.getValue().tuningGuides) {
                 sb.append(guide.getClass().getSimpleName()).append("\n");
                 if (isFull) {
                     sb.append(guide.getDescription()).append("\n");
