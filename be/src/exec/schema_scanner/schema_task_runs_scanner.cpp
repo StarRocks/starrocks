@@ -68,6 +68,10 @@ Status SchemaTaskRunsScanner::start(RuntimeState* state) {
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
+    if (_param->limit > 0) {
+        task_params.__isset.pagination = true;
+        task_params.pagination.__set_limit(_param->limit);
+    }
     RETURN_IF_ERROR(SchemaHelper::get_task_runs(_ss_state, task_params, &_task_run_result));
     _task_run_index = 0;
     return Status::OK();
