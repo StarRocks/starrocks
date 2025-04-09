@@ -314,16 +314,17 @@ void WorkGroupDriverQueue::cancel(DriverRawPtr driver) {
 }
 
 void WorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) {
+    int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
+    auto* wg_entity = driver->workgroup()->driver_sched_entity();
+
     // we don't have to update statistics when we only have one work group
     if (ExecEnv::GetInstance()->workgroup_manager()->num_workgroups() <= 1) {
+        wg_entity->queue()->update_statistics(driver);
         return;
     }
 
     // TODO: reduce the lock scope
     std::lock_guard<std::mutex> lock(_global_mutex);
-
-    int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
-    auto* wg_entity = driver->workgroup()->driver_sched_entity();
 
     // Update sched entity information.
     bool is_in_queue = _wg_entities.find(wg_entity) != _wg_entities.end();
