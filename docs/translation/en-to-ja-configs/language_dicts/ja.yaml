@@ -1,7 +1,5 @@
 FEs: FE
 BEs: BE
-activerecord: &my_value 'test'
-activemodel: *my_value
 distributed architecture: &da 分散アーキテクチャ
 distributed-architecture: *da
 Data loading: データロード
