@@ -455,50 +455,6 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
-<<<<<<< HEAD
-=======
-admin set frontend config ('enable_online_optimize_table'='false');
--- result:
--- !result
-alter table `t#t` distributed by hash(k) buckets 30;
--- result:
--- !result
-function: wait_optimize_table_finish()
--- result:
-None
--- !result
-show create table `t#t`;
--- result:
-t#t	CREATE TABLE `t#t` (
-  `k` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 30 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
--- !result
-admin set frontend config ('enable_online_optimize_table'='true');
--- result:
--- !result
-
--- name: test_cancel_optimize
-create table t(k int) distributed by hash(k) buckets 10;
--- result:
--- !result
-alter table t distributed by hash(k);
--- result:
--- !result
-cancel alter table optimize from t;
--- result:
--- !result
-function: wait_optimize_table_finish(expect_status="CANCELLED")
--- result:
-None
--- !result
 
 -- name: test_optimize_duplicate_partitions
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -542,4 +498,3 @@ show partitions from duplicate_table_with_null_partition;
 .*p202007.*k1, k2, k3, k4, k5	4.*
 .*p202008.*k1, k2, k3, k4, k5	3.*
 -- !result
->>>>>>> 056a4fe487 ([BugFix] Fix the temporary partition residue caused by optimize duplicate partitions (backport #57005) (#57583))
