@@ -23,6 +23,7 @@ vectorized query engine: ベクトル化クエリエンジン
 query federation/federated query: フェデレーションクエリ
 query plan: &qp クエリプラン
 query planning: *qp
+query analysis: *qp
 columnar storage: 列指向（カラムナ）ストレージ
 row storage: 行指向（ロウ）ストレージ
 intelligent materialized view: インテリジェントなマテリアライズドビュー
