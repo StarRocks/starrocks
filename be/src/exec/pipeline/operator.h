@@ -319,6 +319,7 @@ protected:
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;
     RuntimeProfile::Counter* _pull_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _pull_row_num_counter = nullptr;
+    RuntimeProfile::Counter* _pull_chunk_bytes_counter = nullptr;
     RuntimeProfile::Counter* _runtime_in_filter_num_counter = nullptr;
     RuntimeProfile::Counter* _runtime_bloom_filter_num_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_timer = nullptr;
