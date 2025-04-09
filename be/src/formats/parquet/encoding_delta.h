@@ -71,6 +71,7 @@ public:
         delta_bit_widths_.resize(mini_blocks_per_block_);
         first_block_initialized_ = false;
         values_remaining_current_mini_block_ = 0;
+        return Status::OK();
     }
 
     Status InitBlock() {
@@ -82,7 +83,7 @@ public:
         }
 
         // read the bitwidth of each miniblock
-        uint8_t* bit_width_data = (uint8_t*)delta_bit_widths_->data();
+        uint8_t* bit_width_data = (uint8_t*)delta_bit_widths_.data();
         for (uint32_t i = 0; i < mini_blocks_per_block_; ++i) {
             if (!decoder_->GetAligned<uint8_t>(1, bit_width_data + i)) {
                 return Status::Corruption("Decode bit-width EOF");
@@ -104,6 +105,7 @@ public:
         }
         delta_bit_width_ = bit_width;
         values_remaining_current_mini_block_ = values_per_mini_block_;
+        return Status::OK();
     }
 
     Status GetInternal(T* buffer, int max_values) {
@@ -130,7 +132,6 @@ public:
                     RETURN_IF_ERROR(InitBlock());
                 }
                 total_values_remaining_ -= max_values;
-                this->num_values_ -= max_values;
                 return Status::OK();
             }
             RETURN_IF_ERROR(InitBlock());
@@ -163,7 +164,6 @@ public:
             i += values_decode;
         }
         total_values_remaining_ -= max_values;
-        this->num_values_ -= max_values;
 
         if (PREDICT_FALSE(total_values_remaining_ == 0)) {
             uint32_t padding_bits = values_remaining_current_mini_block_ * delta_bit_width_;
@@ -178,12 +178,24 @@ public:
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         count = std::min<uint32_t>(count, total_values_remaining_);
-        dst->resize(count);
-        // TODO: GetInternal
+        size_t cur_size = dst->size();
+        dst->resize_uninitialized(count + cur_size);
+        T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
+        RETURN_IF_ERROR(GetInternal(data, count));
         return Status::OK();
     }
 
-    Status skip(size_t values_to_skip) override { return Status::OK(); }
+    Status skip(size_t values_to_skip) override {
+        values_to_skip = std::min<uint32_t>(values_to_skip, total_values_remaining_);
+        constexpr int kMaxSkipBufferSize = 128;
+        _skip_buffer.resize(kMaxSkipBufferSize);
+        while (values_to_skip > 0) {
+            size_t to_read = std::min<size_t>(values_to_skip, kMaxSkipBufferSize);
+            RETURN_IF_ERROR(GetInternal(_skip_buffer.data(), to_read));
+            values_to_skip -= to_read;
+        }
+        return Status::OK();
+    }
 
 private:
     // ============
@@ -211,6 +223,7 @@ private:
     Slice _data;
     size_t _offset = 0;
     BitReader _bit_reader;
+    std::vector<T> _skip_buffer;
 };
 
 } // namespace starrocks::parquet
