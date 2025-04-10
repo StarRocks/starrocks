@@ -27,6 +27,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "runtime/load_channel_mgr.h"
+#include "service/brpc.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
@@ -278,7 +279,131 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
     }
+    if (request->has_enable_aggregate_publish() && request->enable_aggregate_publish() &&
+        response->status().status_code() == 0) {
+        for (auto tablet_id : request->tablet_ids()) {
+            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, request->new_version());
+            if (!tablet_metadata.ok()) {
+                LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id
+                             << ", version: " << request->new_version() << ", error: " << tablet_metadata.status();
+                tablet_metadata.status().to_protobuf(response->mutable_status());
+                break;
+            }
+            auto& map = *response->mutable_tablet_metas();
+            map[tablet_id].CopyFrom(*(tablet_metadata.value()));
+        }
+    }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
+}
+
+struct AggregatePublishContext {
+    bthread::Mutex mutex;
+    bool has_failure{false};
+    std::map<int64_t, TabletMetadata> tablet_metas;
+    std::unique_ptr<BThreadCountDownLatch> latch;
+    PublishVersionResponse* response;
+    Status publish_status = Status::OK();
+
+    void handle_failure(const std::string& error) {
+        std::lock_guard l(mutex);
+        has_failure = true;
+        publish_status = Status::InternalError(error);
+    }
+
+    void aggregate_response(PublishVersionResponse* resp) {
+        std::lock_guard l(mutex);
+        for (auto tablet_id : resp->failed_tablets()) {
+            response->add_failed_tablets(tablet_id);
+        }
+        for (const auto& [tid, score] : resp->compaction_scores()) {
+            (*response->mutable_compaction_scores())[tid] = score;
+        }
+        for (const auto& [tid, row_num] : resp->tablet_row_nums()) {
+            (*response->mutable_tablet_row_nums())[tid] = row_num;
+        }
+        for (auto& [tid, meta] : *resp->mutable_tablet_metas()) {
+            tablet_metas.emplace(tid, std::move(meta));
+        }
+    }
+
+    void count_down() {
+        if (latch) {
+            latch->count_down();
+        }
+    }
+
+    void wait() {
+        if (latch) {
+            latch->wait();
+        }
+    }
+};
+
+static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx) {
+    std::unique_ptr<brpc::Controller> cntl_guard(cntl);
+    std::unique_ptr<PublishVersionResponse> resp_guard(resp);
+
+    DeferOp defer([&]() { ctx->count_down(); });
+    if (cntl->Failed()) {
+        ctx->handle_failure("link rpc channel failed");
+    } else if (resp->status().status_code() != 0) {
+        std::string msg;
+        for (const auto& str : resp->status().error_msgs()) {
+            msg += str;
+        }
+        ctx->handle_failure(msg);
+    } else {
+        ctx->aggregate_response(resp);
+    }
+}
+
+void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcController* controller,
+                                                const AggregatePublishVersionRequest* request,
+                                                PublishVersionResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard done_guard(done);
+    AggregatePublishContext ctx;
+    ctx.response = response;
+    ctx.latch = std::make_unique<BThreadCountDownLatch>(request->publish_reqs_size());
+
+    for (int i = 0; i < request->publish_reqs_size(); ++i) {
+        const auto timeout_ms = request->publish_reqs(i).has_timeout_ms() ? request->publish_reqs(i).timeout_ms()
+                                                                          : kDefaultTimeoutForPublishVersion;
+        const auto& compute_node = request->compute_nodes(i);
+        const auto& single_req = request->publish_reqs(i);
+
+        butil::EndPoint endpoint;
+        std::string brpc_url = fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port());
+        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
+            LOG(WARNING) << "unknown endpoint, host=" << compute_node.host();
+#ifndef BE_TEST
+            ctx.handle_failure(fmt::format("unknown endpoint, host={}", compute_node.host()));
+#endif
+        }
+        if (ctx.has_failure) {
+            ctx.count_down();
+            continue;
+        }
+
+        auto* node_cntl = new brpc::Controller();
+        auto* node_resp = new PublishVersionResponse();
+        node_cntl->set_timeout_ms(timeout_ms);
+
+        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+        brpc::ChannelOptions options;
+        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+        channel->Init(endpoint, &options);
+        auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
+                                                                  google::protobuf::Service::STUB_OWNS_CHANNEL);
+        stub->publish_version(node_cntl, &single_req, node_resp,
+                              brpc::NewCallback(aggregate_publish_cb, node_cntl, node_resp, &ctx));
+    }
+
+    ctx.wait();
+    Status final_status =
+            ctx.has_failure
+                    ? ctx.publish_status
+                    : ExecEnv::GetInstance()->lake_tablet_manager()->put_aggregate_tablet_metadata(ctx.tablet_metas);
+    final_status.to_protobuf(response->mutable_status());
 }
 
 void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
