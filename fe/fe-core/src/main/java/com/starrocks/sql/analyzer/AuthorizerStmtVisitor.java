@@ -2330,7 +2330,9 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             Map<String, String> properties = statement.getProperties();
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
                 String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-                checkWarehouseUsagePrivilege(warehouseName, context);
+                if (!warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                    checkWarehouseUsagePrivilege(warehouseName, context);
+                }
             }
 
         } catch (AccessDeniedException e) {
