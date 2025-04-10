@@ -171,11 +171,11 @@ PLAN FRAGMENT 1
   17:SORT
   |  order by: <slot 29> 29: substring ASC
   |  offset: 0
-  |  
+  |
   16:AGGREGATE (merge finalize)
   |  output: count(30: count), sum(31: sum)
   |  group by: 29: substring
-  |  
+  |
   15:EXCHANGE
 
 PLAN FRAGMENT 2
@@ -190,30 +190,30 @@ PLAN FRAGMENT 2
   |  STREAMING
   |  output: count(*), sum(6: c_acctbal)
   |  group by: 29: substring
-  |  
+  |
   13:Project
   |  <slot 6> : 6: c_acctbal
   |  <slot 29> : substring(5: c_phone, 1, 2)
-  |  
+  |
   12:HASH JOIN
   |  join op: LEFT ANTI JOIN (BUCKET_SHUFFLE)
-  |  colocate: false, reason: 
+  |  colocate: false, reason:
   |  equal join conjunct: 1: c_custkey = 21: o_custkey
-  |  
+  |
   |----11:EXCHANGE
-  |    
+  |
   9:Project
   |  <slot 1> : 1: c_custkey
   |  <slot 5> : 5: c_phone
   |  <slot 6> : 6: c_acctbal
-  |  
+  |
   8:NESTLOOP JOIN
   |  join op: INNER JOIN
-  |  colocate: false, reason: 
+  |  colocate: false, reason:
   |  other join predicates: CAST(6: c_acctbal AS DECIMAL128(38,8)) > 17: avg
-  |  
+  |
   |----7:EXCHANGE
-  |    
+  |
   0:OlapScanNode
      TABLE: customer
      PREAGGREGATION: ON
@@ -253,11 +253,11 @@ PLAN FRAGMENT 4
 
   6:ASSERT NUMBER OF ROWS
   |  assert number of rows: LE 1
-  |  
+  |
   5:AGGREGATE (merge finalize)
   |  output: avg(17: avg)
-  |  group by: 
-  |  
+  |  group by:
+  |
   4:EXCHANGE
 
 PLAN FRAGMENT 5
@@ -270,11 +270,11 @@ PLAN FRAGMENT 5
 
   3:AGGREGATE (update serialize)
   |  output: avg(14: c_acctbal)
-  |  group by: 
-  |  
+  |  group by:
+  |
   2:Project
   |  <slot 14> : 14: c_acctbal
-  |  
+  |
   1:OlapScanNode
      TABLE: customer
      PREAGGREGATION: ON

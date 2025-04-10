@@ -887,6 +887,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
 
+    public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
+    public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
+    public static final String JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT = "join_reorder_driving_table_max_element";
+
+    public static final String CBO_PUSH_DOWN_DISTINCT = "cbo_push_down_distinct";
+
     public static final String ENABLE_DATACACHE_SHARING = "enable_datacache_sharing";
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
@@ -1765,6 +1771,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In order to be compatible with the previous behavior, the default value is false.
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
+
+    @VarAttr(name = SEMI_JOIN_DEDUPLICATE_MODE)
+    private int semiJoinDeduplicateMode = 0;
+
+    @VarAttr(name = ENABLE_INNER_JOIN_TO_SEMI)
+    private boolean enableInnerJoinToSemi = true;
+
+    @VarAttr(name = JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT)
+    private int joinReorderDrivingTableMaxElement = 5;
+
+    // global, local
+    @VarAttr(name = CBO_PUSH_DOWN_DISTINCT, flag = VariableMgr.INVISIBLE)
+    private String cboPushDownDISTINCT = "global";
 
     @VarAttr(name = ENABLE_DATACACHE_SHARING)
     private boolean enableDataCacheSharing = true;
@@ -4821,6 +4840,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setHistoricalNodesMinUpdateInterval(int historicalNodesMinUpdateInterval) {
         this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
+    }
+
+    public int getSemiJoinDeduplicateMode() {
+        return semiJoinDeduplicateMode;
+    }
+
+    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
+        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
+    }
+
+    public boolean isEnableInnerJoinToSemi() {
+        return enableInnerJoinToSemi;
+    }
+
+    public void setEnableInnerJoinToSemi(boolean enableInnerJoinToSemi) {
+        this.enableInnerJoinToSemi = enableInnerJoinToSemi;
+    }
+
+    public String getCboPushDownDistinct() {
+        return cboPushDownDISTINCT;
+    }
+
+    public int getJoinReorderDrivingTableMaxElement() {
+        return joinReorderDrivingTableMaxElement;
     }
 
     // Serialize to thrift object

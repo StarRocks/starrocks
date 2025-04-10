@@ -31,10 +31,19 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 
 public class MergeProjectWithChildRule extends TransformationRule {
+    boolean eliminateUselessProject = true;
     public MergeProjectWithChildRule() {
         super(RuleType.TF_MERGE_PROJECT_WITH_CHILD,
                 Pattern.create(OperatorType.LOGICAL_PROJECT).
                         addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
+    }
+
+    // sometimes we don't want to eliminate project so we can hit some rules like "RewriteSimpleAggToMetaScanRule"
+    public MergeProjectWithChildRule(boolean eliminateUselessProject) {
+        super(RuleType.TF_MERGE_PROJECT_WITH_CHILD,
+                Pattern.create(OperatorType.LOGICAL_PROJECT).
+                        addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
+        this.eliminateUselessProject = eliminateUselessProject;
     }
 
     @Override
@@ -67,7 +76,7 @@ public class MergeProjectWithChildRule extends TransformationRule {
         ColumnRefSet projectColumns = logicalProjectOperator.getOutputColumns(
                 new ExpressionContext(input));
         ColumnRefSet childOutputColumns = child.getOutputColumns(new ExpressionContext(input.inputAt(0)));
-        if (projectColumns.equals(childOutputColumns)) {
+        if (projectColumns.equals(childOutputColumns) && eliminateUselessProject) {
             return Lists.newArrayList(OptExpression.create(builder.build(), input.inputAt(0).getInputs()));
         }
 

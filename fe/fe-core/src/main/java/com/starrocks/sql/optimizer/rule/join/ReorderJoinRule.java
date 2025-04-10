@@ -175,6 +175,10 @@ public class ReorderJoinRule extends Rule {
         return rewrite(input, JoinReorderFactory.createJoinReorderCardinalityPreserving(), context);
     }
 
+    public OptExpression rewrite_for_distinct_join(OptExpression input, OptimizerContext context) {
+        return rewrite(input, JoinReorderFactory.createJoinReorderDrivingTable(), context);
+    }
+
     public OptExpression rewrite(OptExpression input, JoinReorderFactory joinReorderFactory, OptimizerContext context) {
         List<Pair<OptExpression, Pair<OptExpression, Integer>>> innerJoinTreesAndParents = Lists.newArrayList();
         extractRootInnerJoin(null, -1, input, innerJoinTreesAndParents, false);

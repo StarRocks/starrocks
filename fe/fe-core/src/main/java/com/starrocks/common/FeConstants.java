@@ -80,6 +80,8 @@ public class FeConstants {
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set this flag true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+    // set this flag true to skip some step when running FE unit test
+    public static boolean enableJoinReorderInLogicalPhase = true;
     // set this flat true to enable unit statistics mock
     public static boolean enableUnitStatistics = false;
     public static boolean temporaryTableCleanerTest = false;

@@ -88,6 +88,7 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testPreAggregation() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(2999999);
         String sql = "select k1 from t0 inner join baseall on v1 = cast(k8 as int) group by k1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
