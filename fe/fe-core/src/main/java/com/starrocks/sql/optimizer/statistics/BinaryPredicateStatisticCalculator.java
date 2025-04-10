@@ -115,7 +115,6 @@ public class BinaryPredicateStatisticCalculator {
             Histogram columnHist = columnStatistic.getHistogram();
             Optional<Histogram> hist = updateHistWithEqual(columnStatistic, constant);
             if (hist.isPresent()) {
-                estimatedColumnStatisticBuilder.setHistogram(hist.get());
                 double rowCountInHistogram = hist.get().getTotalRows();
                 double predicateFactor = rowCountInHistogram / (double) columnHist.getTotalRows();
                 rows = Math.min(rowCountInHistogram, statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
@@ -136,7 +135,7 @@ public class BinaryPredicateStatisticCalculator {
     }
 
     public static Optional<Histogram> updateHistWithEqual(ColumnStatistic columnStatistic,
-                                                           Optional<ConstantOperator> constant) {
+                                                          Optional<ConstantOperator> constant) {
         if (constant.isEmpty() || columnStatistic.getHistogram() == null) {
             return Optional.empty();
         }
@@ -337,8 +336,9 @@ public class BinaryPredicateStatisticCalculator {
                         ConnectContext.get().getSessionVariable().isCboEnableHistogramJoinEstimation();
 
         double rowCount;
-        Optional<Histogram> hist = updateHistWithJoin(leftColumnStatistic, leftColumn.getType(), rightColumnStatistic,
-                rightColumn.getType(), enableJoinHistogram);
+        Optional<Histogram> hist = enableJoinHistogram ?
+                updateHistWithJoin(leftColumnStatistic, leftColumn.getType(), rightColumnStatistic, rightColumn.getType()) :
+                Optional.empty();
         if (hist.isEmpty()) {
             double selectivity = 1.0 /
                     max(1, max(leftColumnStatistic.getDistinctValuesCount(), rightColumnStatistic.getDistinctValuesCount()));
@@ -346,7 +346,6 @@ public class BinaryPredicateStatisticCalculator {
                     (isEqualForNull ? 1 :
                             (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
         } else {
-            newEstimateColumnStatistics.setHistogram(hist.get());
             double selectivity = hist.get().getTotalRows() / (double)
                     (leftColumnStatistic.getHistogram().getTotalRows() * rightColumnStatistic.getHistogram().getTotalRows());
             rowCount = statistics.getOutputRowCount() * selectivity;
@@ -357,17 +356,23 @@ public class BinaryPredicateStatisticCalculator {
         if (!isEqualForNull) {
             newEstimateColumnStatistics.setNullsFraction(0);
             newLeftStatistic = newEstimateColumnStatistics
-                    .setAverageRowSize(leftColumnStatistic.getAverageRowSize()).build();
+                    .setAverageRowSize(leftColumnStatistic.getAverageRowSize())
+                    .setHistogram(leftColumnStatistic.getHistogram())
+                    .build();
             newRightStatistic = newEstimateColumnStatistics
-                    .setAverageRowSize(rightColumnStatistic.getAverageRowSize()).build();
+                    .setAverageRowSize(rightColumnStatistic.getAverageRowSize())
+                    .setHistogram(rightColumnStatistic.getHistogram())
+                    .build();
         } else {
             newLeftStatistic = newEstimateColumnStatistics
                     .setAverageRowSize(leftColumnStatistic.getAverageRowSize())
                     .setNullsFraction(leftColumnStatistic.getNullsFraction())
+                    .setHistogram(leftColumnStatistic.getHistogram())
                     .build();
             newRightStatistic = newEstimateColumnStatistics
                     .setAverageRowSize(rightColumnStatistic.getAverageRowSize())
                     .setNullsFraction(rightColumnStatistic.getNullsFraction())
+                    .setHistogram(rightColumnStatistic.getHistogram())
                     .build();
         }
 
@@ -382,12 +387,9 @@ public class BinaryPredicateStatisticCalculator {
         return builder.build();
     }
 
-    public static Optional<Histogram> updateHistWithJoin(ColumnStatistic leftColumnStatistic,
-                                                         Type leftColumnType,
-                                                         ColumnStatistic rightColumnStatistic,
-                                                         Type rightColumnType, boolean isCboEnableHistogramJoinEstimation) {
-        if (!isCboEnableHistogramJoinEstimation || leftColumnStatistic.getHistogram() == null ||
-                rightColumnStatistic.getHistogram() == null) {
+    public static Optional<Histogram> updateHistWithJoin(ColumnStatistic leftColumnStatistic, Type leftColumnType,
+                                                         ColumnStatistic rightColumnStatistic, Type rightColumnType) {
+        if (leftColumnStatistic.getHistogram() == null || rightColumnStatistic.getHistogram() == null) {
             return Optional.empty();
         }
 
