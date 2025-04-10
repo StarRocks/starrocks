@@ -286,8 +286,8 @@ public class RuleSet {
                     new PushDownApplyLeftRule()
             ));
 
-    public static final Rule SUBQUERY_REWRITE_COMMON_RULES =
-            new CombinationRule(RuleType.GP_SUBQUERY_REWRITE_COMMON, ImmutableList.of(
+    public static final Rule SUBQUERY_EXTRACT_CORRELATION_PREDICATE_RULES =
+            new CombinationRule(RuleType.GP_SUBQUERY_EXTRACT_CORRELATION_PREDICATE, ImmutableList.of(
                     new PushDownApplyProjectRule(),
                     new PushDownApplyFilterRule(),
                     new PushDownApplyAggFilterRule(),
