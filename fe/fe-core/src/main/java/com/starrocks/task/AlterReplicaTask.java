@@ -37,7 +37,6 @@ package com.starrocks.task;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ColumnId;
@@ -59,6 +58,7 @@ import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TTabletType;
@@ -71,6 +71,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /*
@@ -99,16 +100,16 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public static class RollupJobV2Params {
         private final Map<String, Expr> defineExprs;
         private final Expr whereExpr;
-        private final DescriptorTable descTabl;
+        private Optional<TDescriptorTable> tDescTabl = Optional.empty();
         private final List<ColumnId> baseTableColIds;
 
         public RollupJobV2Params(Map<String, Expr> defineExprs,
                                  Expr whereExpr,
-                                 DescriptorTable descTabl,
+                                 Optional<TDescriptorTable> tDescTabl,
                                  List<ColumnId> baseTableColIds) {
             this.defineExprs = defineExprs;
             this.whereExpr = whereExpr;
-            this.descTabl = descTabl;
+            this.tDescTabl = tDescTabl;
             this.baseTableColIds = baseTableColIds;
         }
 
@@ -120,8 +121,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             return whereExpr;
         }
 
-        public DescriptorTable getDescTabl() {
-            return descTabl;
+        public Optional<TDescriptorTable> getTDescTabl() {
+            return tDescTabl;
         }
 
         public List<ColumnId> getBaseTableColIds() {
@@ -230,7 +231,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (rollupJobV2Params != null) {
             Map<String, Expr> defineExprs = rollupJobV2Params.getDefineExprs();
             Expr whereExpr = rollupJobV2Params.getWhereExpr();
-            DescriptorTable descTable = rollupJobV2Params.getDescTabl();
+            Optional<TDescriptorTable> tDescTable = rollupJobV2Params.getTDescTabl();
             List<ColumnId> baseTableColIds = rollupJobV2Params.getBaseTableColIds();
             if (defineExprs != null) {
                 for (Map.Entry<String, Expr> entry : defineExprs.entrySet()) {
@@ -255,8 +256,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (whereExpr != null) {
                 req.setWhere_expr(whereExpr.treeToThrift());
             }
-            if (descTable != null) {
-                req.setDesc_tbl(descTable.toThrift());
+            if (tDescTable.isPresent()) {
+                req.setDesc_tbl(tDescTable.get());
             }
             req.setBase_table_column_names(baseTableColIds.stream().map(ColumnId::getId)
                     .collect(Collectors.toList()));
