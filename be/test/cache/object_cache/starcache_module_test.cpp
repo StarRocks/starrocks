@@ -105,7 +105,7 @@ TEST_F(StarCacheModuleTest, test_charge_size) {
     size_t mem_size = 4096;
     size_t value_size = sizeof(int);
     void* ptr = malloc(mem_size);
-    int* value = new(ptr) int;
+    int* value = new (ptr) int;
     *value = 10;
     ObjectCacheHandlePtr handle = nullptr;
     ASSERT_OK(_cache->insert("1", (void*)ptr, value_size, mem_size, &Deleter, &handle, nullptr));
@@ -123,7 +123,7 @@ TEST_F(StarCacheModuleTest, test_charge_size_with_write_option) {
     size_t mem_size = 4096;
     size_t value_size = sizeof(int);
     void* ptr = malloc(mem_size);
-    int* value = new(ptr) int;
+    int* value = new (ptr) int;
     *value = 10;
     ObjectCacheHandlePtr handle = nullptr;
     ASSERT_OK(_cache->insert("1", (void*)ptr, value_size, mem_size, &Deleter, &handle, &_write_opt));
