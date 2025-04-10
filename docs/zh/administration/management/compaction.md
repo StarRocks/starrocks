@@ -15,7 +15,7 @@ displayed_sidebar: docs
 Compaction Score 反映了分区的数据文件合并状态。分数越高，表示该分区的数据文件合并程度越低，即该分区有更多版本的数据文件需要合并。FE 为每个分区维护 Compaction Score 信息，包括 Max Compaction Score （即这个分区中 Compaction Score 最高的 Tablet 的分数）。
 当 Partition 的 Max Compaction Score 小于 FE 参数 `lake_compaction_score_selector_min_score`(默认10)，则这个 Partition 的所有 Compaction 已经结束。
 当 Partition 的 Max Compaction Score 超过 100，就可以认为是不太健康的 Compaction 状态。
-当这个分区的 Max Compaction Score 超过 FE 参数 lake_ingest_slowdown_threshold(默认100)，系统会开始减缓这个分区的数据导入事务的提交速度，当超过 FE 参数 lake_compaction_score_upper_bound(默认2000) 时，系统会拒绝这个分区的数据导入事务。
+当这个分区的 Max Compaction Score 超过 FE 参数 lake_ingest_slowdown_threshold(默认100)，系统会开始减缓这个分区的数据导入事务的提交速度，当超过 FE 参数 `lake_compaction_score_upper_bound`(默认2000) 时，系统会拒绝这个分区的数据导入事务。
 
 ### 计算规则
 大多数情况下，一个数据文件对应的 Compaction Score 为1，也就是说，假设一个分区只有一个 Tablet，如果第一次数据导入这个 Tablet 内产生了10个数据文件，那么这个分区的 Max Compaction Score 就是 10，并且一个事务在一个 Tablet 内产生的所有数据文件被称作是一个 Rowset。
