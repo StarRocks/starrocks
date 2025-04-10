@@ -88,3 +88,28 @@ select regexp_count('1a 2b 14m', '\\d+');
 
 select str, regex, regexp_count(str, regex) from tsc order by str, regex;
 
+-- name: test_regexp_count_invalid
+
+CREATE TABLE `tsc_invalid` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+insert into tsc_invalid values 
+('abc123def456', '[0-9'),
+('test string', '(unclosed'),
+('repetition test', '?invalid'),
+('valid test', 'valid');
+
+select str, regex, regexp_count(str, regex) from tsc_invalid order by str, regex;
+
+select regexp_count('test string', '[0-9');
+select regexp_count('test string', '(unclosed');
+select regexp_count('test string', '?invalid');
+select regexp_count('test string', 'a{,}');
+select regexp_count(NULL, '[0-9');
+select regexp_count('', '[0-9');
+select regexp_count('test', NULL);

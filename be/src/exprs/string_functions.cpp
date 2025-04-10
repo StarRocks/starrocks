@@ -3956,7 +3956,6 @@ Status StringFunctions::regexp_count_prepare(FunctionContext* context, FunctionC
                 std::stringstream error;
                 error << "Invalid regex expression: " << state->pattern;
                 context->set_error(error.str().c_str());
-                delete state;
                 return Status::InvalidArgument(error.str());
             }
         }
@@ -3983,8 +3982,7 @@ static ColumnPtr regexp_count_const_pattern(re2::RE2* const_re, const Columns& c
         }
 
         auto value = str_viewer.value(row);
-        std::string str(value.data, value.size);
-        re2::StringPiece input(str);
+        re2::StringPiece input(value.data, value.size);
 
         int count = 0;
         re2::StringPiece match;
@@ -4051,8 +4049,7 @@ static ColumnPtr regexp_count_general(FunctionContext* context, re2::RE2::Option
             continue;
         }
 
-        std::string str(value.data, value.size);
-        re2::StringPiece input(str);
+        re2::StringPiece input(value.data, value.size);
 
         int count = 0;
         re2::StringPiece match;
