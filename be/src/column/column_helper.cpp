@@ -19,6 +19,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_view/column_view_helper.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -32,7 +33,6 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -272,6 +272,18 @@ ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDe
 
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
     return create_column(type_desc, nullable, false, 0);
+}
+
+MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+                                             long column_view_concat_rows_limit, long column_view_concat_bytes_limit) {
+    if (use_view_if_needed) {
+        auto opt_column = ColumnViewHelper::create_column_view(type_desc, nullable, column_view_concat_rows_limit,
+                                                               column_view_concat_bytes_limit);
+        if (opt_column.has_value()) {
+            return std::move(opt_column.value());
+        }
+    }
+    return create_column(type_desc, nullable);
 }
 
 struct ColumnBuilder {
@@ -523,5 +535,4 @@ ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_row
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
 template struct ChunkSliceTemplate<SegmentedChunkPtr>;
-
 } // namespace starrocks

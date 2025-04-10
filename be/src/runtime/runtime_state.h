@@ -397,6 +397,20 @@ public:
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
 
+    long column_view_concat_rows_limit() const {
+        return _query_options.__isset.column_view_concat_rows_limit ? _query_options.column_view_concat_rows_limit
+                                                                    : -1L;
+    }
+
+    long column_view_concat_bytes_limit() const {
+        return _query_options.__isset.column_view_concat_bytes_limit ? _query_options.column_view_concat_bytes_limit
+                                                                     : -1L;
+    }
+
+    bool enable_column_view() const {
+        return column_view_concat_bytes_limit() > 0 || column_view_concat_rows_limit() > 0;
+    }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }
