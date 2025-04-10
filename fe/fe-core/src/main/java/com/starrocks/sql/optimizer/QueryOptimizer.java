@@ -348,13 +348,14 @@ public class QueryOptimizer extends Optimizer {
                         MaterializationContext::hasMultiTables)) {
             context.getSessionVariable().setCboPushDownAggregateMode(-1);
             context.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+            context.getSessionVariable().setEnableInnerJoinToSemi(false);
         }
     }
 
     private void distinctJoinRewrite(TaskScheduler scheduler, OptExpression tree, TaskContext rootTaskContext) {
         if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableInnerJoinToSemi()) {
             scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
             CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
             deriveLogicalProperty(tree);
             scheduler.rewriteOnce(tree, rootTaskContext, new InnerToSemiRule());
@@ -377,7 +378,7 @@ public class QueryOptimizer extends Optimizer {
             // projection before ReorderJoinRule's application, after that, we must separate operator's
             // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
             scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
             CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
             tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
@@ -792,6 +793,9 @@ public class QueryOptimizer extends Optimizer {
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
             if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+                if (pushDistinctBelowWindowFlag) {
+                    deriveLogicalProperty(tree);
+                }
                 // Reorder joins before applying PushDownAggregateRule to better decide where to push down aggregator.
                 // For example, do not push down a not very efficient aggregator below a very small broadcast join.
                 logicalJoinReorder(tree, rootTaskContext);
@@ -809,7 +813,7 @@ public class QueryOptimizer extends Optimizer {
         if (context.getSessionVariable().getSemiJoinDeduplicateMode() !=
                 SemiJoinDeduplicateRule.DISABLE_PUSH_DOWN_DISTINCT) {
             // if agg push down, we need to call derive firstly
-            if (pushAggFlag) {
+            if (pushAggFlag || pushDistinctBelowWindowFlag) {
                 deriveLogicalProperty(tree);
             }
             // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
@@ -834,7 +838,7 @@ public class QueryOptimizer extends Optimizer {
     private void logicalJoinReorder(OptExpression tree, TaskContext rootTaskContext) {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
         CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
         deriveLogicalProperty(tree);
         tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
