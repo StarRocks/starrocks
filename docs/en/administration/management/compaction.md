@@ -8,7 +8,7 @@ This topic describes how to manage compaction in StarRocks shared-data clusters.
 
 ## Overview
 
-Each data import operation in StarRocks generates a new version. Compaction merges data files from different versions into larger files, reducing the number of small files and improving query efficiency.
+Each data import operation in StarRocks generates a new version of data files. Compaction merges data files from different versions into larger files, reducing the number of small files and improving query efficiency.
 
 ## Compaction Score
 ### Overview
