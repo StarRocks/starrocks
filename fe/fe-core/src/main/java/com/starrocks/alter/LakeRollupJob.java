@@ -53,7 +53,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -67,7 +66,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -295,10 +293,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         LOG.info("previous transactions are all finished, begin to send rollup tasks. job: {}", jobId);
 
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
-        Optional<TDescriptorTable> tDescTable = Optional.empty();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable tbl = getTableOrThrow(db, tableId);
             Preconditions.checkState(tbl.getState() == OlapTable.OlapTableState.ROLLUP);
+            // only needs to analyze once
+            AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                    RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -312,9 +312,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName(),
-                                    tDescTable);
 
                     ComputeNode computeNode = null;
                     try {
