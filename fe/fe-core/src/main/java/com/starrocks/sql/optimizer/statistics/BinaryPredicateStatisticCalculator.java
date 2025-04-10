@@ -479,10 +479,10 @@ public class BinaryPredicateStatisticCalculator {
                 long leftBucketRowCount = leftBucket.getCount() - prevLeftBucketRowCount;
                 long rightBucketRowCount = rightBucket.getCount() - prevRightBucketRowCount;
                 if (dataTypeLeft.isFixedPointType()) {
-                    leftBucketDistinctRowCount = (long) (leftBucket.getUpper() - leftBucket.getLower());
+                    leftBucketDistinctRowCount = (long) (leftBucket.getUpper() - leftBucket.getLower() + 1);
                 }
                 if (dataTypeRight.isFixedPointType()) {
-                    rightBucketDistinctRowCount = (long) (rightBucket.getUpper() - rightBucket.getLower());
+                    rightBucketDistinctRowCount = (long) (rightBucket.getUpper() - rightBucket.getLower() + 1);
                 }
 
                 // merge the upper repeats.

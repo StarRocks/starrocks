@@ -234,7 +234,7 @@ public class HistogramStatisticsTest {
         Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
         Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
         Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
-        Assert.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
+        Assert.assertEquals(82982, estimated.getOutputRowCount(), 0.1);
     }
 
     @Test
@@ -545,7 +545,7 @@ public class HistogramStatisticsTest {
         joinBucket = exist.get().getBuckets().get(0);
         Assert.assertEquals(joinBucket.getLower(), 5D, 0.001);
         Assert.assertEquals(joinBucket.getUpper(), 9D, 0.001);
-        Assert.assertEquals(joinBucket.getCount().longValue(), 833);
+        Assert.assertEquals(joinBucket.getCount().longValue(), 714);
         Assert.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
     }
 }
