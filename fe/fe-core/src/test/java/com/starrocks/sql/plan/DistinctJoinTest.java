@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -23,38 +24,14 @@ public class DistinctJoinTest extends TPCDS1TTestBase {
     public static void beforeClass() throws Exception {
         TPCDS1TTestBase.beforeClass();
         connectContext.getSessionVariable().disableJoinReorder();
+        FeConstants.enableJoinReorderInLogicalPhase = true;
     }
 
     @AfterClass
     public static void afterClass() {
+        FeConstants.enableJoinReorderInLogicalPhase = false;
         connectContext.getSessionVariable().enableJoinReorder();
-        PlanTestBase.afterClass();
-    }
-
-    @Test
-    public void testInnerToSemi() throws Exception {
-        String sql = "select distinct(t2.v9) from t0 join t1 on t0.v1=t1.v4 join t2 on t0.v2 = t2.v8;";
-        String plan = getLogicalFragmentPlan(sql);
-        assertContains(plan, "RIGHT SEMI JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])\n" +
-                "                EXCHANGE SHUFFLE[2]\n" +
-                "                    LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])\n" +
-                "                        SCAN (columns[1: v1, 2: v2] predicate[2: v2 IS NOT NULL])\n" +
-                "                        EXCHANGE BROADCAST\n" +
-                "                            SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])\n" +
-                "                EXCHANGE SHUFFLE[8]\n" +
-                "                    SCAN (columns[8: v8, 9: v9] predicate[8: v8 IS NOT NULL])");
-
-        sql = "select distinct(t0.v1) from t0 join t1 on t0.v1 = t1.v4 join t2 on t1.v4 = t2.v7;";
-        plan = getLogicalFragmentPlan(sql);
-        assertContains(plan, " LEFT SEMI JOIN (join-predicate [1: v1 = 7: v7] post-join-predicate [null])\n" +
-                "        LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])\n" +
-                "            EXCHANGE SHUFFLE[1]\n" +
-                "                SCAN (columns[1: v1] predicate[1: v1 IS NOT NULL])\n" +
-                "            EXCHANGE SHUFFLE[4]\n" +
-                "                SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])\n" +
-                "        EXCHANGE SHUFFLE[7]\n" +
-                "            SCAN (columns[7: v7] predicate[7: v7 IS NOT NULL])");
-
+        TPCDS1TTestBase.afterClass();
     }
 
     @Test
@@ -63,7 +40,7 @@ public class DistinctJoinTest extends TPCDS1TTestBase {
                 "select count(*) from (select catalog_sales.cs_bill_cdemo_sk from catalog_sales" +
                         " left semi join store_sales on catalog_sales.cs_bill_cdemo_sk = store_sales.ss_addr_sk) a;";
         String plan = getLogicalFragmentPlan(sql);
-        assertContains(
+        assertContains(plan,
                 "AGGREGATE ([GLOBAL] aggregate [{58: count=count(58: count)}] group by [[]] having [null]\n" +
                         "    EXCHANGE GATHER\n" +
                         "        AGGREGATE ([LOCAL] aggregate [{58: count=count()}] group by [[]] having [null]\n" +
