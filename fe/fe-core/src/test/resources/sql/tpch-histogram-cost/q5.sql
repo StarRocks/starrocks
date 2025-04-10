@@ -320,5 +320,5 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[AFRICA:1]] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[EUROPE:1][AFRICA:1][AMERICA:1][ASIA:1][MIDDLE EAST:1]] ESTIMATE
 [end]

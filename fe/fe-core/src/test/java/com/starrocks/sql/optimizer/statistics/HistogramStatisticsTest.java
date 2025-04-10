@@ -225,39 +225,16 @@ public class HistogramStatisticsTest {
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
         Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
-        Assert.assertNull(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram());
-        Assert.assertNull(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram());
+        Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
+        Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
         Assert.assertEquals(200000, estimated.getOutputRowCount(), 0.1);
 
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
         estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
         Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
-        Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(),
-                estimated.getColumnStatistic(rightColumnRefOperator).getHistogram());
-        Histogram estimatedHistogram = estimated.getColumnStatistic(leftColumnRefOperator).getHistogram();
-        Assert.assertEquals(estimatedHistogram.getMcvString(), "MCV: [[17:40000][99:10000][38:6000][16:4800][59:4500]]");
-        Assert.assertEquals(estimatedHistogram.getBuckets().size(), 15);
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(0), 1, 10, 1428, 260));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(1), 15, 15, 1748, 320));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(2), 18, 20, 1948, 80));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(3), 21, 36, 2448, 80));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(4), 41, 45, 3019, 120));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(5), 46, 46, 3619, 600));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(6), 47, 47, 4219, 600));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(7), 48, 55, 4719, 160));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(8), 56, 56, 5519, 800));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(9), 57, 57, 6319, 800));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(10), 58, 58, 6499, 180));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(11), 61, 65, 7610, 180));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(12), 66, 67, 7670, 60));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(13), 70, 98, 8276, 60));
-        Assert.assertTrue(checkBucket(estimatedHistogram.getBuckets().get(14), 100, 100, 18276, 10000));
+        Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
+        Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
         Assert.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
-    }
-
-    boolean checkBucket(Bucket bucket, double lower, double upper, long count, long upperRepeats) {
-        return bucket.getLower() == lower && bucket.getUpper() == upper && bucket.getCount() == count &&
-                bucket.getUpperRepeats() == upperRepeats;
     }
 
     @Test
@@ -436,7 +413,7 @@ public class HistogramStatisticsTest {
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT, true);
+                columnStatisticRight, Type.BIGINT);
         Assert.assertTrue(notExist.isEmpty());
 
         // MCV to MCV intersection.
@@ -455,7 +432,7 @@ public class HistogramStatisticsTest {
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT, true);
+                columnStatisticRight, Type.BIGINT);
         Assert.assertTrue(exist.isPresent());
         Assert.assertNull(exist.get().getBuckets());
         Assert.assertEquals(exist.get().getMCV().size(), 1);
@@ -483,7 +460,7 @@ public class HistogramStatisticsTest {
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT, true);
+                columnStatisticRight, Type.BIGINT);
         Assert.assertTrue(exist.isPresent());
         Assert.assertTrue(exist.get().getBuckets().isEmpty());
         Assert.assertEquals(exist.get().getMCV().size(), 2);
@@ -512,7 +489,7 @@ public class HistogramStatisticsTest {
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT, true);
+                columnStatisticRight, Type.BIGINT);
         Assert.assertTrue(exist.isPresent());
         Assert.assertTrue(exist.get().getBuckets().isEmpty());
         Assert.assertEquals(exist.get().getMCV().size(), 2);
@@ -535,7 +512,7 @@ public class HistogramStatisticsTest {
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT, true);
+                columnStatisticRight, Type.BIGINT);
         Assert.assertTrue(exist.isPresent());
         Assert.assertTrue(exist.get().getMCV().isEmpty());
         Assert.assertEquals(exist.get().getBuckets().size(), 1);
@@ -561,7 +538,7 @@ public class HistogramStatisticsTest {
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
-                columnStatisticRight, Type.BIGINT, true);
+                columnStatisticRight, Type.BIGINT);
         Assert.assertTrue(exist.isPresent());
         Assert.assertTrue(exist.get().getMCV().isEmpty());
         Assert.assertEquals(exist.get().getBuckets().size(), 1);
