@@ -3754,7 +3754,6 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     _tablet->updates()->reset_error();
     _tablet->updates()->check_for_apply();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    
 }
 
 TEST_F(TabletUpdatesTest, test_get_compaction_status) {
