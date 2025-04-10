@@ -34,7 +34,7 @@ For storage-compute separated clusters, StarRocks introduces a new FE-controlled
 
 1. Score Calculation: The FE Leader calculates and stores Compaction Scores for partitions based on transaction publish results.
 2. Candidate Selection: FE selects partitions with the highest Max Compaction Scores as compaction candidates.
-3. Task Generation: FE initiates compaction transactions for selected partitions, generates tablet-level subtasks, and dispatches them to Compute Nodes (CNs) until reaching the limit set by the FE parameter lake_compaction_max_tasks.
+3. Task Generation: FE initiates compaction transactions for selected partitions, generates tablet-level subtasks, and dispatches them to Compute Nodes (CNs) until reaching the limit set by the FE parameter `lake_compaction_max_tasks`.
 4. Subtask Execution: CNs execute compaction subtasks in the background. The number of concurrent subtasks per CN is controlled by the CN parameter compact_threads.
 5. Result Collection: FE aggregates subtask results and commits the compaction transaction.
 6. Publish: FE publishes the successfully committed compaction transaction.
