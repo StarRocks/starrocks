@@ -26,7 +26,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.HISTOGRAM_UNREPRESENTED_VALUE_COEFFICIENT;
+
 public class HistogramStatisticsUtils {
+
+    private static class MatchedConstantsInfo {
+        long totalMatchedRows;
+        int matchedConstantsCount;
+        List<Double> validMatchedConstants;
+
+        MatchedConstantsInfo() {
+            this.totalMatchedRows = 0;
+            this.matchedConstantsCount = 0;
+            this.validMatchedConstants = new ArrayList<>();
+        }
+    }
 
     public static Statistics estimateInPredicateWithHistogram(
             ColumnRefOperator columnRefOperator,
@@ -36,14 +50,38 @@ public class HistogramStatisticsUtils {
             Statistics statistics) {
 
         Histogram histogram = columnStatistic.getHistogram();
-        Map<String, Long> mcv = histogram.getMCV();
-        long histogramTotalRows = histogram.getTotalRows();
-
-        long totalMatchedRows = 0;
-        int matchedConstantsCount = 0;
-        List<Double> validMatchedConstants = new ArrayList<>();
         boolean isCharFamily = columnRefOperator.getType().getPrimitiveType().isCharFamily();
 
+        MatchedConstantsInfo matchedInfo = collectMatchedConstantsInfo(
+                columnRefOperator, columnStatistic, constants, histogram, isCharFamily);
+
+        double selectivity = calculateSelectivity(matchedInfo.totalMatchedRows, histogram.getTotalRows(), isNotIn);
+        double nullsFraction = columnStatistic.getNullsFraction();
+        double rowCount = statistics.getOutputRowCount() * (1 - nullsFraction) * selectivity;
+
+        if (isNotIn) {
+            return estimateNotIn(columnRefOperator, columnStatistic, statistics,
+                    matchedInfo, selectivity, nullsFraction, rowCount);
+        } else {
+            return estimateIn(columnRefOperator, columnStatistic, statistics,
+                    matchedInfo, isCharFamily, rowCount);
+        }
+    }
+
+    private static MatchedConstantsInfo collectMatchedConstantsInfo(
+            ColumnRefOperator columnRefOperator,
+            ColumnStatistic columnStatistic,
+            List<ConstantOperator> constants,
+            Histogram histogram,
+            boolean isCharFamily) {
+
+        MatchedConstantsInfo info = new MatchedConstantsInfo();
+        Map<String, Long> mcv = histogram.getMCV();
+
+        // 1. First checks if the constant exists in Most Common Values (MCV)
+        // 2. If not in MCV, checks if it falls within a histogram bucket
+        // 3. For constants not found in either MCV or buckets,
+        // we combine histogram and column's statistics to estimates cardinality.
         for (ConstantOperator constant : constants) {
             String constantStr = constant.toString();
             if (constant.getType() == Type.BOOLEAN) {
@@ -51,21 +89,22 @@ public class HistogramStatisticsUtils {
             }
 
             if (mcv.containsKey(constantStr)) {
-                totalMatchedRows += mcv.get(constantStr);
-                matchedConstantsCount++;
+                info.totalMatchedRows += mcv.get(constantStr);
+                info.matchedConstantsCount++;
             } else {
                 Optional<Long> rowCountInBucket = histogram.getRowCountInBucket(
                         constant, columnStatistic.getDistinctValuesCount());
 
                 if (rowCountInBucket.isPresent()) {
-                    totalMatchedRows += rowCountInBucket.get();
-                    matchedConstantsCount++;
+                    info.totalMatchedRows += rowCountInBucket.get();
+                    info.matchedConstantsCount++;
                 } else {
-                    long estimatedRows = estimateOutOfRangeConstant(columnRefOperator, columnStatistic, constant, histogram);
-                    totalMatchedRows += estimatedRows;
+                    long estimatedRows = estimateNonHistogramValueCardinality(
+                            columnRefOperator, columnStatistic, constant, histogram);
+                    info.totalMatchedRows += estimatedRows;
 
                     if (estimatedRows > 0) {
-                        matchedConstantsCount++;
+                        info.matchedConstantsCount++;
                     }
                 }
             }
@@ -73,103 +112,130 @@ public class HistogramStatisticsUtils {
             if (!isCharFamily) {
                 Optional<Double> constantValueOpt = StatisticUtils.convertStatisticsToDouble(
                         constant.getType(), constantStr);
-                constantValueOpt.ifPresent(validMatchedConstants::add);
+                constantValueOpt.ifPresent(info.validMatchedConstants::add);
             }
         }
 
+        return info;
+    }
+
+    private static double calculateSelectivity(long totalMatchedRows, long histogramTotalRows, boolean isNotIn) {
         double selectivity = (double) totalMatchedRows / histogramTotalRows;
         selectivity = Math.min(1.0, Math.max(0.0, selectivity));
 
-        if (isNotIn) {
-            selectivity = 1.0 - selectivity;
-
-            double nullsFraction = columnStatistic.getNullsFraction();
-            double rowCount = statistics.getOutputRowCount() * (1 - nullsFraction) * selectivity;
-
-            if (Precision.equals(selectivity, 0.0, 0.000001d)) {
-                selectivity = 1 - StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT;
-                rowCount = statistics.getOutputRowCount() * (1 - nullsFraction) * selectivity;
-            }
-
-            double overlapFactor = Math.min(1.0, matchedConstantsCount / columnStatistic.getDistinctValuesCount());
-            double estimatedDistinctValues = columnStatistic.getDistinctValuesCount() * (1 - overlapFactor);
-
-            ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic)
-                    .setNullsFraction(0)
-                    .setDistinctValuesCount(Math.max(1, estimatedDistinctValues))
-                    .build();
-
-            Statistics result = Statistics.buildFrom(statistics)
-                    .setOutputRowCount(rowCount)
-                    .addColumnStatistic(columnRefOperator, estimatedColumnStatistic)
-                    .build();
-
-            return StatisticsEstimateUtils.adjustStatisticsByRowCount(result, rowCount);
-        } else {
-            double nullsFraction = columnStatistic.getNullsFraction();
-            double rowCount = statistics.getOutputRowCount() * (1 - nullsFraction) * selectivity;
-
-            if (isCharFamily) {
-                ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic)
-                        .setNullsFraction(0)
-                        .setDistinctValuesCount(Math.min(matchedConstantsCount, columnStatistic.getDistinctValuesCount()))
-                        .build();
-
-                Statistics result = Statistics.buildFrom(statistics)
-                        .setOutputRowCount(rowCount)
-                        .addColumnStatistic(columnRefOperator, estimatedColumnStatistic)
-                        .build();
-
-                return StatisticsEstimateUtils.adjustStatisticsByRowCount(result, rowCount);
-            } else {
-                if (validMatchedConstants.isEmpty()) {
-                    ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic)
-                            .setNullsFraction(0)
-                            .setDistinctValuesCount(Math.min(matchedConstantsCount, columnStatistic.getDistinctValuesCount()))
-                            .build();
-
-                    Statistics result = Statistics.buildFrom(statistics)
-                            .setOutputRowCount(rowCount)
-                            .addColumnStatistic(columnRefOperator, estimatedColumnStatistic)
-                            .build();
-
-                    return StatisticsEstimateUtils.adjustStatisticsByRowCount(result, rowCount);
-                }
-
-                double constantsMin = Collections.min(validMatchedConstants);
-                double constantsMax = Collections.max(validMatchedConstants);
-
-                double columnMin = columnStatistic.getMinValue();
-                double columnMax = columnStatistic.getMaxValue();
-
-                double newMin = Math.max(columnMin, constantsMin);
-                double newMax = Math.min(columnMax, constantsMax);
-
-                if (newMin > newMax) {
-                    newMin = constantsMin;
-                    newMax = constantsMax;
-                }
-
-                ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic)
-                        .setNullsFraction(0)
-                        .setMinValue(newMin)
-                        .setMaxValue(newMax)
-                        .setDistinctValuesCount(Math.min(matchedConstantsCount, columnStatistic.getDistinctValuesCount()))
-                        .build();
-
-                Statistics result = Statistics.buildFrom(statistics)
-                        .setOutputRowCount(rowCount)
-                        .addColumnStatistic(columnRefOperator, estimatedColumnStatistic)
-                        .build();
-
-                return StatisticsEstimateUtils.adjustStatisticsByRowCount(result, rowCount);
-            }
-        }
+        return isNotIn ? 1.0 - selectivity : selectivity;
     }
 
-    private static long estimateOutOfRangeConstant(
-            ColumnRefOperator columnRefOperator, ColumnStatistic columnStatistic,
-            ConstantOperator constant, Histogram histogram) {
+    private static Statistics estimateNotIn(
+            ColumnRefOperator columnRefOperator,
+            ColumnStatistic columnStatistic,
+            Statistics statistics,
+            MatchedConstantsInfo matchedInfo,
+            double selectivity,
+            double nullsFraction,
+            double rowCount) {
+
+        if (Precision.equals(selectivity, 0.0, 0.000001d)) {
+            selectivity = 1 - StatisticsEstimateCoefficient.IN_PREDICATE_DEFAULT_FILTER_COEFFICIENT;
+            rowCount = statistics.getOutputRowCount() * (1 - nullsFraction) * selectivity;
+        }
+
+        ColumnStatistic estimatedColumnStatistic = createNotInColumnStatistic(columnStatistic, matchedInfo);
+
+        Statistics result = Statistics.buildFrom(statistics)
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(columnRefOperator, estimatedColumnStatistic)
+                .build();
+
+        return StatisticsEstimateUtils.adjustStatisticsByRowCount(result, rowCount);
+    }
+
+    private static ColumnStatistic createNotInColumnStatistic(
+            ColumnStatistic columnStatistic,
+            MatchedConstantsInfo matchedInfo) {
+
+        double overlapFactor = Math.min(1.0, matchedInfo.matchedConstantsCount / columnStatistic.getDistinctValuesCount());
+        double estimatedDistinctValues = columnStatistic.getDistinctValuesCount() * (1 - overlapFactor);
+
+        return ColumnStatistic.buildFrom(columnStatistic)
+                .setNullsFraction(0)
+                .setDistinctValuesCount(Math.max(1, estimatedDistinctValues))
+                .build();
+    }
+
+    private static Statistics estimateIn(
+            ColumnRefOperator columnRefOperator,
+            ColumnStatistic columnStatistic,
+            Statistics statistics,
+            MatchedConstantsInfo matchedInfo,
+            boolean isCharFamily,
+            double rowCount) {
+
+        ColumnStatistic estimatedColumnStatistic = createInColumnStatistic(
+                columnStatistic, matchedInfo, isCharFamily);
+
+        Statistics result = Statistics.buildFrom(statistics)
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(columnRefOperator, estimatedColumnStatistic)
+                .build();
+
+        return StatisticsEstimateUtils.adjustStatisticsByRowCount(result, rowCount);
+    }
+
+    private static ColumnStatistic createInColumnStatistic(
+            ColumnStatistic columnStatistic,
+            MatchedConstantsInfo matchedInfo,
+            boolean isCharFamily) {
+
+        double distinctValues = Math.min(
+                matchedInfo.matchedConstantsCount,
+                columnStatistic.getDistinctValuesCount());
+
+        if (isCharFamily || matchedInfo.validMatchedConstants.isEmpty()) {
+            return ColumnStatistic.buildFrom(columnStatistic)
+                    .setNullsFraction(0)
+                    .setDistinctValuesCount(distinctValues)
+                    .build();
+        }
+
+        List<Double> validConstants = new ArrayList<>();
+        double columnMin = columnStatistic.getMinValue();
+        double columnMax = columnStatistic.getMaxValue();
+
+        for (Double value : matchedInfo.validMatchedConstants) {
+            if (value >= columnMin && value <= columnMax) {
+                validConstants.add(value);
+            }
+        }
+
+        if (validConstants.isEmpty()) {
+            return ColumnStatistic.buildFrom(columnStatistic)
+                    .setNullsFraction(0)
+                    .setDistinctValuesCount(distinctValues)
+                    .build();
+        }
+
+        double newMin = Collections.min(validConstants);
+        double newMax = Collections.max(validConstants);
+
+        return ColumnStatistic.buildFrom(columnStatistic)
+                .setNullsFraction(0)
+                .setMinValue(newMin)
+                .setMaxValue(newMax)
+                .setDistinctValuesCount(distinctValues)
+                .build();
+    }
+
+
+    /**
+     * Estimates the cardinality of values not explicitly represented in the histogram.
+     * This applies to values that are neither in MCV (Most Common Values) nor in regular histogram buckets.
+     */
+    private static long estimateNonHistogramValueCardinality(
+            ColumnRefOperator columnRefOperator,
+            ColumnStatistic columnStatistic,
+            ConstantOperator constant,
+            Histogram histogram) {
 
         long mcvRowCount = histogram.getMCV().values().stream().mapToLong(Long::longValue).sum();
         long totalRows = histogram.getTotalRows();
@@ -178,8 +244,7 @@ public class HistogramStatisticsUtils {
 
         if (columnRefOperator.getType().getPrimitiveType().isCharFamily()) {
             double avgRowsPerValue = totalRows / ndv;
-            double sparsityFactor = 0.1;
-            return Math.max(1, Math.round(avgRowsPerValue * sparsityFactor));
+            return Math.max(1, Math.round(avgRowsPerValue * HISTOGRAM_UNREPRESENTED_VALUE_COEFFICIENT));
         } else {
             Optional<Double> constantValueOpt = StatisticUtils.convertStatisticsToDouble(
                     constant.getType(), constant.toString());
@@ -195,13 +260,10 @@ public class HistogramStatisticsUtils {
             }
 
             long nonMcvRows = totalRows - mcvRowCount;
-
             double nonMcvNdv = Math.max(1.0, ndv - mcvCount);
             double avgRowsPerNonMcvValue = nonMcvRows / nonMcvNdv;
-            double outOfRangeFactor = 0.1;
 
-            return Math.max(1, Math.round(avgRowsPerNonMcvValue * outOfRangeFactor));
+            return Math.max(1, Math.round(avgRowsPerNonMcvValue * HISTOGRAM_UNREPRESENTED_VALUE_COEFFICIENT));
         }
     }
-
 }

@@ -52,7 +52,7 @@ public class PredicateStatisticsCalculatorTest {
     }
 
     @Test
-    public void testDateCompoundPredicate() throws Exception {
+    public void testDateCompoundPredicate() {
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(1000);
         double min = Utils.getLongFromDateTime(LocalDateTime.of(2020, 1, 1, 0, 0, 0));
