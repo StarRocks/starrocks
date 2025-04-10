@@ -1625,14 +1625,7 @@ public class StmtExecutor {
                                 analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(),
                                 analyzeType,
-<<<<<<< HEAD
                                 StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-=======
-                                StatsConstants.ScheduleType.ONCE,
-                                analyzeStmt.getProperties(),
-                                analyzeTypeDesc.getStatsTypes(),
-                                analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null),
->>>>>>> 89d347f645 ([BugFix] Ensure async profile not to throw exception to void affecting query's final result (#57616))
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
                         false);
@@ -2279,20 +2272,12 @@ public class StmtExecutor {
             throw t;
         } finally {
             boolean isAsync = false;
-<<<<<<< HEAD
-            if (context.isProfileEnabled()) {
-                isAsync = tryProcessProfileAsync(execPlan, 0);
-                if (parsedStmt.isExplain() &&
-                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
-=======
             try {
-                if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
+                if (context.isProfileEnabled()) {
                     isAsync = tryProcessProfileAsync(execPlan, 0);
                     if (parsedStmt.isExplain() &&
                             StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                        handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
-                                profile, null, context.getSessionVariable().getColorExplainOutput()));
+                        handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
                     }
                 }
             } catch (Exception e) {
@@ -2303,7 +2288,6 @@ public class StmtExecutor {
                             context.getSessionVariable().getProfileTimeout() * 1000L);
                 } else {
                     QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
->>>>>>> 89d347f645 ([BugFix] Ensure async profile not to throw exception to void affecting query's final result (#57616))
                 }
             }
         }
