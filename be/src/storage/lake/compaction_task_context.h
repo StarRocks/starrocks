@@ -69,6 +69,15 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
               no_write_txnlog(no_write_txnlog_),
               callback(std::move(cb_)) {}
 
+    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
+                                   std::shared_ptr<CompactionTaskCallback> cb_)
+            : txn_id(txn_id_),
+              tablet_id(tablet_id_),
+              version(version_),
+              force_base_compaction(force_base_compaction_),
+              no_write_txnlog(false),
+              callback(std::move(cb_)) {}
+
 #ifndef NDEBUG
     ~CompactionTaskContext() {
         CHECK(next() == this && previous() == this) << "Must remove CompactionTaskContext from list before destructor";
