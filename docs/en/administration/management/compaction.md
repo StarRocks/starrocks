@@ -14,7 +14,7 @@ Each data import operation in StarRocks generates a new version of data files. C
 ### Overview
 The *Compaction Score* reflects the merging status of data files in a partition. A higher score indicates lower merging progress, meaning the partition has more unmerged data file versions. The Frontend (FE) maintains Compaction Score information for each partition, including the Max Compaction Score (the highest score among all tablets in the partition).
 
-If a partition’s Max Compaction Score is below the FE parameter lake_compaction_score_selector_min_score (default: 10), compaction for that partition is considered complete.
+If a partition’s Max Compaction Score is below the FE parameter `lake_compaction_score_selector_min_score` (default: 10), compaction for that partition is considered complete.
 A Max Compaction Score exceeding 100 indicates an unhealthy compaction state.
 When the score exceeds the FE parameter lake_ingest_slowdown_threshold (default: 100), the system slows down data import transaction commits for the partition. If it surpasses lake_compaction_score_upper_bound (default: 2000), the system rejects import transactions for the partition.
 
