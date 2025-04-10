@@ -4858,7 +4858,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInnerJoinToSemi = enableInnerJoinToSemi;
     }
 
-    public String getCboPushDownDISTINCT() {
+    public String getCboPushDownDistinct() {
         return cboPushDownDISTINCT;
     }
 

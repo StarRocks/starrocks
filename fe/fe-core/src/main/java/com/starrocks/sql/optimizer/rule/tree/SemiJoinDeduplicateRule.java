@@ -256,7 +256,7 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
         @NotNull
         private LogicalAggregationOperator getLogicalAggregationOperator(List<ColumnRefOperator> groupBys) {
             AggType aggType;
-            if (sessionVariable.getCboPushDownDISTINCT().equalsIgnoreCase("local")) {
+            if (sessionVariable.getCboPushDownDistinct().equalsIgnoreCase("local")) {
                 aggType = AggType.LOCAL;
             } else {
                 aggType = AggType.GLOBAL;
