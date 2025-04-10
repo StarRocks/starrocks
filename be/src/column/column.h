@@ -36,7 +36,7 @@ struct TypeDescriptor;
 // Forward declaration
 class Datum;
 
-class Column {
+class Column : public std::enable_shared_from_this<Column> {
 public:
     // we use append fixed size to achieve faster memory copy.
     // We copy 350M rows, which total length is 2GB, max length is 15.
@@ -97,7 +97,13 @@ public:
 
     virtual bool is_array() const { return false; }
 
+    virtual bool is_view() const { return false; }
+    virtual bool is_nullable_view() const { return false; }
     virtual bool is_array_view() const { return false; }
+    virtual bool is_json_view() const { return false; }
+    virtual bool is_binary_view() const { return false; }
+    virtual bool is_struct_view() const { return false; }
+    virtual bool is_map_view() const { return false; }
 
     virtual bool is_map() const { return false; }
 
@@ -434,6 +440,8 @@ public:
     virtual Status unfold_const_children(const TypeDescriptor& type) { return Status::OK(); }
     // current only used by adaptive_nullable_column
     virtual void materialized_nullable() const {}
+
+    ColumnPtr get_ptr() const { return const_cast<Column*>(this)->shared_from_this(); }
 
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
