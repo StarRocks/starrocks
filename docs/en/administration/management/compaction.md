@@ -16,7 +16,7 @@ The *Compaction Score* reflects the merging status of data files in a partition.
 
 If a partition’s Max Compaction Score is below the FE parameter `lake_compaction_score_selector_min_score` (default: 10), compaction for that partition is considered complete.
 A Max Compaction Score exceeding 100 indicates an unhealthy compaction state.
-When the score exceeds the FE parameter lake_ingest_slowdown_threshold (default: 100), the system slows down data import transaction commits for the partition. If it surpasses lake_compaction_score_upper_bound (default: 2000), the system rejects import transactions for the partition.
+When the score exceeds the FE parameter lake_ingest_slowdown_threshold (default: 100), the system slows down data import transaction commits for the partition. If it surpasses `lake_compaction_score_upper_bound` (default: 2000), the system rejects import transactions for the partition.
 
 ### Calculation Rules
 Typically, each data file contributes 1 to the Compaction Score. For example:
