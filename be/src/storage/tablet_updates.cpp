@@ -2256,6 +2256,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     if (!st.ok()) {
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
+        manager->index_cache().remove(index_entry);
         failure_handler(msg, st.code());
         return apply_st;
     }
@@ -2266,7 +2267,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     // release or remove index entry when function end
     DeferOp index_defer([&]() {
         index.reset_cancel_major_compaction();
-        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+        if ((enable_persistent_index ^ _tablet.get_enable_persistent_index()) || !index.get_load_status().ok()) {
             manager->index_cache().remove(index_entry);
         } else {
             manager->index_cache().release(index_entry);
@@ -2426,7 +2427,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
                                                     delvecs, *index_meta, enable_persistent_index, nullptr);
         if (!st.ok()) {
-            manager->index_cache().release(index_entry);
             std::string msg = strings::Substitute("_apply_compaction_commit error: write meta failed: $0 $1",
                                                   st.to_string(), _debug_string(false));
             failure_handler(msg, st.code());
@@ -5638,6 +5638,7 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             auto& index = index_entry->value();
             index.unload();
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            manager->index_cache().release(index_entry);
         }
     }
 }
