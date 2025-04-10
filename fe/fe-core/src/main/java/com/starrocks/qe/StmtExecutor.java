@@ -705,8 +705,7 @@ public class StmtExecutor {
                                 }
 
                                 if (context instanceof ArrowFlightSqlConnectContext) {
-                                    isAsync = true;
-                                    tryProcessProfileAsync(execPlan, i);
+                                    isAsync = tryProcessProfileAsync(execPlan, i);
                                 } else if (context.isProfileEnabled()) {
                                     isAsync = tryProcessProfileAsync(execPlan, i);
                                     if (parsedStmt.isExplain() &&
@@ -1023,7 +1022,19 @@ public class StmtExecutor {
         }
     }
 
+    /**
+     * Try to process profile async without exception.
+     */
     private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+        try {
+            return processProfileAsync(plan, retryIndex);
+        } catch (Exception e) {
+            LOG.warn("process profile async failed", e);
+            return false;
+        }
+    }
+
+    private boolean processProfileAsync(ExecPlan plan, int retryIndex) {
         if (coord == null) {
             return false;
         }
@@ -2257,22 +2268,27 @@ public class StmtExecutor {
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
-            LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
+            LOG.warn("DML statement({}) process failed.", originStmt.originStmt, t);
             throw t;
         } finally {
             boolean isAsync = false;
-            if (context.isProfileEnabled()) {
-                isAsync = tryProcessProfileAsync(execPlan, 0);
-                if (parsedStmt.isExplain() &&
-                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
+            try {
+                if (context.isProfileEnabled()) {
+                    isAsync = tryProcessProfileAsync(execPlan, 0);
+                    if (parsedStmt.isExplain() &&
+                            StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                        handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                    }
                 }
-            }
-            if (isAsync) {
-                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                        context.getSessionVariable().getProfileTimeout() * 1000L);
-            } else {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            } catch (Exception e) {
+                LOG.warn("Failed to process profile async", e);
+            } finally {
+                if (isAsync) {
+                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                } else {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
             }
         }
     }
@@ -2885,14 +2901,18 @@ public class StmtExecutor {
             }
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
-            if (context.isProfileEnabled()) {
-                tryProcessProfileAsync(plan, 0);
-                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                        context.getSessionVariable().getProfileTimeout() * 1000L);
-            } else {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            try {
+                if (context.isProfileEnabled()) {
+                    tryProcessProfileAsync(plan, 0);
+                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                } else {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
+                recordExecStatsIntoContext();
+            } catch (Exception e) {
+                LOG.warn("Failed to unregister query", e);
             }
-            recordExecStatsIntoContext();
         }
     }
 
