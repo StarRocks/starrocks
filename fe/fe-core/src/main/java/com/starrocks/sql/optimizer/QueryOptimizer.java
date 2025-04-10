@@ -352,7 +352,8 @@ public class QueryOptimizer extends Optimizer {
         }
     }
 
-    private void distinctJoinRewrite(TaskScheduler scheduler, OptExpression tree, TaskContext rootTaskContext) {
+    private void rewriteDistinctInnerJoinToDistinctSemi(TaskScheduler scheduler, OptExpression tree,
+                                                        TaskContext rootTaskContext) {
         if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableInnerJoinToSemi()) {
             scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
@@ -653,7 +654,7 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteOnce(tree, rootTaskContext, new ArrayDistinctAfterAggRule());
         }
 
-        distinctJoinRewrite(scheduler, tree, rootTaskContext);
+        rewriteDistinctInnerJoinToDistinctSemi(scheduler, tree, rootTaskContext);
 
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
