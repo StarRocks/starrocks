@@ -100,7 +100,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public static class RollupJobV2Params {
         private final Map<String, Expr> defineExprs;
         private final Expr whereExpr;
-        private TDescriptorTable tDescTabl = Optional.empty();
+        private TDescriptorTable tDescTabl;
         private final List<ColumnId> baseTableColIds;
 
         public RollupJobV2Params(Map<String, Expr> defineExprs,
