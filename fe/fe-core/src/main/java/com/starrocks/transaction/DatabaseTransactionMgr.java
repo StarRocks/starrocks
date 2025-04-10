@@ -1718,7 +1718,6 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             LOG.info("replay a transaction state batch{}", transactionStateBatch);
-            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
             updateCatalogAfterVisibleBatch(transactionStateBatch, db);
 
             unprotectSetTransactionStateBatch(transactionStateBatch, true);
