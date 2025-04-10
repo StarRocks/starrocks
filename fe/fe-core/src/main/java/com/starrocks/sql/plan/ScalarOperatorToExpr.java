@@ -252,7 +252,8 @@ public class ScalarOperatorToExpr {
                     d.uncheckedCastTo(type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
-                    return new StringLiteral(literal.getVarchar());
+                    String str = literal.getVarchar();
+                    return StringLiteral.create(str);
                 } else if (type.isBinaryType()) {
                     return new VarBinaryLiteral(literal.getBinary());
                 } else {
@@ -473,6 +474,19 @@ public class ScalarOperatorToExpr {
                     callExpr = new InformationFunction(fnName,
                             "",
                             ((ConstantOperator) call.getChild(0)).getBigint());
+                    break;
+                case "rand":
+                case "random":
+                case "uuid":
+                case "sleep":
+                    List<Expr> arguments = Lists.newArrayList();
+                    if (call.getChildren().size() == 2) {
+                        arguments.add(buildExpr.build(call.getChild(0), context));
+                    }
+                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
+                    Preconditions.checkNotNull(call.getFunction());
+                    callExpr.setFn(call.getFunction());
+                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
                     List<Expr> arg = call.getChildren().stream()

@@ -629,10 +629,10 @@ public class PseudoBackend {
         if (destTablet == null) {
             destTablet = new Tablet(task.tablet_id, srcTablet.tableId, srcTablet.partitionId, srcTablet.schemaHash,
                     srcTablet.enablePersistentIndex);
-            destTablet.fullCloneFrom(srcTablet, srcBackend.getId());
+            destTablet.fullCloneFrom(srcTablet, srcBackend.getId(), getId());
             tabletManager.addClonedTablet(destTablet);
         } else {
-            destTablet.cloneFrom(srcTablet, srcBackend.getId());
+            destTablet.cloneFrom(srcTablet, srcBackend.getId(), getId());
         }
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
@@ -1083,7 +1083,7 @@ public class PseudoBackend {
         }
     }
 
-    private class PseudoLakeService implements LakeService {
+    public static class PseudoLakeService implements LakeService {
         @Override
         public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);

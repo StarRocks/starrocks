@@ -22,6 +22,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -53,69 +54,67 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.lake_io_opts = {false, config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool))
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    std::vector<uint64_t> rssid_rowids;
+    rssid_rowids.reserve(chunk_size);
 
-    int64_t reader_time_ns = 0;
+    const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
-        if (cancel_func()) {
-            return Status::Cancelled("cancelled");
-        }
+
+        RETURN_IF_ERROR(cancel_func());
+
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
         {
-            SCOPED_RAW_TIMER(&reader_time_ns);
-            if (auto st = reader.get_next(chunk.get()); st.is_end_of_file()) {
+            auto st = Status::OK();
+            if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+                st = reader.get_next(chunk.get(), &rssid_rowids);
+            } else {
+                st = reader.get_next(chunk.get());
+            }
+            if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
                 return st;
             }
         }
         ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
-        RETURN_IF_ERROR(writer->write(*chunk));
+        if (rssid_rowids.empty()) {
+            RETURN_IF_ERROR(writer->write(*chunk));
+        } else {
+            // pk table compaction
+            RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
+        }
         chunk->reset();
+        rssid_rowids.clear();
 
         _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
+        _context->stats->collect(reader.stats());
     }
+
+    RETURN_IF_ERROR(writer->finish());
 
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
-    RETURN_IF_ERROR(writer->finish());
-
-    // add reader stats
-    _context->stats->reader_time_ns += reader_time_ns;
-    _context->stats->accumulate(reader.stats());
-
-    // update writer stats
-    _context->stats->segment_write_ns += writer->stats().segment_write_ns;
+    _context->stats->collect(reader.stats());
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
     txn_log->set_tablet_id(_tablet.id());
     txn_log->set_txn_id(_txn_id);
-    for (auto& rowset : _input_rowsets) {
-        op_compaction->add_input_rowsets(rowset->id());
-    }
-
-    for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file.path);
-        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-    }
-
-    op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
-    op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
-    op_compaction->mutable_output_rowset()->set_overlapped(false);
+    RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get(),
+                                                 tablet_schema->keys_type() == KeysType::PRIMARY_KEYS));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
@@ -130,6 +129,12 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
+    if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
+        // can not call `get_read_chunk_size`, for example, if `total_input_segs` is shrinked to half,
+        // read_chunk_size might be doubled, in this case, this optimization will not take effect
+        return config::lake_compaction_chunk_size;
+    }
+
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
@@ -150,8 +155,10 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
             }
         }
     }
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                                total_num_rows, total_mem_footprint, total_input_segs);
+
+    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+                                                config::lake_compaction_chunk_size, total_num_rows, total_mem_footprint,
+                                                total_input_segs);
 }
 
 } // namespace starrocks::lake

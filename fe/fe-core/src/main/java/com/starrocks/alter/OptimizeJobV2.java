@@ -41,10 +41,13 @@ import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -67,7 +70,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
 
-    private final String postfix;
+    private String postfix;
 
     @SerializedName(value = "tmpPartitionIds")
     private List<Long> tmpPartitionIds = Lists.newArrayList();
@@ -95,6 +98,11 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     @SerializedName(value = "optimizeOperation")
     private String optimizeOperation = "";
+
+    // for deserialization
+    public OptimizeJobV2() {
+        super(JobType.OPTIMIZE);
+    }
 
     public OptimizeJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                          OptimizeClause optimizeClause) {
@@ -279,14 +287,16 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         for (int i = 0; i < tmpPartitionNames.size(); ++i) {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
-            String rewriteSql = "insert into " + tableName + " TEMPORARY PARTITION ("
-                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableColumnNames)
-                    + " from " + tableName + " partition (" + partitionName + ")";
+            String rewriteSql = "insert into " + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
+                        + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
+                        + " from " + ParseUtil.backquote(tableName) + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
             rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
             rewriteTask.setLastVersion(partitionLastVersion.get(i));
+            // use half of the alter timeout as rewrite task timeout
+            rewriteTask.getProperties().put(SessionVariable.QUERY_TIMEOUT, String.valueOf(timeoutMs / 2000));
             rewriteTasks.add(rewriteTask);
         }
 
@@ -341,14 +351,16 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // wait insert tasks finished
         boolean allFinished = true;
         int progress = 0;
+        TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                     || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
                 progress += 100 / rewriteTasks.size();
                 continue;
             }
-            TaskRun taskRun = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                    .getRunnableTaskRun(rewriteTask.getId());
+
+            TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(rewriteTask.getId());
             if (taskRun != null) {
                 if (taskRun.getStatus() != null) {
                     progress += taskRun.getStatus().getProgress() / rewriteTasks.size();
@@ -768,9 +780,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        if (jobState != JobState.PENDING) {
-            return;
-        }
+        this.postfix = "_" + jobId;
     }
 
     @Override

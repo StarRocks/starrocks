@@ -315,6 +315,19 @@ void TabletColumn::add_sub_column(TabletColumn&& sub_column) {
     _get_or_alloc_extra_fields()->sub_columns.emplace_back(std::move(sub_column));
 }
 
+bool TabletColumn::is_support_checksum() const {
+    if (!is_support_checksum_type(_type)) {
+        return false;
+    }
+    for (auto i = 0; i < subcolumn_count(); ++i) {
+        const auto& sub_col = subcolumn(i);
+        if (!sub_col.is_support_checksum()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /******************************************************************
  * TabletSchema
  ******************************************************************/
@@ -343,14 +356,22 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
     std::vector<ColumnId> sort_key_idxes;
+    // from referenced column name to index, used for build sort key idxes later.
+    std::map<std::string, uint32_t> col_name_to_idx;
     uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
-        if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
-            sort_key_idxes.emplace_back(cid);
+        col_name_to_idx[tablet_column->name()] = cid++;
+    }
+    // build sort key idxes
+    for (const auto& sort_key_idx : src_tablet_schema->sort_key_idxes()) {
+        std::string col_name = std::string(src_tablet_schema->column(sort_key_idx).name());
+        if (col_name_to_idx.count(col_name) <= 0) {
+            // sort key column is not in referenced column, skip it.
+            continue;
         }
-        cid++;
+        sort_key_idxes.emplace_back(col_name_to_idx[col_name]);
     }
     partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);

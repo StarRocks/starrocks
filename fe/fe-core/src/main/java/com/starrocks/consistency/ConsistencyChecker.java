@@ -49,7 +49,6 @@ import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -57,6 +56,8 @@ import com.starrocks.task.CheckConsistencyTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Comparator;
 import java.util.Date;
@@ -65,6 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConsistencyChecker extends FrontendDaemon {
@@ -92,6 +94,10 @@ public class ConsistencyChecker extends FrontendDaemon {
     private int endTime;
     private long lastTabletMetaCheckTime = 0;
 
+    // Record the id of the table being created and ignore the check of the tablet of the table being created
+    // to avoid deleting its tablets from TabletInvertedIndex by mistake.
+    private final Map<Long, Integer> creatingTableCounters = new ConcurrentHashMap<>();
+
     public ConsistencyChecker() {
         super("consistency checker");
 
@@ -105,8 +111,19 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     private boolean initWorkTime() {
-        Date startDate = TimeUtils.getTimeAsDate(Config.consistency_check_start_time);
-        Date endDate = TimeUtils.getTimeAsDate(Config.consistency_check_end_time);
+        // Using system time zone.
+        SimpleDateFormat hourFormat = new SimpleDateFormat("HH");
+        Date startDate;
+        Date endDate;
+        try {
+            startDate = hourFormat.parse(Config.consistency_check_start_time);
+            endDate = hourFormat.parse(Config.consistency_check_end_time);
+            LOG.info("parsed startDate: {}, endDate: {}", startDate, endDate);
+        } catch (ParseException e) {
+            LOG.error("failed to parse start/end time: {}, {}", Config.consistency_check_start_time,
+                    Config.consistency_check_end_time, e);
+            return false;
+        }
 
         if (startDate == null || endDate == null) {
             return false;
@@ -123,7 +140,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     private void checkTabletMetaConsistency() {
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency(creatingTableCounters);
     }
 
     @Override
@@ -298,33 +315,33 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                         // sort partitions
                         Queue<MetaObject> partitionQueue =
-                                new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
-                        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+                                    new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
+                        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                             // check partition's replication num. if 1 replication. skip
-                            if (table.getPartitionInfo().getReplicationNum(partition.getParentId()) == (short) 1) {
-                                LOG.debug("partition[{}]'s replication num is 1. ignore", partition.getParentId());
+                            if (table.getPartitionInfo().getReplicationNum(physicalPartition.getParentId()) == (short) 1) {
+                                LOG.debug("partition[{}]'s replication num is 1. ignore", physicalPartition.getParentId());
                                 continue;
                             }
 
                             // check if this partition has no data
-                            if (partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
-                                LOG.debug("partition[{}]'s version is {}. ignore", partition.getId(),
-                                        Partition.PARTITION_INIT_VERSION);
+                            if (physicalPartition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
+                                LOG.debug("partition[{}]'s version is {}. ignore", physicalPartition.getId(),
+                                            Partition.PARTITION_INIT_VERSION);
                                 continue;
                             }
-                            if (partition instanceof Partition) {
-                                partitionQueue.add((Partition) partition);
-                            } else if (partition instanceof PhysicalPartitionImpl) {
-                                partitionQueue.add((PhysicalPartitionImpl) partition);
+                            if (physicalPartition instanceof Partition) {
+                                partitionQueue.add((Partition) physicalPartition);
+                            } else if (physicalPartition instanceof PhysicalPartitionImpl) {
+                                partitionQueue.add((PhysicalPartitionImpl) physicalPartition);
                             }
                         }
 
                         while ((chosenOne = partitionQueue.poll()) != null) {
-                            PhysicalPartition partition = (PhysicalPartition) chosenOne;
+                            PhysicalPartition physicalPartition = (PhysicalPartition) chosenOne;
 
                             // sort materializedIndices
                             List<MaterializedIndex> visibleIndexes =
-                                    partition.getMaterializedIndices(IndexExtState.VISIBLE);
+                                        physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
                             Queue<MetaObject> indexQueue =
                                     new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
                             indexQueue.addAll(visibleIndexes);
@@ -346,14 +363,15 @@ public class ConsistencyChecker extends FrontendDaemon {
                                     }
 
                                     // check if version has already been checked
-                                    if (partition.getVisibleVersion() == tablet.getCheckedVersion()) {
+                                    if (physicalPartition.getVisibleVersion() == tablet.getCheckedVersion()) {
                                         if (tablet.isConsistent()) {
                                             LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
-                                                    chosenTabletId, tablet.getCheckedVersion(), partition.getVisibleVersion());
+                                                        chosenTabletId, tablet.getCheckedVersion(),
+                                                        physicalPartition.getVisibleVersion());
                                         }
                                     } else {
                                         LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
-                                                table.getId(), partition.getId(), index.getId(), chosenTabletId);
+                                                    table.getId(), physicalPartition.getId(), index.getId(), chosenTabletId);
 
                                         chosenTablets.add(chosenTabletId);
                                     }
@@ -406,12 +424,13 @@ public class ConsistencyChecker extends FrontendDaemon {
                 LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = table.getPartition(info.getPartitionId());
-            if (partition == null) {
+
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(info.getPhysicalPartitionId());
+            if (physicalPartition == null) {
                 LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);
                 return;
             }
-            MaterializedIndex index = partition.getIndex(info.getIndexId());
+            MaterializedIndex index = physicalPartition.getIndex(info.getIndexId());
             if (index == null) {
                 LOG.warn("replay finish consistency check failed, index is null, info: {}", info);
                 return;
@@ -425,7 +444,9 @@ public class ConsistencyChecker extends FrontendDaemon {
             long lastCheckTime = info.getLastCheckTime();
             db.setLastCheckTime(lastCheckTime);
             table.setLastCheckTime(lastCheckTime);
-            partition.setLastCheckTime(lastCheckTime);
+            if (physicalPartition instanceof MetaObject) {
+                ((MetaObject) physicalPartition).setLastCheckTime(lastCheckTime);
+            }
             index.setLastCheckTime(lastCheckTime);
             tablet.setLastCheckTime(lastCheckTime);
             tablet.setCheckedVersion(info.getCheckedVersion());
@@ -442,5 +463,19 @@ public class ConsistencyChecker extends FrontendDaemon {
             CheckConsistencyJob job = new CheckConsistencyJob(tabletId);
             addJob(job);
         }
+    }
+
+    public void addCreatingTableId(long tableId) {
+        creatingTableCounters.compute(tableId, (k, v) -> (v == null) ? 1 : v + 1);
+    }
+
+    public void deleteCreatingTableId(long tableId) {
+        creatingTableCounters.compute(tableId, (k, v) -> {
+            if (v == null || v <= 1) {
+                return null;
+            } else {
+                return v - 1;
+            }
+        });
     }
 }

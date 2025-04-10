@@ -131,6 +131,10 @@ public:
     }
 
     std::unique_ptr<ColumnConverter> converter;
+
+private:
+    static bool _has_valid_subfield_column_reader(
+            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
 };
 
 } // namespace starrocks::parquet

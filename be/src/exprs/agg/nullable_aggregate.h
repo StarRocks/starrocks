@@ -67,20 +67,43 @@ struct NullableAggregateFunctionState
 
     ConstAggDataPtr nested_state() const { return reinterpret_cast<ConstAggDataPtr>(&_nested_state); }
 
+    const T& nested_state_with_type() const { return _nested_state; }
+
     bool is_null = true;
 
     T _nested_state;
 };
 
+template <typename F, typename State>
+concept IsAggNullPred = requires(F f, State arg) {
+    { f(arg) }
+    ->std::convertible_to<bool>;
+};
+
+template <typename State>
+struct AggNonNullPred {
+    constexpr bool operator()(const State&) const { return false; }
+};
+
 // This class wrap an aggregate function and handle NULL value.
-// If an aggregate function has at least one nullable argument, we should use this class.
-// If all row all are NULL, we will return NULL.
+// If an aggregate function has at least one nullable argument or the output is nullable, we should use this class.
+// There are three possible combinations of nullable attributes for input and output:
+// 1. Input is nullable, output is nullable.
+// 2. Input is nullable, output is not nullable.
+// 3. Input is not nullable, output is nullable.
+//    For this case, the serialized output type is non-nullable, because only the state of input needs to be serialized.
+// If all the rows are NULL or `AggNullPred` returns true, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
+    using NestedState = typename State::NestedState;
+    static constexpr bool is_result_always_nullable = !std::is_same_v<AggNullPred, AggNonNullPred<NestedState>>;
+
 public:
-    explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_)
-            : nested_function(std::move(nested_function_)) {}
+    explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_,
+                                           AggNullPred null_pred = AggNullPred())
+            : nested_function(std::move(nested_function_)), null_pred(std::move(null_pred)) {}
     // as array_agg is not nullable, so it needn't create() here.
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
@@ -114,6 +137,15 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        if constexpr (is_result_always_nullable) {
+            // For the case that input is non-nullable but output is nullable, the serialized output type
+            // is non-nullable, because only the state of input needs to be serialized.
+            if (!to->is_nullable()) {
+                nested_function->serialize_to_column(ctx, this->data(state).nested_state(), to);
+                return;
+            }
+        }
+
         DCHECK(to->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(to);
         if (LIKELY(!this->data(state).is_null)) {
@@ -126,7 +158,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if (LIKELY(!this->data(state).is_null)) {
+        if (LIKELY(!this->data(state).is_null && !null_pred(this->data(state).nested_state_with_type()))) {
             if (to->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(to);
                 nested_function->finalize_to_column(ctx, this->data(state).nested_state(),
@@ -156,6 +188,17 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
+        if constexpr (is_result_always_nullable) {
+            // For the case that input is non-nullable but output is nullable, the serialized output type
+            // is non-nullable, because only the state of input needs to be serialized.
+            if (!(*dst)->is_nullable()) {
+                DCHECK(!src[0]->is_nullable());
+                nested_function->convert_to_serialize_format(ctx, src, chunk_size, dst);
+                return;
+            }
+        }
+
+        DCHECK((*dst)->is_nullable());
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
@@ -195,8 +238,6 @@ public:
         }
     }
 
-    using NestedState = typename State::NestedState;
-
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK(dst->is_nullable());
@@ -204,7 +245,8 @@ public:
         // binary column couldn't call resize method like Numeric Column
         // for non-slice type, null column data has been reset to zero in AnalyticNode
         // for slice type, we need to emplace back null data
-        if (IsNeverNullFunctionState<NestedState> || !this->data(state).is_null) {
+        if (IsNeverNullFunctionState<NestedState> ||
+            (!this->data(state).is_null && !null_pred(this->data(state).nested_state_with_type()))) {
             nested_function->get_values(ctx, this->data(state).nested_state(), nullable_column->mutable_data_column(),
                                         start, end);
             if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
@@ -254,15 +296,19 @@ public:
 
 protected:
     NestedAggregateFunctionPtr nested_function;
+    AggNullPred null_pred;
 };
 
-template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionUnary final
-        : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull> {
+        : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull,
+                                               AggNullPred> {
 public:
-    explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull>(
-                      nested_function) {}
+    explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function,
+                                            AggNullPred null_pred = AggNullPred())
+            : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull, AggNullPred>(
+                      nested_function, std::move(null_pred)) {}
 
     // NOTE: In stream MV, need handle input row by row, so need support single update.
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -746,12 +792,15 @@ public:
     }
 };
 
-template <typename State>
+template <typename State,
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionVariadic final
-        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false> {
+        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred> {
 public:
-    NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false>(nested_function) {}
+    NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function,
+                                      AggNullPred null_pred = AggNullPred())
+            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred>(
+                      nested_function, std::move(null_pred)) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {

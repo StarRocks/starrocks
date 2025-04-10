@@ -55,12 +55,13 @@ public class TaskRun implements Comparable<TaskRun> {
     @SerializedName("taskId")
     private long taskId;
 
-    @SerializedName("properties")
+    @SerializedName("taskRunId")
+    private final String taskRunId;
+
     private Map<String, String> properties;
 
     private final CompletableFuture<Constants.TaskRunState> future;
 
-    @SerializedName("task")
     private Task task;
 
     private ConnectContext runCtx;
@@ -69,17 +70,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private TaskRunProcessor processor;
 
-    @SerializedName("status")
     private TaskRunStatus status;
 
-    @SerializedName("type")
     private Constants.TaskType type;
 
-    @SerializedName("executeOption")
     private ExecuteOption executeOption;
-
-    @SerializedName("taskRunId")
-    private final String taskRunId;
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -203,10 +198,15 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
-        runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        if (status.getUserIdentity() != null) {
+            runCtx.setCurrentUserIdentity(status.getUserIdentity());
+        } else {
+            runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        }
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        runCtx.setIsLastStmt(true);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
@@ -306,6 +306,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setSource(task.getSource());
         status.setCreateTime(created);
         status.setUser(task.getCreateUser());
+        status.setUserIdentity(task.getUserIdentity());
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         status.setPostRun(task.getPostRun());
@@ -318,10 +319,24 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
-            return taskRun.getStatus().getPriority() - this.getStatus().getPriority();
+        int ret = comparePriority(this.status, taskRun.status);
+        if (ret != 0) {
+            return ret;
+        }
+        return taskRunId.compareTo(taskRun.taskRunId);
+    }
+
+    private int comparePriority(TaskRunStatus t0, TaskRunStatus t1) {
+        if (t0 == null || t1 == null) {
+            // prefer this
+            return 0;
+        }
+        // if priority is different, return the higher priority
+        if (t0.getPriority() != t1.getPriority()) {
+            return Integer.compare(t1.getPriority(), t0.getPriority());
         } else {
-            return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
+            // if priority is the same, return the older task
+            return Long.compare(t0.getCreateTime(), t1.getCreateTime());
         }
     }
 
@@ -368,9 +383,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 "taskId=" + taskId +
                 ", type=" + type +
                 ", taskRunId=" + taskRunId +
-                ", task_state=" + status.getState() +
+                ", task_state=" + (status != null ? status.getState() : "") +
                 ", properties=" + properties +
-                ", extra_message =" + status.getExtraMessage() +
+                ", extra_message =" + (status != null ? status.getExtraMessage() : "") +
                 '}';
     }
 }

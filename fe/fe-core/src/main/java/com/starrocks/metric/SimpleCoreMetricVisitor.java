@@ -131,7 +131,16 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
     }
 
     @Override
+    public void visitHistogram(HistogramMetric histogram) {
+    }
+
+    @Override
     public void visitHistogram(String name, Histogram histogram) {
+        // skip HistogramMetric since it needs extra processing
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
         if (!CORE_METRICS.containsKey(name)) {
             return;
         }

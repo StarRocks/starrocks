@@ -20,6 +20,7 @@
 #include "exec/mor_processor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/runtime_filter_bank.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
@@ -65,6 +66,7 @@ struct HdfsScanStats {
     int64_t footer_cache_read_count = 0;
     int64_t footer_cache_write_count = 0;
     int64_t footer_cache_write_bytes = 0;
+    int64_t footer_cache_write_fail_count = 0;
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
@@ -93,6 +95,46 @@ struct HdfsScanStats {
     int64_t iceberg_delete_file_build_ns = 0;
     int64_t iceberg_delete_files_per_scan = 0;
     int64_t iceberg_delete_file_build_filter_ns = 0;
+};
+
+class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
+public:
+    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
+
+    ~CountedSeekableInputStream() override = default;
+
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        _stats->bytes_read += size;
+        return _stream->read_at_fully(offset, data, size);
+    }
+
+    StatusOr<std::string_view> peek(int64_t count) override {
+        auto st = _stream->peek(count);
+        return st;
+    }
+
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    HdfsScanStats* _stats;
 };
 
 class HdfsParquetProfile;
@@ -205,10 +247,13 @@ struct HdfsScannerParams {
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
+    std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
+
     bool use_datacache = false;
     bool enable_populate_datacache = false;
     bool enable_datacache_async_populate_mode = false;
     bool enable_datacache_io_adaptor = false;
+    int32_t datacache_evict_probability = 0;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -234,7 +279,11 @@ struct HdfsScannerContext {
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    std::string formatted_name(const std::string& name) {
+        return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    }
+
+    std::vector<SlotDescriptor*> slot_descs;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -273,7 +322,11 @@ struct HdfsScannerContext {
 
     bool can_use_min_max_count_opt = false;
 
+    bool return_count_column = false;
+
     bool use_file_metacache = false;
+
+    int32_t datacache_evict_probability = 0;
 
     std::string timezone;
 
@@ -285,21 +338,25 @@ struct HdfsScannerContext {
 
     int64_t connector_max_split_size = 0;
 
+    // update none_existed_slot
+    // update conjunct
+    void update_with_none_existed_slot(SlotDescriptor* slot);
+
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
-    void update_materialized_columns(const std::unordered_set<std::string>& names);
-
+    Status update_materialized_columns(const std::unordered_set<std::string>& names);
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
-    void append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+    Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
 
     // If there is no partition column in the chunk，append partition column to chunk，
     // otherwise update partition column in chunk
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
 
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
@@ -318,11 +375,10 @@ public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
-    Status open(RuntimeState* runtime_state);
-    void close(RuntimeState* runtime_state) noexcept;
-    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    void finalize();
+    Status open(RuntimeState* runtime_state);
+    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
+    void close() noexcept;
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
@@ -331,6 +387,7 @@ public:
     int64_t io_time_spent() const { return _app_stats.io_ns; }
     virtual int64_t estimated_mem_usage() const;
     void update_counter();
+    void update_iceberg_delete_file_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {}
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
@@ -339,12 +396,13 @@ public:
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
-    virtual bool is_jni_scanner() { return false; }
+    virtual Status reinterpret_status(const Status& st);
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
 protected:
     Status open_random_access_file();
+    static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 

@@ -24,9 +24,11 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TaskRunsSystemTable {
+    public static final String NAME = "task_runs";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.TASK_RUNS_ID,
-                "task_runs",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("QUERY_ID", ScalarType.createVarchar(64))

@@ -41,6 +41,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -82,6 +84,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -122,6 +125,10 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
             throw new AnalysisException("databaseTransactionMgr[" + dbId + "] does not exist");
         }
         return dbTransactionMgr;
+    }
+
+    public Map<Long, DatabaseTransactionMgr> getAllDatabaseTransactionMgrs() {
+        return dbIdToDatabaseTransactionMgrs;
     }
 
     public void addDatabaseTransactionMgr(Long dbId) {
@@ -338,13 +345,12 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
                 .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond);
     }
 
-    private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
+    public static void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
             throws AnalysisException {
         if (timeoutSecond > maxLoadTimeoutSecond ||
                 timeoutSecond < minLoadTimeOutSecond) {
-            throw new AnalysisException("Invalid timeout. Timeout should between "
-                    + minLoadTimeOutSecond + " and " + maxLoadTimeoutSecond
-                    + " seconds");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, "timeout", timeoutSecond,
+                    String.format("between %d and %d seconds", minLoadTimeOutSecond, maxLoadTimeoutSecond));
         }
     }
 
@@ -439,7 +445,7 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
         if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new UserException("get database write lock timeout, database="
+            throw new UserException("get database write lock timeout, transactionId=" + transactionId + " database="
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
@@ -454,10 +460,14 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
         if (publishTimeoutMillis < 0) {
             // here commit transaction successfully cost too much time to cause publisTimeoutMillis is less than zero,
             // so we just return false to indicate publish timeout
-            throw new UserException("publish timeout: " + timeoutMillis);
+            String errMsg = String.format("publish timeout: %d, transactionId=%d",
+                    timeoutMillis, transactionId);
+            throw new UserException(errMsg);
         }
         if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new UserException("publish timeout: " + timeoutMillis);
+            String errMsg = String.format("publish timeout: %d, transactionId=%d",
+                    timeoutMillis, transactionId);
+            throw new UserException(errMsg);
         }
     }
 
@@ -755,6 +765,19 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
     }
 
     /**
+     * Get the map of active txn [txnId, tableId] of compaction transactions.
+     * @return the list of active txn stats of compaction transactions.
+     */
+    public Map<Long, Long> getLakeCompactionActiveTxnStats() {
+        Map<Long, Long> txnIdToTableIdMap = new HashMap<>();
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
+            txnIdToTableIdMap.putAll(dbTransactionMgr.getLakeCompactionActiveTxnMap());
+        }
+        return txnIdToTableIdMap;
+    }
+
+    /**
      * Get the smallest transaction ID of active transactions in a database.
      * If there are no active transactions in the database, return the transaction ID that will be assigned to the
      * next transaction.
@@ -1023,10 +1046,24 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        long count = 0;
-        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            count += databaseTransactionMgr.getTransactionNum();
+        return ImmutableMap.of("Txn", (long) getTransactionNum(),
+                "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> txnSamples = new ArrayList<>();
+        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
+            List<Object> samples = mgr.getSamplesForMemoryTracker();
+            if (samples.size() > 0) {
+                txnSamples.addAll(samples);
+                break;
+            }
         }
-        return ImmutableMap.of("Transaction", count);
+
+        List<Object> callbackSamples = callbackFactory.getSamplesForMemoryTracker();
+
+        return Lists.newArrayList(Pair.create(txnSamples, (long) getTransactionNum()),
+                Pair.create(callbackSamples, callbackFactory.getCallBackCnt()));
     }
 }

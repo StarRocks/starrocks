@@ -25,13 +25,15 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.ExprUtil;
 import com.starrocks.qe.ConnectContext;
+
+import java.util.Optional;
 
 public class FunctionAnalyzer {
 
@@ -348,55 +350,51 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         "percentile_approx requires the first parameter's type is numeric type");
             }
-            if (!functionCallExpr.getChild(1).getType().isNumericType() ||
-                    !functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(
-                        "percentile_approx requires the second parameter's type is numeric constant type");
+            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
+                throw new SemanticException("percentile_approx requires the second parameter's type is numeric type");
             }
 
             if (functionCallExpr.getChildren().size() == 3) {
-                if (!functionCallExpr.getChild(2).getType().isNumericType() ||
-                        !functionCallExpr.getChild(2).isConstant()) {
+                if (!functionCallExpr.getChild(2).getType().isNumericType()) {
                     throw new SemanticException(
-                            "percentile_approx requires the third parameter's type is numeric constant type");
+                            "percentile_approx requires the third parameter's type is numeric type");
                 }
             }
         }
 
         if (fnName.getFunction().equals(FunctionSet.APPROX_TOP_K)) {
-            Long k = null;
-            Long counterNum = null;
+            Optional<Long> k = Optional.empty();
+            Optional<Long> counterNum = Optional.empty();
             Expr kExpr = null;
             Expr counterNumExpr = null;
             if (functionCallExpr.hasChild(1)) {
                 kExpr = functionCallExpr.getChild(1);
-                if (!ExprUtil.isPositiveConstantInteger(kExpr)) {
+                k = extractIntegerValue(kExpr);
+                if (!k.isPresent() || k.get() <= 0) {
                     throw new SemanticException(
                             "The second parameter of APPROX_TOP_K must be a constant positive integer: " +
                                     functionCallExpr.toSql(), kExpr.getPos());
                 }
-                k = ExprUtil.getIntegerConstant(kExpr);
             }
             if (functionCallExpr.hasChild(2)) {
                 counterNumExpr = functionCallExpr.getChild(2);
-                if (!ExprUtil.isPositiveConstantInteger(counterNumExpr)) {
+                counterNum = extractIntegerValue(counterNumExpr);
+                if (!counterNum.isPresent() || counterNum.get() <= 0) {
                     throw new SemanticException(
                             "The third parameter of APPROX_TOP_K must be a constant positive integer: " +
                                     functionCallExpr.toSql(), counterNumExpr.getPos());
                 }
-                counterNum = ExprUtil.getIntegerConstant(counterNumExpr);
             }
-            if (k != null && k > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
+            if (k.isPresent() && k.get() > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
                 throw new SemanticException("The maximum number of the second parameter is "
                         + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(), kExpr.getPos());
             }
-            if (counterNum != null) {
-                Preconditions.checkNotNull(k);
-                if (counterNum > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
+            if (counterNum.isPresent()) {
+                if (counterNum.get() > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
                     throw new SemanticException("The maximum number of the third parameter is "
                             + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(), counterNumExpr.getPos());
                 }
-                if (k > counterNum) {
+                if (k.get() > counterNum.get()) {
                     throw new SemanticException(
                             "The second parameter must be smaller than or equal to the third parameter" +
                                     functionCallExpr.toSql(), kExpr.getPos());
@@ -437,5 +435,17 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function 's args must be column");
             }
         }
+    }
+
+    private static Optional<Long> extractIntegerValue(Expr expr) {
+        if (expr instanceof UserVariableExpr) {
+            expr = ((UserVariableExpr) expr).getValue();
+        }
+
+        if (expr instanceof LiteralExpr && expr.getType().isFixedPointType()) {
+            return Optional.of(((LiteralExpr) expr).getLongValue());
+        }
+
+        return Optional.empty();
     }
 }

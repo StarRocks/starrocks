@@ -181,7 +181,7 @@ public abstract class AlterJobV2 implements Writable {
 
     public void createConnectContextIfNeeded() {
         if (ConnectContext.get() == null) {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -202,8 +202,10 @@ public abstract class AlterJobV2 implements Writable {
      */
     public synchronized void run() {
         if (isTimeout()) {
-            cancelImpl("Timeout");
-            return;
+            if (cancelImpl("Timeout")) {
+                // If this job can't be cancelled, we should execute it.
+                return;
+            }
         }
 
         // create connectcontext

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -47,8 +46,6 @@ public class PushDownPredicateProjectRule extends TransformationRule {
             new SimplifiedPredicateRule()
     );
 
-    private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-
     public PushDownPredicateProjectRule() {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_PROJECT,
                 Pattern.create(OperatorType.LOGICAL_FILTER).
@@ -81,15 +78,14 @@ public class PushDownPredicateProjectRule extends TransformationRule {
 
         // try rewrite new predicate
         // e.g. : select 1 as b, MIN(v1) from t0 having (b + 1) != b;
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         newPredicate = scalarRewriter.rewrite(newPredicate, PROJECT_REWRITE_PREDICATE_RULE);
 
         OptExpression newFilter = new OptExpression(new LogicalFilterOperator(newPredicate));
-
         newFilter.getInputs().addAll(child.getInputs());
-        child.getInputs().clear();
-        child.getInputs().add(newFilter);
 
-        return Lists.newArrayList(child);
+        OptExpression newProject = OptExpression.create(project, newFilter);
+        return Lists.newArrayList(newProject);
     }
 
 }

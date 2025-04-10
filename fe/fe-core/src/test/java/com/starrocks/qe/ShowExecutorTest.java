@@ -373,7 +373,7 @@ public class ShowExecutorTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
             {
-                scheduler.listConnection("testUser");
+                scheduler.listConnection("testUser", null);
                 minTimes = 0;
                 result = Lists.newArrayList(ctx.toThreadInfo());
             }
@@ -767,18 +767,19 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(28, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(29, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(26).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(27).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(27).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(28).getName());
 
         Assert.assertTrue(resultSet.next());
+        System.out.println(resultSet);
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
-        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(27));
+        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(28));
         Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(11));
     }
 
@@ -1092,7 +1093,7 @@ public class ShowExecutorTest {
                 "  `year` int(11) DEFAULT NULL,\n" +
                 "  `dt` int(11) DEFAULT NULL\n" +
                 ")\n" +
-                "PARTITION BY ( year, dt )\n" +
+                "PARTITION BY (year, dt)\n" +
                 "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");", resultSet.getResultRows().get(0).get(1));
     }
 

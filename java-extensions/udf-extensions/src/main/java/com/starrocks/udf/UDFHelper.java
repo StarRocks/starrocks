@@ -17,6 +17,7 @@ package com.starrocks.udf;
 import com.starrocks.utils.Platform;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -25,7 +26,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
+import java.sql.Blob;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
@@ -49,6 +52,7 @@ public class UDFHelper {
     public static final int TYPE_ARRAY = 19;
     public static final int TYPE_BOOLEAN = 24;
     public static final int TYPE_TIME = 44;
+    public static final int TYPE_VARBINARY = 46;
     public static final int TYPE_DATETIME = 51;
 
     private static final byte[] emptyBytes = new byte[0];
@@ -258,6 +262,23 @@ public class UDFHelper {
         getStringBoxedResult(numRows, results, columnAddr);
     }
 
+    private static void copyDataToBinaryColumn(int numRows, byte[][] byteRes, int[] offsets, byte[] nulls, long columnAddr) {
+        byte[] bytes = new byte[offsets[numRows - 1]];
+        int dst = 0;
+        for (int i = 0; i < numRows; i++) {
+            for (int j = 0; j < byteRes[i].length; j++) {
+                bytes[dst++] = byteRes[i][j];
+            }
+        }
+        final long bytesAddr = resizeStringData(columnAddr, offsets[numRows - 1]);
+        final long[] addrs = getAddrs(columnAddr);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+
+        Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
+
+        Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, bytesAddr, offsets[numRows - 1]);
+    }
+
     private static void getStringBoxedResult(int numRows, String[] column, long columnAddr) {
         byte[] nulls = new byte[numRows];
         int[] offsets = new int[numRows];
@@ -273,20 +294,52 @@ public class UDFHelper {
             offset += byteRes[i].length;
             offsets[i] = offset;
         }
-        byte[] bytes = new byte[offsets[numRows - 1]];
-        int dst = 0;
+        copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
+    }
+
+    private static void getBinaryBoxedResult(int numRows, byte[][] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        byte[][] byteRes = new byte[numRows][];
+        int offset = 0;
         for (int i = 0; i < numRows; i++) {
-            for (int j = 0; j < byteRes[i].length; j++) {
-                bytes[dst++] = byteRes[i][j];
+            if (column[i] == null) {
+                byteRes[i] = emptyBytes;
+                nulls[i] = 1;
+            } else {
+                byteRes[i] = column[i];
             }
+            offset += byteRes[i].length;
+            offsets[i] = offset;
         }
-        final long bytesAddr = resizeStringData(columnAddr, offsets[numRows - 1]);
-        final long[] addrs = getAddrs(columnAddr);
-        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+        copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
+    }
 
-        Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
-
-        Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, bytesAddr, offsets[numRows - 1]);
+    private static void getBinaryBoxedBlobResult(int numRows, Blob[] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        byte[][] byteRes = new byte[numRows][];
+        int offset = 0;
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] == null) {
+                byteRes[i] = emptyBytes;
+                nulls[i] = 1;
+            } else {
+                try {
+                    int len = (int) column[i].length();
+                    if (len == 0) {
+                        byteRes[i] = emptyBytes;
+                    } else {
+                        byteRes[i] = column[i].getBytes(1, len);
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e.getMessage());
+                }
+            }
+            offset += byteRes[i].length;
+            offsets[i] = offset;
+        }
+        copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
     }
 
     public static void getResultFromBoxedArray(int type, int numRows, Object boxedResult, long columnAddr) {
@@ -336,6 +389,16 @@ public class UDFHelper {
                     getStringLargeIntResult(numRows, (BigInteger[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof String[]) {
                     getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                } else {
+                    throw new UnsupportedOperationException("unsupported type:" + boxedResult);
+                }
+                break;
+            }
+            case TYPE_VARBINARY: {
+                if (boxedResult instanceof byte[][]) {
+                    getBinaryBoxedResult(numRows, (byte[][]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof Blob[]) {
+                    getBinaryBoxedBlobResult(numRows, (Blob[]) boxedResult, columnAddr);
                 } else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
                 }
@@ -643,6 +706,21 @@ public class UDFHelper {
         } catch (InvocationTargetException e) {
             throw e.getTargetException();
         }
+    }
+
+    public static Object[] batchCreateDirectBuffer(long data, int[] offsets, int size) throws Exception {
+        Class<?> directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
+        Constructor<?> constructor = directByteBufferClass.getDeclaredConstructor(long.class, int.class);
+        constructor.setAccessible(true);
+
+        Object[] res = new Object[size];
+        int nums = 0;
+        for (int i = 0;i < size; i++) {
+            long address = data + offsets[i];
+            int length = offsets[i + 1] - offsets[i];
+            res[nums++] = constructor.newInstance(address, length);
+        }
+        return res;
     }
 
     // batch call Object(Object...)

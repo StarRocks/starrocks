@@ -15,10 +15,10 @@
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <paimon.version>0.7.0-incubating</paimon.version>
+        <paimon.version>0.8.1</paimon.version>
         <slf4j.version>1.7.32</slf4j.version>
-        <hive.version>2.3.9</hive.version>
-        <hadoop.version>3.3.4</hadoop.version>
+        <hive.version>3.1.2</hive.version>
+        <hadoop.version>3.4.0</hadoop.version>
         <zstd.version>1.5.5-5</zstd.version>
     </properties>
 
@@ -106,7 +106,31 @@
                     <groupId>jdk.tools</groupId>
                     <artifactId>jdk.tools</artifactId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>derby</artifactId>
+                    <groupId>org.apache.derby</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>jetty-client</artifactId>
+                    <groupId>org.eclipse.jetty</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+                    <groupId>org.apache.hadoop</groupId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-client</artifactId>
+            <version>9.4.53.v20231009</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derby</artifactId>
+            <version>10.17.1.0</version>
         </dependency>
 
         <dependency>

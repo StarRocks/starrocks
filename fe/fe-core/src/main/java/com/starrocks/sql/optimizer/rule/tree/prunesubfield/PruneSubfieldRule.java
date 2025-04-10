@@ -34,10 +34,31 @@ import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import java.util.List;
 
 public class PruneSubfieldRule extends TransformationRule {
-    public static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
+
+    public static final List<String> SUPPORT_JSON_FUNCTIONS = ImmutableList.<String>builder()
+            // arguments: Json, path
+            .add(FunctionSet.GET_JSON_INT)
+            .add(FunctionSet.GET_JSON_DOUBLE)
+            .add(FunctionSet.GET_JSON_STRING)
+            .add(FunctionSet.GET_JSON_OBJECT)
+            .add(FunctionSet.JSON_QUERY)
+            .add(FunctionSet.JSON_EXISTS)
+            .add(FunctionSet.JSON_LENGTH)
+            .build();
+
+    public static final List<String> PRUNE_FUNCTIONS = ImmutableList.<String>builder()
             .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
             .add(FunctionSet.ARRAY_LENGTH)
             .add(FunctionSet.CARDINALITY)
+            .addAll(SUPPORT_JSON_FUNCTIONS)
+            .build();
+
+    public static final List<String> PUSHDOWN_FUNCTIONS = ImmutableList.<String>builder()
+            .addAll(PRUNE_FUNCTIONS)
+            .add(FunctionSet.ARRAY_CONTAINS, FunctionSet.ARRAY_CONTAINS_ALL)
+            .add(FunctionSet.ARRAY_MAX, FunctionSet.ARRAY_MIN, FunctionSet.ARRAY_SUM, FunctionSet.ARRAY_AVG)
+            .add(FunctionSet.ARRAY_POSITION)
+            .add(FunctionSet.ARRAY_JOIN)
             .build();
 
     public PruneSubfieldRule() {

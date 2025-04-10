@@ -132,12 +132,12 @@ public class InsertOverwriteJobManagerTest {
         List<Long> newPartitionNames = Lists.newArrayList(10001L);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(1100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
-                sourcePartitionNames, newPartitionNames);
+                sourcePartitionNames, null, newPartitionNames);
         insertOverwriteJobManager.replayInsertOverwriteStateChange(stateChangeInfo);
 
         InsertOverwriteStateChangeInfo stateChangeInfo2 = new InsertOverwriteStateChangeInfo(1100L,
                 InsertOverwriteJobState.OVERWRITE_RUNNING, InsertOverwriteJobState.OVERWRITE_SUCCESS,
-                sourcePartitionNames, newPartitionNames);
+                sourcePartitionNames, null, newPartitionNames);
         insertOverwriteJobManager.replayInsertOverwriteStateChange(stateChangeInfo2);
     }
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 从 Apache Flink® 持续导入
@@ -18,11 +18,12 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 ## 版本要求
 
-| Connector | Flink       | StarRocks  | Java | Scala      |
-| --------- | ----------- | ---------- | ---- | ---------- |
-| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
-| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
-| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
+| Connector | Flink                    | StarRocks  | Java | Scala      |
+| --------- | ------------------------ | ---------- | ---- | ---------- |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 及以上  | 8    | 2.11,2.12  |
 
 ## 获取 Flink connector
 
@@ -108,15 +109,20 @@ Flink connector JAR 文件的命名格式如下：
 | sink.buffer-flush.max-rows        | No       | 500000        | 积攒在内存的数据条数，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64000, 5000000]。该参数只在 `sink.version` 为 `V1`，`sink.semantic` 为 `at-least-once` 才会生效。 |
 | sink.buffer-flush.interval-ms     | No       | 300000        | 数据发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。该参数只在 `sink.semantic` 为 `at-least-once`才会生效。 |
 | sink.max-retries                  | No       | 3             | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。该参数只在 `sink.version` 为 `V1` 才会生效。 |
-| sink.connect.timeout-ms           | No       |  30000            | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。  Flink connector v1.2.9 之前，默认值为 `1000`。  |
+| sink.connect.timeout-ms           | No       |  30000        | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。  Flink connector v1.2.9 之前，默认值为 `1000`。  |
+| sink.socket.timeout-ms            | No       | -1            | 此参数自 Flink connector 1.2.10 开始支持。HTTP 客户端等待数据的超时时间。单位：毫秒。默认值 `-1` 表示没有超时时间。|
 | sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 60000]。 |
 | sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键表中视为 DELETE 操作。 |
-| sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
-| sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
+| sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于 Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
+| sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
 | sink.properties.format            | No       | csv           | Stream Load 导入时的数据格式。Flink connector 会将内存的数据转换为对应格式，然后通过 Stream Load 导入至 StarRocks。取值为 CSV 或者 JSON。 |
 | sink.properties.column_separator  | No       | \t            | CSV 数据的列分隔符。                                         |
 | sink.properties.row_delimiter     | No       | \n            | CSV 数据的行分隔符。                                         |
-| sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
+| sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
+| sink.properties.partial_update    | No       | false         | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。 |
+| sink.properties.partial_update_mode | No     | row           | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
+| sink.properties.strict_mode       | No       | false         | 是否为 Stream Load 启用严格模式。在导入数据中出现不合格行（如列值不一致）时，严格模式会影响导入行为。有效值： `true` 和 `false`。具体参考 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
+| sink.properties.compression       | No       | NONE          | 此参数自 Flink connector 1.2.10 开始支持。指定用于 Stream Load 的压缩算法。目前只支持 JSON 格式的压缩。有效值：`lz4_frame`。仅 StarRocks v3.2.7 及更高版本支持 JSON 格式的压缩。 |
 
 ## 数据类型映射
 
@@ -423,7 +429,7 @@ DISTRIBUTED BY HASH(id);
 
 [Flink CDC 3.0 框架](https://nightlies.apache.org/flink/flink-cdc-docs-stable)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建流式 ELT 管道。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
 
-自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/starrocks)。StarRocks Pipeline Connector 支持：
+自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.1/docs/connectors/pipeline-connectors/starrocks/)。StarRocks Pipeline Connector 支持：
 
 - 自动创建数据库/表
 - 同步 schema change
@@ -431,7 +437,7 @@ DISTRIBUTED BY HASH(id);
 
 快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
 
-建议您使用 StarRocks v3.2.1 及以后的版本，以开启 [fast_schema_evolution](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)，来提高加减列的速度并降低资源使用。
+建议您使用 StarRocks v3.2.1 及以后的版本，以开启 [fast_schema_evolution](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)，来提高加减列的速度并降低资源使用。
 
 ## 最佳实践
 
@@ -528,15 +534,18 @@ DISTRIBUTED BY HASH(`id`);
 
 1. 在 MySQL 客户端中向 StarRocks 表中插入两行数据。
 
-    ```SQL
-    mysql> INSERT INTO score_board VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+   ```sql
+   mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
 
-    mysql> select * from score_board;
-    +------+-----------+-------+
-    +------+-----------+-------+
-    +------+-----------+-------+
-    2 rows in set (0.02 sec)
-    ```
+   mysql> select * from score_board;
+   +------+-----------+-------+
+   | id   | name      | score |
+   +------+-----------+-------+
+   |    1 | starrocks |   100 |
+   |    2 | flink     |   100 |
+   +------+-----------+-------+
+   2 rows in set (0.02 sec)
+   ```
 
 2. 在 Flink SQL 客户端按照以下方式创建表`score_board`：
    - DDL 中包括所有列的定义。
@@ -585,7 +594,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### 导入至 Bitmap 列
 
-`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/Using_bitmap.md)。
+`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/distinct_values/Using_bitmap.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `BITMAP` 列中。
 
@@ -650,7 +659,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### 导入至 HLL 列
 
-`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../using_starrocks/Using_HLL.md)。
+`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../using_starrocks/distinct_values/Using_HLL.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `HLL` 列中。
 

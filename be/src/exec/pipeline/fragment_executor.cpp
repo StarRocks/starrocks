@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/fragment_executor.h"
 
+#include <optional>
 #include <unordered_map>
 
 #include "common/config.h"
@@ -235,12 +236,17 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     int64_t option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
     if (option_query_mem_limit <= 0) option_query_mem_limit = -1;
     int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
-    int64_t spill_mem_limit_bytes = -1;
-    if (query_options.__isset.enable_spill && query_options.enable_spill == true) {
-        spill_mem_limit_bytes = option_query_mem_limit * query_options.spill_mem_limit_threshold;
+    std::optional<double> spill_mem_limit_ratio;
+    if (query_options.__isset.enable_spill && query_options.enable_spill) {
+        spill_mem_limit_ratio = query_options.spill_mem_limit_threshold;
     }
-    _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_bytes,
-                                 wg.get(), runtime_state);
+
+    int connector_scan_node_number = 1;
+    if (query_globals.__isset.connector_scan_node_number) {
+        connector_scan_node_number = query_globals.connector_scan_node_number;
+    }
+    _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
+                                 wg.get(), runtime_state, connector_scan_node_number);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -322,13 +328,13 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
     return QueryContext::DEFAULT_EXPIRE_SECONDS;
 }
 
-static void collect_shuffle_hash_bucket_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
+static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
     for (const auto* child : node->children()) {
-        collect_shuffle_hash_bucket_rf_ids(child, filter_ids);
+        collect_non_broadcast_rf_ids(child, filter_ids);
     }
     if (node->type() == TPlanNodeType::HASH_JOIN_NODE) {
         const auto* join_node = down_cast<const HashJoinNode*>(node);
-        if (join_node->distribution_mode() == TJoinDistributionMode::SHUFFLE_HASH_BUCKET) {
+        if (join_node->distribution_mode() != TJoinDistributionMode::BROADCAST) {
             for (const auto* rf : join_node->build_runtime_filters()) {
                 filter_ids.insert(rf->filter_id());
             }
@@ -380,8 +386,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             ExecNode::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl, &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
     std::unordered_set<int32_t> filter_ids;
-    collect_shuffle_hash_bucket_rf_ids(plan, filter_ids);
-    runtime_state->set_shuffle_hash_bucket_rf_ids(std::move(filter_ids));
+    collect_non_broadcast_rf_ids(plan, filter_ids);
+    runtime_state->set_non_broadcast_rf_ids(std::move(filter_ids));
     BroadcastJoinRightOffsprings broadcast_join_right_offsprings_map;
     collect_broadcast_join_right_offsprings(plan, broadcast_join_right_offsprings_map);
     runtime_state->set_broadcast_join_right_offsprings(std::move(broadcast_join_right_offsprings_map));
@@ -699,7 +705,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* profile = fragment_ctx->runtime_state()->runtime_profile();
 
-            auto* prepare_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
+            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_timer, profiler.prepare_time);
 
             auto* prepare_query_ctx_timer =
@@ -1086,11 +1092,18 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
 
+        int64_t max_file_size = TableInfo::DEFAULT_MAX_FILE_SIZE;
+        if (target_table.__isset.target_max_file_size) {
+            max_file_size = target_table.target_max_file_size;
+        }
+        if (target_table.write_single_file) {
+            max_file_size = INT64_MAX;
+        }
+
         auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
                 context->next_operator_id(), target_table.path, target_table.file_format, target_table.compression_type,
-                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names,
-                target_table.write_single_file, thrift_sink.table_function_table_sink.cloud_configuration,
-                fragment_ctx);
+                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names, max_file_size,
+                thrift_sink.table_function_table_sink.cloud_configuration, fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         size_t sink_dop = request.pipeline_sink_dop();

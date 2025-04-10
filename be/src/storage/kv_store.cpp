@@ -335,4 +335,22 @@ std::string KVStore::get_root_path() {
     return _root_path;
 }
 
+Status KVStore::OptDeleteRange(ColumnFamilyIndex column_family_index, const std::string& begin_key,
+                               const std::string& end_key, WriteBatch* batch) {
+    rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
+    auto delete_range_st = Status::OK();
+    auto st = iterate_range(column_family_index, begin_key, end_key, [&](std::string_view key, std::string_view value) {
+        auto rocksdb_st = batch->Delete(handle, key);
+        if (!rocksdb_st.ok()) {
+            delete_range_st = to_status(rocksdb_st);
+            return false;
+        }
+        return true;
+    });
+    if (!delete_range_st.ok()) {
+        return delete_range_st;
+    }
+    return st;
+}
+
 } // namespace starrocks

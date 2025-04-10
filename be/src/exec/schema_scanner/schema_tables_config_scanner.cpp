@@ -64,12 +64,9 @@ Status SchemaTablesConfigScanner::start(RuntimeState* state) {
     TGetTablesConfigRequest tables_config_req;
     tables_config_req.__set_auth_info(auth_info);
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tables_config(*(_param->ip), _param->port, tables_config_req,
-                                                        &_tables_config_response));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tables_config(_ss_state, tables_config_req, &_tables_config_response));
     return Status::OK();
 }
 

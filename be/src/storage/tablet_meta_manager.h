@@ -137,6 +137,8 @@ public:
     using RowsetIterateFunc = std::function<bool(RowsetMetaSharedPtr rowset_meta)>;
     static Status rowset_iterate(DataDir* store, TTabletId tablet_id, const RowsetIterateFunc& func);
 
+    static Status put_pending_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, int64_t version,
+                                          const RowsetMetaPB& rowset);
     // methods for operating pending commits
     static Status pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key);
@@ -264,6 +266,12 @@ public:
     static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
 
     static Status remove_tablet_persistent_index_meta(DataDir* store, TTabletId table_id);
+
+    static Status get_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, uint32_t rowset_seg_id,
+                                                  std::string* meta_value);
+
+    static Status get_pending_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, int64_t version,
+                                                          std::string* meta_value);
 };
 
 } // namespace starrocks

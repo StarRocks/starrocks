@@ -74,8 +74,10 @@ Status IcebergMORProcessor::get_next(RuntimeState* state, ChunkPtr* chunk) {
         _prepared_probe.store(true);
     }
 
-    _hash_joiner->push_chunk(state, std::move(*chunk));
-    *chunk = std::move(_hash_joiner->pull_chunk(state)).value();
+    ChunkPtr tmp = *chunk;
+    _hash_joiner->push_chunk(state, std::move(tmp));
+    ASSIGN_OR_RETURN(*chunk, _hash_joiner->pull_chunk(state));
+
     return Status::OK();
 }
 

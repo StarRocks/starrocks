@@ -78,8 +78,11 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.CancelDecommissionDiskInfo;
+import com.starrocks.persist.CancelDisableDiskInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
@@ -88,6 +91,8 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DecommissionDiskInfo;
+import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -472,6 +477,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_BATCH_DELETE_REPLICA: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), BatchDeleteReplicaInfo.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_ADD_REPLICA_V2:
             case OperationType.OP_UPDATE_REPLICA_V2:
             case OperationType.OP_DELETE_REPLICA_V2: {
@@ -849,10 +859,12 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
             case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+            case OperationType.OP_SET_HAS_DELETE:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_BUCKET_SIZE:
+            case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -1122,8 +1134,29 @@ public class JournalEntity implements Writable {
                 data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_DELETE_REPLICATION_JOB: {
+                data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_RECOVER_PARTITION_VERSION:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_DECOMMISSION_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DecommissionDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_CANCEL_DECOMMISSION_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDecommissionDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_DISABLE_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_CANCEL_DISABLE_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
                 isRead = true;
                 break;
             default: {

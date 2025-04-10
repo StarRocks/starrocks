@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "runtime/types.h"
 #include "simdjson.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -55,18 +56,145 @@ TEST_F(AddNullableColumnTest, test_add_binary) {
 }
 
 TEST_F(AddNullableColumnTest, test_add_boolean) {
-    TypeDescriptor t = TypeDescriptor::create_char_type(20);
+    TypeDescriptor t(TYPE_BOOLEAN);
     auto column = ColumnHelper::create_column(t, true);
 
+    // boolean
     simdjson::ondemand::parser parser;
     auto json = R"(  { "f_boolean": true}  )"_padded;
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.find_field("f_boolean");
-
     auto st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
     ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
 
-    ASSERT_EQ("['1']", column->debug_string());
+    column->reset_column();
+    json = R"(  { "f_boolean": false}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[0]", column->debug_string());
+
+    // number
+    column->reset_column();
+    json = R"(  { "f_boolean": 1}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": 0}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[0]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": -1}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": 0.1}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": 9223372036854775808}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": 18446744073709551616}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    // string
+    column->reset_column();
+    json = R"(  { "f_boolean": "TrUe"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "1"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "-1"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "10"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "FaLse"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[0]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "0"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[0]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "FaLs"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.is_invalid_argument());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "0.1"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.is_invalid_argument());
+
+    // array
+    column->reset_column();
+    json = R"(  { "f_boolean": [1]}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.is_invalid_argument());
 }
 
 TEST_F(AddNullableColumnTest, test_add_invalid_as_null) {
@@ -109,6 +237,82 @@ TEST_F(AddNullableColumnTest, add_null_numeric_array) {
     auto st = add_nullable_column(column.get(), desc, "f_array", &val, false);
     ASSERT_TRUE(st.ok());
     column->check_or_die();
+}
+
+TEST_F(AddNullableColumnTest, add_boolean_array) {
+    auto desc = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
+    auto column = ColumnHelper::create_column(desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "f_array": [null, 0.1, -0.1, 1, -1, 0, "TRUE", "false", "1"]}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field("f_array");
+
+    auto st = add_nullable_column(column.get(), desc, "f_array", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[[NULL,1,1,1,1,0,1,0,1]]", column->debug_string());
+}
+
+TEST_F(AddNullableColumnTest, test_add_struct) {
+    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
+            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    auto column = ColumnHelper::create_column(type_desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key0": {"key1": "foo", "key2": "bar", "key3": "baz" }}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
+
+    ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
+
+    ASSERT_EQ("[{key1:'foo',key2:'bar'}]", column->debug_string());
+}
+
+TEST_F(AddNullableColumnTest, test_add_struct_null) {
+    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
+            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    auto column = ColumnHelper::create_column(type_desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key0": null}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
+
+    ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
+
+    ASSERT_EQ("[NULL]", column->debug_string());
+}
+
+TEST_F(AddNullableColumnTest, test_add_map) {
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
+                                                               TypeDescriptor::create_varchar_type(10));
+
+    auto column = ColumnHelper::create_column(type_desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key0": {"key1": "foo", "key2": "bar", "key3": "baz" }}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
+
+    ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
+
+    ASSERT_EQ("[{'key1':'foo','key2':'bar','key3':'baz'}]", column->debug_string());
+}
+
+TEST_F(AddNullableColumnTest, test_add_map_null) {
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
+                                                               TypeDescriptor::create_varchar_type(10));
+
+    auto column = ColumnHelper::create_column(type_desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key0": null}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
+
+    ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
+
+    ASSERT_EQ("[NULL]", column->debug_string());
 }
 
 } // namespace starrocks

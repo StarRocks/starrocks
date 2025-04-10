@@ -15,6 +15,9 @@
 #include "pipeline_driver_poller.h"
 
 #include <chrono>
+
+#include "util/time_guard.h"
+
 namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
@@ -71,7 +74,7 @@ void PipelineDriverPoller::run_internal() {
             auto driver_it = _local_blocked_drivers.begin();
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
-
+                WARN_IF_POLLER_TIMEOUT(driver->to_readable_string());
                 if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in

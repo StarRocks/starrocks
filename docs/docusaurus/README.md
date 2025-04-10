@@ -106,7 +106,7 @@ When you create your branch to work on the PR base it off of the `docusaurus` br
 
 #### Edit the nav for the version that you are working on
 
-The nav files are in [`versioned_sidebars/`](https://github.com/StarRocks/docs-site/tree/docusaurus/versioned_sidebars) (nav in Docusaurus is called **Sidebar**). If you are working on 3.1 then `versioned_sidebars/version-3.1`. This file contains both English and Chinese sidebars.
+The nav files are in [`sidebars/`](./sidebars.json) (nav in Docusaurus is called **Sidebar**) in each branch. This file contains both English and Chinese sidebars.
 
 > Note on file structure:
 >

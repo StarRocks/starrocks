@@ -90,7 +90,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
-    _use_datacache = config::datacache_enable;
+    _use_datacache = config::datacache_enable && BlockCache::instance()->available();
     if (state->query_options().__isset.enable_scan_datacache) {
         _use_datacache &= state->query_options().enable_scan_datacache;
     }
@@ -103,11 +103,19 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_datacache_io_adaptor) {
         _enable_datacache_io_adaptor = state->query_options().enable_datacache_io_adaptor;
     }
+    if (state->query_options().__isset.datacache_evict_probability) {
+        _datacache_evict_probability = state->query_options().datacache_evict_probability;
+    }
+
+    _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
     if (state->query_options().__isset.enable_file_metacache) {
-        _use_file_metacache = state->query_options().enable_file_metacache;
+        _use_file_metacache &= state->query_options().enable_file_metacache;
     }
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
         _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+    }
+    if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
+        _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -168,44 +176,46 @@ Status HiveDataSource::_init_partition_values() {
     }
 
     const auto& partition_values = partition_desc->partition_key_value_evals();
-    _partition_values = partition_values;
+    _partition_values = partition_desc->partition_key_value_evals();
 
-    if (_has_partition_conjuncts || _has_scan_range_indicate_const_column) {
-        ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
-        // append partition data
-        for (int i = 0; i < _partition_slots.size(); i++) {
-            SlotId slot_id = _partition_slots[i]->id();
-            int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-            ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
-            assert(partition_value_col->is_constant());
-            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
-            const ColumnPtr& data_column = const_column->data_column();
-            ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
-            if (data_column->is_nullable()) {
-                chunk_part_column->append_default();
-            } else {
-                chunk_part_column->append(*data_column, 0, 1);
+    // init partition chunk
+    auto partition_chunk = std::make_shared<Chunk>();
+    for (int i = 0; i < _partition_slots.size(); i++) {
+        SlotId slot_id = _partition_slots[i]->id();
+        int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
+        ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
+        DCHECK(partition_value_col->is_constant());
+        partition_chunk->append_column(partition_value_col, slot_id);
+    }
+
+    // eval conjuncts and skip if no rows.
+    if (_has_scan_range_indicate_const_column) {
+        std::vector<ExprContext*> ctxs;
+        for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
+            if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
+                ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
+                            _conjunct_ctxs_by_slot.at(slotId).end());
             }
         }
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
+    } else if (_has_partition_conjuncts) {
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+    }
 
-        // eval conjuncts and skip if no rows.
-        if (_has_scan_range_indicate_const_column) {
-            std::vector<ExprContext*> ctxs;
-            for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
-                if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
-                    ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
-                                _conjunct_ctxs_by_slot.at(slotId).end());
-                }
-            }
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
-        } else {
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
-        }
+    if (!partition_chunk->has_rows()) {
+        _filter_by_eval_partition_conjuncts = true;
+        return Status::OK();
+    }
 
+    if (_enable_dynamic_prune_scan_range && _runtime_filters) {
+        _init_rf_counters();
+        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_bloom_filter_eval_context);
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
+            return Status::OK();
         }
     }
+
     return Status::OK();
 }
 
@@ -450,257 +460,22 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     }
 }
 
-static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
-    for (int i = 0; i < type.children.size(); i++) {
-        const auto& t = type.children[i];
-        if (t.is_unknown_type()) continue;
-        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
-        if (t.is_complex_type()) {
-            build_nested_fields(t, p, sb);
-        } else {
-            sb->append(p);
-            sb->append(",");
-        }
+void HiveDataSource::_init_rf_counters() {
+    auto* root = _runtime_profile;
+    if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
+        static const char* prefix = "DynamicPruneScanRange";
+        ADD_COUNTER(root, prefix, TUnit::NONE);
+        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
+                ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
+                ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterInputScanRanges", TUnit::UNIT, prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_output_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterOutputScanRanges", TUnit::UNIT, prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_eval_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterEvaluate", TUnit::UNIT, prefix);
     }
-}
-
-static std::string build_fs_options_properties(const FSOptions& options) {
-    const TCloudConfiguration* cloud_configuration = options.cloud_configuration;
-    static constexpr char KV_SEPARATOR = 0x1;
-    static constexpr char PROP_SEPARATOR = 0x2;
-    std::string data;
-
-    if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                data += cloud_property.key;
-                data += KV_SEPARATOR;
-                data += cloud_property.value;
-                data += PROP_SEPARATOR;
-            }
-        } else {
-            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
-                data += key;
-                data += KV_SEPARATOR;
-                data += value;
-                data += PROP_SEPARATOR;
-            }
-        }
-    }
-
-    if (data.size() > 0 && data.back() == PROP_SEPARATOR) {
-        data.pop_back();
-    }
-    return data;
-}
-
-HdfsScanner* HiveDataSource::_create_hudi_jni_scanner(const FSOptions& options) {
-    const auto& scan_range = _scan_range;
-    const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
-    auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
-    std::string partition_full_path = partition_desc->location();
-
-    std::string required_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-
-    std::string nested_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-
-    std::string delta_file_paths;
-    if (!scan_range.hudi_logs.empty()) {
-        for (const std::string& log : scan_range.hudi_logs) {
-            delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
-            delta_file_paths.append(",");
-        }
-        delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
-    }
-
-    std::string data_file_path;
-    if (scan_range.relative_path.empty()) {
-        data_file_path = "";
-    } else {
-        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
-    }
-
-    std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["base_path"] = hudi_table->get_base_path();
-    jni_scanner_params["hive_column_names"] = hudi_table->get_hive_column_names();
-    jni_scanner_params["hive_column_types"] = hudi_table->get_hive_column_types();
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["instant_time"] = hudi_table->get_instant_time();
-    jni_scanner_params["delta_file_paths"] = delta_file_paths;
-    jni_scanner_params["data_file_path"] = data_file_path;
-    jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
-    jni_scanner_params["serde"] = hudi_table->get_serde_lib();
-    jni_scanner_params["input_format"] = hudi_table->get_input_format();
-    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
-    jni_scanner_params["time_zone"] = hudi_table->get_time_zone();
-
-    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
-HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options) {
-    const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
-
-    std::string required_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-    std::string nested_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-    std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
-    jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
-    jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
-
-    std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
-HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) {
-    const auto& scan_range = _scan_range;
-    static const char* serde_property_prefix = "SerDe.";
-
-    std::string required_fields;
-    for (auto const& slot : _materialize_slots) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-
-    std::string nested_fields;
-    for (auto slot : _materialize_slots) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-
-    std::string data_file_path;
-    std::string hive_column_names;
-    std::string hive_column_types;
-    std::string serde;
-    std::string input_format;
-    std::map<std::string, std::string> serde_properties;
-    std::string time_zone;
-
-    if (dynamic_cast<const FileTableDescriptor*>(_hive_table)) {
-        const auto* file_table = dynamic_cast<const FileTableDescriptor*>(_hive_table);
-
-        data_file_path = scan_range.full_path;
-
-        hive_column_names = file_table->get_hive_column_names();
-        hive_column_types = file_table->get_hive_column_types();
-        serde = file_table->get_serde_lib();
-        input_format = file_table->get_input_format();
-        time_zone = file_table->get_time_zone();
-    } else {
-        const auto* hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
-
-        auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
-        std::string partition_full_path = partition_desc->location();
-        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
-
-        hive_column_names = hdfs_table->get_hive_column_names();
-        hive_column_types = hdfs_table->get_hive_column_types();
-        serde = hdfs_table->get_serde_lib();
-        input_format = hdfs_table->get_input_format();
-        serde_properties = hdfs_table->get_serde_properties();
-        time_zone = hdfs_table->get_time_zone();
-    }
-
-    std::map<std::string, std::string> jni_scanner_params;
-
-    jni_scanner_params["hive_column_names"] = hive_column_names;
-    jni_scanner_params["hive_column_types"] = hive_column_types;
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["data_file_path"] = data_file_path;
-    jni_scanner_params["block_offset"] = std::to_string(scan_range.offset);
-    jni_scanner_params["block_length"] = std::to_string(scan_range.length);
-    jni_scanner_params["serde"] = serde;
-    jni_scanner_params["input_format"] = input_format;
-    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
-    jni_scanner_params["time_zone"] = time_zone;
-
-    for (const auto& pair : serde_properties) {
-        jni_scanner_params[serde_property_prefix + pair.first] = pair.second;
-    }
-
-    std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
-
-    HdfsScanner* scanner = _pool.add(new HiveJniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
-HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) {
-    const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
-    std::string required_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-    std::string nested_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-    std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["project_name"] = odps_table->get_database_name();
-    jni_scanner_params["table_name"] = odps_table->get_table_name();
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params.insert(_scan_range.odps_split_infos.begin(), _scan_range.odps_split_infos.end());
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["time_zone"] = odps_table->get_time_zone();
-
-    const AliyunCloudConfiguration aliyun_cloud_configuration =
-            CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
-    AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
-    jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
-    jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;
-    jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
-
-    std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
@@ -777,10 +552,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
         scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
     }
+    if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
+        scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
+    }
     scanner_params.use_datacache = _use_datacache;
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
     scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
+    scanner_params.datacache_evict_probability = _datacache_evict_probability;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;
@@ -801,47 +580,44 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
     }
 
+    JniScanner::CreateOptions jni_scanner_create_options = {
+            .fs_options = &fsOptions, .hive_table = _hive_table, .scan_range = &scan_range};
+
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
-        scanner = _pool.add(new HdfsPartitionScanner());
+        scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
-        scanner = _create_paimon_jni_scanner(fsOptions);
+        scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {
-        scanner = _create_hudi_jni_scanner(fsOptions);
+        scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
-        scanner = _create_odps_jni_scanner(fsOptions);
+        scanner = create_odps_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
-        scanner = _pool.add(new HdfsParquetScanner());
+        scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;
-        scanner = _pool.add(new HdfsOrcScanner());
+        scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
-        scanner = _pool.add(new HdfsTextScanner());
+        scanner = new HdfsTextScanner();
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
-        scanner = _create_hive_jni_scanner(fsOptions);
+        scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
+    if (scanner == nullptr) {
+        return Status::InternalError("create hdfs scanner failed");
+    }
+    _pool.add(scanner);
+
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
-        if (scanner->is_jni_scanner()) {
-            return st;
-        }
-
-        auto msg = fmt::format("file = {}", native_file_path);
-
-        // After catching the AWS 404 file not found error and returning it to the FE,
-        // the FE will refresh the file information of table and re-execute the SQL operation.
-        if (st.is_io_error() && st.message().starts_with("code=404")) {
-            st = Status::RemoteFileNotFound(st.message());
-        }
-        return st.clone_and_append(msg);
+        return scanner->reinterpret_status(st);
     }
     _scanner = scanner;
     return Status::OK();
@@ -852,7 +628,7 @@ void HiveDataSource::close(RuntimeState* state) {
         if (!_scanner->has_split_tasks()) {
             COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
         }
-        _scanner->close(state);
+        _scanner->close();
     }
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
@@ -862,7 +638,29 @@ void HiveDataSource::close(RuntimeState* state) {
     }
 }
 
-void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    if (_no_data) {
+        return Status::EndOfFile("no data");
+    }
+
+    do {
+        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
+        RETURN_IF_ERROR(_scanner->get_next(state, chunk));
+    } while ((*chunk)->num_rows() == 0);
+
+    // The column order of chunk is required to be invariable. In order to simplify the logic of each scanner,
+    // we force to reorder the columns of chunk, so scanner doesn't have to care about the column order anymore.
+    // The overhead of reorder is negligible because we only swap columns.
+    ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
+
+    return Status::OK();
+}
+
+Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+    if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
+        return Status::OK();
+    }
+
     *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
 
     if (!_equality_delete_slots.empty()) {
@@ -879,22 +677,6 @@ void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
             }
         }
     }
-}
-
-Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    if (_no_data) {
-        return Status::EndOfFile("no data");
-    }
-    _init_chunk(chunk, _runtime_state->chunk_size());
-    do {
-        RETURN_IF_ERROR(_scanner->get_next(state, chunk));
-    } while ((*chunk)->num_rows() == 0);
-
-    // The column order of chunk is required to be invariable. In order to simplify the logic of each scanner,
-    // we force to reorder the columns of chunk, so scanner doesn't have to care about the column order anymore.
-    // The overhead of reorder is negligible because we only swap columns.
-    ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
-
     return Status::OK();
 }
 

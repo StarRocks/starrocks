@@ -43,6 +43,10 @@ public:
     static Status rpc(const std::string& ip, const int32_t port, std::function<void(ClientConnection<T>&)> callback,
                       int timeout_ms);
 
+    template <typename T>
+    static Status rpc_impl(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
+                           const TNetworkAddress& address) noexcept;
+
 private:
     static ExecEnv* _s_exec_env;
 };

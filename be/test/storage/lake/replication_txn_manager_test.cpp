@@ -328,9 +328,14 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
+    auto txn_info = TxnInfoPB();
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(0);
+    txn_info.set_force_publish(false);
     const int64_t txn_ids[] = {_transaction_id};
     auto txn_id_span = std::span<const int64_t>(txn_ids, 1);
-    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_id_span, 0);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, {txn_info});
     EXPECT_TRUE(!status_or.ok()) << status_or.status();
 
     const int32_t txn_types[] = {TxnTypePB::TXN_REPLICATION};
@@ -379,9 +384,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
     EXPECT_TRUE(status.ok()) << status;
 
-    const int64_t txn_ids[] = {_transaction_id};
-    auto txn_id_span = std::span<const int64_t>(txn_ids, 1);
-    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_id_span, 0);
+    auto txn_info = TxnInfoPB();
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(0);
+    txn_info.set_force_publish(false);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, {txn_info});
     EXPECT_TRUE(status_or.ok()) << status_or.status();
 
     EXPECT_EQ(_src_version, status_or.value()->version());

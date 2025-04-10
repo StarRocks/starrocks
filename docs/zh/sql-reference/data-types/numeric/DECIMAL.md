@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # DECIMAL
@@ -37,10 +37,6 @@ StarRocks 1.18 版本开始起，Decimal 类型支持更高精度的 Fast Decima
 Fast Decimal 功能由 FE 动态参数 `enable_decimal_v3` 控制，默认值为 `true`，表示开启。
 
 从 3.1 版本开始，[ARRAY](../semi_structured/Array.md)、[MAP](../semi_structured/Map.md)、[STRUCT](../semi_structured/STRUCT.md) 支持 Fast Decimal。
-
-### 使用限制
-
-读取外部 Hive 数据时，暂不支持读取 ORC 和 Parquet 文件中的 Decimal 数据，会有精度丢失。
 
 ## 示例
 

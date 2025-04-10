@@ -109,15 +109,16 @@ public:
         for (const RowsetMetaSharedPtr& rowset_meta : _tablet_meta->all_rs_metas()) {
             if (!rowset_meta->has_tablet_schema_pb()) {
                 rowset_meta->set_tablet_schema(tablet_schema());
+                rowset_meta->set_skip_tablet_schema(true);
                 flag = true;
             }
         }
         return flag;
     }
 
-protected:
     virtual void on_shutdown() {}
 
+protected:
     void _gen_tablet_path();
 
     TabletState _state;

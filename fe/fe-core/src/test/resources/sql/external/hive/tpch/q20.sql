@@ -48,6 +48,8 @@ cardinality: 40000
 column statistics:
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
+* s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # How to feedback and contribute
@@ -39,25 +39,25 @@ displayed_sidebar: "Chinese"
 
 1. StarRocks文档仓库使用markdown格式，贡献文档前，请熟悉基本的markdown语法。
 2. 语言：请至少选择中英文一种语言，欢迎提供中英双语版本。
-3. 索引：如果文档为新增，则需要在索引文件（TOC.md）中根据分类为新增文档添加索引。此索引文件最终将被渲染为官网页面的侧边导航。
-4. 图片：图片需要先放入文件 assets 中，文档中引用图片时请输入图片的相对路径，比如 `![test image](../../assets/test.png)` 。
+3. 导航栏：如果文档为新增文档，则需要在 `docs/docusaurus` 下的 `sidebars.json` 文件中为新增文档添加中文和英文索引。如果您不熟悉此操作，提交 PR 后，文档团队也会自行添加索引。
+4. 图片：图片需要先放入文件 assets 中，文档中引用图片时请输入图片的相对路径，比如 `![test image](../../_assets/test.png)` 。
 5. 引用：如果引用官网文档，推荐使用文档相对路径，比如 `[test md](./data_source/catalog/hive_catalog.md)(../zh/data_source/catalog/hive_catalog.md)`。<br /> 如果引用外部文档，则引用格式为 `[引用文档名称](引用文档链接)`。
 6. 代码块：代码块必须标明语言类型，比如：`sql`，`json`。
-7. 文档中目前暂不支持出现特殊符号。
 
 ### 编写流程
 
 1. 登录 GitHub 帐户，直接在[中文文档仓库](https://github.com/StarRocks/starrocks/tree/main/docs/zh)单击 Add file，进入新文档编辑页面。
    ![image](https://user-images.githubusercontent.com/98087056/183546267-f05f6afc-4d58-40f8-ba73-437f82d5f662.png)
 
-2. 编写文档（markdown格式），并在索引（TOC.md）中添加索引。
-    > 由于文档为markdown格式，建议您提前使用markdown-lint验证格式的规范性。
-3. 在github上提交文档Propose new file，输入标题和描述，然后提交，创建PR。
+2. 编写文档（markdown 格式），并在 `sidebars.json` 文件中添加索引。
+
+3. 在 Github 上提交文档 Propose new file，输入标题和描述，然后提交，创建 PR。
    ![image](https://user-images.githubusercontent.com/98087056/183547476-bf3adca9-dde9-4205-a2a9-ea6210e9ba48.png)
 
 4. PR 进入评审阶段，评审通过后，文档变更会合入至 StarRocks 文档仓库，并最终更新至官网。
 
 ## 文档模板
 
-[函数文档模板](./sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)<br />
-[SQL命令模板](./sql-reference/How_to_write_SQL_command_doc.md)
+- [函数文档模板](./sql-reference/How_to_Write_Functions_Documentation.md)
+- [SQL命令模板](./sql-reference/How_to_write_SQL_command_doc.md)
+- [参数/变量模板](./sql-reference/template_for_config.md)

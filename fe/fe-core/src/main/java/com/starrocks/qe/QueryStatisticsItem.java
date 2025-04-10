@@ -36,6 +36,7 @@ public final class QueryStatisticsItem {
     // root query profile
     private final RuntimeProfile queryProfile;
     private final TUniqueId executionId;
+    private final String warehouseName;
 
     private QueryStatisticsItem(Builder builder) {
         this.queryId = builder.queryId;
@@ -47,6 +48,7 @@ public final class QueryStatisticsItem {
         this.fragmentInstanceInfos = builder.fragmentInstanceInfos;
         this.queryProfile = builder.queryProfile;
         this.executionId = builder.executionId;
+        this.warehouseName = builder.warehouseName;
     }
 
     public String getDb() {
@@ -90,6 +92,10 @@ public final class QueryStatisticsItem {
         return executionId;
     }
 
+    public String getWarehouseName() {
+        return warehouseName;
+    }
+
     public static final class Builder {
         private String queryId;
         private String db;
@@ -100,6 +106,7 @@ public final class QueryStatisticsItem {
         private List<FragmentInstanceInfo> fragmentInstanceInfos;
         private RuntimeProfile queryProfile;
         private TUniqueId executionId;
+        private String warehouseName;
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
@@ -147,6 +154,11 @@ public final class QueryStatisticsItem {
 
         public Builder executionId(TUniqueId executionId) {
             this.executionId = executionId;
+            return this;
+        }
+
+        public Builder warehouseName(String warehouseName) {
+            this.warehouseName = warehouseName;
             return this;
         }
 

@@ -19,9 +19,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.ParsingException;
@@ -305,7 +304,7 @@ public class TrinoTestBase {
                     connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
-        } catch (ParsingException | SemanticException | UnsupportedException e) {
+        } catch (ParsingException | StarRocksPlannerException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }

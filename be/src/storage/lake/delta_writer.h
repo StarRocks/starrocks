@@ -54,21 +54,25 @@ public:
     DISALLOW_COPY_AND_MOVE(DeltaWriter);
 
     // NOTE: It's ok to invoke this method in a bthread, there is no I/O operation in this method.
-    [[nodiscard]] Status open();
+    Status open();
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status finish(FinishMode mode = kWriteTxnLog);
+    Status finish(FinishMode mode = kWriteTxnLog);
+
+    // Manual flush used by stale memtable flush
+    // different from `flush()`, this method will reduce memory usage in `mem_tracker`
+    Status manual_flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush();
+    Status flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush_async();
+    Status flush_async();
 
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
@@ -169,8 +173,13 @@ public:
         return *this;
     }
 
-    DeltaWriterBuilder& set_index_id(int64_t index_id) {
-        _index_id = index_id;
+    DeltaWriterBuilder& set_schema_id(int64_t schema_id) {
+        _schema_id = schema_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
         return *this;
     }
 
@@ -181,7 +190,7 @@ private:
     int64_t _txn_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
-    int64_t _index_id{0};
+    int64_t _schema_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     std::string _merge_condition{};
@@ -189,6 +198,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 
 } // namespace starrocks::lake

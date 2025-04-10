@@ -114,6 +114,8 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
+
 /**
  * Routine load job is a function which stream load data from streaming medium to starrocks.
  * This function is suitable for streaming load job which loading data continuously
@@ -226,23 +228,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("mb")
     protected long maxBatchSizeBytes = Config.max_routine_load_batch_size;
 
-    /**
-     * RoutineLoad support json data.
-     * Require Params:
-     * 1) format = "json"
-     * 2) jsonPath = "$.XXX.xxx"
-     */
-    private static final String PROPS_FORMAT = "format";
-    private static final String PROPS_STRIP_OUTER_ARRAY = "strip_outer_array";
-    private static final String PROPS_JSONPATHS = "jsonpaths";
-    private static final String PROPS_JSONROOT = "json_root";
-
     private String confluentSchemaRegistryUrl;
-
-    // for csv
-    protected boolean trimspace = false;
-    protected byte enclose = 0;
-    protected byte escape = 0;
 
     protected int currentTaskConcurrentNum;
     @SerializedName("p")
@@ -370,36 +356,36 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put(LoadStmt.MERGE_CONDITION, stmt.getMergeConditionStr());
         }
         if (Strings.isNullOrEmpty(stmt.getFormat()) || stmt.getFormat().equals("csv")) {
-            jobProperties.put(PROPS_FORMAT, "csv");
-            jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "false");
-            jobProperties.put(PROPS_JSONPATHS, "");
-            jobProperties.put(PROPS_JSONROOT, "");
-            this.trimspace = stmt.isTrimspace();
-            this.enclose = stmt.getEnclose();
-            this.escape = stmt.getEscape();
+            jobProperties.put(CreateRoutineLoadStmt.FORMAT, "csv");
+            jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "false");
+            jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
+            jobProperties.put(CreateRoutineLoadStmt.JSONROOT, "");
+            jobProperties.put(CreateRoutineLoadStmt.TRIMSPACE, stmt.isTrimspace() ? "true" : "false");
+            jobProperties.put(CreateRoutineLoadStmt.ENCLOSE, Byte.toString(stmt.getEnclose()));
+            jobProperties.put(CreateRoutineLoadStmt.ESCAPE, Byte.toString(stmt.getEscape()));
         } else if (stmt.getFormat().equals("json")) {
-            jobProperties.put(PROPS_FORMAT, "json");
+            jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
-                jobProperties.put(PROPS_JSONPATHS, stmt.getJsonPaths());
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, stmt.getJsonPaths());
             } else {
-                jobProperties.put(PROPS_JSONPATHS, "");
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
             }
             if (!Strings.isNullOrEmpty(stmt.getJsonRoot())) {
-                jobProperties.put(PROPS_JSONROOT, stmt.getJsonRoot());
+                jobProperties.put(CreateRoutineLoadStmt.JSONROOT, stmt.getJsonRoot());
             } else {
-                jobProperties.put(PROPS_JSONROOT, "");
+                jobProperties.put(CreateRoutineLoadStmt.JSONROOT, "");
             }
             if (stmt.isStripOuterArray()) {
-                jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "true");
+                jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "true");
             } else {
-                jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "false");
+                jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "false");
             }
         } else if (stmt.getFormat().equals("avro")) {
-            jobProperties.put(PROPS_FORMAT, "avro");
+            jobProperties.put(CreateRoutineLoadStmt.FORMAT, "avro");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
-                jobProperties.put(PROPS_JSONPATHS, stmt.getJsonPaths());
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, stmt.getJsonPaths());
             } else {
-                jobProperties.put(PROPS_JSONPATHS, "");
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
             }
             this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
         } else {
@@ -472,15 +458,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public boolean isTrimspace() {
-        return trimspace;
+        return Boolean.parseBoolean(jobProperties.getOrDefault(CreateRoutineLoadStmt.TRIMSPACE, "false"));
     }
 
     public byte getEnclose() {
-        return enclose;
+        return Byte.parseByte(jobProperties.getOrDefault(CreateRoutineLoadStmt.ENCLOSE, "0"));
     }
 
     public byte getEscape() {
-        return escape;
+        return Byte.parseByte(jobProperties.getOrDefault(CreateRoutineLoadStmt.ESCAPE, "0"));
     }
 
     public String getName() {
@@ -531,6 +517,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public JobState getState() {
         return state;
+    }
+
+    public boolean isUnstable() {
+        return state == JobState.RUNNING && substate == JobSubstate.UNSTABLE;
     }
 
     public long getAuthCode() {
@@ -642,7 +632,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public String getFormat() {
-        String value = jobProperties.get(PROPS_FORMAT);
+        String value = jobProperties.get(CreateRoutineLoadStmt.FORMAT);
         if (value == null) {
             return "csv";
         }
@@ -654,11 +644,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public boolean isStripOuterArray() {
-        return Boolean.valueOf(jobProperties.get(PROPS_STRIP_OUTER_ARRAY));
+        return Boolean.parseBoolean(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
     }
 
     public String getJsonPaths() {
-        String value = jobProperties.get(PROPS_JSONPATHS);
+        String value = jobProperties.get(CreateRoutineLoadStmt.JSONPATHS);
         if (value == null) {
             return "";
         }
@@ -666,7 +656,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public String getJsonRoot() {
-        String value = jobProperties.get(PROPS_JSONROOT);
+        String value = jobProperties.get(CreateRoutineLoadStmt.JSONROOT);
         if (value == null) {
             return "";
         }
@@ -698,7 +688,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             unprotectRenewTask(System.currentTimeMillis() + taskSchedIntervalS * 1000,
                                     routineLoadTaskInfo);
                     GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                            .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+                            .releaseBeTaskSlot(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                     GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newTask);
                     LOG.warn(
                             "routine load task [job name {}, task id {}] timeout, remove old task and generate new one",
@@ -777,9 +767,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 // if this is a replay thread, the update state should already be replayed by OP_CHANGE_ROUTINE_LOAD_JOB
                 if (!isReplay) {
                     // remove all of task in jobs and change job state to paused
+                    String errMsg =
+                            String.format("Current error rows: %d is more than max error num: %d", currentErrorRows, maxErrorNum);
                     updateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                    "current error rows of job is more than max error num"),
+                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")),
                             isReplay);
                 }
             }
@@ -801,13 +793,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     .add("current_total_rows", currentTotalRows)
                     .add("current_error_rows", currentErrorRows)
                     .add("max_error_num", maxErrorNum)
-                    .add("msg", "current error rows is more than max error rows, begin to pause job")
+                    .add("msg", "current error rows is more than max error num, begin to pause job")
                     .build());
             if (!isReplay) {
                 // remove all of task in jobs and change job state to paused
+                String errMsg =
+                        String.format("Current error rows: %d is more than max error num: %d", currentErrorRows, maxErrorNum);
                 updateState(JobState.PAUSED,
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                "current error rows is more than max error num"),
+                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")),
                         isReplay);
             }
             // reset currentTotalNum and currentErrorNum
@@ -880,7 +874,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
-                throw new MetaNotFoundException("txn does not exist: " + txnId);
+                throw new UserException("txn does not exist: " + txnId);
             }
             txnState.addTableIndexes(planner.getDestTable());
 
@@ -1076,7 +1070,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
             }
             RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(timeToExecuteMs, routineLoadTaskInfo);
-            GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+            GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
+                    releaseBeTaskSlot(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
             GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
         } finally {
             writeUnlock();
@@ -1200,8 +1195,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
                                             TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
             updateState(JobState.PAUSED,
-                        new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
-                        false /* not replay */);
+                    new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
+                            ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")),
+                    false /* not replay */);
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
                      name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
@@ -1214,7 +1210,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
                 newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr, true);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                        .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+                        .releaseBeTaskSlot(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                 GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
                 LOG.warn(
                         "routine load task [job name {}, task id {}] aborted because of {}, remove old task and generate new one",
@@ -1356,7 +1352,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private void clearTasks() {
         for (RoutineLoadTaskInfo task : routineLoadTaskInfoList) {
             if (task.getBeId() != RoutineLoadTaskInfo.INVALID_BE_ID) {
-                GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(task.getBeId());
+                GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(task.getJobId(), task.getBeId());
             }
         }
         routineLoadTaskInfoList.clear();
@@ -1562,8 +1558,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
         } else {
-            jobProperties.put("columnSeparator", columnSeparator == null ? "\t" : columnSeparator.toString());
-            jobProperties.put("rowDelimiter", rowDelimiter == null ? "\t" : rowDelimiter.toString());
+            jobProperties.put("columnSeparator", columnSeparator == null ? "\t" : columnSeparator.getOriSeparator());
+            jobProperties.put("rowDelimiter", rowDelimiter == null ? "\n" : rowDelimiter.getOriDelimiter());
         }
         jobProperties.put("maxErrorNum", String.valueOf(maxErrorNum));
         jobProperties.put("maxFilterRatio", String.valueOf(maxFilterRatio));
@@ -1582,25 +1578,25 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
         sb.append("\"").append(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(desireTaskConcurrentNum)).append("\",\n");
+        sb.append(desireTaskConcurrentNum).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(maxErrorNum)).append("\",\n");
+        sb.append(maxErrorNum).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(maxFilterRatio)).append("\",\n");
+        sb.append(maxFilterRatio).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(taskSchedIntervalS)).append("\",\n");
+        sb.append(taskSchedIntervalS).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(maxBatchRows)).append("\",\n");
+        sb.append(maxBatchRows).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.TASK_CONSUME_SECOND).append("\"=\"");
-        sb.append(String.valueOf(taskConsumeSecond)).append("\",\n");
+        sb.append(taskConsumeSecond).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND).append("\"=\"");
-        sb.append(String.valueOf(taskTimeoutSecond)).append("\",\n");
+        sb.append(taskTimeoutSecond).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.FORMAT).append("\"=\"");
         sb.append(getFormat()).append("\",\n");
@@ -1609,19 +1605,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         sb.append(getJsonPaths()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY).append("\"=\"");
-        sb.append(Boolean.toString(isStripOuterArray())).append("\",\n");
+        sb.append(isStripOuterArray()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
         sb.append(getJsonRoot()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
-        sb.append(Boolean.toString(isStrictMode())).append("\",\n");
+        sb.append(isStrictMode()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.TIMEZONE).append("\"=\"");
         sb.append(getTimezone()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.PARTIAL_UPDATE).append("\"=\"");
-        sb.append(Boolean.toString(isPartialUpdate())).append("\",\n");
+        sb.append(isPartialUpdate()).append("\",\n");
 
         if (getMergeCondition() != null) {
             sb.append("\"").append(LoadStmt.MERGE_CONDITION).append("\"=\"");
@@ -1629,16 +1625,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         sb.append("\"").append(CreateRoutineLoadStmt.TRIMSPACE).append("\"=\"");
-        sb.append(Boolean.toString(isTrimspace())).append("\",\n");
+        sb.append(isTrimspace()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.ENCLOSE).append("\"=\"");
-        sb.append(StringEscapeUtils.escapeJava(String.valueOf(enclose))).append("\",\n");
+        sb.append(StringEscapeUtils.escapeJava(String.valueOf(getEnclose()))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.ESCAPE).append("\"=\"");
-        sb.append(StringEscapeUtils.escapeJava(String.valueOf(escape))).append("\",\n");
+        sb.append(StringEscapeUtils.escapeJava(String.valueOf(getEscape()))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.LOG_REJECTED_RECORD_NUM_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(getLogRejectedRecordNum())).append("\"\n");
+        sb.append(getLogRejectedRecordNum()).append("\"\n");
 
         sb.append(")\n");
         return sb.toString();

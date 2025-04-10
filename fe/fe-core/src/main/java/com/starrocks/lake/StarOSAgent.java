@@ -93,6 +93,17 @@ public class StarOSAgent {
     public boolean init(StarManagerServer server) {
         client = new StarClient(server);
         client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            client.setClientReadTimeoutSec(Config.star_client_read_timeout_seconds);
+            client.setClientListTimeoutSec(Config.star_client_list_timeout_seconds);
+            client.setClientWriteTimeoutSec(Config.star_client_write_timeout_seconds);
+        });
+        return true;
+    }
+
+    public boolean initForTest() {
+        client = new StarClient(null);
+        client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
         return true;
     }
 
@@ -496,7 +507,8 @@ public class StarOSAgent {
 
         List<List<ShardInfo>> shardInfo;
         try {
-            shardInfo = client.listShard(serviceId, Arrays.asList(groupId));
+            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
+                                         true /* withoutReplicaInfo */);
         } catch (StarClientException e) {
             throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
         }

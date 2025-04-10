@@ -18,6 +18,7 @@
 
 #include "exec/exec_node.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
+#include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
@@ -301,6 +302,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                                                  filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
+            _dict_filter_eval_cache.erase(slot_id);
             return false;
         }
 
@@ -330,6 +332,16 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
                                                          _mor_processor));
     }
     _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
+    return Status::OK();
+}
+
+Status HdfsOrcScanner::build_paimon_delete_file_builder() {
+    if (_scanner_params.paimon_deletion_file == nullptr) {
+        return Status::OK();
+    }
+    std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
+            new PaimonDeleteFileBuilder(_scanner_params.fs, &_need_skip_rowids));
+    RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_params.paimon_deletion_file.get()));
     return Status::OK();
 }
 
@@ -379,7 +391,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
                                           _scanner_ctx.case_sensitive, _scanner_ctx.orc_use_column_names);
-    _scanner_ctx.update_materialized_columns(known_column_names);
+    RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
@@ -520,12 +532,17 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
+        // add scanner's conjunct also, because SearchArgumentBuilder can support it
+        for (const auto& it : _scanner_params.conjunct_ctxs) {
+            conjuncts.push_back(it->root());
+        }
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
 
     // create iceberg delete builder at last
     RETURN_IF_ERROR(build_iceberg_delete_builder());
+    RETURN_IF_ERROR(build_paimon_delete_file_builder());
     return Status::OK();
 }
 
@@ -539,13 +556,44 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    ASSIGN_OR_RETURN(const size_t rows_read, _do_get_next(chunk));
+    size_t rows_read = 0;
 
-    DCHECK_EQ(rows_read, chunk->get()->num_rows());
+    if (_scanner_ctx.return_count_column) {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
+    } else {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
+    }
 
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
+    // check after partition/extended column added
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
+
     return Status::OK();
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
+    size_t read_num_values = 0;
+    Status st = Status::OK();
+    while (true) {
+        {
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            orc::RowReader::ReadPosition position;
+            st = _orc_reader->read_next(&position);
+            if (!st.ok()) {
+                break;
+            }
+        }
+        read_num_values += _orc_reader->get_cvb_size();
+        if (!_need_skip_rowids.empty()) {
+            read_num_values -= _orc_reader->get_row_delete_number(_need_skip_rowids);
+        }
+    }
+
+    if (!st.is_end_of_file()) return st;
+    if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
+    _scanner_ctx.append_or_update_count_column_to_chunk(chunk, read_num_values);
+    return 1;
 }
 
 StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
@@ -591,7 +639,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
-            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
+            RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
 
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;
@@ -616,6 +664,10 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             if (rows_read != 0) {
                 ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
                 rows_read = SIMD::count_nonzero(_chunk_filter);
+                if (rows_read == 0) {
+                    // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
+                    ck->set_num_rows(0);
+                }
             }
 
             if (rows_read != 0 && rows_read != ck->num_rows()) {

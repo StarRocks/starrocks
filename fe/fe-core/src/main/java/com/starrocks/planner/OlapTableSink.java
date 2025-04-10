@@ -159,7 +159,7 @@ public class OlapTableSink extends DataSink {
             for (int i = 0; i < this.tupleDescriptor.getSlots().size(); ++i) {
                 SlotDescriptor slot = this.tupleDescriptor.getSlots().get(i);
                 if (slot.getColumn().isAutoIncrement()) {
-                    this.autoIncrementSlotId = i;
+                    this.autoIncrementSlotId = slot.getId().asInt();
                     break;
                 }
             }
@@ -295,12 +295,16 @@ public class OlapTableSink extends DataSink {
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
+            Map<String, String> columnToExprValue = new HashMap<>();
             columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
                 columnsDesc.add(tColumn);
+                if (column.getDefaultExpr() != null && column.calculatedDefaultValue() != null) {
+                    columnToExprValue.put(column.getName(), column.calculatedDefaultValue());
+                }
             }
             if (indexMeta.getSortKeyUniqueIds() != null) {
                 columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
@@ -316,6 +320,7 @@ public class OlapTableSink extends DataSink {
                     indexMeta.getSchemaHash());
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
+            indexSchema.setColumn_to_expr_value(columnToExprValue);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 String dbName = MetaUtils.getDatabase(dbId).getFullName();

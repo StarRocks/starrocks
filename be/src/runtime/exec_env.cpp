@@ -193,6 +193,8 @@ Status GlobalEnv::_init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    _jemalloc_metadata_tracker =
+            regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_metadata", _process_mem_tracker.get());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
@@ -200,8 +202,7 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t query_pool_spill_limit = query_pool_mem_limit * config::query_pool_spill_mem_limit_threshold;
     _query_pool_mem_tracker->set_reserve_limit(query_pool_spill_limit);
     _connector_scan_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit * config::connector_scan_use_query_mem_ratio,
-                           "query_pool/connector_scan", nullptr);
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool/connector_scan", nullptr);
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
     _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
@@ -230,6 +231,7 @@ Status GlobalEnv::_init_mem_tracker() {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
+    _passthrough_mem_tracker = regist_tracker(MemTracker::PASSTHROUGH, -1, "passthrough");
     _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
@@ -336,7 +338,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
                             .set_min_threads(0)
-                            .set_max_threads(8)
+                            .set_max_threads(1000)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
@@ -392,6 +394,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [] {
+        auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
+        return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
+    });
 
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
@@ -422,10 +428,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_with_workgroup));
-    _connector_scan_executor =
-            new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
-                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
+    _connector_scan_executor = new workgroup::ScanExecutor(
+            std::move(connector_scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::CONNECTOR));
     _connector_scan_executor->initialize(connector_num_io_threads);
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
@@ -472,9 +477,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_with_workgroup));
-    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
-                                                 std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                         workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor = new workgroup::ScanExecutor(
+            std::move(scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::OLAP));
     _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
@@ -678,20 +683,26 @@ void ExecEnv::destroy() {
 }
 
 void ExecEnv::_wait_for_fragments_finish() {
-    size_t max_loop_cnt_cfg = config::loop_count_wait_fragments_finish;
-    if (max_loop_cnt_cfg == 0) {
+    size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
+    if (max_loop_secs == 0) {
         return;
     }
 
-    size_t running_fragments = _fragment_mgr->running_fragment_count();
-    size_t loop_cnt = 0;
+    size_t running_fragments = _get_running_fragments_count();
+    size_t loop_secs = 0;
 
-    while (running_fragments && loop_cnt < max_loop_cnt_cfg) {
-        DLOG(INFO) << running_fragments << " fragment(s) are still running...";
-        sleep(10);
-        running_fragments = _fragment_mgr->running_fragment_count();
-        loop_cnt++;
+    while (running_fragments > 0 && loop_secs < max_loop_secs) {
+        LOG(INFO) << running_fragments << " fragment(s) are still running...";
+        sleep(1);
+        running_fragments = _get_running_fragments_count();
+        loop_secs++;
     }
+}
+
+size_t ExecEnv::_get_running_fragments_count() const {
+    // fragment is registered in _fragment_mgr in non-pipeline env
+    // while _query_context_mgr is used in pipeline engine.
+    return _fragment_mgr->running_fragment_count() + _query_context_mgr->size();
 }
 
 void ExecEnv::wait_for_finish() {

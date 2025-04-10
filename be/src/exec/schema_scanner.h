@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
@@ -34,6 +35,8 @@ namespace starrocks {
 
 // scanner parameter from frontend
 struct SchemaScannerParam {
+    SchemaScannerParam() = default;
+
     const std::string* catalog{nullptr};
     const std::string* db{nullptr};
     const std::string* table{nullptr};
@@ -70,7 +73,17 @@ struct SchemaScannerParam {
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
     std::vector<TFrontend> frontends;
 
-    SchemaScannerParam() = default;
+    // schema scanner's predicates
+    const std::vector<ExprContext*>* expr_contexts;
+    std::unordered_map<SlotId, SlotDescriptor*> slot_id_mapping;
+};
+
+// schema scanner runtime state
+struct SchemaScannerState {
+    std::string ip;
+    int32_t port;
+    int timeout_ms;
+    SchemaScannerParam* param;
 };
 
 // virtual scanner for all schema table
@@ -100,9 +113,16 @@ public:
 
     const std::vector<SlotDescriptor*>& get_slot_descs() { return _slot_descs; }
 
+    Status init_schema_scanner_state(RuntimeState* state);
+
 protected:
     Status _create_slot_descs(ObjectPool* pool);
 
+    bool _parse_expr_predicate(const std::string& col_name, std::string& result);
+    bool _parse_expr_predicate(Expr* conjunct, const std::string& col_name, std::string& result);
+
+    // schema scanner state
+    SchemaScannerState _ss_state;
     bool _is_init;
     // this is used for sub class
     SchemaScannerParam* _param;

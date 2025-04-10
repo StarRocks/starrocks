@@ -58,14 +58,20 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.UnsupportedMVException;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapAggPattern;
@@ -211,7 +217,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     // NOTE: This method is used to replay persistent MaterializedViewMeta,
     // so need keep the same with `genColumnAndSetIntoStmt` and keep compatible with old version policy.
-    public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {
+    public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) {
         Map<String, Expr> result = Maps.newHashMap();
         SelectList selectList = null;
         QueryRelation queryRelation = queryStatement.getQueryRelation();
@@ -250,9 +256,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         break;
                     }
                     default: {
-                        if (functionCallExpr.isAggregateFunction()) {
-                            throw new AnalysisException("Unsupported function:" + functionName);
-                        }
                         MVColumnItem item = buildNonAggColumnItem(selectListItem, slots);
                         expr = item.getDefineExpr();
                         name = item.getName();
@@ -296,12 +299,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
 
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
-            throw new SemanticException("Materialized view query statement only support select");
+            throw new SemanticException("Materialized view query statement only supports a single query blocks");
         }
 
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
         if (tables.size() != 1) {
-            throw new UnsupportedMVException("The materialized view only support one table in from clause.");
+            throw new UnsupportedMVException("The materialized view only supports one table in from clause.");
         }
         Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
         Table table = entry.getValue();
@@ -358,6 +361,47 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         "Aggregate type table do not support count function in materialized view");
             }
         }
+        // analyze table if it has alias
+        analyzeExprWithTableAlias(context, this.dbName, table, getMVColumnItemList());
+    }
+
+    private void analyzeExprWithTableAlias(ConnectContext context,
+                                           String dbName,
+                                           Table table,
+                                           List<MVColumnItem> mvColumnItems) {
+        // sourceScope must be set null tableName for its Field in RelationFields
+        // because we hope slotRef can not be resolved in sourceScope but can be
+        // resolved in outputScope to force to replace the node using outputExprs.
+        TableName tableName = new TableName(dbName, table.getName());
+        SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(context,
+                table, tableName);
+        for (MVColumnItem mvColumnItem : mvColumnItems) {
+            Expr expr = mvColumnItem.getDefineExpr();
+            if (expr == null) {
+                continue;
+            }
+            // to not disturb queryStatement, clone the expr
+            Expr cloned = expr.clone();
+            analyzeExprWithTableAlias(context, visitor, table, tableName, cloned);
+            mvColumnItem.setDefineExpr(cloned);
+        }
+    }
+
+    private void analyzeExprWithTableAlias(ConnectContext context,
+                                           SelectAnalyzer.SlotRefTableNameCleaner visitor,
+                                           Table table,
+                                           TableName tableName,
+                                           Expr expr) {
+        if (expr == null) {
+            return;
+        }
+        expr.accept(visitor, null);
+        ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
+                new Scope(RelationId.anonymous(),
+                        new RelationFields(table.getBaseSchema().stream()
+                                .map(col -> new Field(col.getName(), col.getType(),
+                                        tableName, null))
+                                .collect(Collectors.toList()))), context);
     }
 
     private int genColumnAndSetIntoStmt(Table table, SelectRelation selectRelation) {

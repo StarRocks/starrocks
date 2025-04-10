@@ -56,7 +56,7 @@ public class ShortCircuitPlannerHybrid {
             List<String> keyColumns = ((OlapTable) table).getKeyColumns().stream().map(Column::getName).collect(
                     Collectors.toList());
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-            return isPointScan(table, keyColumns, conjuncts);
+            return isPointScan(table, keyColumns, conjuncts, shortCircuitContext);
         }
     }
 }

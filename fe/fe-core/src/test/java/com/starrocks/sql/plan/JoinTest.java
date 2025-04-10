@@ -22,7 +22,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -426,12 +425,11 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:Project\n" +
+        assertContains(plan, " 1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 26> : '49'\n" +
                 "  |  \n" +
-                "  1:OlapScanNode");
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -662,20 +660,9 @@ public class JoinTest extends PlanTestBase {
                 "limit \n" +
                 "  45;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "9:Project\n" +
+        assertContains(plan, " 6:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 21> : 21: expr\n" +
-                "  |  <slot 22> : 22: P_PARTKEY\n" +
-                "  |  <slot 23> : 23: P_NAME\n" +
-                "  |  <slot 24> : 24: P_MFGR\n" +
-                "  |  <slot 25> : 25: P_BRAND\n" +
-                "  |  <slot 26> : 26: P_TYPE\n" +
-                "  |  <slot 27> : 27: P_SIZE\n" +
-                "  |  <slot 28> : 28: P_CONTAINER\n" +
-                "  |  <slot 29> : 29: P_RETAILPRICE\n" +
-                "  |  <slot 30> : 30: P_COMMENT\n" +
-                "  |  <slot 31> : 31: PAD\n" +
-                "  |  <slot 40> : CAST(21: expr AS INT)");
+                "  |  <slot 21> : 37");
     }
 
     @Test
@@ -1128,23 +1115,21 @@ public class JoinTest extends PlanTestBase {
         Database db = globalStateMgr.getDb("test");
         Table table = db.getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
-        new Expectations(olapTable1) {
-            {
-                olapTable1.getRowCount();
-                result = 2L;
-                minTimes = 0;
-            }
-        };
-        String sql = "select * from join1 join join2 on join1.id = join2.id;";
-        String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: id = 5: id"));
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
-                "     TABLE: join1"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
-                "     TABLE: join2"));
+        try {
+            setTableStatistics(olapTable1, 2);
+            String sql = "select * from join1 join join2 on join1.id = join2.id;";
+            String explainString = getFragmentPlan(sql);
+            Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 2: id = 5: id"));
+            Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+                    "     TABLE: join1"));
+            Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+                    "     TABLE: join2"));
+        } finally {
+            setTableStatistics(olapTable1, 0);
+        }
     }
 
     @Test
@@ -1153,24 +1138,22 @@ public class JoinTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
-        new Expectations(olapTable1) {
-            {
-                olapTable1.getRowCount();
-                result = 2L;
-                minTimes = 0;
-            }
-        };
-        String sql = "WITH t_temp AS (select join1.id as id1, " +
-                "join2.id as id2 from join1 join join2 on join1.id = join2.id) select * from t_temp";
-        String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString, explainString.contains("equal join conjunct: 2: id = 5: id"));
-        Assert.assertTrue(explainString, explainString.contains("  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: join1"));
-        Assert.assertTrue(explainString, explainString.contains("  1:OlapScanNode\n" +
-                "     TABLE: join2\n" +
-                "     PREAGGREGATION: ON"));
+        try {
+            setTableStatistics(olapTable1, 2);
+            String sql = "WITH t_temp AS (select join1.id as id1, " +
+                    "join2.id as id2 from join1 join join2 on join1.id = join2.id) select * from t_temp";
+            String explainString = getFragmentPlan(sql);
+            Assert.assertTrue(explainString, explainString.contains("equal join conjunct: 2: id = 5: id"));
+            Assert.assertTrue(explainString, explainString.contains("  |----2:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: join1"));
+            Assert.assertTrue(explainString, explainString.contains("  1:OlapScanNode\n" +
+                    "     TABLE: join2\n" +
+                    "     PREAGGREGATION: ON"));
+        } finally {
+            setTableStatistics(olapTable1, 0);
+        }
     }
 
     @Test
@@ -1658,23 +1641,21 @@ public class JoinTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
-        new Expectations(olapTable1) {
-            {
-                olapTable1.getRowCount();
-                result = 2L;
-                minTimes = 0;
-            }
-        };
-        String sql = "select * from join1 join join2 on join1.id = join2.id and 1 < join1.id ";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  0:OlapScanNode\n" +
-                "     TABLE: join1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 2: id > 1");
-        assertContains(plan, "  1:OlapScanNode\n" +
-                "     TABLE: join2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: id > 1");
+        try {
+            setTableStatistics(olapTable1, 2);
+            String sql = "select * from join1 join join2 on join1.id = join2.id and 1 < join1.id ";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     TABLE: join1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 2: id > 1");
+            assertContains(plan, "  1:OlapScanNode\n" +
+                    "     TABLE: join2\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 5: id > 1");
+        } finally {
+            setTableStatistics(olapTable1, 0);
+        }
     }
 
     @Test
@@ -1729,24 +1710,17 @@ public class JoinTest extends PlanTestBase {
                 "address as (select 1 as user_id, 'newzland' as address_name) \n" +
                 "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: expr = 5: expr");
-        assertContains(plan, "  4:Project\n" +
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : NULL\n" +
+                "  |  <slot 3> : NULL\n" +
                 "  |  <slot 5> : 2\n" +
                 "  |  <slot 6> : 'mike'\n" +
                 "  |  \n" +
-                "  3:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 2> : 1\n" +
-                "  |  <slot 3> : 'newzland'\n" +
-                "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         NULL\n");
+                "         NULL");
     }
 
     @Test
@@ -3228,5 +3202,91 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v6 = 8: v8");
+    }
+
+    @Test
+    public void testOuterJoinOnConstValue() throws Exception {
+        String query = "WITH `ID_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        \"A\" AS `ID`\n" +
+                "),\n" +
+                "`MAP_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        [\"A\", \"B\", \"C\"] AS `MAP_KEYS`\n" +
+                "),\n" +
+                "`AGGED_MAP_TABLE_EX` AS (\n" +
+                "    SELECT\n" +
+                "        ARRAY_AGG(\n" +
+                "            `AGGED_MAP_TABLE`.`MAP_KEYS`\n" +
+                "        ) AS `AGGED_MAP_KEYS`\n" +
+                "    FROM\n" +
+                "        `MAP_TABLE` AS `AGGED_MAP_TABLE`\n" +
+                "),\n" +
+                "`AGGED_MAP_FIND_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        [\"A\", \"B\", \"C\"] AS `FIND_AGGED_KEY`\n" +
+                "    FROM\n" +
+                "        `AGGED_MAP_TABLE_EX`\n" +
+                "),\n" +
+                "`GROUPED_FIND_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        `GROUPED_AGGED_MAP_FIND_TABLE`.`FIND_AGGED_KEY` AS `FIND_AGGED_KEY`\n" +
+                "    FROM\n" +
+                "        `AGGED_MAP_FIND_TABLE` AS `GROUPED_AGGED_MAP_FIND_TABLE`\n" +
+                "    GROUP BY\n" +
+                "        `GROUPED_AGGED_MAP_FIND_TABLE`.`FIND_AGGED_KEY`\n" +
+                "),\n" +
+                "`AGGED_GROUPED_FIND_SEQUENCE` AS (\n" +
+                "    SELECT\n" +
+                "        `AGGED_GROUPED_FIND_TABLE`.`FIND_AGGED_KEY` AS `FIND_AGGED_KEY`,\n" +
+                "        123 AS `GROUPED_FIND_LITERAL`\n" +
+                "    FROM\n" +
+                "        `GROUPED_FIND_TABLE` AS `AGGED_GROUPED_FIND_TABLE`\n" +
+                "),\n" +
+                "`HANDLE_SEQUENCE_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        `MockTOSQL_UNNEST`.`FIND_AGGED_KEY` AS `FIND_AGGED_KEY`,\n" +
+                "        `SEQUENCE_TABLE`.`GROUPED_FIND_LITERAL` AS `GROUPED_FIND_LITERAL`\n" +
+                "    FROM\n" +
+                "        `AGGED_GROUPED_FIND_SEQUENCE` AS `SEQUENCE_TABLE`,\n" +
+                "        UNNEST(\n" +
+                "            `SEQUENCE_TABLE`.`FIND_AGGED_KEY`\n" +
+                "        ) AS MockTOSQL_UNNEST(\n" +
+                "            `FIND_AGGED_KEY`\n" +
+                "        )\n" +
+                "),\n" +
+                "`JOINED_SEQUENCE` AS (\n" +
+                "    SELECT\n" +
+                "        `R_TABLE`.`ID` AS `JOINED_ID`,\n" +
+                "        `HANDLE_SEQUENCE_TABLE_JOINED`.`GROUPED_FIND_LITERAL` AS `JOINED_LITERAL`\n" +
+                "    FROM\n" +
+                "        `HANDLE_SEQUENCE_TABLE` AS `HANDLE_SEQUENCE_TABLE_JOINED`\n" +
+                "        LEFT JOIN `ID_TABLE` AS `R_TABLE` ON (\n" +
+                "            `HANDLE_SEQUENCE_TABLE_JOINED`.`FIND_AGGED_KEY` = `R_TABLE`.`ID`\n" +
+                "        )\n" +
+                "),\n" +
+                "`JOINED_AGGED_SEQUENCE` AS (\n" +
+                "    SELECT\n" +
+                "        `JOINED_TABLE_SEQUENCE`.`JOINED_LITERAL` AS `JOINED_LITERAL`,\n" +
+                "            `JOINED_TABLE_SEQUENCE`.`JOINED_ID`\n" +
+                "         AS `JOINED_TABLE_AGGED_SEQUENCE`\n" +
+                "    FROM\n" +
+                "        `JOINED_SEQUENCE` AS `JOINED_TABLE_SEQUENCE`\n" +
+                ")\n" +
+                "SELECT\n" +
+                "    `JOINED_AGGED_SEQUENCE_R_TABLE`.`JOINED_TABLE_AGGED_SEQUENCE` AS `RENAME_9`\n" +
+                "FROM\n" +
+                "    `AGGED_GROUPED_FIND_SEQUENCE` AS `AGGED_GROUP_FIND_L_TABLE`\n" +
+                "    LEFT JOIN `JOINED_AGGED_SEQUENCE` AS `JOINED_AGGED_SEQUENCE_R_TABLE` ON (\n" +
+                "        `AGGED_GROUP_FIND_L_TABLE`.`GROUPED_FIND_LITERAL` = `JOINED_AGGED_SEQUENCE_R_TABLE`.`JOINED_LITERAL`\n" +
+                "    );";
+        String plan = getFragmentPlan(query);
+        //outer join can not use const expr replacement optimization because it may generate null values
+        assertContains(plan, "17:Project\n" +
+                "  |  <slot 29> : 29: expr\n" +
+                "  |  \n" +
+                "  16:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN\n" +
+                "  |  colocate: false, reason:");
     }
 }

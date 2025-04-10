@@ -287,19 +287,6 @@ public class Load {
     }
 
     /*
-     * This function should be used for stream load.
-     * And it must be called in same db lock when planing.
-     */
-    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
-                                   Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
-                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params)
-            throws UserException {
-        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
-                srcTupleDesc, slotDescByName, params, true, false, Lists.newArrayList());
-    }
-
-    /*
      * This function should be used for broker load v2.
      * And it must be called in same db lock when planing.
      * This function will do followings:
@@ -561,7 +548,7 @@ public class Load {
                             slotDesc.setType(tblColumn.getType());
                             slotDesc.setColumn(new Column(columnName, tblColumn.getType()));
                         }
-                        slotDesc.setIsMaterialized(true);
+                        slotDesc.setIsMaterialized(importColumnDesc.isMaterialized());
                     } else if (columnName.equals(Load.LOAD_OP_COLUMN)) {
                         // to support auto mapping, the new grammer for compatible with existing load tool.
                         // columns:pk,col1,col2,__op equals to columns:srccol0,srccol1,srccol2,srccol3,pk=srccol0,col1=srccol1,col2=srccol2,__op=srccol3
@@ -685,7 +672,9 @@ public class Load {
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
              List<Boolean> missAutoIncrementColumn) throws UserException {
-        Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
+        Set<String> specified = columnExprs.stream()
+                .map(desc -> desc.getColumnName())
+                .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
             if (specified.contains(col.getName())) {

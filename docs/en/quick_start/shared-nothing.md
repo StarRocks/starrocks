@@ -1,14 +1,14 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 1
 description: "StarRocks in Docker: Query real data with JOINs"
 ---
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsAllin1.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
-# StarRocks basics
+# Deploy StarRocks with Docker
 
 This tutorial covers:
 
@@ -228,9 +228,7 @@ There is more to learn; we intentionally glossed over the data transformation do
 
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
-[Materialized views](../cover_pages/mv_use_cases.mdx)
-
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 

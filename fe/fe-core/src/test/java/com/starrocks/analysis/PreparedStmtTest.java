@@ -19,6 +19,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
@@ -102,4 +104,23 @@ public class PreparedStmtTest{
         assertEquals("Getting analyzing error. Detail message: This command is not supported in the " +
                 "prepared statement protocol yet.", e.getMessage());
     }
+
+    @Test
+    public void testPrepareStmtWithCte() throws Exception {
+        String sql = "PREPARE stmt FROM with cte as (select * from prepare_stmt where c0 = ?) select * from cte where c1 = ?";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        QueryStatement queryStmt = (QueryStatement) stmt.getInnerStmt();
+        Assert.assertTrue(stmt.getParameters().get(1) ==
+                ((SelectRelation) queryStmt.getQueryRelation()).getPredicate().getChild(1));
+
+        sql = "PREPARE stmt FROM select *, ? from (with cte as " +
+                "(select * from prepare_stmt where c0 = ?) select * from cte where c1 = ?) t where c2 = ?";
+        stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        queryStmt = (QueryStatement) stmt.getInnerStmt();
+        Assert.assertTrue(stmt.getParameters().get(0) ==
+                ((SelectRelation) queryStmt.getQueryRelation()).getSelectList().getItems().get(1).getExpr());
+        Assert.assertTrue(stmt.getParameters().get(3) ==
+                ((SelectRelation) queryStmt.getQueryRelation()).getPredicate().getChild(1));
+    }
+
 }

@@ -22,10 +22,10 @@
 #####################################################
 
 # HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6-aarch64.tar.gz"
-HADOOP_NAME="hadoop-3.3.6-aarch64.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.6"
-HADOOP_MD5SUM="369f899194a920e0d1c3c3bc1718b3b5"
+HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.0/hadoop-3.4.0-aarch64.tar.gz"
+HADOOP_NAME="hadoop-3.4.0-aarch64.tar.gz"
+HADOOP_SOURCE="hadoop-3.4.0"
+HADOOP_MD5SUM="4cf40e127f27044310aae36dce23bdb1"
 
 # OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
 JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
@@ -52,7 +52,7 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.4/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.7/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="8617f5b3e67ccad59becbb54ec8c8c48"
+STARCACHE_MD5SUM="b8e2e61ed73c3995299f52620bafe58d"

@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -218,8 +219,8 @@ public class StatisticExecutor {
         }
     }
 
-    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId) {
-        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId);
+    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId, List<Long> partitions) {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId, partitions);
         return executeStatisticDQL(context, sql);
     }
 
@@ -228,10 +229,16 @@ public class StatisticExecutor {
         return executeStatisticDQL(context, sql);
     }
 
+    public List<TStatisticData> queryPartitionLevelColumnNDV(ConnectContext context, long tableId,
+                                                             List<Long> partitions, List<String> columns) {
+        String sql = StatisticSQLBuilder.buildQueryPartitionStatisticsSQL(tableId, partitions, columns);
+        return executeStatisticDQL(context, sql);
+    }
+
     private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
         List<TStatisticData> statistics = Lists.newArrayList();
 
-        if (sqlResult.size() < 1) {
+        if (sqlResult.isEmpty()) {
             return statistics;
         }
 
@@ -240,14 +247,7 @@ public class StatisticExecutor {
             return statistics;
         }
 
-        if (version == StatsConstants.STATISTIC_DATA_VERSION
-                || version == StatsConstants.STATISTIC_DICT_VERSION
-                || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
-                || version == StatsConstants.STATISTIC_TABLE_VERSION
-                || version == StatsConstants.STATISTIC_BATCH_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
+        if (StatsConstants.STATISTIC_SUPPORTED_VERSION.contains(version)) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -273,6 +273,7 @@ public class StatisticExecutor {
         Table table = statsJob.getTable();
 
         try {
+            Stopwatch watch = Stopwatch.createStarted();
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
@@ -281,8 +282,9 @@ public class StatisticExecutor {
 
             statsConnectCtx.setStatisticsConnection(true);
             statsJob.collect(statsConnectCtx, analyzeStatus);
+            LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
-            LOG.warn("Collect statistics error ", e);
+            LOG.warn("execute statistics job failed: {}", statsJob, e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
@@ -356,19 +358,22 @@ public class StatisticExecutor {
     }
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
+        context.setQueryId(UUIDUtil.genUUID());
+        if (Config.enable_print_sql) {
+            LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+        }
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
-        AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
-                DebugUtil.printId(context.getQueryId()), sql);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
+            AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             return sqlResult.first;
         }
     }
@@ -380,9 +385,9 @@ public class StatisticExecutor {
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            executor.execute();
             AuditLog.getStatisticAudit().info("statistic execute DML | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
-            executor.execute();
             return true;
         } catch (Exception e) {
             LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);

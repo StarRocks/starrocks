@@ -100,6 +100,8 @@ struct TTextFileDesc {
     
     // escape character
     8: optional i8 escape
+
+    9: optional i32 skip_header_line_count
 }
 
 enum TSchemaTableType {
@@ -275,6 +277,7 @@ struct TOlapTableIndexSchema {
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
+    7: optional map<string, string> column_to_expr_value
 }
 
 struct TOlapTableSchemaParam {
@@ -436,6 +439,8 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
+
+    7: optional i64 target_max_file_size
 }
 
 struct TIcebergSchema {

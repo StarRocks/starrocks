@@ -17,18 +17,25 @@ package com.starrocks.credential;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.Assert;
 import org.junit.Test;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
 public class AWSCloudConfigurationTest {
 
     @Test
-    public void testUseAWSSDKDefaultBehavior() {
+    public void testUseAwsSDKDefaultBehavior() throws Exception {
         // Test hadoop configuration
         Map<String, String>  properties = new HashMap<>();
         properties.put("aws.s3.use_aws_sdk_default_behavior", "true");
@@ -36,8 +43,34 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
+        Assert.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
                 configuration.get("fs.s3a.aws.credentials.provider"));
+        S3AFileSystem fs = (S3AFileSystem) FileSystem.get(new URI("s3://hi/a.parquet"), configuration);
+        AWSCredentialProviderList list =  fs.shareCredentials("ut");
+        String previousProviderName = list.getProviders().get(0).getClass().getName();
+        int previousHashCode = list.getProviders().get(0).hashCode();
+        fs.close();
+
+        fs = (S3AFileSystem) FileSystem.get(new URI("s3://hi/a.parquet"), configuration);
+        list =  fs.shareCredentials("ut");
+        String currentProviderName = list.getProviders().get(0).getClass().getName();
+        int currentHashCode = list.getProviders().get(0).hashCode();
+        fs.close();
+
+        // Make sure two DefaultCredentialsProviders are the same class
+        Assert.assertEquals(previousProviderName, currentProviderName);
+        // Make sure the provider is DefaultCredentialsProvider
+        Assert.assertEquals(DefaultCredentialsProvider.class.getName(), previousProviderName);
+        // Make sure two DefaultCredentialsProviders are different instances
+        Assert.assertNotEquals(previousHashCode, currentHashCode);
+    }
+
+    @Test
+    public void testAwsDefaultCredentialsProvider() {
+        OverwriteAwsDefaultCredentialsProvider provider = new OverwriteAwsDefaultCredentialsProvider();
+        AwsCredentials credentials = provider.resolveCredentials();
+        Assert.assertNull(credentials.accessKeyId());
+        Assert.assertNull(credentials.secretAccessKey());
     }
 
     @Test
@@ -50,7 +83,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
+        Assert.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
                 configuration.get("fs.s3a.assumed.role.credentials.provider"));
         Assert.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
@@ -126,7 +159,7 @@ public class AWSCloudConfigurationTest {
         {
             AWSCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assert.assertNotNull(credential);
-            Assert.assertThrows(IllegalArgumentException.class, credential::generateAWSCredentialsProvider);
+            Assert.assertThrows(NullPointerException.class, credential::generateAWSCredentialsProvider);
         }
 
         hiveConf.set("aws.glue.sts.region", "region");

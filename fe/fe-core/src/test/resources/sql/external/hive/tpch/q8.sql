@@ -47,6 +47,8 @@ distribution type: GATHER
 cardinality: 2
 column statistics:
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
+* sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
 
 PLAN FRAGMENT 1(F21)

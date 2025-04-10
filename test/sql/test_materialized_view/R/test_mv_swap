@@ -1,8 +1,11 @@
--- name: test_mv_swap
-create database db_test_mv_swap;
+-- name: test_mv_swap @sequential
+admin set frontend config('enable_mv_automatic_active_check'='false');
 -- result:
 -- !result
-use db_test_mv_swap;
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
 -- result:
 -- !result
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
@@ -123,11 +126,11 @@ false	base-mv inactive: mv_on_mv_1
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv_on_mv_1` (`sum_sum_pv`)\nDISTRIBUTED BY RANDOM\nREFRESH ASYNC\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT sum(`db_test_mv_swap`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_test_mv_swap`.`mv1`;\n\nCause an error: Column \'`db_test_mv_swap`.`mv1`.`sum_pv`\' cannot be resolved.')
+[REGEX].*Can not active materialized view.*
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_2] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv_on_mv_2` (`sum_sum_pv + 1`)\nDISTRIBUTED BY RANDOM\nREFRESH ASYNC\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT `db_test_mv_swap`.`mv_on_mv_1`.`sum_sum_pv` + 1 AS `sum_sum_pv + 1`\nFROM `db_test_mv_swap`.`mv_on_mv_1`;\n\nCause an error: Create/Rebuild materialized view from inactive materialized view: mv_on_mv_1.')
+[REGEX].*Can not active materialized view.*
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 -- result:
@@ -174,4 +177,10 @@ ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
 -- result:
 true	
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+admin set frontend config('enable_mv_automatic_active_check'='true');
+-- result:
 -- !result

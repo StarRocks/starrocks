@@ -173,6 +173,15 @@ uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) {
 }
 
 template <typename T>
+uint32_t ObjectColumn<T>::max_one_element_serialize_size() const {
+    uint32_t max_size = 0;
+    for (size_t idx = 0; idx < size(); idx++) {
+        max_size = std::max(serialize_size(idx), max_size);
+    }
+    return max_size;
+}
+
+template <typename T>
 uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) {
     DCHECK(false) << "Don't support object column serialize";
     return 0;
@@ -265,7 +274,7 @@ int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 template <typename T>
-void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
+void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     buf->push_null();
 }
 

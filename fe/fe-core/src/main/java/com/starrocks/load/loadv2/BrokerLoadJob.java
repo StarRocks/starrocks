@@ -276,7 +276,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-                context.setExecutionId(loadId);
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
@@ -348,7 +347,9 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .build());
                 return;
             }
-            if (retryTime <= 0 || !txnStatusChangeReason.contains("timeout") || !isTimeout()) {
+            boolean shouldRetry = retryTime > 0 && txnStatusChangeReason.contains("timeout")
+                    && (LoadErrorUtils.isTimeoutFromLoadingTaskExecution(txnStatusChangeReason) || isTimeout());
+            if (!shouldRetry) {
                 // record attachment in load job
                 unprotectUpdateLoadingStatus(txnState);
                 // cancel load job
@@ -391,6 +392,15 @@ public class BrokerLoadJob extends BulkLoadJob {
             retryTime--;
         } finally {
             writeUnlock();
+        }
+    }
+
+    @Override
+    protected void reset() {
+        super.reset();
+        if (context != null) {
+            context.setStartTime();
+            createTimestamp = context.getStartTime();
         }
     }
 

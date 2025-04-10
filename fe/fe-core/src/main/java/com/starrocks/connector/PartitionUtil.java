@@ -79,6 +79,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergApiConverter.PARTITION_NULL_VALUE;
 import static org.apache.hadoop.hive.common.FileUtils.escapePathName;
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
@@ -236,6 +237,27 @@ public class PartitionUtil {
             }
         }
         return filteredPartitionName;
+    }
+
+
+    public static List<PartitionKey> getPartitionKeys(Table table) {
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        if (table.isUnPartitioned()) {
+            partitionKeys.add(new PartitionKey());
+        } else {
+            List<String> partitionNames = getPartitionNames(table);
+            List<Column> partitionColumns = getPartitionColumns(table);
+            try {
+                for (String partitionName : partitionNames) {
+                    partitionKeys.add(
+                            createPartitionKey(toPartitionValues(partitionName), partitionColumns, table));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to get partition keys", e);
+                throw new StarRocksConnectorException("Failed to get partition keys", e);
+            }
+        }
+        return partitionKeys;
     }
 
     public static List<Column> getPartitionColumns(Table table) {
@@ -637,7 +659,8 @@ public class PartitionUtil {
 
             // currently starrocks date literal only support local datetime
             org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
-            if (partitionField.transform().isIdentity() && icebergType.equals(Types.TimestampType.withZone())) {
+            if (!value.equals(PARTITION_NULL_VALUE) && partitionField.transform().isIdentity() &&
+                    icebergType.equals(Types.TimestampType.withZone())) {
                 value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
                         getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
             }

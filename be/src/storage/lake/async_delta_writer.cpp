@@ -138,7 +138,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         iter->cb(st);
     }
     if (flush_after_write) {
-        st = delta_writer->flush_async();
+        st = delta_writer->manual_flush();
         LOG_IF(ERROR, !st.ok()) << "Fail to flush. tablet_id: " << delta_writer->tablet_id()
                                 << " txn_id: " << delta_writer->txn_id() << ": " << st;
     }
@@ -312,7 +312,8 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_mem_tracker(_mem_tracker)
                                           .set_immutable_tablet_size(_immutable_tablet_size)
                                           .set_miss_auto_increment_column(_miss_auto_increment_column)
-                                          .set_index_id(_index_id)
+                                          .set_schema_id(_schema_id)
+                                          .set_column_to_expr_value(_column_to_expr_value)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

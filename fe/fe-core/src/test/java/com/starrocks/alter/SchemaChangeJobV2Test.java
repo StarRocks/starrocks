@@ -83,7 +83,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 
 public class SchemaChangeJobV2Test extends DDLTestBase {
-    private static String fileName = "./SchemaChangeV2Test";
+    private static final String TEST_FILE_NAME = SchemaChangeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
 
     @Rule
@@ -228,7 +228,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testModifyDynamicPartitionNormal() throws UserException {
+    public void testModifyDynamicPartitionNormal() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
@@ -242,8 +242,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         olapTable.setUseFastSchemaEvolution(false);
         schemaChangeHandler.process(alterClauses, db, olapTable);
-        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExist());
-        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExists());
+        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         Assert.assertEquals("day", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getEnd());
         Assert.assertEquals("p", olapTable.getTableProperty().getDynamicPartitionProperty().getPrefix());
@@ -254,7 +254,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         properties.put(DynamicPartitionProperty.ENABLE, "false");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
         schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
-        Assert.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         // set dynamic_partition.time_unit = week
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.TIME_UNIT, "week");
@@ -279,6 +279,12 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
         schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets());
+    }
+    @Test
+    public void testModifyDynamicPropertyTrim() throws Exception {
+        String sql = "ALTER TABLE testDb1.testTable1 SET(\"dynamic_partition.buckets \"=\"1\")";
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertEquals("1", stmt.getOps().get(0).getProperties().get("dynamic_partition.buckets"));
     }
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
@@ -313,7 +319,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testSerializeOfSchemaChangeJob() throws IOException {
         // prepare file
-        File file = new File(fileName);
+        File file = new File(TEST_FILE_NAME);
         file.createNewFile();
         file.deleteOnExit();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));

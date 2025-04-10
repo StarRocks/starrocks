@@ -335,17 +335,72 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testParseLocationsFromConfig() {
-        SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        List<String> locations = Deencapsulation.invoke(sdsvm, "parseLocationsFromConfig");
-        Assert.assertEquals(1, locations.size());
-        Assert.assertEquals("s3://default-bucket/1", locations.get(0));
+    public void testParseLocationsFromConfig() throws InvalidConfException {
+        Config.cloud_native_storage_type = "s3";
+        Config.aws_s3_path = "default-bucket/1";
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("s3://default-bucket/1", locations.get(0));
+        }
+
+        // with s3:// prefix
+        Config.aws_s3_path = "s3://default-bucket/1";
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("s3://default-bucket/1", locations.get(0));
+        }
+
+        Config.aws_s3_path = "s3://default-bucket";
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("s3://default-bucket", locations.get(0));
+        }
+
+        Config.aws_s3_path = "s3://default-bucket/";
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("s3://default-bucket/", locations.get(0));
+        }
+
+        // with invalid prefix
+        Config.aws_s3_path = "://default-bucket/1";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        // with wrong prefix
+        Config.aws_s3_path = "hdfs://default-bucket/1";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+
+        Config.aws_s3_path = "s3://";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+
+        Config.aws_s3_path = "bucketname:30/b";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+
+        Config.aws_s3_path = "s3://bucketname:9030/b";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+
+        Config.aws_s3_path = "/";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+
+        Config.aws_s3_path = "";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "hdfs://url";
-        locations = Deencapsulation.invoke(sdsvm, "parseLocationsFromConfig");
-        Assert.assertEquals(1, locations.size());
-        Assert.assertEquals("hdfs://url", locations.get(0));
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("hdfs://url", locations.get(0));
+        }
+        Config.cloud_native_hdfs_url = "viewfs://host:9030/a/b/c";
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("viewfs://host:9030/a/b/c", locations.get(0));
+        }
     }
 
     @Test
@@ -593,6 +648,15 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals("bucket", bucketAndPrefix3[0]);
         Assert.assertEquals("", bucketAndPrefix3[1]);
 
+        // allow leading s3:// in configuration, will be just ignored.
+        Config.aws_s3_path = "s3://a-bucket/b";
+        {
+            String[] bucketAndPrefix = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
+            Assert.assertEquals(2, bucketAndPrefix.length);
+            Assert.assertEquals("a-bucket", bucketAndPrefix[0]);
+            Assert.assertEquals("b", bucketAndPrefix[1]);
+        }
+
         Config.aws_s3_path = oldAwsS3Path;
     }
 
@@ -652,26 +716,28 @@ public class SharedDataStorageVolumeMgrTest {
 
     @Test
     public void testValidateStorageVolumeConfig() {
+        SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+
         Config.cloud_native_storage_type = "s3";
         Config.aws_s3_path = "";
-        SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+
         Config.aws_s3_path = "path";
         Config.aws_s3_region = "";
         Config.aws_s3_endpoint = "";
-        Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "";
-        Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.cloud_native_storage_type = "azblob";
         Config.azure_blob_path = "";
-        Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.azure_blob_path = "blob";
         Config.azure_blob_endpoint = "";
-        Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
     }
 
     @Test

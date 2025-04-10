@@ -39,6 +39,7 @@
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "util/json.h"
+#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -1147,6 +1148,24 @@ TEST_F(ChunksSorterTest, test_tie) {
         ASSERT_EQ(iterator.range_last, 5);
         ASSERT_FALSE(iterator.next());
     }
+}
+
+// https://github.com/StarRocks/starrocks/issues/30758
+TEST_F(ChunksSorterTest, test_nan) {
+    std::ifstream ifs("./be/test/exec/test_data/nan_column");
+    std::string context((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
+    DoubleColumn double_column;
+    double_column.resize(86016);
+    auto& data = double_column.get_data();
+    memcpy(data.data(), context.data(), context.size());
+    auto permutation = create_small_permutation(double_column.size());
+    auto inlined = create_inline_permutation<double>(permutation, data);
+    auto begin = inlined.begin() + 26012;
+    auto end = inlined.begin() + 26047;
+
+    ::pdqsort(begin, end, [&](auto lhs, auto rhs) {
+        return SorterComparator<double>::compare(lhs.inline_value, rhs.inline_value) > 0;
+    });
 }
 
 } // namespace starrocks

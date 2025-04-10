@@ -212,6 +212,9 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+            if (!StatisticAutoCollector.checkoutAnalyzeTime()) {
+                break;
+            }
             AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
                     statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
@@ -230,7 +233,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         }
 
         if (!hasFailedCollectJob) {
-            setStatus(StatsConstants.ScheduleStatus.PENDING);
+            setStatus(ScheduleStatus.FINISH);
             setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }

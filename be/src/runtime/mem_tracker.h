@@ -102,7 +102,9 @@ public:
         COMPACTION,
         SCHEMA_CHANGE_TASK,
         RESOURCE_GROUP,
-        RESOURCE_GROUP_BIG_QUERY
+        RESOURCE_GROUP_BIG_QUERY,
+        JEMALLOC,
+        PASSTHROUGH,
     };
 
     /// 'byte_limit' < 0 means no limit
@@ -149,8 +151,7 @@ public:
     }
 
     void consume(int64_t bytes) {
-        if (bytes <= 0) {
-            if (bytes < 0) release(-bytes);
+        if (bytes == 0) {
             return;
         }
         for (auto* tracker : _all_trackers) {
@@ -158,14 +159,17 @@ public:
         }
     }
 
-    void release_without_root() {
-        int64_t bytes = consumption();
-        if (bytes != 0) {
-            for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
-                _all_trackers[i]->_consumption->add(-bytes);
-            }
+    // the function can be used to transform memory stats from process mem_tracker to child mem_tracker
+    void consume_without_root(int64_t bytes) {
+        if (bytes == 0) {
+            return;
+        }
+        for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
+            _all_trackers[i]->_consumption->add(bytes);
         }
     }
+
+    void release_without_root() { return release_without_root(consumption()); }
 
     void list_mem_usage(std::vector<SimpleItem>* items, size_t cur_level, size_t upper_level) const {
         SimpleItem item;
@@ -228,13 +232,14 @@ public:
         // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
             MemTracker* tracker = _all_trackers[i];
-            if (tracker->limit() < 0) {
+            int64_t limit = tracker->reserve_limit();
+            if (limit < 0) {
+                limit = tracker->limit();
+            }
+            if (limit < 0) {
+                DCHECK_EQ(limit, -1);
                 tracker->_consumption->add(bytes); // No limit at this tracker.
             } else {
-                int64_t limit = tracker->reserve_limit();
-                if (limit == -1) {
-                    limit = tracker->limit();
-                }
                 if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
                     continue;
                 } else {
@@ -253,12 +258,21 @@ public:
 
     /// Decreases consumption of this tracker and its ancestors by 'bytes'.
     void release(int64_t bytes) {
-        if (bytes <= 0) {
-            if (bytes < 0) consume(-bytes);
+        if (bytes == 0) {
             return;
         }
         for (auto* tracker : _all_trackers) {
             tracker->_consumption->add(-bytes);
+        }
+    }
+
+    void release_without_root(int64_t bytes) {
+        if (bytes == 0 || _all_trackers.empty()) {
+            return;
+        }
+
+        for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
+            _all_trackers[i]->_consumption->add(-bytes);
         }
     }
 
@@ -282,21 +296,20 @@ public:
         return nullptr;
     }
 
-    // Returns the maximum consumption that can be made without exceeding the limit on
-    // this tracker or any of its parents. Returns int64_t::max() if there are no
-    // limits and a negative value if any limit is already exceeded.
-    int64_t spare_capacity() const {
-        int64_t result = std::numeric_limits<int64_t>::max();
-        for (auto _limit_tracker : _limit_trackers) {
-            int64_t mem_left = _limit_tracker->limit() - _limit_tracker->consumption();
-            result = std::min(result, mem_left);
-        }
-        return result;
-    }
-
     bool limit_exceeded() const { return _limit >= 0 && _limit < consumption(); }
 
     bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
+
+    bool limit_exceeded_precheck(int64_t consume) const { return _limit >= 0 && _limit < consumption() + consume; }
+
+    bool any_limit_exceeded_precheck(int64_t consume) const {
+        for (auto& _limit_tracker : _limit_trackers) {
+            if (_limit_tracker->limit_exceeded_precheck(consume)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     void set_limit(int64_t limit) { _limit = limit; }
 
@@ -307,8 +320,6 @@ public:
     void set_reserve_limit(int64_t reserve_limit) { _reserve_limit = reserve_limit; }
 
     int64_t reserve_limit() const { return _reserve_limit; }
-
-    bool has_reserve_limit() const { return _reserve_limit >= 0; }
 
     const std::string& label() const { return _label; }
 

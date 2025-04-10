@@ -138,7 +138,7 @@ TEST_F(LakeDeltaWriterTest, test_build) {
                            .set_table_id(8)
                            .build();
         ASSERT_TRUE(!res.ok());
-        ASSERT_EQ("index_id not set", res.status().message());
+        ASSERT_EQ("schema_id not set", res.status().message());
     }
 }
 
@@ -153,7 +153,7 @@ TEST_F(LakeDeltaWriterTest, test_open) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         delta_writer->close();
@@ -178,7 +178,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .set_immutable_tablet_size(1)
                                                .build());
     ASSERT_OK(delta_writer->open());
@@ -252,9 +252,9 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
 
     SyncPoint::GetInstance()->EnableProcessing();
 
-    SyncPoint::GetInstance()->SetCallBack("get_tablet_schema_by_index_id.1",
+    SyncPoint::GetInstance()->SetCallBack("get_tablet_schema_by_id.1",
                                           [](void* arg) { ((std::shared_ptr<const TabletSchema>*)arg)->reset(); });
-    SyncPoint::GetInstance()->SetCallBack("get_tablet_schema_by_index_id.2", [&](void* arg) {
+    SyncPoint::GetInstance()->SetCallBack("get_tablet_schema_by_id.2", [&](void* arg) {
         *((StatusOr<std::shared_ptr<const TabletSchema>>*)arg) = Status::NotFound("mocked not found error");
         invoked = true;
     });
@@ -268,7 +268,7 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
 
     ASSERT_OK(delta_writer->open());
@@ -280,7 +280,7 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
     // close
     delta_writer->close();
 
-    ASSERT_TRUE(invoked) << "get_tablet_schema_by_index_id not invoked";
+    ASSERT_TRUE(invoked) << "get_tablet_schema_by_id not invoked";
     SyncPoint::GetInstance()->ClearAllCallBacks();
     SyncPoint::GetInstance()->DisableProcessing();
 }
@@ -303,7 +303,7 @@ TEST_F(LakeDeltaWriterTest, test_close) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -342,7 +342,7 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -374,7 +374,7 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->finish());
@@ -403,7 +403,7 @@ TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {
                                                .set_txn_id(-1)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_ERROR(delta_writer->finish());
@@ -428,7 +428,7 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -478,7 +478,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -529,7 +529,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -581,7 +581,7 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -607,6 +607,37 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
+}
+
+TEST_F(LakeDeltaWriterTest, test_write_oom) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    int64_t old_limit = GlobalEnv::GetInstance()->load_mem_tracker()->limit();
+    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(1);
+    GlobalEnv::GetInstance()->load_mem_tracker()->consume(100);
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_immutable_tablet_size(1)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    // Write and flush
+    ASSERT_ERROR(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    GlobalEnv::GetInstance()->load_mem_tracker()->release(100);
+    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(old_limit);
 }
 
 } // namespace starrocks::lake

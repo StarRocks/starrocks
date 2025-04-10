@@ -142,4 +142,10 @@ public abstract class ScanNode extends PlanNode {
     protected boolean supportTopNRuntimeFilter() {
         return false;
     }
+
+    // We use this flag to know how many connector scan nodes at BE side, and connector framework
+    // will use this number to fair share memory usage between those scan nodes.
+    public boolean isRunningAsConnectorOperator() {
+        return true;
+    }
 }

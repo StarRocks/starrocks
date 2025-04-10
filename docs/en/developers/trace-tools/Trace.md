@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 ### Background
@@ -7,7 +7,7 @@ displayed_sidebar: "English"
 &emsp;A Distributed Trace, more commonly known as a Trace, records the paths taken by requests (made by an application or end-user) as they propagate through multi-service architectures, like microservice and serverless applications. Without tracing, it is challenging to pinpoint the cause of performance problems in a distributed system. It improves the visibility of our application or system’s health and lets us debug behavior that is difficult to reproduce locally. Tracing is essential for distributed systems, which commonly have nondeterministic problems or are too complicated to reproduce locally.
 &emsp;Tracing makes debugging and understanding distributed systems less daunting by breaking down what happens within a request as it flows through a distributed system. A Trace is made of one or more Spans. The first Span represents the Root Span. Each Root Span represents a request from start to finish. The Spans underneath the parent provide a more in-depth context of what occurs during a request (or what steps make up a request). Many Observability back-ends visualize Traces as waterfall diagrams that may look something like this picture.
 
-![trace_pic1](../../assets/trace_pic1.png)
+![trace_pic1](../../_assets/trace_pic1.png)
 
 &emsp;Waterfall diagrams show the parent-child relationship between a Root Span and its child Spans. When a Span encapsulates another Span, this also represents a nested relationship.
 &emsp;Recently SR added a tracing framework. It leverages opentelemetry and jaeger to trace distributed events in the system.
@@ -56,8 +56,8 @@ Steps to enable tracing in SR:
 3.  Open jaeger web UI, usually in `http://localhost:16686/search`
 4.  Do some data ingestion (streamload\/insert into) and search TXN traces on web UI
 
-![trace_pic2.png](../../assets/trace_pic2.png)(trace_pic2.png) 
-![trace_pic3.png](../../assets/trace_pic3.png)(trace_pic3.png) 
+![trace_pic2.png](../../_assets/trace_pic2.png)(trace_pic2.png) 
+![trace_pic3.png](../../_assets/trace_pic3.png)(trace_pic3.png) 
 
 ### Adding traces
 

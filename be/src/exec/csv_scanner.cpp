@@ -46,8 +46,8 @@ static std::string string_2_asc(const std::string& input) {
 static std::string make_column_count_not_matched_error_message(int expected_count, int actual_count,
                                                                CSVParseOptions& parse_options) {
     std::stringstream error_msg;
-    error_msg << "Value count does not match column count: "
-              << "expected = " << expected_count << ", actual = " << actual_count << ". "
+    error_msg << "Target column count: " << expected_count
+              << " doesn't match source value column count: " << actual_count << ". "
               << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
               << "Row delimiter: " << string_2_asc(parse_options.row_delimiter);
     return error_msg.str();
@@ -57,7 +57,8 @@ static std::string make_value_type_not_matched_error_message(int field_pos, cons
                                                              const SlotDescriptor* slot) {
     std::stringstream error_msg;
     error_msg << "The field (name = " << slot->col_name() << ", pos = " << field_pos << ") is out of range. "
-              << "Type: " << slot->type().debug_string() << ", Value: " << field.to_string();
+              << "Type: " << slot->type().debug_string() << ", Value length: " << field.get_size()
+              << ", Value: " << field.to_string();
     return error_msg.str();
 }
 
@@ -107,6 +108,10 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
         _state->update_num_bytes_scan_from_source(s.size);
     }
     return Status::OK();
+}
+
+char* CSVScanner::ScannerCSVReader::_find_line_delimiter(CSVBuffer& buffer, size_t pos) {
+    return buffer.find(_parse_options.row_delimiter, pos);
 }
 
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,

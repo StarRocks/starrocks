@@ -217,12 +217,12 @@ public:
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
-    template <bool use_iso8601_format = false>
+    template <bool use_iso8601_format = false, bool igonre_microsecond = false>
     static std::string to_string(Timestamp timestamp);
 
     // Returns the length of formatted string or -1 if the size of buffer too
     // small to fill the formatted string.
-    template <bool use_iso8601_format = false>
+    template <bool use_iso8601_format = false, bool igonre_microsecond = false>
     static int to_string(Timestamp timestamp, char* s, size_t n);
 
     inline static double time_to_literal(double time);
@@ -474,16 +474,16 @@ inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, i
     return to_date(julian, year, month, day);
 }
 
-template <bool use_iso8601_format>
+template <bool use_iso8601_format, bool igonre_microsecond>
 std::string timestamp::to_string(Timestamp timestamp) {
     std::string s;
     raw::make_room(&s, 26);
-    int len = to_string<use_iso8601_format>(timestamp, s.data(), s.size());
+    int len = to_string<use_iso8601_format, igonre_microsecond>(timestamp, s.data(), s.size());
     s.resize(len);
     return s;
 }
 
-template <bool use_iso8601_format>
+template <bool use_iso8601_format, bool igonre_microsecond>
 int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
     int year, month, day;
     int hour, minute, second, microsecond;
@@ -511,6 +511,9 @@ int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
     /* Second */
     to[17] = (char)('0' + (second / 10));
     to[18] = (char)('0' + (second % 10));
+    if constexpr (igonre_microsecond) {
+        return 19;
+    }
     if (use_iso8601_format || microsecond > 0) {
         if (n < 26) {
             return -1;

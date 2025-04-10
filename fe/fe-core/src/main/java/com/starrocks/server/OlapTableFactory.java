@@ -25,7 +25,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -37,7 +36,8 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -297,6 +297,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                         ex.getMessage(), table.getName(), logReplicationNum));
             }
 
+            // analyze location property
+            PropertyAnalyzer.analyzeLocation(table, properties);
+
             // set in memory
             boolean isInMemory =
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
@@ -371,7 +374,29 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
-                    
+
+            try {
+                table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
+                if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+                    if (table instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) table;
+                        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
+                                || olapTable.isCloudNativeTableOrMaterializedView()) {
+                            throw new DdlException("Property " +
+                                    PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
+                                    " not support primary keys table or cloud native table");
+                        }
+                    }
+                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                            table.getId(), table.getBaseCompactionForbiddenTimeRanges());
+                }
+                if (properties != null) {
+                    properties.remove(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+                }
+            } catch (Exception e) {
+                throw new DdlException(e.getMessage());
+            }
+
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
@@ -486,12 +511,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("random distribution does not support 'colocate_with'");
                 }
 
-                boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
-                        colocateGroup, false /* expectLakeTable */);
+                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* expectLakeTable */);
             }
 
             // get base index storage type. default is COLUMN
-            TStorageType baseIndexStorageType = null;
+            TStorageType baseIndexStorageType;
             try {
                 baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties, table);
             } catch (AnalysisException e) {
@@ -505,6 +529,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
+            Util.checkColumnSupported(baseSchema);
             int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
             if (stmt.getSortKeys() != null) {
@@ -549,7 +574,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
             Preconditions.checkNotNull(version);
 
-            // storage_format is not necessary, remove storage_format if exist.
+            // storage_format is not necessary, remove storage_format if exists.
             if (properties != null) {
                 properties.remove("storage_format");
             }
@@ -671,15 +696,11 @@ public class OlapTableFactory implements AbstractTableFactory {
     private void processConstraint(
             Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
         List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, olapTable);
-        if (uniqueConstraints != null) {
-            olapTable.setUniqueConstraints(uniqueConstraints);
-        }
+        olapTable.setUniqueConstraints(uniqueConstraints);
 
         List<ForeignKeyConstraint> foreignKeyConstraints =
                 PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
-        if (foreignKeyConstraints != null) {
-            olapTable.setForeignKeyConstraints(foreignKeyConstraints);
-        }
+        olapTable.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
 }

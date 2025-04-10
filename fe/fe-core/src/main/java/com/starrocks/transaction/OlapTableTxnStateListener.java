@@ -108,7 +108,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (tableId != table.getId()) {
                 continue;
             }
-            long partitionId = tabletMeta.getPartitionId();
+            long partitionId = tabletMeta.getPhysicalPartitionId();
             if (table.getPhysicalPartition(partitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
                 // or partition really not exist.
@@ -191,9 +191,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     for (long tabletBackend : tabletBackends) {
                         Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                         if (replica == null) {
-                            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
-                            throw new TransactionCommitFailedException("Not found replicas of tablet. "
-                                    + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
+                            Backend backend =
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(tabletBackend);
+                            LOG.warn("Not found replica of tablet. tablet_id: {}, backend: {}, txn_id: {}", tabletId,
+                                    backend.getHost(), txnState.getTransactionId());
+                            continue;
                         }
                         // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                         // if the commit backends is null, set all replicas as error replicas

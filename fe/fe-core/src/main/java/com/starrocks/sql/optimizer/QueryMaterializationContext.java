@@ -18,7 +18,14 @@ package com.starrocks.sql.optimizer;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.api.client.util.Lists;
+import com.google.api.client.util.Sets;
+import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
@@ -30,6 +37,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -38,40 +46,73 @@ import java.util.Set;
 public class QueryMaterializationContext {
     protected static final Logger LOG = LogManager.getLogger(QueryMaterializationContext.class);
 
-    // used by view based mv rewrite
-    // query's logical plan with view
-    private OptExpression logicalTreeWithView;
-    // collect LogicalViewScanOperators
-    private List<LogicalViewScanOperator> viewScans;
+    // MVs that are related to the query
+    private Set<MaterializedView> relatedMVs = Sets.newHashSet();
+    // MVs with context that are valid (SPJG pattern) candidates for materialization rewrite
+    private List<MaterializationContext> validCandidateMVs = Lists.newArrayList();
+
+    // query's logical plan with view: replace all inlined query plans with LogicalViewScanOperators which is used by
+    // view-based mv rewrite
+    private OptExpression queryOptPlanWithView;
+    // collect all query opt expression's LogicalViewScanOperators
+    private List<LogicalViewScanOperator> queryViewScanOps;
 
     // `mvQueryContextCache` is designed for a common cache which is used during the query's rewrite lifecycle, so can be
     // managed in a more unified mode. In the current situation, it's used in two ways:
     // 1. cache query predicates to its final predicate split per query because PredicateSplit's construct is expensive.
     // 2. cache query predicate to its canonized predicate to avoid one predicate's repeat canonized.
     // It can be be used for more situations later.
-    private final Cache<Object, Object> mvQueryContextCache = Caffeine.newBuilder()
-            .maximumSize(Config.mv_query_context_cache_max_size)
-            .recordStats()
-            .build();
+    private Cache<Object, Object> mvQueryContextCache = null;
+
+    private final QueryCacheStats queryCacheStats = new QueryCacheStats();
+
+    /**
+     * It's used to record the cache stats of `mvQueryContextCache`.
+     */
+    public class QueryCacheStats {
+        @SerializedName("counter")
+        private final Map<String, Long> counter = Maps.newHashMap();
+        public QueryCacheStats() {
+        }
+
+        public void incr(String key) {
+            counter.put(key, counter.getOrDefault(key, 0L) + 1);
+        }
+
+        public Map<String, Long> getCounter() {
+            return counter;
+        }
+
+        @Override
+        public String toString() {
+            return GsonUtils.GSON.toJson(this);
+        }
+    }
 
     public QueryMaterializationContext() {
     }
 
     public Cache<Object, Object> getMvQueryContextCache() {
+        if (mvQueryContextCache == null) {
+            mvQueryContextCache = Caffeine.newBuilder()
+                    .maximumSize(Config.mv_query_context_cache_max_size)
+                    .recordStats()
+                    .build();
+        }
         return mvQueryContextCache;
     }
 
     public PredicateSplit getPredicateSplit(Set<ScalarOperator> predicates,
                                             ReplaceColumnRefRewriter columnRefRewriter) {
         // Cache predicate split for predicates because it's time costing if there are too many materialized views.
-        Object cached = mvQueryContextCache.getIfPresent(predicates);
+        Object cached = getMvQueryContextCache().getIfPresent(predicates);
         if (cached != null) {
             return (PredicateSplit) cached;
         }
         ScalarOperator queryPredicate = rewriteOptExprCompoundPredicate(predicates, columnRefRewriter);
         PredicateSplit predicateSplit = PredicateSplit.splitPredicate(queryPredicate);
         if (predicateSplit != null) {
-            mvQueryContextCache.put(predicates, predicateSplit);
+            getMvQueryContextCache().put(predicates, predicateSplit);
         }
         return predicateSplit;
     }
@@ -91,31 +132,71 @@ public class QueryMaterializationContext {
             return null;
         }
 
-        return (ScalarOperator) mvQueryContextCache.get(predicate, x -> {
+        return (ScalarOperator) getMvQueryContextCache().get(predicate, x -> {
             ScalarOperator rewritten = new ScalarOperatorRewriter()
                     .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
             return rewritten;
         });
     }
 
-    public OptExpression getLogicalTreeWithView() {
-        return logicalTreeWithView;
+    public QueryCacheStats getQueryCacheStats() {
+        return queryCacheStats;
     }
 
-    public void setLogicalTreeWithView(OptExpression logicalTreeWithView) {
-        this.logicalTreeWithView = logicalTreeWithView;
+    public OptExpression getQueryOptPlanWithView() {
+        return queryOptPlanWithView;
     }
 
-    public void setViewScans(List<LogicalViewScanOperator> viewScans) {
-        this.viewScans = viewScans;
+    public void setQueryOptPlanWithView(OptExpression queryOptPlanWithView) {
+        this.queryOptPlanWithView = queryOptPlanWithView;
     }
 
-    public List<LogicalViewScanOperator> getViewScans() {
-        return viewScans;
+    public void setQueryViewScanOps(List<LogicalViewScanOperator> queryViewScanOps) {
+        this.queryViewScanOps = queryViewScanOps;
+    }
+
+    public List<LogicalViewScanOperator> getQueryViewScanOps() {
+        return queryViewScanOps;
+    }
+
+    /**
+     * Add related mvs about this query.
+     * @param mvs: related mvs
+     */
+    public void addRelatedMVs(Set<MaterializedView> mvs) {
+        relatedMVs.addAll(mvs);
+    }
+
+    /**
+     * Add valid candidate materialized view for the query:
+     * @param mv mv with context that is valid (SPJG pattern) candidate for materialization rewrite
+     */
+    public void addValidCandidateMV(MaterializationContext mv) {
+        validCandidateMVs.add(mv);
+    }
+
+    /**
+     * All related mvs about this query which contains valid candidate mvs(SPJG) and other mvs(non SPGJ).
+     * @return
+     */
+    public Set<MaterializedView> getRelatedMVs() {
+        return relatedMVs;
+    }
+
+    /**
+     * Get all valid candidate materialized views for the query:
+     * - The materialized view is valid to rewrite by rule(SPJG)
+     * - The materialized view's refresh-ness is valid to rewrite.
+     */
+    public List<MaterializationContext> getValidCandidateMVs() {
+        return validCandidateMVs;
     }
 
     // Invalidate all caches by hand to avoid memory allocation after query optimization.
     public void clear() {
+        if (mvQueryContextCache == null) {
+            return;
+        }
         if (ConnectContext.get() != null) {
             QueryDebugOptions debugOptions = ConnectContext.get().getSessionVariable().getQueryDebugOptions();
             if (debugOptions.isEnableQueryTraceLog()) {
@@ -123,6 +204,9 @@ public class QueryMaterializationContext {
                         mvQueryContextCache.stats(), mvQueryContextCache.estimatedSize());
             }
         }
+        // record cache stats
+        Tracers.record(Tracers.Module.BASE, "MVQueryContextCacheStats", mvQueryContextCache.stats().toString());
+        Tracers.record(Tracers.Module.BASE, "MVQueryCacheStats", queryCacheStats.toString());
         this.mvQueryContextCache.invalidateAll();
     }
 }

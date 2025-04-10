@@ -145,7 +145,7 @@ public class TempPartitionTest {
         if (tabletMeta == null) {
             return -1;
         }
-        return tabletMeta.getPartitionId();
+        return tabletMeta.getPhysicalPartitionId();
     }
 
     private void getPartitionNameToTabletIdMap(String tbl, boolean isTemp, Map<String, Long> partNameToTabletId)

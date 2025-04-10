@@ -201,14 +201,6 @@ public class FileScanNode extends LoadScanNode {
                     throw new UserException(e.getMessage());
                 }
                 brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
-            } else if (tbl instanceof TableFunctionTable) {
-                TableFunctionTable funcTable = (TableFunctionTable) tbl;
-                try {
-                    fileGroups = Lists.newArrayList(new BrokerFileGroup(funcTable));
-                } catch (AnalysisException e) {
-                    throw new UserException(e.getMessage());
-                }
-                brokerDesc = new BrokerDesc(funcTable.getProperties());
             }
             targetTable = tbl;
         }

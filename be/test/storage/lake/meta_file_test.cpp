@@ -31,6 +31,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
@@ -124,7 +125,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     // 3. read delvec
     DelVector after_delvec;
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, &after_delvec).ok());
+    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, true, &after_delvec).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
 
     // 4. read meta
@@ -225,7 +226,7 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
         // 3. read delvec
         DelVector after_delvec;
         ASSIGN_OR_ABORT(auto meta, _tablet_manager->get_tablet_metadata(tablet_id, version));
-        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, &after_delvec).ok());
+        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, false, &after_delvec).ok());
         EXPECT_EQ(before_delvec, after_delvec.save());
     };
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {
@@ -235,6 +236,74 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {
         test_delvec(segment_id);
     }
+}
+
+TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(9);
+    metadata->set_version(10);
+
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(1);
+    op_compaction.add_input_rowsets(11);
+    op_compaction.add_input_rowsets(22);
+    op_compaction.mutable_output_rowset()->add_segments("aaa.dat");
+    op_compaction.mutable_output_rowset()->add_segments("bbb.dat");
+    op_compaction.mutable_output_rowset()->add_segments("ccc.dat");
+    op_compaction.mutable_output_rowset()->add_segments("ddd.dat");
+    RowsetMetadataPB last_input_rowset_metadata;
+
+    last_input_rowset_metadata.set_id(33);
+    last_input_rowset_metadata.mutable_segments()->Clear();
+    last_input_rowset_metadata.add_segments("aaa.dat");
+    last_input_rowset_metadata.add_segments("eee.dat");
+    last_input_rowset_metadata.add_segments("fff.dat");
+    last_input_rowset_metadata.add_segments("ddd.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+    // rowset id mismatch
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+
+    last_input_rowset_metadata.set_id(22);
+    // normal case, duplicate segments will be trimed
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    EXPECT_EQ(last_input_rowset_metadata.segments(0), "eee.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segments(1), "fff.dat");
+
+    // no duplicate segments
+    last_input_rowset_metadata.mutable_segments()->Clear();
+    last_input_rowset_metadata.add_segments("xxx.dat");
+    last_input_rowset_metadata.add_segments("yyy.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+}
+
+TEST_F(MetaFileTest, test_error_state) {
+    // generate metadata
+    const int64_t tablet_id = 10001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    // add rowset with segment
+    RowsetMetadataPB rowset_metadata;
+    rowset_metadata.set_id(110);
+    rowset_metadata.add_segments("aaa.dat");
+    rowset_metadata.add_segments("bbb.dat");
+    metadata->add_rowsets()->CopyFrom(rowset_metadata);
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
+    for (int i = 0; i < 10; i++) {
+        segment_id_to_add_dels[i] = 100;
+    }
+    // generate error state
+    MetaFileBuilder builder(*tablet, metadata);
+    Status st = builder.update_num_del_stat(segment_id_to_add_dels);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
 } // namespace starrocks::lake

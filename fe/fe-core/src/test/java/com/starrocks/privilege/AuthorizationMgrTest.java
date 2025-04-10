@@ -57,6 +57,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
@@ -1799,5 +1801,20 @@ public class AuthorizationMgrTest {
         ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, showStreamLoadStmt);
         ShowResultSet resultSet = executor.execute();
+    }
+
+    @Test(expected = AccessDeniedException.class)
+    public void testSystemPrivExec() throws AccessDeniedException {
+        new MockUp<AuthorizationMgr>() {
+            @Mock
+            protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
+                    throws PrivilegeException {
+                throw new PrivilegeException("");
+            }
+        };
+
+        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
     }
 }

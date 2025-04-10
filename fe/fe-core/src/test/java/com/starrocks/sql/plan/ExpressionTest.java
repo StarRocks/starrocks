@@ -661,6 +661,8 @@ public class ExpressionTest extends PlanTestBase {
                 "AS actions FROM action1 GROUP BY uid) AS t ) AS t1) AS t2;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 32> : minutes_add(31: expr, 90)\n" +
+                "  |  <slot 33> : 31: expr != '2020-01-01 00:00:00'\n" +
                 "  |  <slot 22> : array_sort(4: array_agg)\n" +
                 "  |  <slot 23> : array_sortby(5: array_agg, 4: array_agg)\n" +
                 "  |  <slot 24> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') " +
@@ -714,6 +716,58 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +
                 "CAST(<slot 4> AS SMALLINT) + 1, [1]))"));
     }
+
+    @Test
+    public void testReuseIndependentExprInLambdaFunction() throws Exception {
+        starRocksAssert.withTable("create table if not exists test_reuse_lambda_expr " +
+                "(k bigint, v array<bigint>, m map<bigint, bigint>) " +
+                "duplicate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');");
+        String sql = "select array_map((arg0, arg1) -> arg0 + arg1 + array_length(`v`), `v`, `v`) from test_reuse_lambda_expr";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 7> : array_length(2: v)\n" +
+                "  |  <slot 8> : CAST(7: array_length AS BIGINT)");
+
+        sql = "select array_length(array_map((arg0, arg1) -> " +
+                "arg0 + arg1 + array_length(`v`) + array_length(array_filter((arg0) -> length(arg0) > 4, `v`)),`v`,`v`)) " +
+                "from test_reuse_lambda_expr";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 8> : array_length(2: v)\n" +
+                "  |  <slot 9> : CAST(8: array_length AS BIGINT)\n" +
+                "  |  <slot 10> : array_map(<slot 6> -> length(CAST(<slot 6> AS VARCHAR)) > 4, 2: v)\n" +
+                "  |  <slot 11> : array_filter(2: v, 10: array_map)\n" +
+                "  |  <slot 12> : array_length(11: array_filter)\n" +
+                "  |  <slot 13> : CAST(12: array_length AS BIGINT)");
+
+        sql = "select k, array_filter(x -> x > k + 10, `v`) from test_reuse_lambda_expr";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 6> : 1: k + 10");
+
+        sql = "select map_apply((arg0, arg1) -> (arg0 + k * 10, arg1 + map_size(`m`)), `m`) from test_reuse_lambda_expr";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 7> : 1: k * 10\n" +
+                "  |  <slot 8> : map_size(3: m)\n" +
+                "  |  <slot 9> : CAST(8: map_size AS BIGINT)");
+
+        sql = "select array_map(x -> array_map(x->x+100, x),[[1,23],[4,3,2]]);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 4> : " +
+                "array_map(<slot 2> -> array_map(<slot 3> -> CAST(<slot 3> AS SMALLINT) + 100, <slot 2>), [[1,23],[4,3,2]])");
+
+        sql = "select array_map(x->array_map(y->array_filter(z-> z > array_length(x),y),x), [[[1,23],[4,3,2]],[[3]]]);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 5> : array_map(<slot 2> -> " +
+                "array_map(<slot 3> -> " +
+                "array_filter(<slot 3>, array_map(<slot 4> -> CAST(<slot 4> AS INT) > <slot 8>, <slot 3>))\n" +
+                "        lambda common expressions:{<slot 8> <-> array_length(<slot 2>)}\n" +
+                "        , <slot 2>), [[[1,23],[4,3,2]],[[3]]])");
+    }
+
 
     @Test
     public void testInPredicateNormalize() throws Exception {
@@ -1025,7 +1079,7 @@ public class ExpressionTest extends PlanTestBase {
         // 1.8 test when true in the middle not return directly
         String sql18 = "select case when substr(k7,2,1) then 3 when true then 1 else 2 end as col16 from test.baseall;";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql18),
-                "CASE WHEN CAST(substr(9: k7, 2, 1) AS BOOLEAN) THEN 3 WHEN TRUE THEN 1 ELSE 2 END"));
+                "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 1)"));
 
         // 1.9 test remove when clause when is false/null
         String sql19 = "select case when substr(k7,2,1) then 3 " +
@@ -1487,7 +1541,7 @@ public class ExpressionTest extends PlanTestBase {
 
         String sql2 = "select ilike('AA', concat('a', 'A'))";
         String plan2 = getFragmentPlan(sql2);
-        assertContains(plan2, "<slot 2> : like(lower('AA'), lower('aA'))");
+        assertContains(plan2, "<slot 2> : like('aa', 'aa')");
     }
 
     @Test

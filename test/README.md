@@ -4,24 +4,24 @@ This is an introduction for the SQL-tester project.
 ## About
 SQL-tester is a SQL testing framework for StarRocks , designed to reduce the cost of test case construction. It uses SQL language to write test cases and has the ability to verify test results.
 
-### [**QuickStart**](#QuickStart)
+### [**QuickStart**](#quickstart)
 Documentation on getting started, installation and simple use.  
 
-### [**Run Parameters**](#Parameters)
+### [**Run Parameters**](#run-parameters)
 Detailed description of the execution parameters.  
 
 ### [**Grammar**](#Grammar)  
 Reference documentation for the syntax format and other functions.
 
 
-# <span id="QuickStart">QuickStart</span>
+# QuickStart
 ## Prerequisites
 ### 1. Python
 
 <table>
   <tr>
     <td>Python</td>
-    <td>>= 3.6.8</td>
+    <td>>= 3.8</td>
   </tr>
 </table>
 
@@ -66,7 +66,7 @@ $ python3 run.py
 $ python3 run.py -a sequential -c 1 -v
 ```
 
-# <span id="Parameters">Run Parameters<span>
+# Run Parameters
 
 This describes the parameters for running the test cases.
 
@@ -120,7 +120,7 @@ The format of the value is a regular expression, and only test cases whose names
 **`--skip_reruns` [Optional]**
 By default, all cases will run 3 times and passed 3 times, if this parameter provided, all case will be run exactly only once, default False.
 
-# <span id="Grammar">Grammar</span>
+# Grammar
 This describes the grammar of SQL-tester framework, and how to add your cases.
 
 ## Add Cases
@@ -191,7 +191,7 @@ select * from t0 order by c0;
 drop database test_array_ee2a58b4_64a9_11ed_9ab7_00163e0b9de0;
 ```
 
-## Function
+## Feature
 ### 1. Skip Check
 It shows ways to skip result checking in record mode.
 #### 1.1 SKIP ARRAY
@@ -304,7 +304,8 @@ SQL2;
 
 ### 5. REGULAR CHECKS FOR SQL RESULTS
 Some SQL execution results have variables (such as ID).In addition to using SKIP CHECK and UNCHECK, the framework supports regular checks.  
-Note: Before using, please make sure the SQL is not in the SKIP CHECK list.  
+Note: Before using, please make sure the SQL is not in the SKIP CHECK list.
+
 Usage: Add the [REGEX] marker before the result to be verified.
 ```sql
 -- name: ${case name}
@@ -326,4 +327,151 @@ explain select 1;
 -- result:
 [REGEX].*PARTITION: UNPARTITIONED.*
 -- !result
+```
+
+
+### 6. SPECIFY THE CLUSTER MODE TO RUN
+By default, the cases will run in both cloud&native mode. If you expect to run it only in a certain mode, you can specify it by the case tag.  
+Usage: Add the `@native`(shared_nothing deployment) or `@cloud`(shared_data deployment) tag in case name lines.  
+```sql
+-- name: ${case name} @cloud
+...
+
+-- name: ${case name} @native
+...
+```
+
+### 7. EXECUTE QUERIES ON OTHER SQL ENGINES
+All sqls are executed by the StarRocks cluster by default. Besides, you can also execute queries on other SQL engines. As of now, we support hive, spark, and trino. 
+
+Usage: 
+```sql
+SELECT 1, 2; -- executed by StarRocks
+
+trino: SELECT 1, 2; -- executed by trino
+
+spark: SELECT 1, 2; -- executed by spark
+
+hive: SELECT 1, 2; -- executed by hive
+```
+### 8. LOOP
+Loop through the statements within the structure until all results are as expected.  
+Any usage of wait function written in lib will be deprecated!  
+
+The structure consists of three parts:
+- PROPERTY: Optional. Can only be the first line of the structure.
+  - timeout : Loop timeout(s), default 60. If the timeout is reached, the case will exit with False.
+  - interval: The interval(s) between rounds, default 10.
+  - desc    : Description
+- STATEMENT:
+  - Executable commands, including SQL/functions/shells...
+  - Multiple statements are allowed
+  - The results of the statements are all expected to be True and do not need to be recorded in result flag.
+  - If you need to further verify the result, you can store it in a variable by `k=statement`, and then verify it through the check method.
+- CHECK:
+  - Format: `CHECK: ${assert statement}`
+  - Multiple checks are allowed
+  - Until all checks in the structure pass, exit the loop and return True
+  - For preorder results, the framework provides some common functions to facilitate writing assertions.
+    - to_json
+    - to_array
+    - ...
+    - Please contact us if you have any needs.
+    
+Usage: 
+```sql
+LOOP {
+  PROPERTY: {"timeout": ${timeout(s)}, "interval": ${interval}, "desc": "${description}"}
+  stat1
+  stat2
+  CHECK1
+  stat3
+  CHECK2
+  ...
+} END LOOP
+```
+
+- Example:
+```sql
+...
+ 
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 10, "desc": "wait alter table finish"}
+  result=SHOW ALTER MATERIALIZED VIEW;
+  CHECK: to_array(${result})[-1][8] == "FINISHED"
+} END LOOP
+
+```
+
+### 9. Concurrency
+To satisfy the need for concurrent statement execution, a concurrency construct, consisting of multiple threads.  
+Each thread is a relatively independent part that inherits public variables from the execution state of the case and is also allowed to share variables privately within the thread.  
+Three ways to exit the structure:
+- Any statement in any thread fails to execute or fails an assertion.
+- All threads are executed successfully and the checksum is successful
+- Case times out
+
+Usage: 
+```sql
+CONCURRENCY {
+  -- thread name 1:
+    statement 1
+    -- result:
+    ${result of statement 1}
+    -- !result
+    statement 2;
+    -- result:
+    ${result of statement 2}
+    -- !result
+    ...
+
+  -- thread name 2:
+    statement 3
+    -- result:
+    ${result of statement 3}
+    -- !result
+
+} END CONCURRENCY
+```
+
+- Example:
+```sql
+...
+ 
+res=select 4;
+-- result:
+4
+-- !result
+
+CONCURRENCY {
+  -- thread 1:
+    shell: curl ${stream_load_cmd}
+    -- result:
+    0
+    {
+        "Status": "Success",
+        "Message": "OK"
+    }
+    -- !result
+    res=select 3;
+    -- result:
+    3
+    -- !result
+    
+    shell: echo ${res}
+    -- result:
+    0
+    3
+    -- !result
+    
+
+  -- thread 2:
+    
+    shell: echo ${res}
+    -- result:
+    0
+    4
+    -- !result
+
+} END CONCURRENCY
 ```

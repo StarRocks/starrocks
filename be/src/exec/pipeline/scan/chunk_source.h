@@ -48,6 +48,13 @@ public:
 
     virtual void close(RuntimeState* state) = 0;
 
+    // Start the ChunkSource for some heavy operations like RPC calls
+    // The difference between prepare() is, the start() is executed in IO-ThreadPool instead of Exec-ThreadPool,
+    // which is more suitable for blocking network operations.
+    // The start() itself should use std::once to make sure it's idempotent and called once, since the io-thread would
+    // call it multiple times
+    virtual Status start(RuntimeState* state) { return {}; }
+
     // Return true if eos is not reached
     // Return false if eos is reached or error occurred
     bool has_next_chunk() const { return _status.ok(); }
@@ -78,7 +85,7 @@ protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) = 0;
     // The schedule entity of this workgroup for resource group.
-    virtual const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const = 0;
+    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const;
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;

@@ -29,13 +29,16 @@ public class SetTest extends PlanTestBase {
     public void testValuesNodePredicate() throws Exception {
         String queryStr = "SELECT 1 AS z, MIN(a.x) FROM (select 1 as x) a WHERE abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  3:Project\n" +
-                "  |  <slot 3> : 3: min\n" +
-                "  |  <slot 4> : 1\n" +
+        Assert.assertTrue(explainString.contains("4:Project\n" +
+                "  |  <slot 4> : 4: min\n" +
+                "  |  <slot 5> : 1\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
+                "  3:AGGREGATE (update finalize)\n" +
                 "  |  output: min(1)\n" +
                 "  |  group by: \n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 7> : 1\n" +
                 "  |  \n" +
                 "  1:SELECT\n" +
                 "  |  predicates: abs(1) = 2\n" +
@@ -205,22 +208,10 @@ public class SetTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
-        Assert.assertTrue(plan.contains("  3:Project\n" +
-                "  |  <slot 2> : 499\n" +
-                "  |  \n" +
-                "  2:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL"));
-        Assert.assertTrue(plan.contains("  6:Project\n" +
-                "  |  <slot 4> : 670\n" +
-                "  |  \n" +
-                "  5:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL"));
-        Assert.assertTrue(plan.contains("13:Project\n" +
+        Assert.assertTrue(plan.contains("  5:Project\n" +
                 "  |  <slot 7> : 499\n" +
                 "  |  \n" +
-                "  12:UNION\n" +
+                "  4:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
         Assert.assertTrue(plan.contains("0:EXCEPT"));
@@ -285,40 +276,32 @@ public class SetTest extends PlanTestBase {
         String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [5, BOOLEAN, true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [2: expr, BOOLEAN, true]\n" +
-                "  |      [4: expr, BOOLEAN, true]");
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "         NULL\n");
 
         sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [6, TINYINT, true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [2: expr, TINYINT, false]\n" +
-                "  |      [5: cast, TINYINT, true]");
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         NULL\n");
 
         sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [7, DECIMAL64(12,2), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
-                "  |      [6: cast, DECIMAL64(12,2), false]\n");
+                "     constant exprs: \n" +
+                "         1.20\n" +
+                "         1\n");
 
         sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [7, DECIMAL64(12,2), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
-                "  |      [6: cast, DECIMAL64(12,2), false]");
+                "     constant exprs: \n" +
+                "         1.20\n" +
+                "         1\n");
     }
 
     @Test
@@ -536,15 +519,57 @@ public class SetTest extends PlanTestBase {
                     "  1:OlapScanNode\n" +
                     "     TABLE: t0"));
         }
+        String sql;
+        String plan;
 
-        {
-            String sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
-            String plan = getFragmentPlan(sql);
-            Assert.assertTrue(plan.contains("  6:SORT\n" +
-                    "  |  order by: <slot 8> 8: expr ASC"));
-            Assert.assertTrue(plan.contains("  2:Project\n" +
-                    "  |  <slot 4> : 1: v1 + 2: v2"));
-        }
+        sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 4> : 1: v1 + 2: v2"));
+
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by upper(x)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "7:SORT\n" +
+                "  |  order by: <slot 9> 9: upper ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 9> : upper(CAST(8: expr AS VARCHAR))\n" +
+                "  |  \n" +
+                "  0:UNION");
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by upper(x) limit 1,10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  7:TOP-N\n" +
+                "  |  order by: <slot 9> 9: upper ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 11\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 9> : upper(CAST(8: expr AS VARCHAR))");
+
+        // order by null literal
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "SORT");
+
+        // order by null literal with limit
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:EXCHANGE\n" +
+                "     limit: 10");
+
+        // order by null literal with limit offset
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10, 20";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:MERGING-EXCHANGE\n" +
+                "     offset: 10\n" +
+                "     limit: 20");
+
+
     }
     */
 
@@ -593,5 +618,94 @@ public class SetTest extends PlanTestBase {
                 "  |  <slot 10> : 1\n" +
                 "  |  <slot 11> : 1\n" +
                 "  |  <slot 12> : 1");
+    }
+
+    @Test
+    public void testUnionToValues() throws Exception {
+        String sql = "select 1 union all select 10 + 'a' union all select 3";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1.0\n" +
+                "         10.0 + CAST('a' AS DOUBLE)\n" +
+                "         3.0\n");
+
+        sql = "select 1  union all select 10 + 'a' union all select 3 union all select * from (values(6)) t;";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [11, DOUBLE, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [10: cast, DOUBLE, true]\n" +
+                "  |      [3: cast, DOUBLE, true]\n");
+
+        sql = "(select 1 limit 1) UNION ALL select 2;";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [5, TINYINT, false]\n" +
+                "  |  child exprs:\n" +
+                "  |      [2: expr, TINYINT, false]\n" +
+                "  |      [4: expr, TINYINT, false]\n");
+
+        sql = "select k1 from db1.tbl6 union all select 1 union" +
+                " all select 2 union all select * from (values (3)) t";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [13, VARCHAR(32), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [1: k1, VARCHAR, true]\n" +
+                "  |      [12: cast, VARCHAR(32), false]\n" +
+                "  |      [7: cast, VARCHAR(32), true]\n");
+
+        sql = "select k1 from db1.tbl6 union all select 1 union" +
+                " all select 2 union all select * from (values (3)) t";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [13, VARCHAR(32), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [1: k1, VARCHAR, true]\n" +
+                "  |      [12: cast, VARCHAR(32), false]\n" +
+                "  |      [7: cast, VARCHAR(32), true]\n");
+
+        sql = "select 1 union all select 2 union all select * from (values (1)) t;";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         1\n");
+
+        sql = "select 1 union select 2 union select * from (values (1));";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         1\n");
+
+        sql = "select 1  union all select 2 union all select * from (values (3)) t;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         3\n");
+
+        sql = "select 1, 2 union all select 3, 4 union all select * from (values (5, 6)) t;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 2\n" +
+                "         3 | 4\n" +
+                "         5 | 6\n");
     }
 }

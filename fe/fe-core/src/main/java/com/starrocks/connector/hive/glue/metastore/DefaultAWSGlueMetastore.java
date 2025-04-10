@@ -15,61 +15,6 @@
 
 package com.starrocks.connector.hive.glue.metastore;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.glue.AWSGlue;
-import com.amazonaws.services.glue.model.BatchCreatePartitionRequest;
-import com.amazonaws.services.glue.model.BatchGetPartitionRequest;
-import com.amazonaws.services.glue.model.BatchGetPartitionResult;
-import com.amazonaws.services.glue.model.BinaryColumnStatisticsData;
-import com.amazonaws.services.glue.model.BooleanColumnStatisticsData;
-import com.amazonaws.services.glue.model.ColumnStatistics;
-import com.amazonaws.services.glue.model.ColumnStatisticsData;
-import com.amazonaws.services.glue.model.ColumnStatisticsType;
-import com.amazonaws.services.glue.model.CreateDatabaseRequest;
-import com.amazonaws.services.glue.model.CreateTableRequest;
-import com.amazonaws.services.glue.model.CreateUserDefinedFunctionRequest;
-import com.amazonaws.services.glue.model.Database;
-import com.amazonaws.services.glue.model.DatabaseInput;
-import com.amazonaws.services.glue.model.DateColumnStatisticsData;
-import com.amazonaws.services.glue.model.DecimalColumnStatisticsData;
-import com.amazonaws.services.glue.model.DeleteDatabaseRequest;
-import com.amazonaws.services.glue.model.DeletePartitionRequest;
-import com.amazonaws.services.glue.model.DeleteTableRequest;
-import com.amazonaws.services.glue.model.DeleteUserDefinedFunctionRequest;
-import com.amazonaws.services.glue.model.DoubleColumnStatisticsData;
-import com.amazonaws.services.glue.model.GetColumnStatisticsForPartitionRequest;
-import com.amazonaws.services.glue.model.GetColumnStatisticsForPartitionResult;
-import com.amazonaws.services.glue.model.GetColumnStatisticsForTableRequest;
-import com.amazonaws.services.glue.model.GetColumnStatisticsForTableResult;
-import com.amazonaws.services.glue.model.GetDatabaseRequest;
-import com.amazonaws.services.glue.model.GetDatabaseResult;
-import com.amazonaws.services.glue.model.GetDatabasesRequest;
-import com.amazonaws.services.glue.model.GetDatabasesResult;
-import com.amazonaws.services.glue.model.GetPartitionRequest;
-import com.amazonaws.services.glue.model.GetPartitionsRequest;
-import com.amazonaws.services.glue.model.GetPartitionsResult;
-import com.amazonaws.services.glue.model.GetTableRequest;
-import com.amazonaws.services.glue.model.GetTableResult;
-import com.amazonaws.services.glue.model.GetTablesRequest;
-import com.amazonaws.services.glue.model.GetTablesResult;
-import com.amazonaws.services.glue.model.GetUserDefinedFunctionRequest;
-import com.amazonaws.services.glue.model.GetUserDefinedFunctionsRequest;
-import com.amazonaws.services.glue.model.GetUserDefinedFunctionsResult;
-import com.amazonaws.services.glue.model.LongColumnStatisticsData;
-import com.amazonaws.services.glue.model.Partition;
-import com.amazonaws.services.glue.model.PartitionError;
-import com.amazonaws.services.glue.model.PartitionInput;
-import com.amazonaws.services.glue.model.PartitionValueList;
-import com.amazonaws.services.glue.model.Segment;
-import com.amazonaws.services.glue.model.StringColumnStatisticsData;
-import com.amazonaws.services.glue.model.Table;
-import com.amazonaws.services.glue.model.TableInput;
-import com.amazonaws.services.glue.model.UpdateDatabaseRequest;
-import com.amazonaws.services.glue.model.UpdatePartitionRequest;
-import com.amazonaws.services.glue.model.UpdateTableRequest;
-import com.amazonaws.services.glue.model.UpdateUserDefinedFunctionRequest;
-import com.amazonaws.services.glue.model.UserDefinedFunction;
-import com.amazonaws.services.glue.model.UserDefinedFunctionInput;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -91,6 +36,61 @@ import org.apache.thrift.TException;
 import org.joda.time.DateTime;
 import org.joda.time.Days;
 import org.joda.time.MutableDateTime;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.glue.GlueClient;
+import software.amazon.awssdk.services.glue.model.BatchCreatePartitionRequest;
+import software.amazon.awssdk.services.glue.model.BatchGetPartitionRequest;
+import software.amazon.awssdk.services.glue.model.BatchGetPartitionResponse;
+import software.amazon.awssdk.services.glue.model.BinaryColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.BooleanColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.ColumnStatistics;
+import software.amazon.awssdk.services.glue.model.ColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.ColumnStatisticsType;
+import software.amazon.awssdk.services.glue.model.CreateDatabaseRequest;
+import software.amazon.awssdk.services.glue.model.CreateTableRequest;
+import software.amazon.awssdk.services.glue.model.CreateUserDefinedFunctionRequest;
+import software.amazon.awssdk.services.glue.model.Database;
+import software.amazon.awssdk.services.glue.model.DatabaseInput;
+import software.amazon.awssdk.services.glue.model.DateColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.DecimalColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.DeleteDatabaseRequest;
+import software.amazon.awssdk.services.glue.model.DeletePartitionRequest;
+import software.amazon.awssdk.services.glue.model.DeleteTableRequest;
+import software.amazon.awssdk.services.glue.model.DeleteUserDefinedFunctionRequest;
+import software.amazon.awssdk.services.glue.model.DoubleColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.GetColumnStatisticsForPartitionRequest;
+import software.amazon.awssdk.services.glue.model.GetColumnStatisticsForPartitionResponse;
+import software.amazon.awssdk.services.glue.model.GetColumnStatisticsForTableRequest;
+import software.amazon.awssdk.services.glue.model.GetColumnStatisticsForTableResponse;
+import software.amazon.awssdk.services.glue.model.GetDatabaseRequest;
+import software.amazon.awssdk.services.glue.model.GetDatabaseResponse;
+import software.amazon.awssdk.services.glue.model.GetDatabasesRequest;
+import software.amazon.awssdk.services.glue.model.GetDatabasesResponse;
+import software.amazon.awssdk.services.glue.model.GetPartitionRequest;
+import software.amazon.awssdk.services.glue.model.GetPartitionsRequest;
+import software.amazon.awssdk.services.glue.model.GetPartitionsResponse;
+import software.amazon.awssdk.services.glue.model.GetTableRequest;
+import software.amazon.awssdk.services.glue.model.GetTableResponse;
+import software.amazon.awssdk.services.glue.model.GetTablesRequest;
+import software.amazon.awssdk.services.glue.model.GetTablesResponse;
+import software.amazon.awssdk.services.glue.model.GetUserDefinedFunctionRequest;
+import software.amazon.awssdk.services.glue.model.GetUserDefinedFunctionsRequest;
+import software.amazon.awssdk.services.glue.model.GetUserDefinedFunctionsResponse;
+import software.amazon.awssdk.services.glue.model.LongColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.Partition;
+import software.amazon.awssdk.services.glue.model.PartitionError;
+import software.amazon.awssdk.services.glue.model.PartitionInput;
+import software.amazon.awssdk.services.glue.model.PartitionValueList;
+import software.amazon.awssdk.services.glue.model.Segment;
+import software.amazon.awssdk.services.glue.model.StringColumnStatisticsData;
+import software.amazon.awssdk.services.glue.model.Table;
+import software.amazon.awssdk.services.glue.model.TableInput;
+import software.amazon.awssdk.services.glue.model.UpdateDatabaseRequest;
+import software.amazon.awssdk.services.glue.model.UpdatePartitionRequest;
+import software.amazon.awssdk.services.glue.model.UpdateTableRequest;
+import software.amazon.awssdk.services.glue.model.UpdateUserDefinedFunctionRequest;
+import software.amazon.awssdk.services.glue.model.UserDefinedFunction;
+import software.amazon.awssdk.services.glue.model.UserDefinedFunctionInput;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -132,7 +132,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
     public static final int GLUE_COLUMN_STATS_SEGMENT_SIZE = 100;
 
     private final HiveConf conf;
-    private final AWSGlue glueClient;
+    private final GlueClient glueClient;
     private final String catalogId;
     private final ExecutorService executorService;
     private final int numPartitionSegments;
@@ -147,7 +147,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         return factory.getExecutorService(hiveConf);
     }
 
-    public DefaultAWSGlueMetastore(HiveConf conf, AWSGlue glueClient) {
+    public DefaultAWSGlueMetastore(HiveConf conf, GlueClient glueClient) {
         checkNotNull(conf, "Hive Config cannot be null");
         checkNotNull(glueClient, "glueClient cannot be null");
         this.numPartitionSegments = conf.getInt(NUM_PARTITION_SEGMENTS_CONF, DEFAULT_NUM_PARTITION_SEGMENTS);
@@ -163,16 +163,17 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
 
     @Override
     public void createDatabase(DatabaseInput databaseInput) {
-        CreateDatabaseRequest createDatabaseRequest = new CreateDatabaseRequest().withDatabaseInput(databaseInput)
-                .withCatalogId(catalogId);
-        glueClient.createDatabase(createDatabaseRequest);
+        CreateDatabaseRequest.Builder createDatabaseRequest =
+                CreateDatabaseRequest.builder().databaseInput(databaseInput)
+                        .catalogId(catalogId);
+        glueClient.createDatabase(createDatabaseRequest.build());
     }
 
     @Override
     public Database getDatabase(String dbName) {
-        GetDatabaseRequest getDatabaseRequest = new GetDatabaseRequest().withCatalogId(catalogId).withName(dbName);
-        GetDatabaseResult result = glueClient.getDatabase(getDatabaseRequest);
-        return result.getDatabase();
+        GetDatabaseRequest.Builder getDatabaseRequest = GetDatabaseRequest.builder().catalogId(catalogId).name(dbName);
+        GetDatabaseResponse result = glueClient.getDatabase(getDatabaseRequest.build());
+        return result.database();
     }
 
     @Override
@@ -180,44 +181,45 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         List<Database> ret = Lists.newArrayList();
         String nextToken = null;
         do {
-            GetDatabasesRequest getDatabasesRequest = new GetDatabasesRequest().withNextToken(nextToken).withCatalogId(
+            GetDatabasesRequest.Builder getDatabasesRequest =
+                    GetDatabasesRequest.builder().nextToken(nextToken).catalogId(
                     catalogId);
-            GetDatabasesResult result = glueClient.getDatabases(getDatabasesRequest);
-            nextToken = result.getNextToken();
-            ret.addAll(result.getDatabaseList());
+            GetDatabasesResponse result = glueClient.getDatabases(getDatabasesRequest.build());
+            nextToken = result.nextToken();
+            ret.addAll(result.databaseList());
         } while (nextToken != null);
         return ret;
     }
 
     @Override
     public void updateDatabase(String databaseName, DatabaseInput databaseInput) {
-        UpdateDatabaseRequest updateDatabaseRequest = new UpdateDatabaseRequest().withName(databaseName)
-                .withDatabaseInput(databaseInput).withCatalogId(catalogId);
-        glueClient.updateDatabase(updateDatabaseRequest);
+        UpdateDatabaseRequest.Builder updateDatabaseRequest = UpdateDatabaseRequest.builder().name(databaseName)
+                .databaseInput(databaseInput).catalogId(catalogId);
+        glueClient.updateDatabase(updateDatabaseRequest.build());
     }
 
     @Override
     public void deleteDatabase(String dbName) {
-        DeleteDatabaseRequest deleteDatabaseRequest = new DeleteDatabaseRequest().withName(dbName).withCatalogId(
+        DeleteDatabaseRequest.Builder deleteDatabaseRequest = DeleteDatabaseRequest.builder().name(dbName).catalogId(
                 catalogId);
-        glueClient.deleteDatabase(deleteDatabaseRequest);
+        glueClient.deleteDatabase(deleteDatabaseRequest.build());
     }
 
     // ======================== Table ========================
 
     @Override
     public void createTable(String dbName, TableInput tableInput) {
-        CreateTableRequest createTableRequest = new CreateTableRequest().withTableInput(tableInput)
-                .withDatabaseName(dbName).withCatalogId(catalogId);
-        glueClient.createTable(createTableRequest);
+        CreateTableRequest.Builder createTableRequest = CreateTableRequest.builder().tableInput(tableInput)
+                .databaseName(dbName).catalogId(catalogId);
+        glueClient.createTable(createTableRequest.build());
     }
 
     @Override
     public Table getTable(String dbName, String tableName) {
-        GetTableRequest getTableRequest = new GetTableRequest().withDatabaseName(dbName).withName(tableName)
-                .withCatalogId(catalogId);
-        GetTableResult result = glueClient.getTable(getTableRequest);
-        return result.getTable();
+        GetTableRequest.Builder getTableRequest = GetTableRequest.builder().databaseName(dbName).name(tableName)
+                .catalogId(catalogId);
+        GetTableResponse result = glueClient.getTable(getTableRequest.build());
+        return result.table();
     }
 
     @Override
@@ -225,39 +227,40 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         List<Table> ret = new ArrayList<>();
         String nextToken = null;
         do {
-            GetTablesRequest getTablesRequest = new GetTablesRequest().withDatabaseName(dbname)
-                    .withExpression(tablePattern).withNextToken(nextToken).withCatalogId(catalogId);
-            GetTablesResult result = glueClient.getTables(getTablesRequest);
-            ret.addAll(result.getTableList());
-            nextToken = result.getNextToken();
+            GetTablesRequest.Builder getTablesRequest = GetTablesRequest.builder().databaseName(dbname)
+                    .expression(tablePattern).nextToken(nextToken).catalogId(catalogId);
+            GetTablesResponse result = glueClient.getTables(getTablesRequest.build());
+            ret.addAll(result.tableList());
+            nextToken = result.nextToken();
         } while (nextToken != null);
         return ret;
     }
 
     @Override
     public void updateTable(String dbName, TableInput tableInput) {
-        UpdateTableRequest updateTableRequest = new UpdateTableRequest().withDatabaseName(dbName)
-                .withTableInput(tableInput).withCatalogId(catalogId);
-        glueClient.updateTable(updateTableRequest);
+        UpdateTableRequest.Builder updateTableRequest = UpdateTableRequest.builder().databaseName(dbName)
+                .tableInput(tableInput).catalogId(catalogId);
+        glueClient.updateTable(updateTableRequest.build());
     }
 
     @Override
     public void deleteTable(String dbName, String tableName) {
-        DeleteTableRequest deleteTableRequest = new DeleteTableRequest().withDatabaseName(dbName).withName(tableName)
-                .withCatalogId(catalogId);
-        glueClient.deleteTable(deleteTableRequest);
+        DeleteTableRequest.Builder deleteTableRequest =
+                DeleteTableRequest.builder().databaseName(dbName).name(tableName)
+                        .catalogId(catalogId);
+        glueClient.deleteTable(deleteTableRequest.build());
     }
 
     // =========================== Partition ===========================
 
     @Override
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
-        GetPartitionRequest request = new GetPartitionRequest()
-                .withDatabaseName(dbName)
-                .withTableName(tableName)
-                .withPartitionValues(partitionValues)
-                .withCatalogId(catalogId);
-        return glueClient.getPartition(request).getPartition();
+        GetPartitionRequest.Builder request = GetPartitionRequest.builder()
+                .databaseName(dbName)
+                .tableName(tableName)
+                .partitionValues(partitionValues)
+                .catalogId(catalogId);
+        return glueClient.getPartition(request.build()).partition();
     }
 
     @Override
@@ -266,29 +269,29 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
 
         List<List<PartitionValueList>> batchedPartitionsToGet = Lists.partition(partitionsToGet,
                 BATCH_GET_PARTITIONS_MAX_REQUEST_SIZE);
-        List<Future<BatchGetPartitionResult>> batchGetPartitionFutures = Lists.newArrayList();
+        List<Future<BatchGetPartitionResponse>> batchGetPartitionFutures = Lists.newArrayList();
 
         for (List<PartitionValueList> batch : batchedPartitionsToGet) {
-            final BatchGetPartitionRequest request = new BatchGetPartitionRequest()
-                    .withDatabaseName(dbName)
-                    .withTableName(tableName)
-                    .withPartitionsToGet(batch)
-                    .withCatalogId(catalogId);
-            batchGetPartitionFutures.add(this.executorService.submit(new Callable<BatchGetPartitionResult>() {
+            final BatchGetPartitionRequest.Builder request = BatchGetPartitionRequest.builder()
+                    .databaseName(dbName)
+                    .tableName(tableName)
+                    .partitionsToGet(batch)
+                    .catalogId(catalogId);
+            batchGetPartitionFutures.add(this.executorService.submit(new Callable<BatchGetPartitionResponse>() {
                 @Override
-                public BatchGetPartitionResult call() throws Exception {
-                    return glueClient.batchGetPartition(request);
+                public BatchGetPartitionResponse call() throws Exception {
+                    return glueClient.batchGetPartition(request.build());
                 }
             }));
         }
 
         List<Partition> result = Lists.newArrayList();
         try {
-            for (Future<BatchGetPartitionResult> future : batchGetPartitionFutures) {
-                result.addAll(future.get().getPartitions());
+            for (Future<BatchGetPartitionResponse> future : batchGetPartitionFutures) {
+                result.addAll(future.get().partitions());
             }
         } catch (ExecutionException e) {
-            Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+            Throwables.throwIfInstanceOf(e.getCause(), SdkException.class);
             Throwables.throwIfUnchecked(e.getCause());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -318,9 +321,9 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         // Prepare the segments
         List<Segment> segments = Lists.newArrayList();
         for (int i = 0; i < numPartitionSegments; i++) {
-            segments.add(new Segment()
-                    .withSegmentNumber(i)
-                    .withTotalSegments(numPartitionSegments));
+            segments.add(Segment.builder()
+                    .segmentNumber(i)
+                    .totalSegments(numPartitionSegments).build());
         }
         // Submit Glue API calls in parallel using the thread pool.
         // We could convert this into a parallelStream after upgrading to JDK 8 compiler base.
@@ -349,7 +352,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
                 }
             }
         } catch (ExecutionException e) {
-            Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+            Throwables.throwIfInstanceOf(e.getCause(), SdkException.class);
             Throwables.throwIfUnchecked(e.getCause());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -363,22 +366,22 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         List<Partition> partitions = Lists.newArrayList();
         String nextToken = null;
         do {
-            GetPartitionsRequest request = new GetPartitionsRequest()
-                    .withDatabaseName(databaseName)
-                    .withTableName(tableName)
-                    .withExpression(expression)
-                    .withNextToken(nextToken)
-                    .withCatalogId(catalogId)
-                    .withSegment(segment);
-            GetPartitionsResult res = glueClient.getPartitions(request);
-            List<Partition> list = res.getPartitions();
+            GetPartitionsRequest.Builder request = GetPartitionsRequest.builder()
+                    .databaseName(databaseName)
+                    .tableName(tableName)
+                    .expression(expression)
+                    .nextToken(nextToken)
+                    .catalogId(catalogId)
+                    .segment(segment);
+            GetPartitionsResponse res = glueClient.getPartitions(request.build());
+            List<Partition> list = res.partitions();
             if ((partitions.size() + list.size()) >= max && max > 0) {
                 long remaining = max - partitions.size();
                 partitions.addAll(list.subList(0, (int) remaining));
                 break;
             }
             partitions.addAll(list);
-            nextToken = res.getNextToken();
+            nextToken = res.nextToken();
         } while (nextToken != null);
         return partitions;
     }
@@ -386,46 +389,47 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
     @Override
     public void updatePartition(String dbName, String tableName, List<String> partitionValues,
                                 PartitionInput partitionInput) {
-        UpdatePartitionRequest updatePartitionRequest = new UpdatePartitionRequest().withDatabaseName(dbName)
-                .withTableName(tableName).withPartitionValueList(partitionValues)
-                .withPartitionInput(partitionInput).withCatalogId(catalogId);
-        glueClient.updatePartition(updatePartitionRequest);
+        UpdatePartitionRequest.Builder updatePartitionRequest = UpdatePartitionRequest.builder().databaseName(dbName)
+                .tableName(tableName).partitionValueList(partitionValues)
+                .partitionInput(partitionInput).catalogId(catalogId);
+        glueClient.updatePartition(updatePartitionRequest.build());
     }
 
     @Override
     public void deletePartition(String dbName, String tableName, List<String> partitionValues) {
-        DeletePartitionRequest request = new DeletePartitionRequest()
-                .withDatabaseName(dbName)
-                .withTableName(tableName)
-                .withPartitionValues(partitionValues)
-                .withCatalogId(catalogId);
-        glueClient.deletePartition(request);
+        DeletePartitionRequest.Builder request = DeletePartitionRequest.builder()
+                .databaseName(dbName)
+                .tableName(tableName)
+                .partitionValues(partitionValues)
+                .catalogId(catalogId);
+        glueClient.deletePartition(request.build());
     }
 
     @Override
     public List<PartitionError> createPartitions(String dbName, String tableName,
                                                  List<PartitionInput> partitionInputs) {
-        BatchCreatePartitionRequest request =
-                new BatchCreatePartitionRequest().withDatabaseName(dbName)
-                .withTableName(tableName).withCatalogId(catalogId)
-                .withPartitionInputList(partitionInputs);
-        return glueClient.batchCreatePartition(request).getErrors();
+        BatchCreatePartitionRequest.Builder request =
+                BatchCreatePartitionRequest.builder().databaseName(dbName)
+                        .tableName(tableName).catalogId(catalogId)
+                        .partitionInputList(partitionInputs);
+        return glueClient.batchCreatePartition(request.build()).errors();
     }
 
     // ====================== User Defined Function ======================
 
     @Override
     public void createUserDefinedFunction(String dbName, UserDefinedFunctionInput functionInput) {
-        CreateUserDefinedFunctionRequest createUserDefinedFunctionRequest = new CreateUserDefinedFunctionRequest()
-                .withDatabaseName(dbName).withFunctionInput(functionInput).withCatalogId(catalogId);
-        glueClient.createUserDefinedFunction(createUserDefinedFunctionRequest);
+        CreateUserDefinedFunctionRequest.Builder createUserDefinedFunctionRequest =
+                CreateUserDefinedFunctionRequest.builder()
+                        .databaseName(dbName).functionInput(functionInput).catalogId(catalogId);
+        glueClient.createUserDefinedFunction(createUserDefinedFunctionRequest.build());
     }
 
     @Override
     public UserDefinedFunction getUserDefinedFunction(String dbName, String functionName) {
-        GetUserDefinedFunctionRequest getUserDefinedFunctionRequest = new GetUserDefinedFunctionRequest()
-                .withDatabaseName(dbName).withFunctionName(functionName).withCatalogId(catalogId);
-        return glueClient.getUserDefinedFunction(getUserDefinedFunctionRequest).getUserDefinedFunction();
+        GetUserDefinedFunctionRequest.Builder getUserDefinedFunctionRequest = GetUserDefinedFunctionRequest.builder()
+                .databaseName(dbName).functionName(functionName).catalogId(catalogId);
+        return glueClient.getUserDefinedFunction(getUserDefinedFunctionRequest.build()).userDefinedFunction();
     }
 
     @Override
@@ -433,28 +437,32 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         List<UserDefinedFunction> ret = Lists.newArrayList();
         String nextToken = null;
         do {
-            GetUserDefinedFunctionsRequest getUserDefinedFunctionsRequest = new GetUserDefinedFunctionsRequest()
-                    .withDatabaseName(dbName).withPattern(pattern).withNextToken(nextToken).withCatalogId(catalogId);
-            GetUserDefinedFunctionsResult result = glueClient.getUserDefinedFunctions(getUserDefinedFunctionsRequest);
-            nextToken = result.getNextToken();
-            ret.addAll(result.getUserDefinedFunctions());
+            GetUserDefinedFunctionsRequest.Builder getUserDefinedFunctionsRequest =
+                    GetUserDefinedFunctionsRequest.builder()
+                            .databaseName(dbName).pattern(pattern).nextToken(nextToken).catalogId(catalogId);
+            GetUserDefinedFunctionsResponse result =
+                    glueClient.getUserDefinedFunctions(getUserDefinedFunctionsRequest.build());
+            nextToken = result.nextToken();
+            ret.addAll(result.userDefinedFunctions());
         } while (nextToken != null);
         return ret;
     }
 
     @Override
     public void deleteUserDefinedFunction(String dbName, String functionName) {
-        DeleteUserDefinedFunctionRequest deleteUserDefinedFunctionRequest = new DeleteUserDefinedFunctionRequest()
-                .withDatabaseName(dbName).withFunctionName(functionName).withCatalogId(catalogId);
-        glueClient.deleteUserDefinedFunction(deleteUserDefinedFunctionRequest);
+        DeleteUserDefinedFunctionRequest.Builder deleteUserDefinedFunctionRequest =
+                DeleteUserDefinedFunctionRequest.builder()
+                        .databaseName(dbName).functionName(functionName).catalogId(catalogId);
+        glueClient.deleteUserDefinedFunction(deleteUserDefinedFunctionRequest.build());
     }
 
     @Override
     public void updateUserDefinedFunction(String dbName, String functionName, UserDefinedFunctionInput functionInput) {
-        UpdateUserDefinedFunctionRequest updateUserDefinedFunctionRequest = new UpdateUserDefinedFunctionRequest()
-                .withDatabaseName(dbName).withFunctionName(functionName).withFunctionInput(functionInput)
-                .withCatalogId(catalogId);
-        glueClient.updateUserDefinedFunction(updateUserDefinedFunctionRequest);
+        UpdateUserDefinedFunctionRequest.Builder updateUserDefinedFunctionRequest =
+                UpdateUserDefinedFunctionRequest.builder()
+                        .databaseName(dbName).functionName(functionName).functionInput(functionInput)
+                        .catalogId(catalogId);
+        glueClient.updateUserDefinedFunction(updateUserDefinedFunctionRequest.build());
     }
 
     @Override
@@ -463,27 +471,27 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         List<List<String>> columnChunks = Lists.partition(colNames, GLUE_COLUMN_STATS_SEGMENT_SIZE);
 
         // Submit Glue API calls in parallel using the thread pool.
-        List<CompletableFuture<GetColumnStatisticsForTableResult>> futures = columnChunks.stream().
+        List<CompletableFuture<GetColumnStatisticsForTableResponse>> futures = columnChunks.stream().
                 map(columnChunk -> supplyAsync(() -> {
-                    GetColumnStatisticsForTableRequest request = new GetColumnStatisticsForTableRequest()
-                            .withDatabaseName(dbName)
-                            .withTableName(tableName)
-                            .withColumnNames(columnChunk);
-                    return glueClient.getColumnStatisticsForTable(request);
+                    GetColumnStatisticsForTableRequest.Builder request = GetColumnStatisticsForTableRequest.builder()
+                            .databaseName(dbName)
+                            .tableName(tableName)
+                            .columnNames(columnChunk);
+                    return glueClient.getColumnStatisticsForTable(request.build());
                 }, this.executorService)).collect(Collectors.toList());
 
         // Get the column statistics
         Map<String, ColumnStatisticsObj> columnStatisticsMap = Maps.newHashMap();
         try {
-            for (CompletableFuture<GetColumnStatisticsForTableResult> future : futures) {
-                GetColumnStatisticsForTableResult columnStatisticsForTableResult = future.get();
-                for (ColumnStatistics columnStatistics : columnStatisticsForTableResult.getColumnStatisticsList()) {
-                    columnStatisticsMap.put(columnStatistics.getColumnName(),
+            for (CompletableFuture<GetColumnStatisticsForTableResponse> future : futures) {
+                GetColumnStatisticsForTableResponse columnStatisticsForTableResult = future.get();
+                for (ColumnStatistics columnStatistics : columnStatisticsForTableResult.columnStatisticsList()) {
+                    columnStatisticsMap.put(columnStatistics.columnName(),
                             toHiveColumnStatistic(columnStatistics));
                 }
             }
         } catch (ExecutionException e) {
-            Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+            Throwables.throwIfInstanceOf(e.getCause(), SdkException.class);
             Throwables.throwIfUnchecked(e.getCause());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -495,7 +503,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
     public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStatistics(String dbName, String tableName,
                                                                                List<String> partitionNames,
                                                                                List<String> colNames) {
-        Map<String, List<CompletableFuture<GetColumnStatisticsForPartitionResult>>> futureForPartition =
+        Map<String, List<CompletableFuture<GetColumnStatisticsForPartitionResponse>>> futureForPartition =
                 Maps.newHashMap();
         for (String partitionName : partitionNames) {
             // get column statistics for each partition
@@ -503,27 +511,28 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
             // Split colNames into column chunks
             List<List<String>> columnChunks = Lists.partition(colNames, GLUE_COLUMN_STATS_SEGMENT_SIZE);
             futureForPartition.put(partitionName, columnChunks.stream().map(columnChunk -> supplyAsync(() -> {
-                GetColumnStatisticsForPartitionRequest request = new GetColumnStatisticsForPartitionRequest()
-                        .withDatabaseName(dbName)
-                        .withTableName(tableName)
-                        .withColumnNames(columnChunk)
-                        .withPartitionValues(partitionValue);
-                return glueClient.getColumnStatisticsForPartition(request);
+                GetColumnStatisticsForPartitionRequest.Builder request =
+                        GetColumnStatisticsForPartitionRequest.builder()
+                                .databaseName(dbName)
+                                .tableName(tableName)
+                                .columnNames(columnChunk)
+                                .partitionValues(partitionValue);
+                return glueClient.getColumnStatisticsForPartition(request.build());
             }, this.executorService)).collect(Collectors.toList()));
         }
 
         Map<String, List<ColumnStatisticsObj>> partitionColumnStats = Maps.newHashMap();
         futureForPartition.forEach((partitionName, futures) -> {
             List<ColumnStatisticsObj> columnStatisticsObjs = Lists.newArrayList();
-            for (CompletableFuture<GetColumnStatisticsForPartitionResult> future : futures) {
+            for (CompletableFuture<GetColumnStatisticsForPartitionResponse> future : futures) {
                 try {
-                    GetColumnStatisticsForPartitionResult result = future.get();
-                    result.getColumnStatisticsList().forEach(columnStatistics ->
+                    GetColumnStatisticsForPartitionResponse result = future.get();
+                    result.columnStatisticsList().forEach(columnStatistics ->
                             columnStatisticsObjs.add(toHiveColumnStatistic(columnStatistics)));
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 } catch (ExecutionException e) {
-                    Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+                    Throwables.throwIfInstanceOf(e.getCause(), SdkException.class);
                     Throwables.throwIfUnchecked(e.getCause());
                 }
             }
@@ -534,80 +543,80 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
     }
 
     private ColumnStatisticsObj toHiveColumnStatistic(ColumnStatistics columnStatistics) {
-        ColumnStatisticsData columnStatisticsData = columnStatistics.getStatisticsData();
-        ColumnStatisticsType type = ColumnStatisticsType.fromValue(columnStatisticsData.getType());
-        String columnName = columnStatistics.getColumnName();
+        ColumnStatisticsData columnStatisticsData = columnStatistics.statisticsData();
+        ColumnStatisticsType type = columnStatisticsData.type();
+        String columnName = columnStatistics.columnName();
         switch (type) {
             case BINARY: {
-                BinaryColumnStatisticsData data = columnStatisticsData.getBinaryColumnStatisticsData();
+                BinaryColumnStatisticsData data = columnStatisticsData.binaryColumnStatisticsData();
                 org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
                         org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.binaryStats(
-                                new BinaryColumnStatsData(data.getMaximumLength(), data.getAverageLength(),
-                                        data.getNumberOfNulls()));
+                                new BinaryColumnStatsData(data.maximumLength(), data.averageLength(),
+                                        data.numberOfNulls()));
                 return new ColumnStatisticsObj(columnName, "BINARY", hiveColumnStatisticsData);
             }
             case BOOLEAN: {
-                BooleanColumnStatisticsData data = columnStatisticsData.getBooleanColumnStatisticsData();
+                BooleanColumnStatisticsData data = columnStatisticsData.booleanColumnStatisticsData();
                 org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
                         org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.booleanStats(
-                                new BooleanColumnStatsData(data.getNumberOfTrues(), data.getNumberOfFalses(),
-                                        data.getNumberOfNulls()));
+                                new BooleanColumnStatsData(data.numberOfTrues(), data.numberOfFalses(),
+                                        data.numberOfNulls()));
                 return new ColumnStatisticsObj(columnName, "BOOLEAN", hiveColumnStatisticsData);
             }
             case DATE: {
-                DateColumnStatisticsData data = columnStatisticsData.getDateColumnStatisticsData();
-                DateColumnStatsData dateColumnStatsData = new DateColumnStatsData(data.getNumberOfNulls(),
-                        data.getNumberOfDistinctValues());
+                DateColumnStatisticsData data = columnStatisticsData.dateColumnStatisticsData();
+                DateColumnStatsData dateColumnStatsData = new DateColumnStatsData(data.numberOfNulls(),
+                        data.numberOfDistinctValues());
                 MutableDateTime epoch = new MutableDateTime();
                 epoch.setDate(0); //Set to Epoch time
                 dateColumnStatsData.setHighValue(new Date(Days.daysBetween(epoch,
-                        new DateTime(data.getMaximumValue().getTime())).getDays()));
+                        new DateTime(data.maximumValue().getEpochSecond() * 1000)).getDays()));
                 dateColumnStatsData.setLowValue(new Date(Days.daysBetween(epoch,
-                        new DateTime(data.getMinimumValue().getTime())).getDays()));
+                        new DateTime(data.minimumValue().getEpochSecond() * 1000)).getDays()));
 
                 org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
                         org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.dateStats(dateColumnStatsData);
                 return new ColumnStatisticsObj(columnName, "DATE", hiveColumnStatisticsData);
             }
             case DECIMAL: {
-                DecimalColumnStatisticsData data = columnStatisticsData.getDecimalColumnStatisticsData();
-                DecimalColumnStatsData decimalColumnStatsData = new DecimalColumnStatsData(data.getNumberOfNulls(),
-                        data.getNumberOfDistinctValues());
-                decimalColumnStatsData.setHighValue(new Decimal(data.getMaximumValue().getScale().shortValue(),
-                        data.getMaximumValue().getUnscaledValue()));
-                decimalColumnStatsData.setLowValue(new Decimal(data.getMinimumValue().getScale().shortValue(),
-                        data.getMinimumValue().getUnscaledValue()));
+                DecimalColumnStatisticsData data = columnStatisticsData.decimalColumnStatisticsData();
+                DecimalColumnStatsData decimalColumnStatsData = new DecimalColumnStatsData(data.numberOfNulls(),
+                        data.numberOfDistinctValues());
+                decimalColumnStatsData.setHighValue(new Decimal(data.maximumValue().scale().shortValue(),
+                        data.maximumValue().unscaledValue().asByteBuffer()));
+                decimalColumnStatsData.setLowValue(new Decimal(data.minimumValue().scale().shortValue(),
+                        data.minimumValue().unscaledValue().asByteBuffer()));
 
                 org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
                         org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.decimalStats(decimalColumnStatsData);
                 return new ColumnStatisticsObj(columnName, "DECIMAL", hiveColumnStatisticsData);
             }
             case DOUBLE: {
-                DoubleColumnStatisticsData data = columnStatisticsData.getDoubleColumnStatisticsData();
-                DoubleColumnStatsData doubleColumnStatsData = new DoubleColumnStatsData(data.getNumberOfNulls(),
-                        data.getNumberOfDistinctValues());
-                doubleColumnStatsData.setHighValue(data.getMaximumValue());
-                doubleColumnStatsData.setLowValue(data.getMinimumValue());
+                DoubleColumnStatisticsData data = columnStatisticsData.doubleColumnStatisticsData();
+                DoubleColumnStatsData doubleColumnStatsData = new DoubleColumnStatsData(data.numberOfNulls(),
+                        data.numberOfDistinctValues());
+                doubleColumnStatsData.setHighValue(data.maximumValue());
+                doubleColumnStatsData.setLowValue(data.minimumValue());
 
                 org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
                         org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.doubleStats(doubleColumnStatsData);
                 return new ColumnStatisticsObj(columnName, "DOUBLE", hiveColumnStatisticsData);
             }
             case LONG: {
-                LongColumnStatisticsData data = columnStatisticsData.getLongColumnStatisticsData();
-                LongColumnStatsData longColumnStatsData = new LongColumnStatsData(data.getNumberOfNulls(),
-                        data.getNumberOfDistinctValues());
-                longColumnStatsData.setHighValue(data.getMaximumValue());
-                longColumnStatsData.setLowValue(data.getMinimumValue());
+                LongColumnStatisticsData data = columnStatisticsData.longColumnStatisticsData();
+                LongColumnStatsData longColumnStatsData = new LongColumnStatsData(data.numberOfNulls(),
+                        data.numberOfDistinctValues());
+                longColumnStatsData.setHighValue(data.maximumValue());
+                longColumnStatsData.setLowValue(data.minimumValue());
 
                 org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
                         org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.longStats(longColumnStatsData);
                 return new ColumnStatisticsObj(columnName, "LONG", hiveColumnStatisticsData);
             }
             case STRING: {
-                StringColumnStatisticsData data = columnStatisticsData.getStringColumnStatisticsData();
-                StringColumnStatsData stringColumnStatsData = new StringColumnStatsData(data.getMaximumLength(),
-                        data.getAverageLength(), data.getNumberOfNulls(), data.getNumberOfDistinctValues());
+                StringColumnStatisticsData data = columnStatisticsData.stringColumnStatisticsData();
+                StringColumnStatsData stringColumnStatsData = new StringColumnStatsData(data.maximumLength(),
+                        data.averageLength(), data.numberOfNulls(), data.numberOfDistinctValues());
 
                 org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
                         org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.stringStats(stringColumnStatsData);

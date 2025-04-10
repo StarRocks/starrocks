@@ -67,6 +67,27 @@ static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggr
     return STORAGE_AGGREGATE_NONE;
 }
 
+static Status validate_tablet_schema(const TabletSchemaPB& schema_pb) {
+#if !defined(NDEBUG) || defined(BE_TEST)
+    std::unordered_set<std::string> column_names;
+    std::unordered_set<int64_t> column_ids;
+    for (const auto& col : schema_pb.column()) {
+        DCHECK(col.has_unique_id()) << col.DebugString();
+        if (auto [it, ok] = column_ids.insert(col.unique_id()); !ok) {
+            LOG(ERROR) << "Duplicate column unique id: " << col.unique_id() << " schema: " << schema_pb.DebugString();
+            return Status::InvalidArgument("Duplicate column id found in tablet schema");
+        }
+        if (auto [it, ok] = column_names.insert(col.name()); !ok) {
+            LOG(ERROR) << "Duplicate column name: " << col.name() << " schema: " << schema_pb.DebugString();
+            return Status::InvalidArgument("Duplicate column name found in tablet schema");
+        }
+    }
+    return Status::OK();
+#else
+    return Status::OK();
+#endif
+}
+
 // This function is used to initialize ColumnPB for subfield like element of Array.
 static void init_column_pb_for_sub_field(ColumnPB* field) {
     const int32_t kFakeUniqueId = -1;
@@ -123,6 +144,9 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
             // All struct fields all nullable now
             RETURN_IF_ERROR(type_desc_to_pb(types, index, field_pb));
             field_pb->set_name(field.name);
+            if (field.__isset.id && field.id >= 0) {
+                field_pb->set_unique_id(field.id);
+            }
         }
         return Status::OK();
     }
@@ -284,7 +308,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     if (has_bf_columns && tablet_schema.__isset.bloom_filter_fpp) {
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);
     }
-    return Status::OK();
+    return validate_tablet_schema(*schema);
 }
 
 } // namespace starrocks

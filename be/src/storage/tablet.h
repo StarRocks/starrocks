@@ -57,6 +57,7 @@
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -99,7 +100,7 @@ public:
     void register_tablet_into_dir();
     void deregister_tablet_from_dir();
 
-    void save_meta();
+    void save_meta(bool skip_tablet_schema = false);
     // Used in clone task, to update local meta when finishing a clone job
     [[nodiscard]] Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                                             const std::vector<Version>& versions_to_delete);
@@ -267,7 +268,11 @@ public:
 
     void set_compaction_context(std::unique_ptr<CompactionContext>& context);
 
+#ifdef BE_TEST
+    virtual std::shared_ptr<CompactionTask> create_compaction_task();
+#else
     std::shared_ptr<CompactionTask> create_compaction_task();
+#endif
 
     bool has_compaction_task();
 
@@ -307,7 +312,7 @@ public:
 
     const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
 
-    TabletSchemaCSPtr update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
+    void update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
 
     int64_t data_size();
 
@@ -327,7 +332,17 @@ public:
     void remove_all_delta_column_group_cache() const;
     void remove_all_delta_column_group_cache_unlocked() const;
 
-protected:
+    [[nodiscard]] bool is_dropping() const { return _is_dropping; }
+    // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
+    void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
+
+    [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
+    void set_update_schema_running(bool is_running) { _update_schema_running.store(is_running); }
+    std::shared_mutex& get_schema_lock() { return _schema_lock; }
+    bool add_committed_rowset(const RowsetSharedPtr& rowset);
+    void erase_committed_rowset(const RowsetSharedPtr& rowset);
+    int64_t committed_rowset_size() { return _committed_rs_map.size(); }
+
     void on_shutdown() override;
 
 private:
@@ -364,6 +379,7 @@ private:
     // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
+    void _get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -407,6 +423,12 @@ private:
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
+    // Keep the rowsets committed but not publish which rowset meta without schema
+    phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
+                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5, std::mutex,
+                                  true>
+            _committed_rs_map;
+
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;
 
@@ -443,6 +465,9 @@ private:
     // another tablet with the same tablet id
     // currently, it will be used in Restore process
     bool _will_be_force_replaced = false;
+
+    std::atomic<bool> _is_dropping{false};
+    std::atomic<bool> _update_schema_running{false};
 };
 
 inline bool Tablet::init_succeeded() {

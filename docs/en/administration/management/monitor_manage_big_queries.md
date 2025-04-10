@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Monitor and manage big queries
@@ -22,7 +22,7 @@ StarRocks provides two precautionary instruments for dealing with big queries - 
 
 ### Filter out big queries via resource groups
 
-Resource groups can automatically identify and terminate big queries. When creating a resource group, you can specify the upper limit of CPU time, memory usage, or scan row count that a query is entitled to. Among all queries that hit the resource group, any queries that require more resources are rejected and returned with an error. For more information, see [Resource Isolation](../../administration/management/resource_management/resource_group.md).
+Resource groups can automatically identify and terminate big queries. When creating a resource group, you can specify the upper limit of CPU time, memory usage, or scan row count that a query is entitled to. Among all queries that hit the resource group, any queries that require more resources are rejected and returned with an error. For more information and instructions on resource groups, see [Resource Isolation](../../administration/management/resource_management/resource_group.md).
 
 Before creating resource groups, you must execute the following statement to enable Pipeline Engine, on which the Resource Group feature depends:
 
@@ -107,7 +107,7 @@ You can also decide how to deal with these queued queries by configuring the max
   SET GLOBAL query_queue_pending_timeout_second = 480;
   ```
 
-You can check whether a query is pending using [SHOW PROCESSLIST](../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md).
+You can check whether a query is pending using [SHOW PROCESSLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md).
 
 ```Plain
 mysql> SHOW PROCESSLIST;
@@ -126,7 +126,7 @@ From v3.0 onwards, StarRocks supports viewing the queries that are currently pro
 
 ### Monitor via MySQL client
 
-1. You can view the queries that are currently processed (`current_queries`) using [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW_PROC.md).
+1. You can view the queries that are currently processed (`current_queries`) using [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md).
 
    ```SQL
    SHOW PROC '/current_queries';
@@ -175,19 +175,19 @@ In addition to MySQL client, you can use the FE console for visualized, interact
    http://<fe_IP>:<fe_http_port>/system?path=//current_queries
    ```
 
-   ![FE console 1](../../assets/console_1.png)
+   ![FE console 1](../../_assets/console_1.png)
 
    You can view the queries that are currently processed and their resource consumption on the **System Info** page.
 
 2. Click the **QueryID** of the query.
 
-   ![FE console 2](../../assets/console_2.png)
+   ![FE console 2](../../_assets/console_2.png)
 
    You can view the detailed, node-specific resource consumption information on the page that appears.
 
 ### Manually terminate big queries
 
-If any big queries bypass the precautions you have set and threaten the system availability, you can terminate them manually using the corresponding connection ID in the [KILL](../../sql-reference/sql-statements/Administration/KILL.md) statement:
+If any big queries bypass the precautions you have set and threaten the system availability, you can terminate them manually using the corresponding connection ID in the [KILL](../../sql-reference/sql-statements/cluster-management/nodes_processes/KILL.md) statement:
 
 ```SQL
 KILL QUERY <ConnectionId>;
@@ -247,7 +247,7 @@ To enable SQL Blacklist, execute the following statement:
 ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true");
 ```
 
-Then you can add the regular expression that represents the SQL pattern to SQL Blacklist using [ADD SQLBLACKLIST](../../sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md).
+Then you can add the regular expression that represents the SQL pattern to SQL Blacklist using [ADD SQLBLACKLIST](../../sql-reference/sql-statements/cluster-management/sql_blacklist/ADD_SQLBLACKLIST.md).
 
 The following example adds `COUNT(DISTINCT)` to SQL Blacklist:
 

@@ -23,30 +23,31 @@ import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public interface StatisticStorage {
-    default TableStatistic getTableStatistic(Long tableId, Long partitionId) {
-        return TableStatistic.unknown();
+    // partitionId: RowCount
+    default Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
-    // partitionId: TableStatistic
-    default Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
-        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));
+    default void refreshTableStatistic(Table table, boolean isSync) {
     }
 
-    default void refreshTableStatistic(Table table) {
-    }
-
-    default void refreshTableStatisticSync(Table table) {
+    default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     ColumnStatistic getColumnStatistic(Table table, String column);
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
 
-    default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
-        return getColumnStatistics(table, columns);
+    /**
+     * Return partition-level column statistics, it may not exist
+     */
+    default Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
+                                                                                 List<String> columns) {
+        return null;
     }
 
     default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
@@ -81,6 +82,9 @@ public interface StatisticStorage {
     }
 
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+    }
+
+    default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {

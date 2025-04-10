@@ -57,6 +57,8 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TColumn;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.text.translate.UnicodeUnescaper;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -214,6 +216,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
+        this.generatedColumnExpr = column.generatedColumnExpr();
+    }
+
+    public Column deepCopy() {
+        Column col = new Column(this);
+        col.setIsAutoIncrement(this.isAutoIncrement);
+        Type newType = type.clone();
+        col.setType(newType);
+        return col;
     }
 
     public ColumnDef toColumnDef() {
@@ -502,12 +513,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (generatedColumnExpr == null) {
             return null;
         }
-        return generatedColumnExpr.clone();
+        Expr expr = generatedColumnExpr.clone();
+        expr.setType(type);
+        return expr;
     }
 
-    public Expr getGeneratedColumnExpr() {
-        return generatedColumnExpr;
-    }
     public void setGeneratedColumnExpr(Expr expr) {
         generatedColumnExpr = expr;
     }
@@ -555,7 +565,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+            sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                    .append("\" ");
         } else if (isGeneratedColumn()) {
             sb.append("AS " + generatedColumnExpr.toSql() + " ");
         }
@@ -661,18 +672,21 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         } else {
             sb.append("NOT NULL ");
         }
-        if (defaultExpr == null && isAutoIncrement) {
-            sb.append("AUTO_INCREMENT ");
-        } else if (defaultExpr != null) {
+        if (defaultExpr == null) {
+            if (isAutoIncrement) {
+                sb.append("AUTO_INCREMENT ");
+            }
+            if (defaultValue != null && !type.isOnlyMetricType()) {
+                sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                        .append("\" ");
+            }
+        } else {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 // compatible with mysql
                 sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
             } else {
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
-        }
-        if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
         if (isGeneratedColumn()) {
             sb.append("AS " + generatedColumnExpr.toSql() + " ");
@@ -769,6 +783,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return GsonUtils.GSON.fromJson(json, Column.class);
     }
 
+    public String generatedColumnExprToString() {
+        if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.expressionSql != null) {
+            return SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql, SqlModeHelper.MODE_DEFAULT).toSql();
+        }
+        return null;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.expressionSql != null) {
@@ -805,5 +826,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (bfColumns != null && bfColumns.contains(this.name)) {
             tColumn.setIs_bloom_filter_column(true);
         }
+    }
+
+    // return max unique id of all fields
+    public int getMaxUniqueId() {
+        return Math.max(this.uniqueId, type.getMaxUniqueId());
     }
 }

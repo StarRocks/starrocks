@@ -52,6 +52,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -70,8 +71,11 @@ import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -175,6 +179,18 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert createDatabaseIfNotExists(String dbName) throws Exception {
+        try {
+            CreateDbStmt createDbStmt =
+                    (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database if not exists `"
+                            + dbName + "`;", ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        } catch (AlreadyExistsException e) {
+            // ignore
+        }
+        return this;
+    }
+
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
@@ -194,6 +210,10 @@ public class StarRocksAssert {
         CreateDbStmt dbStmt = new CreateDbStmt(false, dbName);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         return this;
+    }
+
+    public String showCreateTable(String sql) throws Exception {
+        return show(sql).get(0).get(1);
     }
 
     public boolean databaseExist(String dbName) {
@@ -516,7 +536,6 @@ public class StarRocksAssert {
             withView(sql);
             action.run();
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("With view " + viewName + " failed:" + e.getMessage());
         } finally {
             dropView(viewName);
@@ -665,8 +684,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         } finally {
             Preconditions.checkState(!Strings.isNullOrEmpty(mvName));
             try {
@@ -750,11 +768,74 @@ public class StarRocksAssert {
             taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
             taskRunProperties.put(TaskRun.FORCE, "true");
 
-            Task task = TaskBuilder.rebuildMvTask(mv, mvName.getDb(), taskRunProperties);
+            Task task = TaskBuilder.rebuildMvTask(mv, mvName.getDb(), taskRunProperties, null);
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
             taskRun.executeTaskRun();
             waitingTaskFinish(taskRun);
+        }
+        return this;
+    }
+
+    /**
+     * Wait the input mv refresh task finished.
+     * @param mvId: mv id
+     * @return true if the mv refresh task finished, otherwise false.
+     */
+    public boolean waitRefreshFinished(long mvId) {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = tm.getTask(TaskBuilder.getMvTaskName(mvId));
+        Assert.assertTrue(task != null);
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
+        int maxTimes = 1200;
+        int count = 0;
+        while (taskRun != null && count < maxTimes) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(500L);
+            taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
+            count += 1;
+        }
+        return taskRun == null;
+    }
+
+    /**
+     * Refresh materialized view asynchronously.
+     * @param ctx connnect context
+     * @param mvName mv's name
+     */
+    public StarRocksAssert refreshMV(ConnectContext ctx, String mvName) throws Exception {
+        String sql = "REFRESH MATERIALIZED VIEW " + mvName;
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+        TableName tableName = refreshMaterializedViewStatement.getMvName();
+        Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+        Table table = db.getTable(tableName.getTbl());
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        ctx.executeSql(sql);
+        return this;
+    }
+
+    public StarRocksAssert refreshMV(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+        TableName mvName = refreshMaterializedViewStatement.getMvName();
+        Database db = GlobalStateMgr.getCurrentState().getDb(mvName.getDb());
+        Table table = db.getTable(mvName.getTbl());
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        getCtx().executeSql(sql);
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        Task task = tm.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
+        while (taskRun != null) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+            taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
         }
         return this;
     }

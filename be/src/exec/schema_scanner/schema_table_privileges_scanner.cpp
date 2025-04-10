@@ -39,16 +39,13 @@ Status SchemaTablePrivilegesScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     // construct request params for `FrontendService.getTablePrivs()`
     TGetTablePrivsParams table_privs_params;
     table_privs_params.__set_current_user_ident(*(_param->current_user_ident));
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_table_privs(*(_param->ip), _param->port, table_privs_params, &_table_privs_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_table_privs(_ss_state, table_privs_params, &_table_privs_result));
     return Status::OK();
 }
 

@@ -20,6 +20,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1522,6 +1523,32 @@ public class AggregateTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: t1c <=> 27: t1c\n" +
                 "  |  equal join conjunct: 17: expr <=> 28: expr");
+        // count distinct with grouping sets
+
+        sql = "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), " +
+                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by rollup(t1c, t1b)";
+        plan = getFragmentPlan(sql);
+        // make sure repeat + project + multi cast sink
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 10\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 17\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 13> : 13: expr\n" +
+                "  |  <slot 14> : 14: expr\n" +
+                "  |  <slot 18> : 18: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [3], [2, 3]]");
     }
 
     @Test
@@ -1793,8 +1820,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 4> : 4: t1d\n" +
-                "  |  <slot 11> : 18: add\n" +
-                "  |  <slot 18> : clone(18: add)\n" +
+                "  |  <slot 11> : clone(18: add)\n" +
+                "  |  <slot 18> : 18: add\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
                 "  |  <slot 18> : 17: cast + 1");
@@ -1934,6 +1961,15 @@ public class AggregateTest extends PlanTestBase {
                 "bitmap_union(to_bitmap(CAST(10: id_decimal AS VARCHAR)))\n" +
                 "  |  group by: ");
 
+        sql = "select bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v2, -999)))) as c1, \n" +
+                "bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v3, -999)))) as c2,\n" +
+                "bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v2, -999)))) - " +
+                "bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v3, -999))))\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 8> : 11: bitmap_count\n" +
+                "  |  <slot 9> : 12: bitmap_count\n" +
+                "  |  <slot 10> : 11: bitmap_count - 12: bitmap_count");
     }
 
     @Test
@@ -2358,12 +2394,22 @@ public class AggregateTest extends PlanTestBase {
         String plan = getCostExplain(sql);
         assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
 
+        sql = "with cc as (select 1 as a) select percentile_approx(1, cc.a) from cc;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: percentile_approx(1.0, 1.0)\n" +
+                "  |  group by: ");
+        Exception exception = Assert.assertThrows(StarRocksPlannerException.class, () -> {
+            String testSql = "with cc as (select 1 as a, v1 from t0) select percentile_approx(1, cc.a, cc.v1) from cc;";
+            getFragmentPlan(testSql);
+        });
+        Assert.assertTrue(exception.getMessage().contains("the third parameter's type is numeric constant type"));
+
         sql = "select percentile_approx(1, cast(1.3 as DOUBLE));";
         expectedException.expect(SemanticException.class);
         expectedException.expectMessage("Getting analyzing error. " +
                 "Detail message: percentile_approx second parameter'value must be between 0 and 1.");
         getCostExplain(sql);
-        plan = getCostExplain(sql);
 
         sql = "select percentile_cont(1, cast(0.4 as DOUBLE));";
         expectedException.expect(SemanticException.class);
@@ -2705,8 +2751,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 8> : 8: count\n" +
                 "  |  <slot 9> : 9: count\n" +
                 "  |  \n" +
-                "  9:AGGREGATE (update finalize)\n" +
-                "  |  output: count(1: v1), count(9: count), max(10: max)\n" +
+                "  9:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(8: count), count(9: count), max(10: max)\n" +
                 "  |  group by: 7: abs\n" +
                 "  |  having: 10: max > CAST(abs(1) AS BIGINT)");
     }
@@ -2748,8 +2794,8 @@ public class AggregateTest extends PlanTestBase {
         sql = "select max(a), a from (select v1, abs(1) as a, abs(2) as b from t0) t group by a, v1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:Project\n" +
-                "  |  <slot 4> : abs(1)\n" +
-                "  |  <slot 6> : 6: max\n" +
+                "  |  <slot 7> : abs(1)\n" +
+                "  |  <slot 8> : 8: max\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(abs(1))\n" +
@@ -2781,5 +2827,29 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  having: CAST(14: multi_distinct_sum AS DOUBLE) / CAST(13: multi_distinct_count AS DOUBLE) = 2.0\n" +
                 "  |  limit: 10");
+    }
+
+    @Test
+    public void testAvgDecimalScale() throws Exception {
+        String sql = "select avg(v2 - 1.86659630566164 * (v3 - 3.062175673706)) from t0 group by v1;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> [5: avg, DECIMAL128(38,18), true]\n" +
+                "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testHavingAggregate() throws Exception {
+        String sql = "select * from (" +
+                "select sum(v1), f2, v3 from " +
+                "   (select v1, v2, v2 + 2 as f2, v3 from t0) cc " +
+                "group by v2, f2, v3 having (f2 + sum(v1)) > 0" +
+                ") xx ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2, 3: v3\n" +
+                "  |  having: 2: v2 + 2 + 5: sum > 0");
     }
 }

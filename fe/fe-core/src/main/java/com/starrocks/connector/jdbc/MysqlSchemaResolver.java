@@ -22,6 +22,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.jetbrains.annotations.NotNull;
 
@@ -226,9 +227,12 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                         list.add(new Partition(partitionName, createTime));
                     }
                 }
-                return list.build();
+                ImmutableList<Partition> partitions = list.build();
+                return partitions.isEmpty()
+                        ? Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()))
+                        : partitions;
             } else {
-                return Lists.newArrayList();
+                return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
             }
         } catch (SQLException | NullPointerException e) {
             throw new StarRocksConnectorException(e.getMessage(), e);

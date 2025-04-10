@@ -1,16 +1,16 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # REVOKE
 
 ## Description
 
-Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/user_privs/privilege_item.md).
+Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/user_privs/privilege_overview.md).
 
 :::tip
 
-- Common users can only revoke their privileges that have the `WITH GRANT OPTION` keyword from other users and roles. For information about `WITH GRANT OPTION`, see [GRANT](GRANT.md).
+- Common users can only revoke their privileges that have the `WITH GRANT OPTION` keyword from other users and roles. For information about `WITH GRANT OPTION`, see [GRANT](./GRANT.md).
 - Only users with the `user_admin` role has the privilege to revoke privileges from other users.
 
 :::
@@ -59,7 +59,7 @@ REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>;
 ```SQL
 REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name> [, <function_name>,...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
@@ -152,7 +152,7 @@ REVOKE
 ```SQL
 REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name> [, < function_name >,...]
+    ON { FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]
        ｜ ALL FUNCTIONS} IN 
            { { DATABASE <database_name> [, <database_name>,...] } | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
@@ -162,7 +162,7 @@ REVOKE
 * You can also use db.function to represent a function.
 
   ```SQL
-  REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+  REVOKE <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) FROM {ROLE <role_name> | USER <user_identity>}
   ```
 
 #### Storage volume

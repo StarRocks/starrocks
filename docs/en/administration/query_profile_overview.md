@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+keywords: ['profile', 'query']
 ---
 
 # Query Profile Overview
@@ -59,11 +60,11 @@ Follow these steps to obtain Query Profile:
 2. On the page that appears, click **queries** in the top navigation.
 3. In the **Finished Queries** list, select the query you want to analyze and click the link in the **Profile** column.
 
-![img](../assets/profile-1.png)
+![img](../_assets/profile-1.png)
 
 You will be redirected to the detailed page of the selected Query Profile.
 
-![img](../assets/profile-2.png)
+![img](../_assets/profile-2.png)
 
 ### Obtain Query Profile via get_query_profile
 

@@ -26,6 +26,7 @@
 #include "storage/olap_define.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
+#include "storage/task/engine_clone_task.h"
 #include "testutil/assert.h"
 #include "util/uuid_generator.h"
 
@@ -240,6 +241,17 @@ TEST_F(AgentTaskTest, test_update_schema) {
 
     auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
     EXPECT_EQ(3, tablet->num_columns_with_max_version());
+}
+
+TEST_F(AgentTaskTest, clone_task_under_dropping) {
+    TCloneReq clone_req;
+    clone_req.__set_tablet_id(_tablet_id);
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
+    tablet->set_is_dropping(true);
+    EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, nullptr);
+    Status st = task.execute();
+    ASSERT_TRUE(st.is_corruption());
+    tablet->set_is_dropping(false);
 }
 
 } // namespace starrocks

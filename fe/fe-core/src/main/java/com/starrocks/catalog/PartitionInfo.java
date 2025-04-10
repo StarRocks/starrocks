@@ -53,6 +53,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import javax.validation.constraints.NotNull;
@@ -122,6 +123,10 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return type != PartitionType.UNPARTITIONED;
     }
 
+    public boolean isUnPartitioned() {
+        return type == PartitionType.UNPARTITIONED;
+    }
+
     public DataProperty getDataProperty(long partitionId) {
         return idToDataProperty.get(partitionId);
     }
@@ -141,11 +146,13 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
     }
 
     public short getReplicationNum(long partitionId) {
-        if (!idToReplicationNum.containsKey(partitionId)) {
+        // Perform the op under no lock, the formal containsKey() call can't guarantee the later get() op success.
+        Short replicationNum = idToReplicationNum.get(partitionId);
+        if (replicationNum == null) {
             LOG.debug("failed to get replica num for partition: {}", partitionId);
             return (short) -1;
         }
-        return idToReplicationNum.get(partitionId);
+        return replicationNum;
     }
 
     public short getMinReplicationNum() {
@@ -190,6 +197,7 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
         idToInMemory.remove(partitionId);
+        idToStorageCacheInfo.remove(partitionId);
     }
 
     public void moveRangeFromTempToFormal(long tempPartitionId) {
@@ -241,7 +249,7 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         out.writeInt(idToDataProperty.size());
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
             out.writeLong(entry.getKey());
-            if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
+            if (DataProperty.DATA_PROPERTY_HDD.equals(entry.getValue())) {
                 out.writeBoolean(true);
             } else {
                 out.writeBoolean(false);
@@ -278,6 +286,17 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
 
     @Override
     public void gsonPostProcess() throws IOException {
+        // NOTE: clean dirty data in idToStorageCacheInfo due to historic bugs.
+        // Taking idToReplicationNum as reference, remove all the items of idToStorageCacheInfo
+        // that doesn't have the corresponding key in idToReplicationNum, ASSUMING that all valid
+        // partitions should have a record in idToReplicationNum.
+        //
+        // Can be removed after several major releases.
+        if (idToStorageCacheInfo.size() > idToReplicationNum.size()) {
+            HashSet<Long> keyToDelete = new HashSet<>(idToStorageCacheInfo.keySet());
+            keyToDelete.removeAll(idToReplicationNum.keySet());
+            keyToDelete.forEach(idToStorageCacheInfo::remove);
+        }
     }
 
     @Override
@@ -286,12 +305,8 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         buff.append("type: ").append(type.typeString).append("; ");
 
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
-            buff.append(entry.getKey()).append(" is HDD: ");
-            if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
-                buff.append(true);
-            } else {
-                buff.append(false);
-            }
+            buff.append(entry.getKey()).append(" is HDD: ")
+                    .append(DataProperty.DATA_PROPERTY_HDD.equals(entry.getValue()));
             buff.append(" data_property: ").append(entry.getValue().toString());
             buff.append(" replica number: ").append(idToReplicationNum.get(entry.getKey()));
             buff.append(" in memory: ").append(idToInMemory.get(entry.getKey()));
@@ -309,18 +324,57 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
 
     protected Object clone()  {
         try {
-            // shallow clone on base partition info
             PartitionInfo p = (PartitionInfo) super.clone();
             p.type = this.type;
-            p.idToDataProperty = this.idToDataProperty;
-            p.idToReplicationNum = this.idToReplicationNum;
+            p.idToDataProperty = new HashMap<>(this.idToDataProperty);
+            p.idToReplicationNum = new HashMap<>(this.idToReplicationNum);
             p.isMultiColumnPartition = this.isMultiColumnPartition;
-            p.idToInMemory = this.idToInMemory;
-            p.idToTabletType = this.idToTabletType;
-            p.idToStorageCacheInfo = this.idToStorageCacheInfo;
+            p.idToInMemory = new HashMap<>(this.idToInMemory);
+            p.idToTabletType = new HashMap<>(this.idToTabletType);
+            p.idToStorageCacheInfo = new HashMap<>(this.idToStorageCacheInfo);
             return p;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        Map<Long, DataProperty> oldIdToDataProperty = this.idToDataProperty;
+        Map<Long, Short> oldIdToReplicationNum = this.idToReplicationNum;
+        Map<Long, Boolean> oldIdToInMemory = this.idToInMemory;
+        Map<Long, TTabletType> oldIdToTabletType = this.idToTabletType;
+        Map<Long, DataCacheInfo> oldIdToStorageCacheInfo = this.idToStorageCacheInfo;
+
+        this.idToDataProperty = new HashMap<>();
+        this.idToReplicationNum = new HashMap<>();
+        this.idToInMemory = new HashMap<>();
+        this.idToTabletType = new HashMap<>();
+        this.idToStorageCacheInfo = new HashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            DataProperty dataProperty = oldIdToDataProperty.get(oldId);
+            if (dataProperty != null) {
+                this.idToDataProperty.put(newId, dataProperty);
+            }
+            Short replicationNum = oldIdToReplicationNum.get(oldId);
+            if (replicationNum != null) {
+                this.idToReplicationNum.put(newId, replicationNum);
+            }
+            Boolean inMemory = oldIdToInMemory.get(oldId);
+            if (inMemory != null) {
+                this.idToInMemory.put(newId, inMemory);
+            }
+            TTabletType tabletType = oldIdToTabletType.get(oldId);
+            if (tabletType != null) {
+                this.idToTabletType.put(newId, tabletType);
+            }
+            DataCacheInfo dataCacheInfo = oldIdToStorageCacheInfo.get(oldId);
+            if (dataCacheInfo != null) {
+                this.idToStorageCacheInfo.put(newId, dataCacheInfo);
+            }
         }
     }
 }

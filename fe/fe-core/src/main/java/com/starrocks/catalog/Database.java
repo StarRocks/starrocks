@@ -58,6 +58,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +72,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -478,6 +480,15 @@ public class Database extends MetaObject implements Writable {
             nameToTable.put(table.getName(), table);
             return true;
         }
+    }
+
+    public void unRegisterTableUnlocked(Table table) {
+        if (table == null) {
+            return;
+        }
+
+        idToTable.remove(table.getId());
+        nameToTable.remove(table.getName());
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
@@ -907,6 +918,10 @@ public class Database extends MetaObject implements Writable {
                 fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
     }
 
+    public boolean isStatisticsDatabase() {
+        return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
+    }
+
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
@@ -914,5 +929,22 @@ public class Database extends MetaObject implements Writable {
 
     public boolean isExist() {
         return exist;
+    }
+
+    public List<PhysicalPartition> getPartitionSamples() {
+        return this.idToTable.values()
+                .stream()
+                .filter(table -> table instanceof OlapTable)
+                .map(table -> ((OlapTable) table).getPartitionSample())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    public int getOlapPartitionsCount() {
+        return this.idToTable.values()
+                .stream()
+                .filter(table -> table instanceof OlapTable)
+                .mapToInt(table -> ((OlapTable) table).getPartitionsCount())
+                .sum();
     }
 }

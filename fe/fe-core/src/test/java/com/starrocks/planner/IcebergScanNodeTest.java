@@ -77,7 +77,7 @@ public class IcebergScanNodeTest extends TableTestBase {
     public void testGetScanRangeLocations() throws Exception {
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableC, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableC, Maps.newHashMap());
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -105,7 +105,7 @@ public class IcebergScanNodeTest extends TableTestBase {
     public void testEqualityDelete() throws UserException {
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableA, Maps.newHashMap());
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -138,7 +138,7 @@ public class IcebergScanNodeTest extends TableTestBase {
     public void testEqualityDeleteWithUnsupportedFormat() throws UserException {
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableA, Maps.newHashMap());
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");

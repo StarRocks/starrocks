@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "agent/master_info.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
@@ -167,6 +168,9 @@ void GlobalDriverExecutor::_worker_thread() {
             }
 
             if (!status.ok()) {
+                auto o_id = get_backend_id();
+                int64_t be_id = o_id.has_value() ? o_id.value() : -1;
+                status = status.clone_and_append(fmt::format("BE:{}", be_id));
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
@@ -327,8 +331,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
             auto status = ExecStateReporter::report_exec_status(params, exec_env, fe_addr);
             if (!status.ok()) {
                 if (status.is_not_found()) {
-                    LOG(INFO) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
-                              << print_id(fragment_id);
+                    VLOG(1) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
+                            << print_id(fragment_id);
                 } else {
                     LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
                                  << ", status: " << status.to_string() << ", retry_times=" << retry_times;
@@ -338,8 +342,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                     }
                 }
             } else {
-                LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                          << ", is_done=" << params.done;
+                VLOG(1) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                        << ", is_done=" << params.done;
             }
             break;
         }
@@ -353,16 +357,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
             << ", is_done=" << done;
 }
 
-void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) {
-    // It should be guaranteed that the done flag must be set to true in any cases.
-    // If the async task is submitted successfully, the done flag will be set to true in the lambda function.
-    // Otherwise, the done flag will be set to true in the defer object.
-    bool submit_success = false;
-    DeferOp defer([&]() {
-        if (!submit_success) {
-            *done = true;
-        }
-    });
+void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
     auto query_statistics = query_ctx->final_query_statistic();
 
     TReportAuditStatisticsParams params;
@@ -382,7 +377,6 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
     auto report_task = [=]() {
-        *done = true;
         auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
         if (!status.ok()) {
             if (status.is_not_found()) {
@@ -393,12 +387,12 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
                              << print_id(fragment_id) << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+            VLOG(1) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
         }
     };
     auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
-    if (st.ok()) {
-        submit_success = true;
+    if (!st.ok()) {
+        LOG(ERROR) << "submit audit statistics report fail, " << st.to_string();
     }
 }
 
@@ -435,7 +429,7 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
                              << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+            VLOG(1) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
         }
     };
 

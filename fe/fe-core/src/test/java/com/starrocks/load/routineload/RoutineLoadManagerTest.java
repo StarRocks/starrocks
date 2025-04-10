@@ -78,12 +78,16 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class RoutineLoadManagerTest {
 
@@ -315,7 +319,7 @@ public class RoutineLoadManagerTest {
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
-        routineLoadManager.takeBeTaskSlot();
+        routineLoadManager.takeBeTaskSlot(1L);
 
         Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
@@ -343,8 +347,8 @@ public class RoutineLoadManagerTest {
         routineLoadManager.updateBeTaskSlot();
 
         // take tow slots
-        long beId1 = routineLoadManager.takeBeTaskSlot();
-        long beId2 = routineLoadManager.takeBeTaskSlot();
+        long beId1 = routineLoadManager.takeBeTaskSlot(1L);
+        long beId2 = routineLoadManager.takeBeTaskSlot(2L);
         Assert.assertTrue(beId1 != beId2);
         Assert.assertTrue(beId1 != -1L);
         Assert.assertTrue(beId2 != -1L);
@@ -352,26 +356,69 @@ public class RoutineLoadManagerTest {
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot() > 0));
+            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(3L) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot());
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(4L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(5L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(6L));
 
         // release all slots
         ExecutorService es2 = Executors.newCachedThreadPool();
         for (int i = 0; i < Config.max_routine_load_task_num_per_be; i++) {
             es2.submit(() -> {
-                routineLoadManager.releaseBeTaskSlot(1L);
-                routineLoadManager.releaseBeTaskSlot(2L);
+                routineLoadManager.releaseBeTaskSlot(1L, 1L);
+                routineLoadManager.releaseBeTaskSlot(2L, 2L);
             });
         }
         es2.shutdown();
         es2.awaitTermination(1, TimeUnit.HOURS);
         Assert.assertEquals(2 * Config.max_routine_load_task_num_per_be, routineLoadManager.getClusterIdleSlotNum());
+    }
+
+    @Test
+    public void testTakeBeTaskSlotWithJobs() throws Exception {
+        Config.max_routine_load_task_num_per_be = 1000;
+        List<Long> beIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = beIds;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        routineLoadManager.updateBeTaskSlot();
+        
+        List<Integer> jobIDs = IntStream.rangeClosed(1, 100).boxed().collect(Collectors.toList());
+        
+        Collections.shuffle(jobIDs);
+        for (long jobID : jobIDs) {
+            for (long taskId = 0; taskId < 3; taskId++) {
+                long beId = routineLoadManager.takeBeTaskSlot(jobID);
+            }
+        }
+
+        Map<Long, Set<Long>> nodeToJobs = routineLoadManager.getNodeToJobs();
+        Assert.assertEquals(5, nodeToJobs.size());
+        for (long beId : nodeToJobs.keySet()) {
+            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            long total = 0;
+            for (long jobId : nodeToJobs.get(beId)) {
+                total += jobId;
+                routineLoadManager.takeNodeById(jobId, beId);
+            }
+            LOG.warn("beId: {}, total: {}", beId, total);
+        }
+        for (long beId : nodeToJobs.keySet()) {
+            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            Assert.assertEquals(120, routineLoadManager.getBeTasksNum().get(beId).intValue());
+        }
+        Config.max_routine_load_task_num_per_be = 16;
     }
 
     @Test
@@ -420,7 +467,6 @@ public class RoutineLoadManagerTest {
     public void testGetJob(@Injectable RoutineLoadJob routineLoadJob1,
                            @Injectable RoutineLoadJob routineLoadJob2,
                            @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
-
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -447,6 +493,144 @@ public class RoutineLoadManagerTest {
         Assert.assertEquals(routineLoadJob2, result.get(0));
         Assert.assertEquals(routineLoadJob1, result.get(1));
         Assert.assertEquals(routineLoadJob3, result.get(2));
+    }
+
+    @Test
+    public void testGetJobByJobName(@Injectable RoutineLoadJob routineLoadJob1,
+                                    @Injectable RoutineLoadJob routineLoadJob2,
+                                    @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newHashMap();
+        idToRoutineLoadJob.put(1L, routineLoadJob1);
+        idToRoutineLoadJob.put(2L, routineLoadJob2);
+        idToRoutineLoadJob.put(3L, routineLoadJob3);
+        Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob(null, "aaa", false);
+
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+    }
+
+    @Test
+    public void testGetJobByDb(@Injectable RoutineLoadJob routineLoadJob1,
+                               @Injectable RoutineLoadJob routineLoadJob2,
+                               @Injectable RoutineLoadJob routineLoadJob3,
+                               @Mocked GlobalStateMgr globalStateMgr,
+                               @Mocked Database database) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+                globalStateMgr.getDb("db1");
+                minTimes = 0;
+                result = database;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
+        nameToRoutineLoadJob.put("aaa", Lists.newArrayList(routineLoadJob1, routineLoadJob2));
+        nameToRoutineLoadJob.put("bbb", Lists.newArrayList(routineLoadJob3));
+        dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
+        Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", null, true);
+
+        Assert.assertEquals(3, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assert.assertEquals(routineLoadJob1, result.get(1));
+        Assert.assertEquals(routineLoadJob3, result.get(2));
+    }
+
+    @Test
+    public void testGetJobByDbAndJobName(@Injectable RoutineLoadJob routineLoadJob1,
+                                         @Injectable RoutineLoadJob routineLoadJob2,
+                                         @Injectable RoutineLoadJob routineLoadJob3,
+                                         @Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked Database database) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+                globalStateMgr.getDb("db1");
+                minTimes = 0;
+                result = database;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
+        nameToRoutineLoadJob.put("aaa", Lists.newArrayList(routineLoadJob1, routineLoadJob2));
+        nameToRoutineLoadJob.put("bbb", Lists.newArrayList(routineLoadJob3));
+        dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
+        Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", "aaa", true);
+
+        Assert.assertEquals(2, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assert.assertEquals(routineLoadJob1, result.get(1));
     }
 
     @Test
@@ -879,5 +1063,24 @@ public class RoutineLoadManagerTest {
 
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(1L));
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(2L));
+    }
+
+
+    @Test
+    public void testCheckTaskInJob() throws Exception {
+
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
+        partitionIdToOffset.put(1, 100L);
+        partitionIdToOffset.put(2, 200L);
+        KafkaTaskInfo routineLoadTaskInfo = new KafkaTaskInfo(new UUID(1, 1), kafkaRoutineLoadJob, 20000,
+                System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
+        kafkaRoutineLoadJob.routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
+        boolean taskExist = routineLoadMgr.checkTaskInJob(kafkaRoutineLoadJob.getId(), routineLoadTaskInfo.getId());
+        Assert.assertTrue(taskExist);
+        boolean taskNotExist = routineLoadMgr.checkTaskInJob(-1L, routineLoadTaskInfo.getId());
+        Assert.assertFalse(taskNotExist);
     }
 }

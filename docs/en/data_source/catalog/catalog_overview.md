@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Overview
@@ -17,7 +17,7 @@ StarRocks supports the catalog feature from v2.3 onwards. Catalogs enable you to
 
 Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
 
-![figure1](../../assets/3.8.1.png)
+![figure1](../../_assets/3.8.1.png)
 
 - **Internal catalog** manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default_catalog](../catalog/default_catalog.md).
 
@@ -39,7 +39,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
 ## Access catalog
 
-You can use the [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
+You can use the [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
 
 ## Query data
 

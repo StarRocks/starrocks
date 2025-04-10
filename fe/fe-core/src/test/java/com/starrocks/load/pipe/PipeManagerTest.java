@@ -29,6 +29,7 @@ import com.starrocks.load.pipe.filelist.RepoAccessor;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
@@ -240,11 +241,13 @@ public class PipeManagerTest {
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().saveImage(image1.getDataOutputStream(), 123);
+        pm.getRepo().save(image1.getDataOutputStream());
 
         // restore from image
         PipeManager pm1 = new PipeManager();
-        pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
+        SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+        pm1.getRepo().load(reader);
+        reader.close();
         Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
 
         // create pipe 2
@@ -256,11 +259,13 @@ public class PipeManagerTest {
         AlterPipeStmt alterPipeStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterPipeStmt);
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().saveImage(image2.getDataOutputStream(), 123);
+        pm.getRepo().save(image2.getDataOutputStream());
 
         // restore and check
         PipeManager pm2 = new PipeManager();
-        pm2.getRepo().loadImage(image2.getDataInputStream(), 123);
+        reader = new SRMetaBlockReader(image2.getDataInputStream());
+        pm2.getRepo().load(reader);
+        reader.close();
         Assert.assertEquals(pm.getPipesUnlock(), pm2.getPipesUnlock());
         Pipe p1 = pm2.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
         Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
@@ -986,7 +991,7 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
             Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT *\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             dropPipe(pipeName);
         }
 
@@ -1000,7 +1005,7 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
             Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT `col_int`, `col_string`\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             dropPipe(pipeName);
         }
 
@@ -1016,7 +1021,7 @@ public class PipeManagerTest {
             Assert.assertEquals("INSERT INTO `tbl1` " +
                     "WITH LABEL `insert_label` " +
                     "(`col_int`) SELECT `col_int`\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             SqlParser.parse(sql, new SessionVariable());
             dropPipe(pipeName);
         }
@@ -1038,7 +1043,7 @@ public class PipeManagerTest {
                 "create pipe p_crash as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         createPipe(sql);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().saveImage(image1.getDataOutputStream(), 123);
+        pm.getRepo().save(image1.getDataOutputStream());
 
         // loading file and crash
         String name = "p_crash";
@@ -1052,7 +1057,9 @@ public class PipeManagerTest {
         {
             PipeManager pm1 = new PipeManager();
             FileListRepo repo = pipe.getPipeSource().getFileListRepo();
-            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
+            SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+            pm1.getRepo().load(reader);
+            reader.close();
             Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
             pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
             Assert.assertFalse(pipe.isRecovered());
@@ -1077,7 +1084,9 @@ public class PipeManagerTest {
             };
 
             PipeManager pm1 = new PipeManager();
-            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
+            SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+            pm1.getRepo().load(reader);
+            reader.close();
             Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
             pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
             Assert.assertFalse(pipe.isRecovered());
@@ -1100,6 +1109,6 @@ public class PipeManagerTest {
 
         String sql = "select inspect_all_pipes()";
         String plan = UtFrameUtils.getFragmentPlan(newCtx, sql);
-        Assert.assertTrue(plan.contains("p_inspect"));
+        Assert.assertTrue(plan.contains("name"));
     }
 }

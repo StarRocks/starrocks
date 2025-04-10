@@ -185,9 +185,10 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_and(FunctionContext* context, const 
 
 // bitmap_to_string
 DEFINE_STRING_UNARY_FN_WITH_IMPL(bitmapToStingImpl, bitmap_ptr) {
-    if (bitmap_ptr->cardinality() > config::max_length_for_bitmap_function) {
+    auto max_cardinality = config::max_length_for_bitmap_function;
+    if (bitmap_ptr->cardinality() > max_cardinality) {
         std::stringstream ss;
-        ss << "bitmap_to_string not supported size > " << config::max_length_for_bitmap_function;
+        ss << "bitmap_to_string not supported size > " << max_cardinality;
         throw std::runtime_error(ss.str());
     }
     return bitmap_ptr->to_string();
@@ -397,7 +398,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
 StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     const constexpr LogicalType TYPE = TYPE_BIGINT;
-    size_t size = columns[0]->size();
+    size_t size = columns[0]->is_constant() ? 1 : columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
 
     Column* data_column = ColumnHelper::get_data_column(columns[0].get());
@@ -439,7 +440,8 @@ StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, c
         // append bitmap
         builder.append(std::move(bitmap));
     }
-    return builder.build(ColumnHelper::is_all_const(columns));
+    auto result = builder.build(false);
+    return columns[0]->is_constant() ? ConstColumn::create(std::move(result), columns[0]->size()) : result;
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks::Columns& columns) {
@@ -561,13 +563,17 @@ StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context, const 
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, const starrocks::Columns& columns) {
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> builder(size);
 
     for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
         BitmapValue* bitmap = viewer.value(row);
         int byteSize = bitmap->get_size_in_bytes();
         std::unique_ptr<char[]> buf;
@@ -591,7 +597,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, 
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* context, const starrocks::Columns& columns) {
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
@@ -675,7 +681,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_in_range(FunctionContext* con
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_binary(FunctionContext* context, const starrocks::Columns& columns) {
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_binary(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
@@ -683,6 +689,10 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_binary(FunctionContext* context, 
 
     raw::RawString buf;
     for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
         BitmapValue* bitmap = viewer.value(row);
         size_t serialize_size = bitmap->get_size_in_bytes();
         buf.resize(serialize_size);

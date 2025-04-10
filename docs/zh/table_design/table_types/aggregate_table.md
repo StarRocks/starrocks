@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 40
+keywords: ['juhe']
 ---
 
 # 聚合表
@@ -74,8 +76,8 @@ PROPERTIES (
 
 > **注意**
 >
-> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../Data_distribution.md#分桶)。
-> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../Data_distribution.md#设置分桶数量)。
+> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../data_distribution/Data_distribution.md#分桶)。
+> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 使用说明
 
@@ -90,7 +92,7 @@ PROPERTIES (
 
 - 指标列：通过在列名后指定聚合函数，定义该列为指标列。一般为需要汇总统计的数据。
 
-- 聚合函数：指标列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+- 聚合函数：指标列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 - 查询时，排序键在多版聚合之前就能进行过滤，而指标列的过滤在多版本聚合之后。因此建议将频繁使用的过滤字段作为排序键，在聚合前就能过滤数据，从而提升查询性能。
 
@@ -98,6 +100,6 @@ PROPERTIES (
 
 ## 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/loading_introduction/Loading_intro.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/Loading_intro.md)。
 
 > 导入时，仅支持全字段导入，即导入任务需要涵盖表的所有列，例如示例中的 `site_id`、`date`、`city_code` 和 `pv` 四个列。

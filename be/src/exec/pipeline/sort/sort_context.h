@@ -105,7 +105,7 @@ public:
                        std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
                        const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
                        int64_t offset, int64_t limit, const std::string& sort_keys,
-                       const std::vector<OrderByType>& order_by_types,
+                       const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters);
 
     SortContextPtr create(int32_t idx);

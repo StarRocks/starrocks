@@ -22,7 +22,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.TableStatistic;
 import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
@@ -32,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -57,6 +57,9 @@ public class BasicStatsMeta implements Writable {
     // it is now changed to record the total number of rows in the table.
     @SerializedName("updateRows")
     private long updateRows;
+
+    @SerializedName("deltaRows")
+    private long deltaRows;
 
     public BasicStatsMeta(long dbId, long tableId, List<String> columns,
                           StatsConstants.AnalyzeType type,
@@ -119,6 +122,9 @@ public class BasicStatsMeta implements Writable {
         return properties;
     }
 
+    /**
+     * Return a number within [0,1] to indicate the health of table stats, 1 means all good.
+     */
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) database.getTable(tableId);
@@ -129,22 +135,19 @@ public class BasicStatsMeta implements Writable {
         long updatePartitionRowCount = 0L;
         long updatePartitionCount = 0L;
 
-        Map<Long, TableStatistic> tableStatistics = GlobalStateMgr.getCurrentStatisticStorage()
+        Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentStatisticStorage()
                 .getTableStatistics(table.getId(), table.getPartitions());
 
         for (Partition partition : table.getPartitions()) {
             tableRowCount += partition.getRowCount();
-            TableStatistic statistic = tableStatistics.getOrDefault(partition.getId(), TableStatistic.unknown());
-            if (!statistic.equals(TableStatistic.unknown())) {
-                cachedTableRowCount += tableStatistics.get(partition.getId()).getRowCount();
-            }
-            LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+            Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
+            cachedTableRowCount += statistic.orElse(0L);
 
-            if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
+            if (!StatisticUtils.isPartitionStatsHealthy(table, partition, this, statistic.orElse(0L))) {
                 updatePartitionCount++;
             }
         }
-        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount, updateRows) - cachedTableRowCount);
+        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount + deltaRows, updateRows) - cachedTableRowCount);
 
         double updateRatio;
         // 1. If none updated partitions, health is 1
@@ -153,9 +156,9 @@ public class BasicStatsMeta implements Writable {
         if (updatePartitionCount == 0) {
             return 1;
         } else if (updatePartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
-            updateRatio = (updateRows * 1.0) / updatePartitionRowCount;
+            updateRatio = (updatePartitionRowCount * 1.0) / tableRowCount;
         } else {
-            double rowUpdateRatio = (updateRows * 1.0) / updatePartitionRowCount;
+            double rowUpdateRatio = (updatePartitionRowCount * 1.0) / tableRowCount;
             double partitionUpdateRatio = (updatePartitionCount * 1.0) / totalPartitionCount;
             updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
         }
@@ -170,8 +173,9 @@ public class BasicStatsMeta implements Writable {
         this.updateRows = updateRows;
     }
 
-    public void increaseUpdateRows(Long delta) {
+    public void increaseDeltaRows(Long delta) {
         updateRows += delta;
+        deltaRows += delta;
     }
 
     public boolean isInitJobMeta() {

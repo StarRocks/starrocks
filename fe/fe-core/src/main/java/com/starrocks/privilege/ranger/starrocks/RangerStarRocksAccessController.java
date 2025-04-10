@@ -148,6 +148,18 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
+    public void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                  String column, PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(RangerStarRocksResource.builder()
+                        .setCatalog(tableName.getCatalog())
+                        .setDatabase(tableName.getDb())
+                        .setTable(tableName.getTbl())
+                        .setColumn(column)
+                        .build(),
+                currentUser, privilegeType);
+    }
+
+    @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         hasPermission(

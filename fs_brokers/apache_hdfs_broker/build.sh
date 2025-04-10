@@ -25,14 +25,12 @@ export STARROCKS_HOME=${ROOT}/../..
 
 . ${STARROCKS_HOME}/env.sh
 
-export BROKER_HOME=$ROOT
+export BROKER_HOME=$ROOT/
+export BROKER_CORE_HOME=$ROOT/src/broker-core/
+export HADOOP_COS_HOME=$ROOT/src/hadoop-cos-shaded/
 
-# prepare thrift
-mkdir -p ${BROKER_HOME}/src/main/resources/thrift
-mkdir -p ${BROKER_HOME}/src/main/thrift
-
-cp ${BROKER_HOME}/../../gensrc/thrift/FileBrokerService.thrift ${BROKER_HOME}/src/main/resources/thrift/
-
+echo ${BROKER_HOME}
+cd ${BROKER_HOME}/src
 $MVN_CMD clean
 $MVN_CMD package -DskipTests
 
@@ -41,17 +39,15 @@ BROKER_OUTPUT=${BROKER_HOME}/output/apache_hdfs_broker/
 rm -rf ${BROKER_OUTPUT}
 
 install -d ${BROKER_OUTPUT}/bin ${BROKER_OUTPUT}/conf \
-           ${BROKER_OUTPUT}lib/
-
-cp -r ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
-cp -r ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${BROKER_OUTPUT}/lib/
+           ${BROKER_OUTPUT}/lib/
 
 cp -r -p ${BROKER_HOME}/bin/*.sh ${BROKER_OUTPUT}/bin/
 cp -r -p ${BROKER_HOME}/conf/*.conf ${BROKER_OUTPUT}/conf/
 cp -r -p ${BROKER_HOME}/conf/*.xml ${BROKER_OUTPUT}/conf/
 cp -r -p ${BROKER_HOME}/conf/log4j.properties ${BROKER_OUTPUT}/conf/
-cp -r -p ${BROKER_HOME}/target/lib/* ${BROKER_OUTPUT}/lib/
-cp -r -p ${BROKER_HOME}/target/apache_hdfs_broker.jar ${BROKER_OUTPUT}/lib/
+cp -r -p ${HADOOP_COS_HOME}/target/hadoop-cos-shaded*.jar ${BROKER_OUTPUT}/lib/
+cp -r -p ${BROKER_CORE_HOME}/target/lib/* ${BROKER_OUTPUT}/lib/
+cp -r -p ${BROKER_CORE_HOME}/target/apache_hdfs_broker.jar ${BROKER_OUTPUT}/lib/
 
 echo ""
 echo "***************************************"

@@ -63,7 +63,7 @@ export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 # Definitions for architecture-related thirdparty
 MACHINE_TYPE=$(uname -m)
 # handle mac m1 platform, change arm64 to aarch64
-if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then
     MACHINE_TYPE="aarch64"
 fi
 
@@ -163,10 +163,10 @@ RAPIDJSON_SOURCE=rapidjson-1.1.0
 RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 
 # simdjson
-SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v2.2.0.tar.gz"
-SIMDJSON_NAME=simdjson-v2.2.0.tar.gz
-SIMDJSON_SOURCE=simdjson-2.2.0
-SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
+SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v3.9.4.tar.gz"
+SIMDJSON_NAME=simdjson-v3.9.4.tar.gz
+SIMDJSON_SOURCE=simdjson-3.9.4
+SIMDJSON_MD5SUM="bdc1dfcb2a89dc0c09e8370808a946f5"
 
 # curl
 CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"
@@ -193,10 +193,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.3.0.tar.gz"
-BRPC_NAME=brpc-1.3.0.tar.gz
-BRPC_SOURCE=brpc-1.3.0
-BRPC_MD5SUM="9470f1a77ec153e82cd8a25dc2148e47"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.8.0.tar.gz"
+BRPC_NAME=brpc-1.8.0.tar.gz
+BRPC_SOURCE=brpc-1.8.0
+BRPC_MD5SUM="f907ccf704e357285f59874b36d38b47"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -320,10 +320,10 @@ GCS_CONNECTOR_SOURCE="gcs-connector-hadoop3-2.2.11-shaded"
 GCS_CONNECTOR_MD5SUM="51fd0eb5cb913a84e4ad8a5ed2069e21"
 
 # aws-sdk-cpp
-AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.10.36.tar.gz"
-AWS_SDK_CPP_NAME="aws-sdk-cpp-1.10.36.tar.gz"
-AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.10.36"
-AWS_SDK_CPP_MD5SUM="8fed635c5ac98b448bc1a98cf7c97c70"
+AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.11.267.tar.gz"
+AWS_SDK_CPP_NAME="aws-sdk-cpp-1.11.267.tar.gz"
+AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.11.267"
+AWS_SDK_CPP_MD5SUM="fdf43e7262f9d08968eb34f9ad18b8e7"
 
 # velocypack: A fast and compact format for serialization and storage
 VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"

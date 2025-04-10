@@ -23,7 +23,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -380,7 +380,7 @@ public class ReportHandlerTest {
                 db.readUnlock();
             }
 
-            Partition partition = table.getPartition(tabletMeta.getPartitionId());
+            PhysicalPartition partition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
             MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
             LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
 

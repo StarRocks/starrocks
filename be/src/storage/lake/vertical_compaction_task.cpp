@@ -48,7 +48,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool));
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool,
+                                                     true /** is compaction**/));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -62,7 +63,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     for (size_t i = 0; i < column_group_size; ++i) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
 
         bool is_key = (i == 0);
@@ -73,32 +74,21 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer, mask_buffer.get(),
                                              source_masks.get(), cancel_func));
     }
+
+    RETURN_IF_ERROR(writer->finish());
+
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the number of rows read may be less than the
     //    number of rows counted in the metadata.
     // 2. If the number of rows is 0, the progress will not be updated
     _context->progress.update(100);
 
-    RETURN_IF_ERROR(writer->finish());
-
-    // update writer stats
-    _context->stats->segment_write_ns += writer->stats().segment_write_ns;
-
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
     txn_log->set_tablet_id(_tablet.id());
     txn_log->set_txn_id(_txn_id);
-    for (auto& rowset : _input_rowsets) {
-        op_compaction->add_input_rowsets(rowset->id());
-    }
-    for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(std::move(file.path));
-        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-    }
-
-    op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
-    op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
-    op_compaction->mutable_output_rowset()->set_overlapped(false);
+    RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get(),
+                                                 _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
@@ -114,6 +104,12 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         const std::vector<uint32_t>& column_group) {
+    if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
+        // can not call `get_read_chunk_size`, for example, if `_total_input_segs` is shrinked to half,
+        // read_chunk_size might be doubled, in this case, this optimization will not take effect
+        return config::lake_compaction_chunk_size;
+    }
+
     int64_t total_mem_footprint = 0;
     for (auto& rowset : _input_rowsets) {
         // in vertical compaction, there may be a lot of column groups, it will waste a lot of time to
@@ -135,8 +131,9 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
             }
         }
     }
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                                _total_num_rows, total_mem_footprint, _total_input_segs);
+    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+                                                config::lake_compaction_chunk_size, _total_num_rows,
+                                                total_mem_footprint, _total_input_segs);
 }
 
 Status VerticalCompactionTask::compact_column_group(bool is_key, int column_group_index, size_t column_group_size,
@@ -162,26 +159,35 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                   config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
+    CompactionTaskStats prev_stats;
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    std::vector<uint64_t> rssid_rowids;
+    rssid_rowids.reserve(chunk_size);
 
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
-    int64 reader_time_ns = 0;
+    const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
-        if (cancel_func()) {
-            return Status::Cancelled("cancelled");
-        }
+
+        RETURN_IF_ERROR(cancel_func());
+
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
         {
-            SCOPED_RAW_TIMER(&reader_time_ns);
-            if (auto st = reader.get_next(chunk.get(), source_masks); st.is_end_of_file()) {
+            auto st = Status::OK();
+            // Collect rssid & rowid only when compact primary key columns
+            if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_key && enable_light_pk_compaction_publish) {
+                st = reader.get_next(chunk.get(), source_masks, &rssid_rowids);
+            } else {
+                st = reader.get_next(chunk.get(), source_masks);
+            }
+            if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
                 return st;
@@ -189,8 +195,13 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         }
 
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
-        RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
+        if (rssid_rowids.empty()) {
+            RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
+        } else {
+            RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key, rssid_rowids));
+        }
         chunk->reset();
+        rssid_rowids.clear();
 
         if (!source_masks->empty()) {
             if (is_key) {
@@ -201,13 +212,18 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 
         _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
                                   column_group_size);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
+        CompactionTaskStats temp_stats;
+        temp_stats.collect(reader.stats());
+        CompactionTaskStats diff_stats = temp_stats - prev_stats;
+        *_context->stats = *_context->stats + diff_stats;
+        prev_stats = temp_stats;
     }
     RETURN_IF_ERROR(writer->flush_columns());
 
-    // add reader stats
-    _context->stats->reader_time_ns += reader_time_ns;
-    _context->stats->accumulate(reader.stats());
+    CompactionTaskStats temp_stats;
+    temp_stats.collect(reader.stats());
+    CompactionTaskStats diff_stats = temp_stats - prev_stats;
+    *_context->stats = *_context->stats + diff_stats;
 
     if (is_key) {
         RETURN_IF_ERROR(mask_buffer->flush());

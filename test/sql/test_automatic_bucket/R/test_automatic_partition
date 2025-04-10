@@ -36,6 +36,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- !result
+
 -- name: test_invalid_bucket_size
 create table t0(k int) properties('bucket_size'='0');
 -- result:
@@ -57,6 +58,7 @@ E: (5064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
 alter table t set('bucket_size'='2048');
 -- result:
 -- !result
+
 -- name: test_automatic_bucket
 create database kkk;
 -- result:
@@ -88,6 +90,7 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 alter table t set('bucket_size'='1');
 -- result:
 -- !result
+
 -- name: test_range_partition @sequential
 create database ttt;
 -- result:
@@ -146,6 +149,7 @@ select * from t;
 2021-01-01	1
 2021-01-05	1
 -- !result
+
 -- name: test_list_partition @sequential
 create database ddd;
 -- result:
@@ -204,6 +208,7 @@ select * from t;
 2021-01-01	1
 2021-01-03	1
 -- !result
+
 -- name: test_expr_partition @sequential
 create database eee;
 -- result:
@@ -257,6 +262,7 @@ select * from t;
 2021-01-01	1
 2021-01-01	1
 -- !result
+
 -- name: test_schema_change @sequential
 create table t(k date, v int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -360,6 +366,7 @@ select * from t;
 2021-01-05	None	1
 2021-01-05	None	2
 -- !result
+
 -- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -440,4 +447,49 @@ select k, v1 from t;
 2021-01-01	3
 2021-01-03	1
 2021-01-03	2
+-- !result
+
+-- name: test_delete
+create table t(k int, v int)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+[]
+-- !result
+insert into t values(1,1);
+-- result:
+[]
+-- !result
+insert into t values(1,2);
+-- result:
+[]
+-- !result
+insert into t values(1,3);
+-- result:
+[]
+-- !result
+insert into t values(1,4);
+-- result:
+[]
+-- !result
+insert into t values(1,5);
+-- result:
+[]
+-- !result
+select * from t;
+-- result:
+1	2
+1	3
+1	4
+1	5
+1	1
+-- !result
+delete from t where k = 1;
+-- result:
+[]
+-- !result
+select * from t;
+-- result:
 -- !result

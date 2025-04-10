@@ -95,6 +95,12 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
+        for (int i = 0; i < size; i++) {
+            CppType index_value;
+            page_decoder.at_index(i, &index_value);
+            ASSERT_EQ(src[i], index_value);
+        }
+
         ASSERT_EQ(0, page_decoder.current_index());
 
         auto column = ChunkHelper::column_from_field_type(Type, false);
@@ -108,7 +114,7 @@ public:
         }
 
         auto column1 = ChunkHelper::column_from_field_type(Type, false);
-        page_decoder.seek_to_position_in_page(0);
+        ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
 
         SparseRange<> read_range;
@@ -136,7 +142,7 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
-            page_decoder.seek_to_position_in_page(seek_off);
+            ASSERT_TRUE(page_decoder.seek_to_position_in_page(seek_off).ok());
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);

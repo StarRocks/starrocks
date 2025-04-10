@@ -1,6 +1,8 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
+
+import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
 
 # regexp_extract
 
@@ -16,21 +18,92 @@ VARCHAR regexp_extract(VARCHAR str, VARCHAR pattern, int pos)
 
 ## Examples
 
-```Plain Text
-MySQL > SELECT regexp_extract('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
-+-------------------------------------------------------------+
-| regexp_extract('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1) |
-+-------------------------------------------------------------+
-| b                                                           |
-+-------------------------------------------------------------+
+<Tip />
 
-MySQL > SELECT regexp_extract('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 2);
-+-------------------------------------------------------------+
-| regexp_extract('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 2) |
-+-------------------------------------------------------------+
-| d                                                           |
-+-------------------------------------------------------------+
+Given this data:
+
+```SQL
+SELECT HourlySkyConditions FROM quickstart.weatherdata
+WHERE HourlySkyConditions LIKE '%OVC%'
+LIMIT 10;
 ```
+
+```plaintext
++---------------------+
+| HourlySkyConditions |
++---------------------+
+| OVC:08 110          |
+| OVC:08 120          |
+| OVC:08 120          |
+| OVC:08 30           |
+| OVC:08 29           |
+| OVC:08 27           |
+| OVC:08 26           |
+| OVC:08 22           |
+| OVC:08 23           |
+| OVC:08 22           |
++---------------------+
+10 rows in set (0.03 sec)
+```
+
+### Return the two sets of digits following the string `OVC: `
+
+```SQL
+SELECT regexp_extract(HourlySkyConditions, 'OVC:(\\d+ \\d+)', 1) FROM quickstart.weatherdata
+WHERE HourlySkyConditions LIKE '%OVC%'
+LIMIT 10;
+```
+
+```plaintext
++-----------------------------------------------------------+
+| regexp_extract(HourlySkyConditions, 'OVC:(\\d+ \\d+)', 1) |
++-----------------------------------------------------------+
+| 08 110                                                    |
+| 08 120                                                    |
+| 08 120                                                    |
+| 08 30                                                     |
+| 08 29                                                     |
+| 08 27                                                     |
+| 08 26                                                     |
+| 08 22                                                     |
+| 08 23                                                     |
+| 08 22                                                     |
++-----------------------------------------------------------+
+10 rows in set (0.01 sec)
+```
+
+### Return only the second set of digits following the string `OVC: `
+
+```SQL
+SELECT regexp_extract(HourlySkyConditions, 'OVC:(\\d+) (\\d+)', 2) FROM quickstart.weatherdata WHERE HourlySkyConditions LIKE '%OVC%' LIMIT 10;
+```
+
+```plaintext
++-------------------------------------------------------------+
+| regexp_extract(HourlySkyConditions, 'OVC:(\\d+) (\\d+)', 2) |
++-------------------------------------------------------------+
+| 110                                                         |
+| 120                                                         |
+| 120                                                         |
+| 30                                                          |
+| 29                                                          |
+| 27                                                          |
+| 26                                                          |
+| 22                                                          |
+| 23                                                          |
+| 22                                                          |
++-------------------------------------------------------------+
+10 rows in set (0.01 sec)
+```
+
+:::tip
+The same result could be returned by not wrapping the first set of digits in a matching group `()` and returning the first group:
+
+```SQL
+regexp_extract(HourlySkyConditions, 'OVC:\\d+ (\\d+)', 1)
+```
+
+:::
 
 ## keyword
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 INSERT INTO FILES 导出数据
@@ -45,7 +45,12 @@ VALUES
 
 表 `sales_records` 包含了每个交易的交易 ID `record_id`、销售人员 `seller`、商店 ID `store_id`、时间 `sales_time` 和销售额 `sales_amt`。该表根据 `sales_time` 以日为单位分区。
 
-此外，您还需要准备一个具有写权限的远程存储系统。以下示例使用启用了简单验证的 HDFS 集群。有关支持的远程存储系统和认证方法，请参阅 [SQL参考 - FILES()](../sql-reference/sql-functions/table-functions/files.md)。
+此外，您还需要准备一个具有写权限的远程存储系统。以下示例使用了两种远程存储系统：
+
+- 启用了简单验证的 HDFS 集群。
+- 通过 IAM User 认证介入 AWS S3 储存空间。
+
+有关 FILES() 支持的远程存储系统和认证方法，请参阅 [SQL参考 - FILES()](../sql-reference/sql-functions/table-functions/files.md)。
 
 ## 导出数据
 
@@ -55,20 +60,44 @@ INSERT INTO FILES 支持将数据导出到单个文件或多个文件。您可�
 
 ### 导出数据到多个文件
 
-默认情况下，INSERT INTO FILES 会将数据导出到多个数据文件中，每个文件的大小为 1 GB。您可以使用`max_file_size` 属性配置文件大小。
+默认情况下，INSERT INTO FILES 会将数据导出到多个数据文件中，每个文件的大小为 1 GB。您可以使用`target_max_file_size` 属性配置文件大小, 单位是 Byte。
 
 以下示例将 `sales_records` 中的所有数据行导出为多个以 `data1` 为前缀的 Parquet 文件。每个文件的大小为 1 KB。
+
+:::note
+
+此处将 `target_max_file_size` 设置为 1 KB 是为了通过小数据集演示导入到多个文件中。在生产环境中，强烈建议将该值设置在几百 MB 到几 GB 的范围内。
+
+:::
+
+- **导出至 S3：**
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "s3://mybucket/unload/data1",
+    "format" = "parquet",
+    "compression" = "uncompressed",
+    "target_max_file_size" = "1024", -- 1KB
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy",
+    "aws.s3.region" = "us-west-2"
+)
+SELECT * FROM sales_records;
+```
+
+- **导出至 HDFS：**
 
 ```SQL
 INSERT INTO 
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data1",
     "format" = "parquet",
+    "compression" = "uncompressed",
+    "target_max_file_size" = "1024", -- 1KB
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "max_file_size" = "1KB"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
@@ -77,18 +106,36 @@ SELECT * FROM sales_records;
 
 您还可以使用 `partition_by` 属性提取指定列的值，从而将数据文件分别存储到不同路径中。
 
-以下示例将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
+以下示例将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
+
+- **导出至 S3：**
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "s3://mybucket/unload/partitioned/",
+    "format" = "parquet",
+    "compression" = "lz4",
+    "partition_by" = "sales_time",
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy",
+    "aws.s3.region" = "us-west-2"
+)
+SELECT * FROM sales_records;
+```
+
+- **导出至 HDFS：**
 
 ```SQL
 INSERT INTO 
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
+    "compression" = "lz4",
+    "partition_by" = "sales_time",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "partition_by" = "sales_time"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
@@ -99,37 +146,55 @@ SELECT * FROM sales_records;
 
 以下示例将 `sales_records` 中的所有数据行导出为以 `data2` 为前缀的单个 Parquet 文件。
 
+- **导出至 S3：**
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "s3://mybucket/unload/data2",
+    "format" = "parquet",
+    "compression" = "lz4",
+    "single" = "true",
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy",
+    "aws.s3.region" = "us-west-2"
+)
+SELECT * FROM sales_records;
+```
+
+- **导出至 HDFS：**
+
 ```SQL
 INSERT INTO 
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data2",
     "format" = "parquet",
+    "compression" = "lz4",
+    "single" = "true",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "single" = "true"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
 
-### 导出数据到 S3 (MinIO)
+### 导出至 MinIO
 
-以下示例将 `sales_records` 中的所有数据行导出至 MinIO。
+用于 MinIO 导出的参数与用于 AWS S3 导出的参数不同。
 
 ```SQL
 INSERT INTO 
 FILES(
     "path" = "s3://huditest/unload/data3",
     "format" = "parquet",
-    "aws.s3.access_key" = "admin",
-    "aws.s3.secret_key" = "password",
+    "compression" = "zstd",
+    "single" = "true",
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy",
     "aws.s3.region" = "us-west-2",
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.enable_ssl" = "false",
     "aws.s3.enable_path_style_access" = "true",
-    "compression" = "zstd",
-    "single" = "true",
     "aws.s3.endpoint" = "http://minio:9000"
 )
 SELECT * FROM sales_records;
@@ -137,5 +202,5 @@ SELECT * FROM sales_records;
 
 ## 另请参阅
 
-- 有关使用 INSERT 的更多说明，请参阅 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。
+- 有关使用 INSERT 的更多说明，请参阅 [SQL 参考 - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。
 - 有关使用 FILES() 的更多说明，请参阅 [SQL 参考 - FILES()](../sql-reference/sql-functions/table-functions/files.md)。

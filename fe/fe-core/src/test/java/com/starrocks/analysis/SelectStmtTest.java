@@ -180,6 +180,13 @@ public class SelectStmtTest {
     }
 
     @Test
+    void testSessionUserFunSupport() throws Exception {
+        String sql = "select session_user()";
+        String result = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(result.contains("root"));
+    }
+
+    @Test
     void testTimeFunSupport() throws Exception {
         String sql = "select current_timestamp()";
         starRocksAssert.query(sql).explainQuery();
@@ -320,37 +327,15 @@ public class SelectStmtTest {
     }
 
     @Test
-    void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
+    void testGroupByCountDistinctWithSkewHintLossPredicate() throws Exception {
         FeConstants.runningUnitTest = true;
-        // array is not supported now
         String sql =
-                "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
+                "select t from(select cast(k1 as int), count(distinct [skew] cast(k2 as int)) as t from db1.tbl1 group by cast(k1 as int)) temp where t > 1";
         String s = starRocksAssert.query(sql).explainQuery();
-        Assert.assertTrue(s, s.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:3: expr | 4: count\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(4: count)\n" +
-                "  |  group by: 3: expr\n" +
-                "  |  \n" +
-                "  3:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(2: split)\n" +
-                "  |  group by: 3: expr\n" +
-                "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 2: split, 3: expr\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 2> : split('a,b,c', ',')\n" +
-                "  |  <slot 3> : 'aaa'\n" +
-                "  |  \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL"));
+        Assert.assertTrue(s, s.contains(" 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(7: count)\n" +
+                "  |  group by: 5: cast\n" +
+                "  |  having: 7: count > 1"));
         FeConstants.runningUnitTest = false;
     }
 

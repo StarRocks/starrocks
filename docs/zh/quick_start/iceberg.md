@@ -1,11 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_position: 3
 description: "湖仓分析"
 toc_max_heading_level: 2
+keywords: ['iceberg']
 ---
-import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 # 基于 Apache Iceberg 的数据湖分析
 

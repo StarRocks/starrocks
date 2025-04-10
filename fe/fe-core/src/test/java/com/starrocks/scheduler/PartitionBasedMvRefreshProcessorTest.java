@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
@@ -31,6 +32,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
@@ -43,17 +45,20 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -70,6 +75,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -359,24 +365,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         }
     }
 
-    private void refreshMVRange(String mvName, boolean force) throws Exception {
-        refreshMVRange(mvName, null, null, force);
-    }
-
-    private void refreshMVRange(String mvName, String start, String end, boolean force) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        sb.append("refresh materialized view " + mvName);
-        if (start != null && end != null) {
-            sb.append(String.format(" partition start('%s') end('%s')", start, end));
-        }
-        if (force) {
-            sb.append(" force");
-        }
-        sb.append(" with sync mode");
-        String sql = sb.toString();
-        starRocksAssert.getCtx().executeSql(sql);
-    }
-
     private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
@@ -400,7 +388,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertFalse(plan.contains("partitions=5/5"));
+            PlanTestBase.assertContains(plan, "partitions=5/5");
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail(e.getMessage());
@@ -581,10 +569,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     initAndExecuteTaskRun(taskRun);
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-                    TaskRun run = tm.getTaskRunManager().getRunnableTaskRun(taskId);
+                    TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+                    TaskRun run = taskRunScheduler.getRunnableTaskRun(taskId);
                     Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), run.getStatus().getPriority());
 
-                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                    while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
                     }
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
@@ -2984,7 +2973,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         try {
             initAndExecuteTaskRun(taskRun);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("error-msg : User Cancelled"));
+            Assert.assertTrue(e.getMessage().contains("User Cancelled"));
             starRocksAssert.dropMaterializedView("hive_parttbl_mv1");
             return;
         }
@@ -3073,22 +3062,86 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     initAndExecuteTaskRun(taskRun);
 
                     // without db name
-                    Assert.assertFalse(tm.showTaskRunStatus(null).isEmpty());
-                    Assert.assertFalse(tm.showTasks(null).isEmpty());
-                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(null).isEmpty());
+                    Assert.assertFalse(tm.getMatchedTaskRunStatus(null).isEmpty());
+                    Assert.assertFalse(tm.filterTasks(null).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null).isEmpty());
 
                     // specific db
-                    Assert.assertFalse(tm.showTaskRunStatus(TEST_DB_NAME).isEmpty());
-                    Assert.assertFalse(tm.showTasks(TEST_DB_NAME).isEmpty());
-                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(TEST_DB_NAME).isEmpty());
+                    TGetTasksParams getTasksParams = new TGetTasksParams();
+                    getTasksParams.setDb(TEST_DB_NAME);
+                    Assert.assertFalse(tm.getMatchedTaskRunStatus(getTasksParams).isEmpty());
+                    Assert.assertFalse(tm.filterTasks(getTasksParams).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME).isEmpty());
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-                    Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
-                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                    TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+                    Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
+
+                    while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
                     }
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
+    }
+
+    @Test
+    public void testRefreshWithCachePartitionTraits() {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
+                        "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;",
+                () -> {
+                    MaterializedView mv = getMv("test", "test_mv1");
+                    PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                    RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
+                    QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
+                    Assert.assertTrue(queryCacheStats != null);
+                    queryCacheStats.getCounter().forEach((key, value) -> {
+                        if (key.contains("cache_partitionNames")) {
+                            Assert.assertEquals(1L, value.longValue());
+                        } else if (key.contains("cache_getPartitionKeyRange")) {
+                            Assert.assertEquals(3L, value.longValue());
+                        } else {
+                            Assert.assertEquals(1L, value.longValue());
+                        }
+                    });
+                    Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
+                    Assert.assertTrue(partitionsToRefresh1.isEmpty());
+                });
+    }
+
+    /**
+     * When refresh some partitions of MV, each refresh task should only refresh the corresponding partitions of base
+     * table instead of all of them
+     */
+    @Test
+    public void testRefreshExternalTablePrecise() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_mv_external\n" +
+                "PARTITION BY date_trunc('day', l_shipdate) \n" +
+                "distributed by hash(l_orderkey) buckets 3\n" +
+                "refresh deferred manual\n" +
+                " properties ('partition_refresh_number'='1') \n" +
+                "as SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        List<List<String>> calls = Lists.newArrayList();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public void refreshTable(String catalogName, String srDbName, Table table,
+                                     List<String> partitionNames, boolean onlyCachedPartitions) {
+                calls.add(partitionNames);
+            }
+        };
+
+        starRocksAssert.refreshMvPartition("refresh materialized view test_mv_external partition " +
+                " start('1998-01-01') end('1998-01-04')");
+        Assert.assertEquals(
+                Lists.newArrayList(
+                        Lists.newArrayList("l_shipdate=1998-01-01"),
+                        Lists.newArrayList("l_shipdate=1998-01-02"),
+                        Lists.newArrayList("l_shipdate=1998-01-03")
+                ),
+                calls);
     }
 }

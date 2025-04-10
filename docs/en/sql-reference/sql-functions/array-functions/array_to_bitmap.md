@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_to_bitmap
@@ -16,7 +16,7 @@ BITMAP array_to_bitmap(array)
 
 ## Parameters
 
-`array`: Elements in an array can be of the INT, TINYINT, or SMALLINT type.
+`array`: Elements in an array can be of the BIGINT, INT, TINYINT, or SMALLINT type.
 
 ## Return value
 

@@ -59,6 +59,7 @@ import org.roaringbitmap.RoaringBitmap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedList;
@@ -67,6 +68,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -152,8 +154,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     protected double fragmentCost;
 
-    protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
-    protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
+    protected Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newHashMap();
+    protected Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newHashMap();
 
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
@@ -635,34 +637,33 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return transferQueryStatisticsWithEveryBatch;
     }
 
-    public void collectBuildRuntimeFilters(PlanNode root) {
-        if (root instanceof ExchangeNode) {
-            return;
-        }
-
-        if (root instanceof RuntimeFilterBuildNode) {
-            RuntimeFilterBuildNode rfBuildNode = (RuntimeFilterBuildNode) root;
-            for (RuntimeFilterDescription description : rfBuildNode.getBuildRuntimeFilters()) {
-                buildRuntimeFilters.put(description.getFilterId(), description);
-            }
-        }
-
-        for (PlanNode node : root.getChildren()) {
-            collectBuildRuntimeFilters(node);
-        }
+    public void collectBuildRuntimeFilters() {
+        Map<Integer, RuntimeFilterDescription> filters = Maps.newHashMap();
+        collectNodes().stream()
+                .filter(node -> node instanceof RuntimeFilterBuildNode)
+                .flatMap(node -> ((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().stream())
+                .forEach(desc -> filters.put(desc.getFilterId(), desc));
+        buildRuntimeFilters = filters;
     }
 
-    public void collectProbeRuntimeFilters(PlanNode root) {
-        for (RuntimeFilterDescription description : root.getProbeRuntimeFilters()) {
-            probeRuntimeFilters.put(description.getFilterId(), description);
-        }
+    public void collectProbeRuntimeFilters() {
+        Map<Integer, RuntimeFilterDescription> filters = Maps.newHashMap();
+        collectNodes().stream()
+                .flatMap(node -> node.getProbeRuntimeFilters().stream())
+                .forEach(desc -> filters.put(desc.getFilterId(), desc));
+        probeRuntimeFilters = filters;
+    }
 
-        if (root instanceof ExchangeNode) {
-            return;
-        }
+    public List<PlanNode> collectNodes() {
+        List<PlanNode> nodes = Lists.newArrayList();
+        collectNodesImpl(getPlanRoot(), nodes);
+        return nodes;
+    }
 
-        for (PlanNode node : root.getChildren()) {
-            collectProbeRuntimeFilters(node);
+    private void collectNodesImpl(PlanNode root, List<PlanNode> nodes) {
+        nodes.add(root);
+        if (!(root instanceof ExchangeNode)) {
+            root.getChildren().forEach(child -> collectNodesImpl(child, nodes));
         }
     }
 
@@ -815,21 +816,31 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
-
-    private RoaringBitmap collectShuffleHashBucketRfIds(PlanNode root) {
+    private RoaringBitmap collectNonBroadcastRfIds(PlanNode root) {
         RoaringBitmap filterIds = root.getChildren().stream()
                 .filter(child -> child.getFragmentId().equals(root.getFragmentId()))
-                .map(this::collectShuffleHashBucketRfIds)
+                .map(this::collectNonBroadcastRfIds)
                 .reduce(RoaringBitmap.bitmapOf(), (a, b) -> RoaringBitmap.or(a, b));
         if (root instanceof HashJoinNode) {
             HashJoinNode joinNode = (HashJoinNode) root;
-            if (joinNode.getDistrMode().equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+            if (!joinNode.isBroadcast()) {
                 joinNode.getBuildRuntimeFilters().forEach(rf -> filterIds.add(rf.getFilterId()));
             }
         }
         return filterIds;
     }
 
+    /**
+     * In the same fragment, collect all nodes of the right subtree of BroadcastJoinNode that will build global RFs
+     * For example, the following plan will add 3 and 4 to {@code localRightOffsprings}.
+     * <pre>{@code
+     *       Broadcast Join#1
+     *        /        \
+     *      Node#2  ProjectNode#3
+     *                 |
+     *          ExchangeSourceNode#4
+     * }</pre>
+     */
     private RoaringBitmap collectLocalRightOffspringsOfBroadcastJoin(PlanNode root,
                                                                      RoaringBitmap localRightOffsprings) {
         List<RoaringBitmap> localOffspringsPerChild = root.getChildren().stream()
@@ -868,10 +879,30 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void removeRfOnRightOffspringsOfBroadcastJoin() {
         RoaringBitmap localRightOffsprings = RoaringBitmap.bitmapOf();
         collectLocalRightOffspringsOfBroadcastJoin(getPlanRoot(), localRightOffsprings);
-        RoaringBitmap filterIds = collectShuffleHashBucketRfIds(getPlanRoot());
+
+        RoaringBitmap filterIds = collectNonBroadcastRfIds(getPlanRoot());
         if (localRightOffsprings.isEmpty() || filterIds.isEmpty()) {
             return;
         }
+
         removeRfOfRightOffspring(getPlanRoot(), localRightOffsprings, filterIds);
     }
+
+    public void removeDictMappingProbeRuntimeFilters() {
+        removeDictMappingProbeRuntimeFilters(getPlanRoot());
+    }
+
+    private void removeDictMappingProbeRuntimeFilters(PlanNode root) {
+        root.getProbeRuntimeFilters().removeIf(filter -> {
+            Expr probExpr = filter.getNodeIdToProbeExpr().get(root.getId().asInt());
+            return probExpr.containsDictMappingExpr();
+        });
+
+        for (PlanNode child : root.getChildren()) {
+            if (child.getFragmentId().equals(root.getFragmentId())) {
+                removeDictMappingProbeRuntimeFilters(child);
+            }
+        }
+    }
+
 }

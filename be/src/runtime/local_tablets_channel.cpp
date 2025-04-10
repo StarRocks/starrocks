@@ -90,6 +90,14 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
         _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
+    for (auto& index_schema : params.schema().indexes()) {
+        if (index_schema.id() != _index_id) {
+            continue;
+        }
+        for (auto& entry : index_schema.column_to_expr_value()) {
+            _column_to_expr_value.insert({entry.first, entry.second});
+        }
+    }
 
     RETURN_IF_ERROR(_open_all_writers(params));
 
@@ -231,11 +239,20 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
         auto tablet_id = tablet_ids[row_indexes[from]];
         auto it = _delta_writers.find(tablet_id);
-        DCHECK(it != _delta_writers.end());
+        if (it == _delta_writers.end()) {
+            LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " not found tablet_id: " << tablet_id;
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(
+                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
+                                _txn_id, print_id(request.id())));
+            return;
+        }
         auto& delta_writer = it->second;
 
         // back pressure OlapTableSink since there are too many memtables need to flush
-        while (delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
+        while (delta_writer->get_state() != kAborted &&
+               delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
             auto t1 = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 > request.timeout_ms()) {
                 LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
@@ -349,8 +366,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
-            _immutable_partition_ids.insert(writer->partition_id());
             immutable_tablet_ids.insert(tablet_id);
+
+            _insert_immutable_partition(writer->partition_id());
         }
     }
 
@@ -413,6 +431,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {
+    if (_is_immutable_partition_empty() && config::stale_memtable_flush_time_sec <= 0) {
+        return;
+    }
     bool high_mem_usage = false;
     bool full_mem_usage = false;
     if (_mem_tracker->limit_exceeded_by_ratio(70) ||
@@ -433,7 +454,7 @@ void LocalTabletsChannel::_flush_stale_memtables() {
         bool need_flush = false;
         auto last_write_ts = writer->last_write_ts();
         if (last_write_ts > 0) {
-            if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
+            if (_has_immutable_partition(writer->partition_id())) {
                 if (high_mem_usage) {
                     // immutable tablet flush stale memtable immediately when high mem usage
                     need_flush = true;
@@ -621,7 +642,8 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.ptable_schema_param = params.schema();
+        options.ptable_schema_param = &(params.schema());
+        options.column_to_expr_value = &(_column_to_expr_value);
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -663,11 +685,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     if (_is_replicated_storage) {
         std::stringstream ss;
         ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open "
-           << _delta_writers.size() << " delta writer: ";
-        for (auto& [tablet_id, delta_writer] : _delta_writers) {
-            ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
-        }
-        ss << " " << failed_tablet_ids.size() << " failed_tablets: ";
+           << _delta_writers.size() << " delta writers, " << failed_tablet_ids.size() << " failed_tablets: ";
         for (auto& tablet_id : failed_tablet_ids) {
             ss << tablet_id << ",";
         }
@@ -815,7 +833,9 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.ptable_schema_param = &(params.schema());
         options.immutable_tablet_size = params.immutable_tablet_size();
+        options.column_to_expr_value = &(_column_to_expr_value);
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);

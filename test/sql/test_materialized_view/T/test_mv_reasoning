@@ -1,0 +1,104 @@
+-- name: test_mv_rewrite_reason
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1(
+    c1 date,
+    c2 int, 
+    c3 int, 
+    c4 string
+) 
+PARTITION BY date_trunc('DAY', c1);
+
+INSERT INTO t1 VALUES ('1988-07-01', 1, 1, 'a');
+INSERT INTO t1 VALUES ('1988-07-01', 1, 2, 'a');
+INSERT INTO t1 VALUES ('1988-07-02', 1, 1, 'a');
+INSERT INTO t1 VALUES ('1988-07-02', 1, 2, 'a');
+INSERT INTO t1 VALUES ('1988-07-03', 1, 1, 'a');
+INSERT INTO t1 VALUES ('1988-07-03', 1, 2, 'a');
+
+-- Aggregation MV
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (c1)
+REFRESH ASYNC
+AS 
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+-- normal rewrite
+TRACE REASON MV
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+TRACE REASON MV
+    SELECT c1, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1;
+TRACE REASON MV
+    SELECT c1, sum(c3), count(c3)
+    FROM t1
+    WHERE c2 > 1
+    GROUP BY c1;
+-- cannot rewrite
+TRACE REASON MV
+    SELECT c4, sum(c3), count(c3)
+    FROM t1
+    WHERE c2 > 1
+    GROUP BY c4;
+TRACE REASON MV
+    SELECT c1, sum(c3), count(c3)
+    FROM t1
+    WHERE c4 > 'a'
+    GROUP BY c1;
+
+-- Projection MV
+DROP MATERIALIZED VIEW mv1;
+CREATE MATERIALIZED VIEW mv1
+REFRESH ASYNC
+PARTITION BY (c1)
+AS 
+    SELECT c1, c2, c3
+    FROM t1;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+TRACE REASON MV
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+TRACE REASON MV
+    SELECT c1, c2, c4, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2, c4;
+TRACE REASON MV
+    SELECT c1, c2, c4
+    FROM t1;
+TRACE REASON MV
+    SELECT c1, c2
+    FROM t1
+    WHERE c4='a';
+
+
+ALTER MATERIALIZED VIEW mv1 INACTIVE;
+TRACE REASON MV
+    SELECT c1, c2, sum(c3), count(c3)
+    FROM t1
+    GROUP BY c1, c2;
+
+-- MV Unsupported
+DROP MATERIALIZED VIEW mv1;
+CREATE MATERIALIZED VIEW mv1
+REFRESH ASYNC
+PARTITION BY (c1)
+AS 
+    SELECT c1, c2, c3
+    FROM t1
+    ORDER BY c1;
+TRACE REASON MV
+    SELECT c1, c2, c3
+    FROM t1
+    ORDER BY c1;

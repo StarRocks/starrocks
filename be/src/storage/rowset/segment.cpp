@@ -348,7 +348,12 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);
-        column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
+                       << footer->columns(it->second).column_id() << "' and column '" << column_pb.column_id() << "'";
+            return Status::InternalError("Duplicate column id");
+        }
     }
 
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
@@ -358,7 +363,7 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             continue;
         }
 
-        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
+        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this, &column);
         if (!res.ok()) {
             return res.status();
         }
@@ -371,7 +376,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
-        return _column_readers.at(id)->new_iterator(path);
+        return _column_readers.at(id)->new_iterator(path, &column);
     } else if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
@@ -389,7 +394,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        return iter->second->new_iterator(path);
+        return iter->second->new_iterator(path, nullptr);
     } else {
         return Status::NotFound(fmt::format("{} does not contain column of id {}", _segment_file_info.path, id));
     }
@@ -411,7 +416,8 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     } else {
         tablet_schema = TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]);
     }
-    FileInfo info{.path = dcg.column_files(parent_name(_segment_file_info.path))[idx]};
+    ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
+    FileInfo info{.path = filepath};
     return Segment::open(_fs, info, 0, tablet_schema, nullptr);
 }
 

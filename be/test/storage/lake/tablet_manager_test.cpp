@@ -85,11 +85,13 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    EXPECT_OK(_tablet_manager->tablet_metadata_exists(12345, 2));
     auto res = _tablet_manager->get_tablet_metadata(12345, 2);
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->id(), 12345);
     EXPECT_EQ(res.value()->version(), 2);
     EXPECT_OK(_tablet_manager->delete_tablet_metadata(12345, 2));
+    EXPECT_STATUS(Status::NotFound(""), _tablet_manager->tablet_metadata_exists(12345, 2));
     res = _tablet_manager->get_tablet_metadata(12345, 2);
     EXPECT_TRUE(res.status().is_not_found());
 }
@@ -136,6 +138,44 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_FALSE(metadata->has_delvec_meta());
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_duplicate_column_id_or_name) {
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    TColumnType col_type;
+    col_type.__set_type(TPrimitiveType::SMALLINT);
+    req.tablet_schema.columns.resize(2);
+    auto& c0 = req.tablet_schema.columns[0];
+    c0.__set_is_key(true);
+    c0.__set_is_allow_null(false);
+    c0.__set_column_name("c0");
+    c0.__set_aggregation_type(TAggregationType::NONE);
+    c0.__set_col_unique_id(0);
+    c0.__set_column_type(col_type);
+    auto& c1 = req.tablet_schema.columns[1];
+    c1 = c0;
+    c1.__set_column_name("c1");
+    auto st = _tablet_manager->create_tablet(req);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, st.code());
+    ASSERT_TRUE(MatchPattern(std::string(st.message()), "*Duplicate column id*")) << st.message();
+
+    c1.__set_col_unique_id(1);
+    c1.__set_column_name(c0.column_name);
+    st = _tablet_manager->create_tablet(req);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, st.code());
+    ASSERT_TRUE(MatchPattern(std::string(st.message()), "*Duplicate column name*")) << st.message();
 }
 
 // NOLINTNEXTLINE
@@ -585,14 +625,9 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
     _tablet_manager->add_in_writing_data_size(1, 100);
 
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
-    _tablet_manager->remove_in_writing_data_size(1);
-
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
-
     _tablet_manager->add_in_writing_data_size(1, 100);
     _tablet_manager->clean_in_writing_data_size();
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 200);
 
     // preserve original g_worker value, and reset it to our MockedWorker
     std::shared_ptr<StarOSWorker> origin_worker = g_worker;

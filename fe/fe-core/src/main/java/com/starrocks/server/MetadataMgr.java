@@ -24,6 +24,7 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
@@ -60,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -461,16 +463,44 @@ public class MetadataMgr {
                                          ScalarOperator predicate,
                                          long limit) {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
-        Statistics statistics = FeConstants.runningUnitTest ? null :
+        // Get basic/histogram stats from internal statistics.
+        Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
+        if (internalStatistics == null ||
+                internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            // Get basic stats from connector metadata.
             session.setObtainedFromInternalStatistics(false);
-            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            return connectorMetadata.map(metadata -> metadata.getTableStatistics(
-                    session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+            // Avoid `analyze table` to collect table statistics from metadata.
+            if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+                return internalStatistics;
+            } else {
+                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                        session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+                if (connectorBasicStats != null && internalStatistics != null &&
+                        internalStatistics.getColumnStatistics().values().stream().anyMatch(
+                                columnStatistic -> columnStatistic.getHistogram() != null)) {
+                    // combine connector metadata basic stats and histogram from internal stats
+                    Map<ColumnRefOperator, ColumnStatistic> internalColumnStatsMap = internalStatistics.getColumnStatistics();
+                    Map<ColumnRefOperator, ColumnStatistic> combinedColumnStatsMap = Maps.newHashMap();
+                    connectorBasicStats.getColumnStatistics().forEach((key, value) -> {
+                        if (internalColumnStatsMap.containsKey(key)) {
+                            combinedColumnStatsMap.put(key, ColumnStatistic.buildFrom(value).
+                                    setHistogram(internalColumnStatsMap.get(key).getHistogram()).build());
+                        } else {
+                            combinedColumnStatsMap.put(key, value);
+                        }
+                    });
+
+                    return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                } else {
+                    return connectorBasicStats;
+                }
+            }
         } else {
             session.setObtainedFromInternalStatistics(true);
-            return statistics;
+            return internalStatistics;
         }
     }
 

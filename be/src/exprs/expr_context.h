@@ -117,6 +117,11 @@ public:
 
     bool error_if_overflow() const;
 
+    void set_build_from_only_in_filter(bool build_from_only_in_filter) {
+        _build_from_only_in_filter = build_from_only_in_filter;
+    }
+    bool build_from_only_in_filter() const { return _build_from_only_in_filter; }
+
 private:
     friend class Expr;
     friend class OlapScanNode;
@@ -139,6 +144,7 @@ private:
     /// Variables keeping track of current state.
     bool _prepared{false};
     bool _opened{false};
+    bool _build_from_only_in_filter{false};
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed{false};
 };

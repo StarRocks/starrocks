@@ -78,6 +78,7 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,6 +90,7 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public final class MetricRepo {
@@ -113,6 +115,9 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
+
+    public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
+    public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
@@ -231,16 +236,6 @@ public final class MetricRepo {
         // capacity
         generateBackendsTabletMetrics();
 
-        // connections
-        GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
-                "connection_total", MetricUnit.CONNECTIONS, "total connections") {
-            @Override
-            public Integer getValue() {
-                return ExecuteEnv.getInstance().getScheduler().getConnectionNum();
-            }
-        };
-        STARROCKS_METRIC_REGISTER.addMetric(connections);
-
         // journal id
         GaugeMetric<Long> maxJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
                 "max_journal_id", MetricUnit.NOUNIT, "max journal id of this frontends") {
@@ -291,6 +286,19 @@ public final class MetricRepo {
             gauge.addLabel(new MetricLabel("state", state.name()));
             STARROCKS_METRIC_REGISTER.addMetric(gauge);
         }
+
+        GaugeMetric<Long> routineLoadUnstableJobsGauge = new GaugeMetric<Long>("routine_load_jobs",
+                MetricUnit.NOUNIT, "routine load jobs") {
+            @Override
+            public Long getValue() {
+                if (null == routineLoadManger) {
+                    return 0L;
+                }
+                return routineLoadManger.numUnstableJobs();
+            }
+        };
+        routineLoadUnstableJobsGauge.addLabel(new MetricLabel("state", "UNSTABLE"));
+        STARROCKS_METRIC_REGISTER.addMetric(routineLoadUnstableJobsGauge);
 
         // qps, rps, error rate and query latency
         // these metrics should be set an init value, in case that metric calculator is not running
@@ -411,6 +419,13 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
         COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
+
+        COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
+                                                           "total analysis error query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
+        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, 
+                                                           "total internal error query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);
 
         COUNTER_TXN_REJECT =
                 new LongCounterMetric("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
@@ -635,7 +650,7 @@ public final class MetricRepo {
                 "The count of running task_run") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getRunningTaskRunCount();
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunScheduler().getRunningTaskCount();
             }
         };
         runningTaskRunCount.addLabel(new MetricLabel("type", "running_task_run_count"));
@@ -645,7 +660,7 @@ public final class MetricRepo {
                 "The count of pending task_run") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getPendingTaskRunCount();
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunScheduler().getPendingQueueCount();
             }
         };
         pendingTaskRunCount.addLabel(new MetricLabel("type", "pending_task_run_count"));
@@ -655,7 +670,8 @@ public final class MetricRepo {
                 "The count of history task_run") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getHistoryTaskRunCount();
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                        .getTaskRunHistory().getTaskRunCount();
             }
         };
         historyTaskRunCount.addLabel(new MetricLabel("type", "history_task_run_count"));
@@ -924,6 +940,12 @@ public final class MetricRepo {
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
+        //collect connections for per user
+        collectUserConnMetrics(visitor);
+
+        // collect runnning txns of per db
+        collectDbRunningTxnMetrics(visitor);
+
         // collect starmgr related metrics as well
         StarMgrServer.getCurrentState().visitMetrics(visitor);
 
@@ -991,6 +1013,38 @@ public final class MetricRepo {
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
         for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
             visitor.visit(metric);
+        }
+    }
+
+    // collect connections of per user
+    private static void collectUserConnMetrics(MetricVisitor visitor) {
+
+        Map<String, AtomicInteger> userConnectionMap = ExecuteEnv.getInstance().getScheduler().getUserConnectionMap();
+
+        userConnectionMap.forEach((username, connValue) -> {
+            GaugeMetricImpl<Integer> metricConnect =
+                    new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
+                        "total connection");
+            metricConnect.addLabel(new MetricLabel("user", username));
+            metricConnect.setValue(connValue.get());
+            visitor.visit(metricConnect);
+        });
+    }
+
+    // collect runnning txns of per db
+    private static void collectDbRunningTxnMetrics(MetricVisitor visitor) {
+        Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getAllDatabaseTransactionMgrs();
+        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mgr.getDbId());
+            if (null == db) {
+                continue;
+            }
+            GaugeMetricImpl<Integer> txnNum = new GaugeMetricImpl<>("txn_running", MetricUnit.NOUNIT,
+                        "number of running transactions");
+            txnNum.addLabel(new MetricLabel("db", db.getFullName()));
+            txnNum.setValue(mgr.getRunningTxnNums());
+            visitor.visit(txnNum);
         }
     }
 

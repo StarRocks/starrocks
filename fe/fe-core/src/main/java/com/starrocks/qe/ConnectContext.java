@@ -34,12 +34,14 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
@@ -60,6 +62,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
@@ -67,6 +70,7 @@ import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -187,7 +191,7 @@ public class ConnectContext {
     // isLastStmt is true when original stmt is single stmt
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
-    protected boolean isLastStmt;
+    protected boolean isLastStmt = true;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -195,6 +199,9 @@ public class ConnectContext {
     protected boolean isStatisticsJob = false;
     protected boolean isStatisticsContext = false;
     protected boolean needQueued = true;
+
+    // Bypass the authorizer check for certain cases
+    protected boolean bypassAuthorizerCheck = false;
 
     protected DumpInfo dumpInfo;
 
@@ -215,6 +222,10 @@ public class ConnectContext {
     private boolean relationAliasCaseInsensitive = false;
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
+
+    // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
+    // lifecycle instead of per materialized view.
+    private QueryMaterializationContext queryMVContext;
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -262,6 +273,23 @@ public class ConnectContext {
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
+    }
+
+    /**
+     * Build a ConnectContext for normal query.
+     */
+    public static ConnectContext build() {
+        return new ConnectContext();
+    }
+
+    /**
+     * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     */
+    public static ConnectContext buildInner() {
+        ConnectContext connectContext = new ConnectContext();
+        // disable materialized view rewrite for inner query
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        return connectContext;
     }
 
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
@@ -316,17 +344,10 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
-    /**
-     * Set this connect to thread-local if not exists
-     *
-     * @return set or not
-     */
-    public boolean setThreadLocalInfoIfNotExists() {
-        if (threadLocalInfo.get() == null) {
-            threadLocalInfo.set(this);
-            return true;
-        }
-        return false;
+    public static ConnectContext exchangeThreadLocalInfo(ConnectContext ctx) {
+        ConnectContext prev = threadLocalInfo.get();
+        threadLocalInfo.set(ctx);
+        return prev;
     }
 
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
@@ -416,6 +437,7 @@ public class ConnectContext {
     public Map<String, UserVariable> getUserVariables() {
         return userVariables;
     }
+
     public UserVariable getUserVariable(String variable) {
         return userVariables.get(variable);
     }
@@ -455,6 +477,12 @@ public class ConnectContext {
 
     public void setStartTime() {
         startTime = Instant.now();
+        returnRows = 0;
+    }
+
+    @VisibleForTesting
+    public void setStartTime(Instant start) {
+        startTime = start;
         returnRows = 0;
     }
 
@@ -502,12 +530,23 @@ public class ConnectContext {
         this.state = state;
     }
 
-    public String getErrorCode() {
-        return errorCode;
+    public String getNormalizedErrorCode() {
+        // TODO: how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
+        if (StringUtils.isNotEmpty(errorCode)) {
+            // error happens in BE execution.
+            return errorCode;
+        }
+
+        if (state.getErrType() != QueryState.ErrType.UNKNOWN) {
+            // error happens in FE execution.
+            return state.getErrType().name();
+        }
+
+        return "";
     }
 
-    public void setErrorCode(String errorCode) {
-        this.errorCode = errorCode;
+    public void resetErrorCode() {
+        this.errorCode = "";
     }
 
     public void setErrorCodeOnce(String errorCode) {
@@ -716,6 +755,14 @@ public class ConnectContext {
         this.needQueued = needQueued;
     }
 
+    public boolean isBypassAuthorizerCheck() {
+        return bypassAuthorizerCheck;
+    }
+
+    public void setBypassAuthorizerCheck(boolean value) {
+        this.bypassAuthorizerCheck = value;
+    }
+
     public ConnectContext getParent() {
         return parent;
     }
@@ -734,6 +781,14 @@ public class ConnectContext {
 
     public int getForwardTimes() {
         return this.forwardTimes;
+    }
+
+    public QueryMaterializationContext getQueryMVContext() {
+        return queryMVContext;
+    }
+
+    public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
+        this.queryMVContext = queryMVContext;
     }
 
     // kill operation with no protect.
@@ -755,7 +810,7 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
-                        LOG.warn("wait for close fail, break.");
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
                         break;
                     }
                 } catch (InterruptedException e) {
@@ -778,20 +833,25 @@ public class ConnectContext {
         long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
+        String sql = "";
+        if (executor != null) {
+            sql = executor.getOriginStmtInString();
+        }
         if (command == MysqlCommand.COM_SLEEP) {
             if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
                 // Need kill this connection.
-                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS());
-
+                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId,
+                        SqlUtils.sqlPrefix(sql));
                 killFlag = true;
                 killConnection = true;
             }
         } else {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
+                LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId,
+                        SqlUtils.sqlPrefix(sql));
 
                 // Only kill
                 killFlag = true;
@@ -820,6 +880,10 @@ public class ConnectContext {
 
     public int getTotalBackendNumber() {
         return globalStateMgr.getClusterInfo().getTotalBackendNumber();
+    }
+
+    public int getAliveComputeNumber() {
+        return globalStateMgr.getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
     }
 
     public void setPending(boolean pending) {
@@ -874,8 +938,15 @@ public class ConnectContext {
         return executor;
     }
 
+    /**
+     * Bind the context to current scope, exchange the context if it's already existed
+     * Sample usage:
+     * try (var guard = context.bindScope()) {
+     * ......
+     * }
+     */
     public ScopeGuard bindScope() {
-        return ScopeGuard.setIfNotExists(this);
+        return ScopeGuard.bind(this);
     }
 
     /**
@@ -884,20 +955,29 @@ public class ConnectContext {
     public static class ScopeGuard implements AutoCloseable {
 
         private boolean set = false;
+        private ConnectContext prev;
 
         private ScopeGuard() {
         }
 
-        public static ScopeGuard setIfNotExists(ConnectContext session) {
+        private static ScopeGuard bind(ConnectContext session) {
             ScopeGuard res = new ScopeGuard();
-            res.set = session.setThreadLocalInfoIfNotExists();
+            res.prev = exchangeThreadLocalInfo(session);
+            res.set = true;
             return res;
+        }
+
+        public ConnectContext prev() {
+            return prev;
         }
 
         @Override
         public void close() {
             if (set) {
                 ConnectContext.remove();
+            }
+            if (prev != null) {
+                prev.setThreadLocalInfo();
             }
         }
     }

@@ -39,6 +39,10 @@ public class InsertOverwriteJob {
     @SerializedName(value = "targetTableId")
     private long targetTableId;
 
+    @SerializedName(value = "sourcePartitionNames")
+    private List<String> sourcePartitionNames;
+
+
     private transient InsertStmt insertStmt;
 
     public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId, long targetTableId) {
@@ -81,6 +85,14 @@ public class InsertOverwriteJob {
 
     public void setSourcePartitionIds(List<Long> sourcePartitionIds) {
         this.sourcePartitionIds = sourcePartitionIds;
+    }
+
+    public List<String> getSourcePartitionNames() {
+        return sourcePartitionNames;
+    }
+
+    public void setSourcePartitionNames(List<String> sourcePartitionNames) {
+        this.sourcePartitionNames = sourcePartitionNames;
     }
 
     public List<Long> getTmpPartitionIds() {

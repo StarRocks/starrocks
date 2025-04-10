@@ -76,6 +76,13 @@ public class IcebergApiConverterTest {
     }
 
     @Test
+    public void testUUID() {
+        org.apache.iceberg.types.Type icebergType = Types.UUIDType.get();
+        Type resType = fromIcebergType(icebergType);
+        Assert.assertTrue(resType.isBinaryType());
+    }
+
+    @Test
     public void testArray() {
         Assert.assertEquals(fromIcebergType(Types.ListType.ofRequired(136, Types.IntegerType.get())),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));

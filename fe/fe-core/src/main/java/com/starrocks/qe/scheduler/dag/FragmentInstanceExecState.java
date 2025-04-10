@@ -159,6 +159,7 @@ public class FragmentInstanceExecState {
         TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
         try {
             serializedRequest = serializer.serialize(requestToDeploy);
+            requestToDeploy = null;
         } catch (TException ignore) {
             // throw exception means serializedRequest will be empty, and then we will treat it as not serialized
         }
@@ -319,9 +320,6 @@ public class FragmentInstanceExecState {
             case EXECUTING:
             case CANCELLING:
             default:
-                if (params.isSetProfile()) {
-                    profile.update(params.profile);
-                }
                 if (params.isDone()) {
                     if (params.getStatus() == null || params.getStatus().getStatus_code() == TStatusCode.OK) {
                         transitionState(State.FINISHED);
@@ -330,6 +328,12 @@ public class FragmentInstanceExecState {
                     }
                 }
                 return true;
+        }
+    }
+
+    public synchronized void updateRunningProfile(TReportExecStatusParams execStatusParams) {
+        if (execStatusParams.isSetProfile()) {
+            profile.update(execStatusParams.profile);
         }
     }
 

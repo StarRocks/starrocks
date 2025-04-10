@@ -9,6 +9,10 @@
 #   image: copy the artifacts from a artifact docker image.
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
+# The default run_as user when starting the container
+ARG RUN_AS_USER=root
+# The precreated non-privileged user account, the owner of the starrocks assets
+ARG USER=starrocks
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
@@ -24,6 +28,9 @@ FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
 
 FROM ubuntu:22.04
 ARG STARROCKS_ROOT=/opt/starrocks
+ARG USER
+ARG RUN_AS_USER
+ARG GROUP=starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
         default-jdk mysql-client curl vim tree net-tools less tzdata locales netcat && \
@@ -36,22 +43,21 @@ ENV JAVA_HOME=/lib/jvm/default-java
 
 WORKDIR $STARROCKS_ROOT
 
-# Run as starrocks user
-ARG USER=starrocks
-ARG GROUP=starrocks
-RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
-             --shell /usr/sbin/nologin $USER && \
+RUN groupadd --gid 1000 $GROUP && \
+    if [ "$USER" != "root" ]; then \
+        useradd --no-create-home --uid 1000 --gid 1000 --shell /usr/sbin/nologin $USER; \
+    fi && \
     chown -R $USER:$GROUP $STARROCKS_ROOT
+
 USER $USER
 
 # Copy all artifacts to the runtime container image
-COPY --from=artifacts --chown=starrocks:starrocks /release/fe_artifacts/ $STARROCKS_ROOT/
+COPY --from=artifacts --chown=$USER:$GROUP /release/fe_artifacts/ $STARROCKS_ROOT/
 
 # Copy fe k8s scripts to the runtime container image
-COPY --chown=starrocks:starrocks docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
+COPY --chown=$USER:$GROUP docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
 RUN mkdir -p /opt/starrocks/fe/meta
 
-# run as root by default
-USER root
+USER $RUN_AS_USER

@@ -22,6 +22,7 @@
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "common/status.h"
+#include "exprs/function_context.h"
 #include "fmt/core.h"
 #include "jni.h"
 #include "types/logical_type.h"
@@ -148,6 +149,11 @@ void JVMFunctionHelper::_init() {
     _batch_update_if_not_null = _env->GetStaticMethodID(
             _udf_helper_class, "batchUpdateIfNotNull",
             "(Ljava/lang/Object;Ljava/lang/reflect/Method;Lcom/starrocks/udf/FunctionStates;[I[Ljava/lang/Object;)V");
+
+    _batch_create_bytebuf =
+            _env->GetStaticMethodID(_udf_helper_class, "batchCreateDirectBuffer", "(J[II)[Ljava/lang/Object;");
+
+    CHECK(_batch_create_bytebuf) << " not found method batchCreateDirectBuffer plz check jni-packages";
 
     _int_batch_call = _env->GetStaticMethodID(_udf_helper_class, "batchCall",
                                               "([Ljava/lang/Object;Ljava/lang/reflect/Method;I)[I");
@@ -283,6 +289,14 @@ jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
     return res_arr;
 }
 
+jobject JVMFunctionHelper::batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end) {
+    int size = end - begin;
+    auto offsets = _env->NewIntArray(size + 1);
+    _env->SetIntArrayRegion(offsets, 0, size + 1, (const int32_t*)offset);
+    LOCAL_REF_GUARD(offsets);
+    return _env->CallStaticObjectMethod(_udf_helper_class, _batch_create_bytebuf, ptr, offsets, size);
+}
+
 void JVMFunctionHelper::batch_update_single(AggBatchCallStub* stub, int state, jobject* input, int cols, int rows) {
     auto obj = convert_handle_to_jobject(stub->ctx(), state);
     LOCAL_REF_GUARD(obj);
@@ -315,7 +329,7 @@ void JVMFunctionHelper::batch_update_if_not_null(FunctionContext* ctx, jobject u
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
-jobject JVMFunctionHelper::batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows) {
+StatusOr<jobject> JVMFunctionHelper::batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows) {
     return stub->batch_evaluate(rows, input, cols);
 }
 
@@ -392,19 +406,12 @@ jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     return nstr;
 }
 
-size_t JVMFunctionHelper::string_length(jstring jstr) {
-    return _env->GetStringUTFLength(jstr);
-}
-
 Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
-    size_t length = this->string_length(jstr);
-    buffer->resize(length);
-    _env->GetStringUTFRegion(jstr, 0, length, buffer->data());
+    const size_t utf_length = _env->GetStringUTFLength(jstr);
+    buffer->resize(utf_length);
+    const size_t string_length = _env->GetStringLength(jstr);
+    _env->GetStringUTFRegion(jstr, 0, string_length, buffer->data());
     return {buffer->data(), buffer->length()};
-}
-
-Slice JVMFunctionHelper::sliceVal(jstring jstr) {
-    return {_env->GetStringUTFChars(jstr, nullptr)};
 }
 
 std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {
@@ -476,15 +483,19 @@ StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
 }
 
 UDAFStateList::UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get,
-                             JavaGlobalRef&& add)
+                             JavaGlobalRef&& add, JavaGlobalRef&& remove, JavaGlobalRef&& clear)
         : _handle(std::move(handle)),
           _get_method(std::move(get)),
           _batch_get_method(std::move(batch_get)),
-          _add_method(std::move(add)) {
+          _add_method(std::move(add)),
+          _remove_method(std::move(remove)),
+          _clear_method(std::move(clear)) {
     auto* env = JVMFunctionHelper::getInstance().getEnv();
     _get_method_id = env->FromReflectedMethod(_get_method.handle());
     _batch_get_method_id = env->FromReflectedMethod(_batch_get_method.handle());
     _add_method_id = env->FromReflectedMethod(_add_method.handle());
+    _remove_method_id = env->FromReflectedMethod(_remove_method.handle());
+    _clear_method_id = env->FromReflectedMethod(_clear_method.handle());
 }
 
 jobject UDAFStateList::get_state(FunctionContext* ctx, JNIEnv* env, int state_handle) {
@@ -503,6 +514,16 @@ int UDAFStateList::add_state(FunctionContext* ctx, JNIEnv* env, jobject state) {
     auto res = env->CallIntMethod(_handle.handle(), _add_method_id, state);
     CHECK_UDF_CALL_EXCEPTION(env, ctx);
     return res;
+}
+
+void UDAFStateList::remove(FunctionContext* ctx, JNIEnv* env, int state_handle) {
+    env->CallVoidMethod(_handle.handle(), _remove_method_id, state_handle);
+    CHECK_UDF_CALL_EXCEPTION(env, ctx);
+}
+
+void UDAFStateList::clear(FunctionContext* ctx, JNIEnv* env) {
+    env->CallVoidMethod(_handle.handle(), _clear_method_id);
+    CHECK_UDF_CALL_EXCEPTION(env, ctx);
 }
 
 ClassLoader::~ClassLoader() {
@@ -804,6 +825,7 @@ void UDAFFunction::destroy(int state) {
     // call destroy
     env->CallVoidMethod(_udaf_handle, destory, obj);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
+    _ctx->states->remove(_function_context, env, state);
 }
 
 jvalue UDAFFunction::finalize(int state) {
@@ -831,7 +853,7 @@ void AggBatchCallStub::batch_update_single(int num_rows, jobject state, jobject*
     CHECK_UDF_CALL_EXCEPTION(env, this->_ctx);
 }
 
-jobject BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input, int cols) {
+StatusOr<jobject> BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input, int cols) {
     jvalue jni_inputs[2 + cols];
     jni_inputs[0].i = num_rows;
     jni_inputs[1].l = _caller;
@@ -841,7 +863,7 @@ jobject BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input, int cols
     auto* env = JVMFunctionHelper::getInstance().getEnv();
     auto res = env->CallStaticObjectMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()),
                                             jni_inputs);
-    CHECK_UDF_CALL_EXCEPTION(env, this->_ctx);
+    RETURN_ERROR_IF_JNI_EXCEPTION(env);
     return res;
 }
 

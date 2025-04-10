@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 监控管理大查询
@@ -22,7 +22,7 @@ StarRocks 提供了两种预防工具处理大查询——资源组和查询队�
 
 ### 通过资源组滤除大查询
 
-资源组可以自动识别和终止大查询。在创建资源组时，您可以指定单个查询可以使用的 CPU 时间、内存使用量或 Scan 行数的上限。在命中资源组的所有查询中，任何要求更多资源的查询都将被拒绝执行并返回错误。详细信息，请参阅 [资源隔离](./resource_management/resource_group.md)。
+资源组可以自动识别和终止大查询。在创建资源组时，您可以指定单个查询可以使用的 CPU 时间、内存使用量或 Scan 行数的上限。在命中资源组的所有查询中，任何要求更多资源的查询都将被拒绝执行并返回错误。有关资源组的详细信息以及使用说明，请参阅 [资源隔离](./resource_management/resource_group.md)。
 
 在创建资源组之前，执行以下语句启用资源组功能依赖的 Pipeline 引擎功能：
 
@@ -107,7 +107,7 @@ SET GLOBAL enable_query_queue_select = true;
   SET GLOBAL query_queue_pending_timeout_second = 480;
   ```
 
-您可以使用 [SHOW PROCESSLIST](../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 查看查询是否为待处理（Pending）状态。
+您可以使用 [SHOW PROCESSLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md) 查看查询是否为待处理（Pending）状态。
 
 ```Plain
 mysql> SHOW PROCESSLIST;
@@ -126,7 +126,7 @@ mysql> SHOW PROCESSLIST;
 
 ### 通过 MySQL 客户端监控
 
-1. 您可以使用 [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW_PROC.md) 查看当前正在处理的查询 `current_queries`。
+1. 您可以使用 [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) 查看当前正在处理的查询 `current_queries`。
 
    ```SQL
    SHOW PROC '/current_queries';
@@ -175,19 +175,19 @@ mysql> SHOW PROCESSLIST;
    http://<fe_IP>:<fe_http_port>/system?path=//current_queries
    ```
 
-   ![FE console 1](../../assets/console_1.png)
+   ![FE console 1](../../_assets/console_1.png)
 
    您可以在 **System Info** 页面上查看当前正在处理的查询及其资源消耗。
 
 2. 点击对应查询的 **QueryID**。
 
-   ![FE console 2](../../assets/console_2.png)
+   ![FE console 2](../../_assets/console_2.png)
 
    您可以在新页面中查看该查询在各节点上的资源消耗信息。
 
 ### 手动终止大查询
 
-如果有大查询绕过了您设置的预防措施并威胁到系统可用性，您可以通过在 [KILL](../../sql-reference/sql-statements/Administration/KILL.md) 语句中使用该查询对应的连接 ID 手动终止该查询：
+如果有大查询绕过了您设置的预防措施并威胁到系统可用性，您可以通过在 [KILL](../../sql-reference/sql-statements/cluster-management/nodes_processes/KILL.md) 语句中使用该查询对应的连接 ID 手动终止该查询：
 
 ```SQL
 KILL QUERY <ConnectionId>;
@@ -247,7 +247,7 @@ SET GLOBAL enable_big_query_log = true;
 ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true");
 ```
 
-然后，您可以使用 [ADD SQLBLACKLIST](../../sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md) 语句将代表这种 SQL 模式的正则表达式添加到 SQL 黑名单。
+然后，您可以使用 [ADD SQLBLACKLIST](../../sql-reference/sql-statements/cluster-management/sql_blacklist/ADD_SQLBLACKLIST.md) 语句将代表这种 SQL 模式的正则表达式添加到 SQL 黑名单。
 
 以下示例将 `COUNT(DISTINCT)` 添加到 SQL 黑名单：
 

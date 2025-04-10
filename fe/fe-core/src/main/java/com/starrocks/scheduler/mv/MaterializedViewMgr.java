@@ -57,16 +57,8 @@ import java.util.stream.Collectors;
  */
 public class MaterializedViewMgr {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
-    private static final MaterializedViewMgr INSTANCE = new MaterializedViewMgr();
 
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
-
-    private MaterializedViewMgr() {
-    }
-
-    public static MaterializedViewMgr getInstance() {
-        return INSTANCE;
-    }
 
     public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
                                             long mvId, long dbId)

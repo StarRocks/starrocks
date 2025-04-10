@@ -101,6 +101,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -129,6 +130,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -439,6 +441,10 @@ public class JobSpec {
 
     public boolean isStreamLoad() {
         return queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD;
+    }
+
+    public boolean isBrokerLoad() {
+        return queryOptions.getLoad_job_type() == TLoadJobType.BROKER;
     }
 
     public String getPlanProtocol() {

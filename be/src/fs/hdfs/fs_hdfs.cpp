@@ -24,6 +24,7 @@
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
+#include "service/backend_options.h"
 #include "testutil/sync_point.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
@@ -55,10 +56,12 @@ public:
             _file = hdfsOpenFile(st.value(), _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
             if (_file == nullptr) {
                 if (errno == ENOENT) {
-                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", _path));
+                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, backend={}, file={}",
+                                                                  BackendOptions::get_localhost(), _path));
                 } else {
-                    return Status::InternalError(
-                            fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", _path, get_hdfs_err_msg()));
+                    return Status::InternalError(fmt::format("hdfsOpenFile failed, backend={}, file={}. err_msg: {}",
+                                                             BackendOptions::get_localhost(), _path,
+                                                             get_hdfs_err_msg()));
                 }
             }
         }
@@ -562,11 +565,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     std::shared_ptr<HdfsFsClient> hdfs_client;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int flags = O_WRONLY;
-    if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
-        if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
-            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path={}", path));
-        }
-    } else if (opts.mode == MUST_CREATE) {
+    // O_WRONLY means create or overwrite for hdfsOpenFile, which is exactly CREATE_OR_OPEN_WITH_TRUNCATE
+    if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
             return Status::AlreadyExist(path);
         }
@@ -574,12 +574,10 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         return Status::NotSupported("Open with MUST_EXIST not supported by hdfs writer");
     } else if (opts.mode == CREATE_OR_OPEN) {
         return Status::NotSupported("Open with CREATE_OR_OPEN not supported by hdfs writer");
-    } else {
+    } else if (opts.mode != CREATE_OR_OPEN_WITH_TRUNCATE) {
         auto msg = strings::Substitute("Unsupported open mode $0", opts.mode);
         return Status::NotSupported(msg);
     }
-
-    flags |= O_CREAT;
 
     int hdfs_write_buffer_size = 0;
     // pass zero to hdfsOpenFile will use the default hdfs_write_buffer_size

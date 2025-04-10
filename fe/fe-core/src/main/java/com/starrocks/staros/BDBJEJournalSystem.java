@@ -223,5 +223,9 @@ public class BDBJEJournalSystem implements JournalSystem {
     public BDBJEJournal getJournal() {
         return bdbjeJournal;
     }
+
+    public JournalWriter getJournalWriter() {
+        return journalWriter;
+    }
 }
 

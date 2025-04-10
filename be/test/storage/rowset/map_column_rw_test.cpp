@@ -144,7 +144,7 @@ protected:
         }
 
         // read and check
-        auto res = ColumnReader::create(&meta, segment.get());
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
 

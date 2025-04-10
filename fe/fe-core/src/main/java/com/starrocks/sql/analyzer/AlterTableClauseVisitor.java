@@ -50,6 +50,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -75,6 +77,7 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 
 import java.time.format.DateTimeParseException;
@@ -162,6 +165,14 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            try {
+                PropertyAnalyzer.analyzeLocation(properties, false);
+            } catch (SemanticException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + " not valid");
+            }
+            clause.setNeedTableStable(false);
         } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
             // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
@@ -236,6 +247,19 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
+            clause.setNeedTableStable(false);
+            clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
+                        || olapTable.isCloudNativeTableOrMaterializedView()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
+                                    " not support primary keys table or cloud native table");
+                }
+            }
+            PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
@@ -330,6 +354,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize materialized view is not supported");
         }
 
+        if (olapTable.getAutomaticBucketSize() > 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Random distribution table already supports automatic scaling and does not require optimization");
+        }
+
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
@@ -406,7 +435,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
             }
 
-            List<Long> partitionIds = Lists.newArrayList();
+            Set<Long> partitionIds = Sets.newHashSet();
             for (String partitionName : partitionNameList) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {
@@ -414,7 +443,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
                 partitionIds.add(partition.getId());
             }
-            clause.setSourcePartitionIds(partitionIds);
+            clause.setSourcePartitionIds(Lists.newArrayList(partitionIds));
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
             clause.setTableOptimize(true);
@@ -431,7 +460,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("No column definition in add column clause.");
         }
         try {
-            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+            if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                 columnDef.setAggregateType(AggregateType.REPLACE);
             }
             columnDef.analyze(true);
@@ -546,7 +575,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         boolean hasNormalColumn = false;
         for (ColumnDef colDef : columnDefs) {
             try {
-                if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                     colDef.setAggregateType(AggregateType.REPLACE);
                 }
                 colDef.analyze(true);
@@ -662,13 +691,55 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
+    public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Add field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        StructFieldDesc fieldDesc = clause.getFieldDesc();
+        try {
+            fieldDesc.analyze(baseColumn, false);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Drop field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
+        try {
+            fieldDesc.analyze(baseColumn, true);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
     public Void visitModifyColumnClause(ModifyColumnClause clause, ConnectContext context) {
         ColumnDef columnDef = clause.getColumnDef();
         if (columnDef == null) {
             throw new SemanticException("No column definition in modify column clause.");
         }
         try {
-            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+            if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                 columnDef.setAggregateType(AggregateType.REPLACE);
             }
             columnDef.analyze(true);
@@ -933,4 +1004,5 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         }
         return null;
     }
+
 }

@@ -107,6 +107,7 @@ struct RunningQueryToken {
 public:
     RunningQueryToken(WorkGroupPtr wg) : wg(std::move(wg)) {}
     ~RunningQueryToken();
+    WorkGroupPtr get_wg() { return wg; }
 
 private:
     WorkGroupPtr wg;
@@ -133,6 +134,7 @@ public:
     void copy_metrics(const WorkGroup& rhs);
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
+    std::shared_ptr<MemTracker> grab_mem_tracker() { return _mem_tracker; }
     const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
@@ -311,6 +313,11 @@ private:
 class DefaultWorkGroupInitialization {
 public:
     DefaultWorkGroupInitialization();
+
+    // create or renew default group
+    std::shared_ptr<WorkGroup> create_default_workgroup();
+    // create or renew default mv group
+    std::shared_ptr<WorkGroup> create_default_mv_workgroup();
 };
 
 } // namespace workgroup

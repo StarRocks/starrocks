@@ -300,6 +300,12 @@ struct TIcebergDeleteFile {
     4: optional i64 length
 }
 
+struct TPaimonDeletionFile {
+    1: optional string path
+    2: optional i64 offset
+    3: optional i64 length
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -358,7 +364,9 @@ struct THdfsScanRange {
     20: optional map<string, string> odps_split_infos
 
     // delete columns slots like iceberg equality delete column slots
-    21: optional list<Types.TSlotId> delete_column_slot_ids;
+    21: optional list<Types.TSlotId> delete_column_slot_ids
+
+    27: optional TPaimonDeletionFile paimon_deletion_file;
 }
 
 struct TBinlogScanRange {
@@ -520,6 +528,8 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+  // reserved for backport
+  37: optional i64 schema_id
 }
 
 struct TJDBCScanNode {
@@ -672,6 +682,7 @@ struct TNestLoopJoinNode {
     2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
     3: optional list<Exprs.TExpr> join_conjuncts
     4: optional string sql_join_conjuncts
+    5: optional bool interpolate_passthrough = false
 }
 
 enum TAggregationOp {
@@ -954,6 +965,8 @@ struct TIntersectNode {
     3: required list<list<Exprs.TExpr>> const_expr_lists
     // Index of the first child that needs to be materialized.
     4: required i64 first_materialized_child_idx
+    
+    5: optional bool has_outer_join_child
 }
 
 struct TExceptNode {

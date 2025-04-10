@@ -39,24 +39,21 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
-import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
@@ -73,7 +70,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -177,19 +173,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // DON'T LOG, otherwise the log line will repeat everytime the listener refreshes
             return;
         }
-
-        int oldNumThreads = lakeTaskExecutor.getMaximumPoolSize();
-        if (oldNumThreads == newNumThreads) {
-            return;
-        }
-
-        if (newNumThreads < oldNumThreads) { // scale in
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-        } else { // scale out
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-        }
+        ThreadPoolManager.setFixedThreadPoolSize(lakeTaskExecutor, newNumThreads);
     }
 
     /**
@@ -283,6 +267,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
+        List<Long> transactionIds = new ArrayList<>();
         // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
@@ -292,9 +277,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (!tasks.isEmpty()) {
                 transactionState.setHasSendTask(true);
-                LOG.info("send publish tasks for txn_id: {}", transactionState.getTransactionId());
+                transactionIds.add(transactionState.getTransactionId());
             }
         }
+        LOG.debug("send publish tasks for transactions: {}", transactionIds);
         if (!batchTask.getAllTasks().isEmpty()) {
             AgentTaskExecutor.submit(batchTask);
         }
@@ -347,9 +333,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
             }
         } // end for readyTransactionStates
@@ -375,8 +358,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
             } catch (UserException e) {
                 LOG.error("errors while publish version to all backends", e);
@@ -484,7 +465,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
-                    refreshMvIfNecessary(txnState);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -565,13 +545,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 List<Tablet> publishTablets = new ArrayList<>();
                 publishTablets.addAll(normalTablets);
 
-                // commit time of last transactionState as commitTime
-                long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
+                List<TxnInfoPB> txnInfos = new ArrayList<>();
+                for (TransactionState state : transactionStates) {
+                    txnInfos.add(TxnInfoHelper.fromTransactionState(state));
+                }
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
-                Utils.publishVersionBatch(publishTablets, txnIds,
-                        startVersion - 1, endVersion, commitTime, compactionScores, nodeToTablets);
+                Utils.publishVersionBatch(publishTablets, txnInfos,
+                        startVersion - 1, endVersion, compactionScores,
+                        nodeToTablets);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -711,11 +694,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
-                    //
-                    for (TransactionState state : txnStateBatch.getTransactionStates()) {
-                        refreshMvIfNecessary(state);
-                    }
-
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
                 } catch (UserException e) {
@@ -818,14 +796,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
             db.readUnlock();
         }
 
+        TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
-                        compactionScores);
+                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
@@ -836,57 +814,5 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     txnId, e.getMessage());
             return false;
         }
-    }
-
-    /**
-     * Refresh the materialized view if it should be triggered after base table was loaded.
-     *
-     * @param transactionState
-     * @throws DdlException
-     * @throws MetaNotFoundException
-     */
-    private void refreshMvIfNecessary(TransactionState transactionState)
-            throws DdlException, MetaNotFoundException {
-        // Refresh materialized view when base table update transaction has been visible
-        long dbId = transactionState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (long tableId : transactionState.getTableIdList()) {
-            Table table;
-            db.readLock();
-            try {
-                table = db.getTable(tableId);
-            } finally {
-                db.readUnlock();
-            }
-            if (table == null) {
-                LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
-                return;
-            }
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            Iterator<MvId> mvIdIterator = relatedMvs.iterator();
-            while (mvIdIterator.hasNext()) {
-                MvId mvId = mvIdIterator.next();
-                Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                mvDb.readLock();
-                try {
-                    MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
-                    if (materializedView == null) {
-                        LOG.warn("materialized view {} does not exists.", mvId.getId());
-                        mvIdIterator.remove();
-                        continue;
-                    }
-                    if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
-                        LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                        "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
-                    }
-                } finally {
-                    mvDb.readUnlock();
-                }
-            }
-        }
-
     }
 }

@@ -58,6 +58,8 @@ public:
 
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
 
+    virtual workgroup::ScanSchedEntityType sched_entity_type() const { return workgroup::ScanSchedEntityType::OLAP; }
+
     void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }

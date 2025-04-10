@@ -172,12 +172,36 @@ public class StructType extends Type {
         return fieldMap.get(StringUtils.lowerCase(fieldName));
     }
 
+    public boolean containsField(String fieldName) {
+        return fieldMap.containsKey(StringUtils.lowerCase(fieldName));
+    }
+
     public int getFieldPos(String fieldName) {
         return fieldMap.get(StringUtils.lowerCase(fieldName)).getPosition();
     }
 
     public StructField getField(int pos) {
         return fields.get(pos);
+    }
+
+    public void updateFields(List<StructField> structFields) {
+        Preconditions.checkNotNull(structFields);
+        Preconditions.checkArgument(structFields.size() > 0);
+        fields.clear();
+        fieldMap.clear();
+        for (StructField field : structFields) {
+            String lowerFieldName = field.getName().toLowerCase();
+            if (fieldMap.containsKey(lowerFieldName)) {
+                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
+            } else {
+                field.setPosition(fields.size());
+                fields.add(field);
+                // Store lowercase field name in fieldMap
+                fieldMap.put(lowerFieldName, field);
+            }
+        }
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
     }
 
     @Override
@@ -325,6 +349,15 @@ public class StructType extends Type {
     // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
     public String toMysqlColumnTypeString() {
         return toSql();
+    }
+
+    @Override
+    public int getMaxUniqueId() {
+        int maxUniqueId = -1;
+        for (StructField f : fields) {
+            maxUniqueId = Math.max(maxUniqueId, f.getMaxUniqueId());
+        }
+        return maxUniqueId;
     }
 }
 

@@ -769,7 +769,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
      */
     public String toSqlWithoutTbl() {
-        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true).visit(this);
+        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true, true).visit(this);
     }
 
     public String explain() {
@@ -947,7 +947,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         // may be null.
         // NOTE that all the types of the related member variables must implement hashCode() and equals().
         if (id == null) {
-            int result = 31 * Objects.hashCode(type) + Objects.hashCode(opcode);
+            int result = 31 * Objects.hashCode(type) + Objects.hashCode(opcode.getValue());
             for (Expr child : children) {
                 result = 31 * result + Objects.hashCode(child);
             }
@@ -1217,7 +1217,11 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static double getConstFromExpr(Expr e) throws AnalysisException {
         Preconditions.checkState(e.isConstant());
-        double value = 0;
+        double value;
+        if (e instanceof UserVariableExpr) {
+            e = ((UserVariableExpr) e).getValue();
+        }
+
         if (e instanceof LiteralExpr) {
             LiteralExpr lit = (LiteralExpr) e;
             value = lit.getDoubleValue();
@@ -1496,6 +1500,17 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public List<String> getHints() {
         return hints;
+    }
+
+    public boolean containsDictMappingExpr() {
+        return containsDictMappingExpr(this);
+    }
+
+    private static boolean containsDictMappingExpr(Expr expr) {
+        if (expr instanceof DictMappingExpr) {
+            return true;
+        }
+        return expr.getChildren().stream().anyMatch(child -> containsDictMappingExpr(child));
     }
 
 }

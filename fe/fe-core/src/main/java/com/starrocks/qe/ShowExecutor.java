@@ -57,7 +57,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -145,6 +145,7 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -258,8 +259,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
-import static com.starrocks.catalog.Table.TableType.JDBC;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -575,7 +574,7 @@ public class ShowExecutor {
         if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
-            mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
+            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName);
         }
         for (MaterializedView mvTable : materializedViews) {
             long mvId = mvTable.getId();
@@ -696,7 +695,7 @@ public class ShowExecutor {
         List<List<String>> rowSet = Lists.newArrayList();
 
         List<ConnectContext.ThreadInfo> threadInfos = connectContext.getConnectScheduler()
-                .listConnection(connectContext.getQualifiedUser());
+                .listConnection(connectContext.getQualifiedUser(), showStmt.getForUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
             List<String> row = info.toRow(nowMs, showStmt.showFull());
@@ -880,49 +879,44 @@ public class ShowExecutor {
 
     // Show databases statement
     private void handleShowDb() {
-        GlobalStateMgr.getCurrentState().tryLock(true);
-        try {
-            ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
-            List<List<String>> rows = Lists.newArrayList();
-            List<String> dbNames;
-            String catalogName;
-            if (showDbStmt.getCatalogName() == null) {
-                catalogName = connectContext.getCurrentCatalog();
-            } else {
-                catalogName = showDbStmt.getCatalogName();
-            }
-            dbNames = metadataMgr.listDbNames(catalogName);
-
-            PatternMatcher matcher = null;
-            if (showDbStmt.getPattern() != null) {
-                matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
-                        CaseSensibility.DATABASE.getCaseSensibility());
-            }
-            Set<String> dbNameSet = Sets.newTreeSet();
-            for (String dbName : dbNames) {
-                // Filter dbname
-                if (matcher != null && !matcher.match(dbName)) {
-                    continue;
-                }
-
-                try {
-                    Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
-                            connectContext.getCurrentRoleIds(), catalogName, dbName);
-                } catch (AccessDeniedException e) {
-                    continue;
-                }
-
-                dbNameSet.add(dbName);
-            }
-
-            for (String dbName : dbNameSet) {
-                rows.add(Lists.newArrayList(dbName));
-            }
-
-            resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
-        } finally {
-            GlobalStateMgr.getCurrentState().unlock();
+        ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+        List<String> dbNames;
+        String catalogName;
+        if (showDbStmt.getCatalogName() == null) {
+            catalogName = connectContext.getCurrentCatalog();
+        } else {
+            catalogName = showDbStmt.getCatalogName();
         }
+        dbNames = metadataMgr.listDbNames(catalogName);
+
+        PatternMatcher matcher = null;
+        if (showDbStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
+                    CaseSensibility.DATABASE.getCaseSensibility());
+        }
+        Set<String> dbNameSet = Sets.newTreeSet();
+        for (String dbName : dbNames) {
+            // Filter dbname
+            if (matcher != null && !matcher.match(dbName)) {
+                continue;
+            }
+
+            try {
+                Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), catalogName, dbName);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+
+            dbNameSet.add(dbName);
+        }
+
+        for (String dbName : dbNameSet) {
+            rows.add(Lists.newArrayList(dbName));
+        }
+
+        resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
     }
 
     // Show table statement.
@@ -1102,7 +1096,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
+        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase() && Strings.isNullOrEmpty(db.getCatalogName())) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
@@ -1121,11 +1115,11 @@ public class ShowExecutor {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             showCreateInternalCatalogTable(showStmt);
         } else {
-            showCreateExternalCatalogTable(tbl, catalogName);
+            showCreateExternalCatalogTable(showStmt, tbl, catalogName);
         }
     }
 
-    private void showCreateExternalCatalogTable(TableName tbl, String catalogName) {
+    private void showCreateExternalCatalogTable(ShowCreateTableStmt showStmt, TableName tbl, String catalogName) {
         String dbName = tbl.getDb();
         String tableName = tbl.getTbl();
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -1138,44 +1132,16 @@ public class ShowExecutor {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
 
-        // create table catalogName.dbName.tableName (
-        StringBuilder createTableSql = new StringBuilder();
-        createTableSql.append("CREATE TABLE ")
-                .append("`").append(tableName).append("`")
-                .append(" (\n");
-
-        // Columns
-        List<String> columns = table.getFullSchema().stream().map(
-                this::toMysqlDDL).collect(Collectors.toList());
-        createTableSql.append(String.join(",\n", columns))
-                .append("\n)");
-
-        // Partition column names
-        if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY ( ")
-                    .append(String.join(", ", table.getPartitionColumnNames()))
-                    .append(" )");
-        }
-
-        // Location
-        String location = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            location = ((HiveMetaStoreTable) table).getTableLocation();
-        } else if (table.isIcebergTable()) {
-            location = table.getTableLocation();
-        } else if (table.isDeltalakeTable()) {
-            location = table.getTableLocation();
-        } else if (table.isPaimonTable()) {
-            location = table.getTableLocation();
-        }
-
-        if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
-        }
-
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
-        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+        if (table.isHiveView()) {
+            String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((HiveView) table);
+            rows.add(Lists.newArrayList(tableName, createViewSql));
+            resultSet = new ShowResultSet(ShowCreateTableStmt.getConnectorViewMetaData(), rows);
+        } else {
+            String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+            rows.add(Lists.newArrayList(tableName, createTableSql));
+            resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+        }
     }
 
     private String toMysqlDDL(Column column) {
@@ -1345,7 +1311,11 @@ public class ShowExecutor {
     private void handleShowIndex() throws AnalysisException {
         ShowIndexStmt showStmt = (ShowIndexStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDbName());
+        String catalogName = showStmt.getTableName().getCatalog();
+        if (catalogName == null) {
+            catalogName = connectContext.getCurrentCatalog();
+        }
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, showStmt.getDbName());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
         db.readLock();
         try {
@@ -1947,7 +1917,7 @@ public class ShowExecutor {
             String dbName = null;
             Long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
             String tableName = null;
-            Long partitionId = tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+            Long partitionId = tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
             String partitionName = null;
             Long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
             String indexName = null;
@@ -2519,7 +2489,7 @@ public class ShowExecutor {
                             olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
                     rows.add(Lists.newArrayList(
                             tableName,
-                            String.valueOf(dynamicPartitionProperty.getEnable()),
+                            String.valueOf(dynamicPartitionProperty.isEnabled()),
                             dynamicPartitionProperty.getTimeUnit().toUpperCase(),
                             String.valueOf(dynamicPartitionProperty.getStart()),
                             String.valueOf(dynamicPartitionProperty.getEnd()),
@@ -2536,7 +2506,8 @@ public class ShowExecutor {
                             dynamicPartitionScheduler
                                     .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
                             dynamicPartitionScheduler
-                                    .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG)));
+                                    .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG),
+                            String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
                 }
             } finally {
                 db.readUnlock();

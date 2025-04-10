@@ -684,6 +684,15 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BUCKET_SIZE = 11140;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_MUTABLE_BUCKET_NUM = 11141;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_ENABLE_LOAD_PROFILE = 11142;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 11143;
+
     // external table analyze
 
     @IgnorableOnReplayFailed
@@ -905,6 +914,12 @@ public class OperationType {
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;
+    @IgnorableOnReplayFailed
+    public static final short OP_DELETE_REPLICATION_JOB = 13501;
+
+    // has delete
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_HAS_DELETE = 13506;
 
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
 

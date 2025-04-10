@@ -1,4 +1,10 @@
 -- name: test_materialized_view_union
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 CREATE TABLE `t1` (
   `k1` int(11) NULL COMMENT "",
   `v1` int(11) NULL COMMENT "",
@@ -55,7 +61,7 @@ select k1, v1, v2 from t2;
 insert into t1 values ("202301",1,1),("202305",1,2);
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "mv1")
 -- result:
 None
 -- !result
@@ -123,12 +129,13 @@ union
 select k1, v1, v2 from t2;
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "mv1")
 -- result:
 None
 -- !result
 select * from mv1 order by k1, v1;
 -- result:
+202301	1	1
 202305	1	2
 -- !result
 drop table t1;

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 2.3
@@ -31,8 +31,8 @@ displayed_sidebar: "Chinese"
 - FE 中表级别 scan 统计信息错误，导致表查询和导入的 metrics 信息不正确。[#28022](https://github.com/StarRocks/starrocks/pull/28022)
 - 当 Join 列是 BINARY 类型且过大时 BE 会 crash。[#25084](https://github.com/StarRocks/starrocks/pull/25084)
 - Aggregate 算子在某些情况下会触发线程安全问题，导致 BE crash。[#26092](https://github.com/StarRocks/starrocks/pull/26092)
-- [RESTORE](../sql-reference/sql-statements/data-definition/backup_restore/RESTORE.md) 后同一个 Tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
-- [RECOVER](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) 的表自动创建分区失败。[#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- [RESTORE](../sql-reference/sql-statements/backup_restore/RESTORE.md) 后同一个 Tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- [RECOVER](../sql-reference/sql-statements/backup_restore/RECOVER.md) 的表自动创建分区失败。[#26813](https://github.com/StarRocks/starrocks/pull/26813)
 - 严格模式下，INSERT INTO 的数据存在质量问题，导入事务会一直处于 pending 状态，导致 DDL 语句卡住。[#27140](https://github.com/StarRocks/starrocks/pull/27140)
 - 低基数优化开启时，某些情况下 INSERT INTO 导入任务报错 `[42000][1064] Dict Decode failed, Dict can't take cover all key :0`。[#27395](https://github.com/StarRocks/starrocks/pull/27395)
 - 某些情况下 INSERT INTO SELECT 在 Pipeline 未开启时执行超时。[#26594](https://github.com/StarRocks/starrocks/pull/26594)
@@ -187,7 +187,7 @@ displayed_sidebar: "Chinese"
 修复了如下问题：
 
 - 当 StarRocks 表某些列支持为 NULL，但是当基于该表创建视图 时，视图中该列会被错误设置为 NOT NULL。 [#15749](https://github.com/StarRocks/starrocks/pull/15749)
-- 导入时生成了新的 Tablet 版本，但是 FE 可能尚未感知新的 tablet 版本，因此此时 FE 下发的查询执行计划中依然要求 BE 读取该 Tablet 的历史版本。如果此时垃圾回收机制回收了该历史版本，则该时间点发起的查询无法读取该历史版本，从而查询报错 “Not found: get_applied_rowsets(version xxxx) failed tablet:xxx #version:x [xxxxxx]”。 [#15726](https://github.com/StarRocks/starrocks/pull/15726)
+- 导入时生成了新的 Tablet 版本，但是 FE 可能尚未感知新的 tablet 版本，因此此时 FE 下发的查询执行计划中依然要求 BE 读取该 Tablet 的历史版本。如果此时垃圾回收机制回收了该历史版本，则该时间点发起的查询无法读取该历史版本，从而查询报错 “Not found: get_applied_rowsets(version xxxx) failed tablet:xxx #version:x xxxxxx”。 [#15726](https://github.com/StarRocks/starrocks/pull/15726)
 - 高频导入时 FE 占用较多内存。 [#15377](https://github.com/StarRocks/starrocks/pull/15377)
 - 对于聚合和多表 JOIN 的查询，统计信息收集不准确，出现 CROSS JOIN，导致查询耗时过长。 [#12067](https://github.com/StarRocks/starrocks/pull/12067) [#14780](https://github.com/StarRocks/starrocks/pull/14780)
 
@@ -265,7 +265,7 @@ displayed_sidebar: "Chinese"
 
 ### 功能优化
 
-- 优化 Routine Load 创建失败时的报错提示。[#12204]( https://github.com/StarRocks/starrocks/pull/12204)
+- 优化 Routine Load 创建失败时的报错提示。[#12204](https://github.com/StarRocks/starrocks/pull/12204)
 - 查询 Hive 时解析 CSV 数据失败后会直接报错。[#13013](https://github.com/StarRocks/starrocks/pull/13013)
 
 ### 问题修复
@@ -360,7 +360,7 @@ displayed_sidebar: "Chinese"
 - 主键表支持完整的 DELETE WHERE 语法。相关文档，请参见 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE#delete-与主键类型表)。
 - 主键表支持持久化主键索引，基于磁盘而不是内存维护索引，大幅降低内存使用。相关文档，请参见[主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table#使用说明)。
 - 全局低基数字典优化支持实时数据导入，实时场景下字符串数据的查询性能提升一倍。
-- 支持以异步的方式执行 CTAS，并将结果写入新表。相关文档，请参见 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)。
+- 支持以异步的方式执行 CTAS，并将结果写入新表。相关文档，请参见 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)。
 - 资源组相关功能：
   - 支持监控资源组：可在审计日志中查看查询所属的资源组，并通过相关 API 获取资源组的监控信息。相关文档，请参见[监控指标](../administration/management/monitoring/Monitor_and_Alert.md#监控指标)。
   - 支持限制大查询的 CPU、内存、或 I/O 资源；可通过匹配分类器将查询路由至资源组，或者设置会话变量直接为查询指定资源组。相关文档，请参见[资源隔离](../administration/management/resource_management/resource_group.md)。
@@ -382,7 +382,7 @@ displayed_sidebar: "Chinese"
   - 包含函数的等值比较运算符下推至 scan 算子时，支持使用 Zone Map 索引。
 - 优化 Apache Hive™ 外表功能。
   - 当 Apache Hive™ 的数据存储采用 Parquet、ORC、CSV 格式时，支持 Hive 表执行 ADD COLUMN、REPLACE COLUMN 等表结构变更（Schema Change）。相关文档，请参见 [Hive 外部表](../data_source/External_table.md#deprecated-hive-外部表)。
-  - 支持 Hive 资源修改 `hive.metastore.uris`。相关文档，请参见 [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md)。
+  - 支持 Hive 资源修改 `hive.metastore.uris`。相关文档，请参见 [ALTER RESOURCE](../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)。
 - 优化 Apache Iceberg 外表功能，创建 Iceberg 资源时支持使用自定义目录（Catalog）。相关文档，请参见 [Apache Iceberg 外表](../data_source/External_table.md#deprecated-iceberg-外部表)。
 - 优化 Elasticsearch 外表功能，支持取消探测 Elasticsearch 集群数据节点的地址。相关文档，请参见 [Elasticsearch 外部表](../data_source/External_table.md#deprecated-elasticsearch-外部表)。
 - 当 sum() 中输入的值为 STRING 类型且为数字时，则自动进行隐式转换。

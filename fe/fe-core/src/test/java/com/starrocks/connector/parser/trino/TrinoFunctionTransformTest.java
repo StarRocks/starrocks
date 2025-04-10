@@ -60,12 +60,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "array_concat([1,2,3], [4,5,6])");
 
         sql = "select concat(c1, c2) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>))");
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
 
         sql = "select concat(c1, c2, array[1,2], array[3,4]) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR(65533)>), " +
-                "CAST([3,4] AS ARRAY<VARCHAR(65533)>)");
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>), " +
+                "CAST([1,2] AS ARRAY<VARCHAR>), " +
+                "CAST([3,4] AS ARRAY<VARCHAR>)");
 
         sql = "select concat(c2, 2) from test_array";
         assertPlanContains(sql, "array_concat(3: c2, CAST([2] AS ARRAY<INT>))");
@@ -96,9 +96,6 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     public void testDateFnTransform() throws Exception {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
-
-        sql = "select to_unixtime(cast('2023-12-05 23:28:46' as timestamp) at time zone 'Asia/Shanghai')";
-        analyzeFail(sql, "Time zone is not supported");
 
         sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
         assertPlanContains(sql, "2022-10-20 05:00:00");
@@ -149,13 +146,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
 
         sql = "select format_datetime(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 00:00:00");
 
         sql = "select to_char(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select parse_datetime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')");
@@ -257,10 +254,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "char_length('aaa')");
 
         sql = "SELECT replace('hello-world', '-');";
-        assertPlanContains(sql, "replace('hello-world', '-', '')");
+        assertPlanContains(sql, "'helloworld'");
 
         sql = "SELECT replace('hello-world', '-', '$');";
-        assertPlanContains(sql, "replace('hello-world', '-', '$')");
+        assertPlanContains(sql, "'hello$world'");
 
         sql = "select index('hello', 'l')";
         assertPlanContains(sql, "instr('hello', 'l')");
@@ -357,10 +354,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testInformationFunction() throws Exception {
         String sql = "select connection_id() from tall";
-        assertPlanContains(sql, "<slot 12> : CONNECTION_ID()");
+        assertPlanContains(sql, "<slot 12> : 0");
 
         sql = "select catalog() from tall";
-        assertPlanContains(sql, "<slot 12> : CATALOG()");
+        assertPlanContains(sql, "<slot 12> : 'default_catalog'");
 
         sql = "select database() from tall";
         assertPlanContains(sql, "<slot 12> : 'test'");
@@ -369,13 +366,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : 'test'");
 
         sql = "select user() from tall";
-        assertPlanContains(sql, "<slot 12> : USER()");
+        assertPlanContains(sql, "<slot 12> : '\\'root\\'@%'");
 
         sql = "select CURRENT_USER from tall";
-        assertPlanContains(sql, "<slot 12> : CURRENT_USER()");
+        assertPlanContains(sql, "<slot 12> : '\\'root\\'@\\'%\\''");
 
         sql = "select CURRENT_ROLE from tall";
-        assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
+        assertPlanContains(sql, "<slot 12> : 'root'");
     }
 
     @Test
@@ -408,7 +405,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testUtilityFunction() throws Exception {
         String sql = "select current_catalog";
-        assertPlanContains(sql, "<slot 2> : CATALOG()");
+        assertPlanContains(sql, "<slot 2> : 'default_catalog'");
 
         sql = "select current_schema";
         assertPlanContains(sql, "<slot 2> : 'test'");

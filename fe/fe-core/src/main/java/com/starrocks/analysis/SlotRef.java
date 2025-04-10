@@ -63,8 +63,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class SlotRef extends Expr {
     private TableName tblName;
     private String col;
-    // Used in toSql
+    // isBackQuoted/label used in toSql
     private String label;
+    private boolean isBackQuoted = false;
 
     private QualifiedName qualifiedName;
 
@@ -280,7 +281,12 @@ public class SlotRef extends Expr {
         if (tblName != null && !isFromLambda()) {
             return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
-            return label;
+            if (isBackQuoted) {
+                sb.append("`").append(label).append("`");
+                return sb.toString();
+            } else {
+                return label;
+            }
         } else if (desc.getSourceExprs() != null) {
             sb.append("<slot ").append(desc.getId().asInt()).append(">");
             for (Expr expr : desc.getSourceExprs()) {
@@ -500,6 +506,14 @@ public class SlotRef extends Expr {
         SlotRef slotRef = new SlotRef();
         slotRef.readFields(in);
         return slotRef;
+    }
+
+    public void setBackQuoted(boolean isBackQuoted) {
+        this.isBackQuoted = isBackQuoted;
+    }
+
+    public boolean isBackQuoted() {
+        return isBackQuoted;
     }
 
     /**

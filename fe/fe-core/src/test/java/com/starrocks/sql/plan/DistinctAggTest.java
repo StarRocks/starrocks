@@ -41,13 +41,37 @@ public class DistinctAggTest extends PlanTestBase {
     }
 
     @Test
+    void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
+        String sql = "select count(distinct v3) from (select *, 'b' as b from tarray) t group by b";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 5:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(3: v3)\n" +
+                "  |  group by: 5: b\n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 3: v3, 5: b\n" +
+                "  |  \n" +
+                "  3:EXCHANGE");
+    }
+    @Test
+    void testDistinctConstant() throws Exception {
+        String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
+                "t1 group by b1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(CAST(split('a,b,c', ',') IS NOT NULL AS BIGINT))");
+    }
+
+    @Test
     void testDistinctConstants() throws Exception {
         String sql = "select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), " +
                 "group_concat(distinct 1, 2 order by 1), array_agg(distinct 1 order by 1) from t0 group by v2;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (update finalize)\n" +
-                "  |  output: count(if(1 IS NULL, NULL, if(2 IS NULL, NULL, if(3 IS NULL, NULL, 4)))), sum(1), avg(1), " +
-                "group_concat('1', '2', ','), array_agg(1)");
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(1, 2, 3, 4), multi_distinct_sum(1), avg(1), " +
+                "group_concat(DISTINCT '1', '2', ','), array_agg_distinct(1)");
         sql = "select count(distinct 1, 2, 3, 4) from t0 group by v2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +

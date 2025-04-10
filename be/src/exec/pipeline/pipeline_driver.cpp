@@ -34,6 +34,7 @@
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
@@ -52,8 +53,12 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state > OperatorStage::PREPARED && op_state != OperatorStage::CLOSED) {
-            auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
-                                   to_readable_string(), op->get_name(), func_name);
+            std::stringstream ss;
+            ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+               << " fragment_id="
+               << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
+            auto msg = fmt::format("{} close operator {}-{} failed, may leak resources when {}, please reflect to SR",
+                                   ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
             LOG(ERROR) << msg;
             DCHECK(false) << msg;
         }
@@ -63,15 +68,15 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
-    auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
+    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
     SCOPED_TIMER(prepare_timer);
 
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
-    _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
+    _overhead_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "OverheadTime", 1_ms);
+    _schedule_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "ScheduleTime", 1_ms);
 
-    _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
     _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
@@ -80,13 +85,16 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
 
-    _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
-    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
-    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
-    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
-    _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
-    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
-    _pending_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PendingFinishTime", "PendingTime");
+    _pending_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "PendingTime", 1_ms);
+    _precondition_block_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "PreconditionBlockTime", "PendingTime", 1_ms);
+    _input_empty_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "InputEmptyTime", "PendingTime", 1_ms);
+    _first_input_empty_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime", 1_ms);
+    _followup_input_empty_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime", 1_ms);
+    _output_full_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "OutputFullTime", "PendingTime", 1_ms);
+    _pending_finish_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "PendingFinishTime", "PendingTime", 1_ms);
 
     _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
             "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
@@ -302,7 +310,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
-                    SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(curr_op);
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
@@ -333,7 +340,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                         total_rows_moved += row_num;
                         {
-                            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
@@ -571,9 +577,21 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
 
+        bool need_spill = false;
         if (!tls_thread_status.try_mem_reserve(request_reserved)) {
+            need_spill = true;
             mem_resource_mgr.to_low_memory_mode();
         }
+
+        auto query_mem_tracker = _query_ctx->mem_tracker();
+        auto query_consumption = query_mem_tracker->consumption();
+        auto limited = query_mem_tracker->limit();
+        auto reserved_limit = query_mem_tracker->reserve_limit();
+
+        TRACE_SPILL_LOG << "adjust memory spill:" << op->get_name() << " request: " << request_reserved
+                        << " revocable: " << op->revocable_mem_bytes() << " set finishing: " << (chunk == nullptr)
+                        << " need_spill:" << need_spill << " query_consumption:" << query_consumption
+                        << " limit:" << limited << "query reserved limit:" << reserved_limit;
     }
 }
 
@@ -723,7 +741,6 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
@@ -741,7 +758,6 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
@@ -751,10 +767,11 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
 
 Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
     Status res = _mark_operator_finished(op, state);
-    if (!res.ok()) {
-        LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
-                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
-                                    res.get_error_msg());
+    if (!res.ok() && !res.is_cancelled()) {
+        LOG(WARNING) << fmt::format(
+                "[Driver] failed to finish operator called by cancelling operator [fragment_id={}] [driver={}] "
+                "[operator={}] [error={}]",
+                print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(), res.get_error_msg());
     }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {
@@ -764,7 +781,6 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         op_state = OperatorStage::CANCELLED;
         return op->set_cancelled(state);
     }
@@ -786,7 +802,6 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
 
     VLOG_ROW << msg;
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
         QUERY_TRACE_SCOPED(op->get_name(), "close");

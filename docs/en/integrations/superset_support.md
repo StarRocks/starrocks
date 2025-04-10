@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Superset Support
 
 [Apache Superset](https://superset.apache.org) is a modern data exploration and visualization platform. It uses [SQLAlchemy](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks) to query data.
 
-Although [Mysql Dialect](https://superset.apache.org/docs/databases/mysql) can be used, it does not support `largeint`. So we developed [StarRocks Dialect](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks/sqlalchemy).
+Although [Mysql Dialect](https://superset.apache.org/docs/databases/mysql) can be used, it does not support `largeint`. So we developed [StarRocks Dialect](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks/).
 
 ## Environment
 

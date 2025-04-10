@@ -49,7 +49,7 @@ import java.util.List;
 import java.util.Map;
 
 public class OptimizeJobV2Test extends DDLTestBase {
-    private static String fileName = "./SchemaChangeV2Test";
+    private static final String TEST_FILE_NAME = OptimizeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
 
     @Rule
@@ -260,7 +260,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testSerializeOfOptimizeJob() throws IOException {
         // prepare file
-        File file = new File(fileName);
+        File file = new File(TEST_FILE_NAME);
         file.createNewFile();
         file.deleteOnExit();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));

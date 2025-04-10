@@ -65,9 +65,10 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropObserverClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
@@ -148,11 +149,11 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
-        } else if (alterClause instanceof ModifyBackendAddressClause) {
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(addBackendClause.getHostPortPairs());
+        } else if (alterClause instanceof ModifyBackendClause) {
             // update Backend Address
-            ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            return GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
+            ModifyBackendClause modifyBackendClause = (ModifyBackendClause) alterClause;
+            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().modifyBackend(modifyBackendClause);
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
@@ -204,6 +205,9 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
         } else if (alterClause instanceof CreateImageClause) {
             GlobalStateMgr.getCurrentState().triggerNewImage();
+            if (RunMode.isSharedDataMode()) {
+                StarMgrServer.getCurrentState().triggerNewImage();
+            }
         } else if (alterClause instanceof CleanTabletSchedQClause) {
             GlobalStateMgr.getCurrentState().getTabletScheduler().forceCleanSchedQ();
         } else {
@@ -271,7 +275,7 @@ public class SystemHandler extends AlterHandler {
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (long dbId : localMetastore.getDbIds()) {
             Database db = localMetastore.getDb(dbId);
-            if (db == null) {
+            if (db == null || db.isStatisticsDatabase()) {
                 continue;
             }
             db.readLock();

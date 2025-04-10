@@ -51,6 +51,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
@@ -158,7 +160,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
-                     String hiveDbName, String hiveTableName, String tableLocation, long createTime,
+                     String hiveDbName, String hiveTableName, String tableLocation, String comment, long createTime,
                      List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties,
                      Map<String, String> serdeProperties, HiveStorageFormat storageFormat, HiveTableType hiveTableType) {
         super(id, name, TableType.HIVE, fullSchema);
@@ -167,6 +169,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         this.hiveDbName = hiveDbName;
         this.hiveTableName = hiveTableName;
         this.tableLocation = tableLocation;
+        this.comment = comment;
         this.createTime = createTime;
         this.partColumnNames = partColumnNames;
         this.dataColumnNames = dataColumnNames;
@@ -570,6 +573,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         private String hiveTableName;
         private String resourceName;
         private String tableLocation;
+        private String comment;
         private long createTime;
         private List<Column> fullSchema;
         private List<String> partitionColNames = Lists.newArrayList();
@@ -617,6 +621,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setComment(String comment) {
+            this.comment = comment;
+            return this;
+        }
+
         public Builder setCreateTime(long createTime) {
             this.createTime = createTime;
             return this;
@@ -659,7 +668,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         public HiveTable build() {
             return new HiveTable(id, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
-                    tableLocation, createTime, partitionColNames, dataColNames, properties, serdeProperties,
+                    tableLocation, comment, createTime, partitionColNames, dataColNames, properties, serdeProperties,
                     storageFormat, hiveTableType);
         }
     }

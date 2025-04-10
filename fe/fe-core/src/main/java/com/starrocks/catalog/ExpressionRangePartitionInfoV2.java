@@ -65,6 +65,10 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
     @SerializedName(value = "sourcePartitionTypes")
     private List<Type> sourcePartitionTypes;
 
+    public ExpressionRangePartitionInfoV2() {
+        this.type = PartitionType.EXPR_RANGE_V2;
+    }
+
     public ExpressionRangePartitionInfoV2(List<Expr> partitionExprs, List<Column> columns) {
         super(columns);
         this.type = PartitionType.EXPR_RANGE_V2;

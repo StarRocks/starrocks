@@ -24,6 +24,8 @@ import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Test;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,7 +35,7 @@ public class TableFunctionTableSinkTest {
     public void testTableFunctionTableSink() {
         TableFunctionTable tableFunctionTable = new TableFunctionTable("s3://path/to/directory/", "parquet",
                 "uncompressed", ImmutableList.of(new Column("k1", Type.INT)), null, false,
-                ImmutableMap.of());
+                Optional.empty(), ImmutableMap.of());
 
         TableFunctionTableSink tableFunctionTableSink = new TableFunctionTableSink(tableFunctionTable);
 

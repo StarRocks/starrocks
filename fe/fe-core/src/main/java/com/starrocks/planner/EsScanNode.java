@@ -35,6 +35,7 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -49,7 +50,10 @@ import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
 import com.starrocks.connector.elasticsearch.QueryConverter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TEsScanNode;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExplainLevel;
@@ -169,8 +173,18 @@ public class EsScanNode extends ScanNode {
     public void assignNodes() throws UserException {
         nodeMap = HashMultimap.create();
         nodeList = Lists.newArrayList();
-        for (ComputeNode node : GlobalStateMgr.getCurrentSystemInfo().
-                backendAndComputeNodeStream().collect(Collectors.toList())) {
+
+        List<ComputeNode> nodes;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if (RunMode.isSharedDataMode()) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            ImmutableSet<Long> computeNodeIds = warehouseManager.getComputeNodesFromWarehouse().keySet();
+            nodes = computeNodeIds.stream()
+                    .map(id -> systemInfoService.getBackendOrComputeNode(id)).collect(Collectors.toList());
+        } else {
+            nodes = systemInfoService.backendAndComputeNodeStream().collect(Collectors.toList());
+        }
+        for (ComputeNode node : nodes) {
             if (node.isAlive()) {
                 nodeMap.put(node.getHost(), node);
                 nodeList.add(node);

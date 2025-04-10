@@ -197,7 +197,7 @@ struct SortRuntimeFilterUpdater {
     std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
         auto data_column = ColumnHelper::get_data_column(column.get());
         auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
-        auto data = runtime_data_column->get_data()[rid];
+        auto data = GetContainer<ltype>::get_data(runtime_data_column)[rid];
         if (asc) {
             down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<false>(data);
         } else {

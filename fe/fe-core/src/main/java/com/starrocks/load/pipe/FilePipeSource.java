@@ -241,7 +241,7 @@ public class FilePipeSource implements GsonPostProcessable {
 
         FileTableFunctionRelation fileRelation = new FileTableFunctionRelation(properties, NodePosition.ZERO);
         select.setRelation(fileRelation);
-        return AstToSQLBuilder.toSQL(sqlStmt);
+        return AstToSQLBuilder.toSQLWithCredential(sqlStmt);
     }
 
     @Override

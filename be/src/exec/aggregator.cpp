@@ -24,7 +24,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
@@ -36,6 +38,40 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+
+static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {
+        "variance_samp", "var_samp", "stddev_samp", "covar_samp", "corr", "max_by_v2", "min_by_v2"};
+
+template <bool UseIntermediateAsOutput>
+bool AggFunctionTypes::is_result_nullable() const {
+    if constexpr (UseIntermediateAsOutput) {
+        // If using intermediate results as output, no output will be generated and only the input will be serialized.
+        // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
+        return has_nullable_child;
+    } else {
+        // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
+        // Therefore, we need to decide whether the output is really nullable case by case:
+        // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
+        // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
+        // 3. Always nullable: `is_always_nullable_result`.
+        return (has_nullable_child && is_nullable) || is_always_nullable_result;
+    }
+}
+
+bool AggFunctionTypes::use_nullable_fn(bool use_intermediate_as_output) const {
+    // The non-nullable version functions assume that both the input and output are non-nullable, while the nullable version
+    // functions support nullable input or nullable output, which will judge whether the input and output are nullable.
+    //
+    // NOTE that for the case of `is_always_nullable_result=true`, the function created with `use_intermediate_as_output=true`
+    // also needs to use `is_result_nullable<true>` when getting the finalize result.
+    // Because for the case of `is_always_nullable_result=true and has_nullable_child=false`, the function is the non-nullable version,
+    // which causes only non-nullable output can be created.
+    if (use_intermediate_as_output) {
+        return has_nullable_child || is_result_nullable<true>();
+    } else {
+        return has_nullable_child || is_result_nullable<false>();
+    }
+}
 
 std::string AggrAutoContext::get_auto_state_string(const AggrAutoState& state) {
     switch (state) {
@@ -129,8 +165,10 @@ void AggregatorParams::init() {
                 arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
             }
 
-            bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
+            const bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
+            agg_fn_types[i].is_always_nullable_result =
+                    ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
             if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
@@ -158,35 +196,6 @@ void AggregatorParams::init() {
     }
 
     VLOG_ROW << "has_nullable_key " << has_nullable_key;
-}
-
-ChunkUniquePtr AggregatorParams::create_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc) {
-    auto result_chunk = std::make_unique<Chunk>();
-
-    const auto& slots = desc.slots();
-    size_t append_offset = 0;
-
-    for (auto& group_by_type : group_by_types) {
-        auto col = ColumnHelper::create_column(group_by_type.result_type, group_by_type.is_nullable);
-        result_chunk->append_column(std::move(col), slots[append_offset++]->id());
-    }
-
-    if (!is_serialize_fmt) {
-        for (auto& agg_fn_type : agg_fn_types) {
-            // For count, count distinct, bitmap_union_int such as never return null function,
-            // we need to create a not-nullable column.
-            auto col = ColumnHelper::create_column(agg_fn_type.result_type,
-                                                   agg_fn_type.has_nullable_child && agg_fn_type.is_nullable);
-            result_chunk->append_column(std::move(col), slots[append_offset++]->id());
-        }
-    } else {
-        for (auto& agg_fn_type : agg_fn_types) {
-            auto col = ColumnHelper::create_column(agg_fn_type.serde_type, agg_fn_type.has_nullable_child);
-            result_chunk->append_column(std::move(col), slots[append_offset++]->id());
-        }
-    }
-
-    return result_chunk;
 }
 
 #define ALIGN_TO(size, align) ((size + align - 1) / align * align)
@@ -304,8 +313,8 @@ Status Aggregator::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(check_has_error());
 
-    _buffer_mem_manager = std::make_unique<pipeline::ChunkBufferMemoryManager>(
-            1, config::local_exchange_buffer_mem_limit_per_driver,
+    _limited_buffer = std::make_unique<LimitedPipelineChunkBuffer<AggStatistics>>(
+            _agg_stat, 1, config::local_exchange_buffer_mem_limit_per_driver,
             state->chunk_size() * config::streaming_agg_chunk_buffer_size);
 
     return Status::OK();
@@ -359,6 +368,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
+        const auto& agg_fn_type = _agg_fn_types[i];
         _is_merge_funcs[i] = aggregate_functions[i].nodes[0].agg_expr.is_merge_agg;
         // get function
         if (fn.name.function_name == "count") {
@@ -380,7 +390,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
             // Because max_by and min_by function have two input types,
             // so we use its second arguments type as input.
-            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by") {
+            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by" ||
+                fn.name.function_name == "max_by_v2" || fn.name.function_name == "min_by_v2") {
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 
@@ -400,14 +411,14 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 arg_type = arg_type.children[0];
             }
 
-            bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
-            auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                is_input_nullable, fn.binary_type, state->func_version());
+            const bool use_nullable_fn = agg_fn_type.use_nullable_fn(_use_intermediate_as_output());
+            auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type, use_nullable_fn,
+                                                fn.binary_type, state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
                         "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",
                         fn.name.function_name, type_to_string(arg_type.type), type_to_string(serde_type.type),
-                        type_to_string(return_type.type), is_input_nullable ? "true" : "false"));
+                        type_to_string(return_type.type), use_nullable_fn ? "true" : "false"));
             }
             VLOG_ROW << "get agg function " << func->get_name() << " serde_type " << serde_type << " return_type "
                      << return_type;
@@ -520,7 +531,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _num_pass_through_rows = 0;
     _num_rows_returned = 0;
 
-    _buffer = {};
+    _limited_buffer->clear();
 
     _tmp_agg_states.assign(_tmp_agg_states.size(), nullptr);
     _streaming_selection.assign(_streaming_selection.size(), 0);
@@ -534,6 +545,13 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     } else if (!_is_only_group_by_columns) {
         _release_agg_memory();
     }
+
+    for (int i = 0; i < _agg_functions.size(); i++) {
+        if (_agg_fn_ctxs[i]) {
+            _agg_fn_ctxs[i]->release_mems();
+        }
+    }
+
     _mem_pool->free_all();
 
     if (_group_by_expr_ctxs.empty()) {
@@ -546,6 +564,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     } else {
         TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
+
     // _state_allocator holds the entries of the hash_map/hash_set, when iterating a hash_map/set, the _state_allocator
     // is used to access these entries, so we must reset the _state_allocator along with the hash_map/hash_set.
     _state_allocator.reset();
@@ -585,8 +604,8 @@ void Aggregator::close(RuntimeState* state) {
 
     _is_closed = true;
     // Clear the buffer
-    while (!_buffer.empty()) {
-        _buffer.pop();
+    if (_limited_buffer != nullptr) {
+        _limited_buffer->clear();
     }
 
     auto agg_close = [this, state]() {
@@ -602,6 +621,12 @@ void Aggregator::close(RuntimeState* state) {
             }
 
             _mem_pool->free_all();
+        }
+
+        for (int i = 0; i < _agg_functions.size(); i++) {
+            if (_agg_fn_ctxs[i]) {
+                _agg_fn_ctxs[i]->release_mems();
+            }
         }
 
         if (_is_only_group_by_columns) {
@@ -626,45 +651,19 @@ void Aggregator::close(RuntimeState* state) {
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    return _buffer.empty();
+    return _limited_buffer->is_empty();
 }
 
 ChunkPtr Aggregator::poll_chunk_buffer() {
-    ChunkPtr chunk;
-    {
-        std::lock_guard<std::mutex> l(_buffer_mutex);
-        if (_buffer.empty()) {
-            return nullptr;
-        }
-        chunk = _buffer.front();
-        _buffer.pop();
-    }
-    size_t mem_usage = chunk->memory_usage();
-    size_t num_rows = chunk->num_rows();
-    _buffer_mem_manager->update_memory_usage(-mem_usage, -num_rows);
-
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, -mem_usage);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, -1);
-
-    return chunk;
+    return _limited_buffer->pull();
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
-    {
-        std::lock_guard<std::mutex> l(_buffer_mutex);
-        _buffer.push(chunk);
-    }
-
-    size_t mem_usage = chunk->memory_usage();
-    size_t num_rows = chunk->num_rows();
-    _buffer_mem_manager->update_memory_usage(mem_usage, num_rows);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, mem_usage);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, 1);
+    _limited_buffer->push(chunk);
 }
 
 bool Aggregator::is_chunk_buffer_full() {
-    return _buffer_mem_manager->is_full();
+    return _limited_buffer->is_full();
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -893,7 +892,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
-            if (use_intermediate_as_input) {
+            if (_is_merge_funcs[i] || use_intermediate_as_input) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
@@ -1026,14 +1025,14 @@ Columns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_interme
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
             // For count, count distinct, bitmap_union_int such as never return null function,
             // we need to create a not-nullable column.
-            agg_result_columns[i] = ColumnHelper::create_column(
-                    _agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child && _agg_fn_types[i].is_nullable);
+            agg_result_columns[i] = ColumnHelper::create_column(_agg_fn_types[i].result_type,
+                                                                _agg_fn_types[i].is_result_nullable<false>());
             agg_result_columns[i]->reserve(num_rows);
         }
     } else {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-            agg_result_columns[i] =
-                    ColumnHelper::create_column(_agg_fn_types[i].serde_type, _agg_fn_types[i].has_nullable_child);
+            agg_result_columns[i] = ColumnHelper::create_column(_agg_fn_types[i].serde_type,
+                                                                _agg_fn_types[i].is_result_nullable<true>());
             agg_result_columns[i]->reserve(num_rows);
         }
     }
@@ -1354,7 +1353,8 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
     });
 }
 
-Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output) {
+Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
+                                             bool force_use_intermediate_as_output) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
     RETURN_IF_ERROR(_hash_map_variant.visit([&](auto& variant_value) {
@@ -1366,8 +1366,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
 
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
-        auto use_intermediate =
-                use_intermediate_as_output != nullptr ? *use_intermediate_as_output : _use_intermediate_as_output();
+        auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
         Columns group_by_columns = _create_group_by_columns(num_rows);
         Columns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 

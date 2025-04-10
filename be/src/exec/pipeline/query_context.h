@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 #include "exec/pipeline/fragment_context.h"
@@ -30,6 +31,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
+#include "util/hash.h"
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
 #include "util/time.h"
@@ -145,18 +147,15 @@ public:
         _desc_tbl = desc_tbl;
     }
 
-    DescriptorTbl* desc_tbl() {
-        DCHECK(_desc_tbl != nullptr);
-        return _desc_tbl;
-    }
+    DescriptorTbl* desc_tbl() { return _desc_tbl; }
 
     size_t total_fragments() { return _total_fragments; }
     /// Initialize the mem_tracker of this query.
     /// Positive `big_query_mem_limit` and non-null `wg` indicate
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
-                          int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr,
-                          RuntimeState* state = nullptr);
+                          std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
+                          RuntimeState* state = nullptr, int connector_scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
@@ -251,10 +250,6 @@ private:
     int64_t _big_query_profile_threshold_ns = 0;
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
-    std::shared_ptr<MemTracker> _mem_tracker;
-    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
-    std::mutex _operator_mem_trackers_lock;
-    std::unordered_map<int32_t, std::shared_ptr<MemTracker>> _operator_mem_trackers;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
@@ -282,14 +277,20 @@ private:
     // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
     SpinLock _scan_stats_lock;
     // table level scan stats
-    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
 
     bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;
+    // _wg_mem_tracker is used to grab mem_tracker in workgroup to prevent it from
+    // being released prematurely in FragmentContext::cancel, otherwise accessing
+    // workgroup's mem_tracker in QueryContext's dtor shall cause segmentation fault.
+    std::shared_ptr<MemTracker> _wg_mem_tracker = nullptr;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
     std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
 
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;

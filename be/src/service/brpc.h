@@ -72,3 +72,10 @@
 #include <butil/strings/string_piece.h>
 
 #include "common/compiler_util.h"
+#include "common/config.h"
+
+// ignore brpc overcrowded error
+#define SET_IGNORE_OVERCROWDED(ctnl, module)          \
+    if (config::brpc_##module##_ignore_overcrowded) { \
+        ctnl.ignore_eovercrowded();                   \
+    }

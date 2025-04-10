@@ -37,6 +37,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -111,19 +112,27 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
+            boolean forceDelete = Config.meta_sync_force_delete_shard_meta;
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    LOG.info("failedTablets is {}", response.failedTablets);
-                    response.failedTablets.forEach(shards::remove);
+                    TStatusCode stCode = TStatusCode.findByValue(response.status.statusCode);
+                    LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
+
+                    // ignore INVALID_ARGUMENT error, treat it as success
+                    if (stCode != TStatusCode.INVALID_ARGUMENT && !forceDelete) {
+                        response.failedTablets.forEach(shards::remove);
+                    }
                 }
             } catch (Throwable e) {
                 LOG.error(e);
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                continue;
+                if (!forceDelete) {
+                    continue;
+                }
             }
 
             // 2. delete shard
@@ -285,8 +294,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 }
                 // no need to check db/table/partition again, everything still works
                 long groupId = physicalPartition.getShardGroupId();
-                List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
-                Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                Set<Long> starmgrShardIdsSet = null;
+                if (redundantGroupToShards.get(groupId) != null) {
+                    starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                } else {
+                    List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                    starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                }
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : materializedIndex.getTablets()) {

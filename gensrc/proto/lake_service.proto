@@ -18,13 +18,15 @@ package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+import "lake_types.proto";
 import "status.proto";
 
 option cc_generic_services = true;
 
 message PublishVersionRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;
+    // This field is deprecated now, use |txn_infos| instead.
+    repeated int64 txn_ids = 2; // deprecated
     // |base_version| would be |new_version - txn_ids_size()| now, define
     // it explicitly for more clarity and better forward compatibility.
     optional int64 base_version = 3;
@@ -32,8 +34,9 @@ message PublishVersionRequest {
     // Commit time of the transaction to be published.
     // If the size of txn_ids is greater than 1, commit_time should be the commit time of the last transaction.
     // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC)
-    optional int64 commit_time = 5;
+    optional int64 commit_time = 5; // deprecated
     optional int64 timeout_ms = 6;
+    repeated TxnInfoPB txn_infos = 7;
 }
 
 message PublishVersionResponse {
@@ -80,6 +83,25 @@ message CompactRequest {
     optional int64 txn_id = 2;
     optional int64 version = 3;
     optional int64 timeout_ms = 4;
+    optional bool allow_partial_success = 5;
+}
+
+message CompactStat {
+    // basic
+    optional int64 tablet_id = 1;
+
+    // read
+    optional int64 read_time_remote = 11; // ns
+    optional int64 read_bytes_remote = 12;
+    optional int64 read_time_local = 13; // ns
+    optional int64 read_bytes_local = 14;
+
+    // write
+    // TODO
+
+    // other
+    optional int32 sub_task_count = 51; // tablet count in this compaction request
+    optional int32 in_queue_time_sec = 52;
 }
 
 message CompactResponse {
@@ -90,6 +112,7 @@ message CompactResponse {
     // optional int64 num_output_bytes = 5;
     // optional int64 num_output_rows = 6;
     optional StatusPB status = 7;
+    repeated CompactStat compact_stats = 8;
 }
 
 message DropTableRequest {

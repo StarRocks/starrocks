@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -392,19 +393,21 @@ public class SystemInfoServiceTest {
         Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().
                 getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
 
-        List<Long> longList = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, false, false);
+        List<Long> longList = GlobalStateMgr.getCurrentSystemInfo().getNodeSelector()
+                .seqChooseComputeNodes(1, false, false);
         Assert.assertEquals(1, longList.size());
         ComputeNode computeNode = new ComputeNode();
         computeNode.setHost("192.168.0.1");
         computeNode.setHttpPort(9030);
         computeNode.setAlive(true);
         GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
-        List<Long> computeNods = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true, false);
+        List<Long> computeNods = GlobalStateMgr.getCurrentSystemInfo().getNodeSelector()
+                .seqChooseComputeNodes(1, true, false);
         Assert.assertEquals(1, computeNods.size());
 
         // test seqChooseBackendOrComputeId func
         Exception exception = Assertions.assertThrows(UserException.class, () -> {
-            GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+            GlobalStateMgr.getCurrentSystemInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend alive."));
 
@@ -414,7 +417,7 @@ public class SystemInfoServiceTest {
                 return RunMode.SHARED_DATA;
             }
         };
-        new MockUp<SystemInfoService>() {
+        new MockUp<NodeSelector>() {
             @Mock
             public List<Long> seqChooseComputeNodes(int computeNodeNum,
                                                     boolean needAvailable, boolean isCreate) {
@@ -423,9 +426,20 @@ public class SystemInfoServiceTest {
         };
 
         exception = Assert.assertThrows(UserException.class, () -> {
-            GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+            GlobalStateMgr.getCurrentSystemInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
+    }
+
+    @Test
+    public void testGetDecommissionedBackends() throws Exception {
+        for (int i = 100; i < 200; i++) {
+            Backend be = new Backend(i, "decommissionedHost", 1000);
+            be.setStarletPort(i);
+            systemInfoService.addBackend(be);
+            be.setDecommissioned(true);
+        }
+        Assert.assertTrue(systemInfoService.getDecommissionedBackendIds().size() == 100);
     }
 
 }

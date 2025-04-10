@@ -1,12 +1,13 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Resource group
 
 This topic describes the resource group feature of StarRocks.
 
-![resource group](../../../assets/resource_group.png)
+![resource group](../../../_assets/resource_group.png)
 
 With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters. From technical perspective, the execution engine would schedule concurrent workloads according to users' specification and isolate the interference among them.
 
@@ -16,12 +17,12 @@ The roadmap of Resource Group:
 - In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
 - StarRocks v2.5 supports limiting computation resource consumption for data loading (INSERT).
 
-|  | Internal Table | External Table | Big Query Restriction | Short Query | INSERT INTO, Broker Load  | Routine Load, Stream Load, Schema Change |
-|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × |
-| 2.3 | √ | √ | √ | √ | × | × |
-| 2.4 | √ | √ | √ | √ | × | × |
-| 2.5 and later | √ | √ | √ | √ | √ | × |
+|  | Internal Table | External Table | Big Query Restriction | Short Query | INSERT INTO | Broker Load  | Routine Load, Stream Load, Schema Change |
+|---|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × | × |
+| 2.3 | √ | √ | √ | √ | × | × | × |
+| 2.5 | √ | √ | √ | √ | √ | × | × |
+| 3.1 and later | √ | √ | √ | √ | √ | √ | × |
 
 ## Terms
 
@@ -60,7 +61,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   > **NOTE**
   >
-  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
+  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter.
 
 - `concurrency_limit`
 
@@ -68,7 +69,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 - `max_cpu_cores`
 
-  The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
+  The CPU core threshold for triggering query queue in FE. This only takes effect when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
 
 - `spill_mem_limit_threshold`
 
@@ -98,6 +99,33 @@ You can set the resource group `type` to `short_query`, or `normal`.
 >
 > - You can create at most ONE short query resource group in a StarRocks Cluster.
 > - StarRocks does not set set a hard upper limit of CPU resource for `short_query` resource group.
+
+#### System-defined resource groups
+
+There are two system-defined resource groups in each StarRocks instance: `default_wg` and `default_mv_wg`.
+
+##### default_wg
+
+`default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The resource limits of `default_wg` are as follows:
+
+- `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
+- `mem_limit`: 100%.
+- `concurrency_limit`: 0.
+- `big_query_cpu_second_limit`: 0.
+- `big_query_scan_rows_limit`: 0.
+- `big_query_mem_limit`: 0.
+- `spill_mem_limit_threshold`: 1.
+
+##### default_mv_wg
+
+`default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The resource limits of `default_mv_wg` are as follows:
+
+- `cpu_core_limit`: 1.
+- `mem_limit`: 80%.
+- `concurrency_limit`: 0.
+- `spill_mem_limit_threshold`: 80%.
+
+You can configure the CPU core limit, memory limit, concurrency limit, and spilling threshold of `default_mv_wg` by modifying the BE configuration items `default_mv_resource_group_cpu_limit`, `default_mv_resource_group_memory_limit`, `default_mv_resource_group_concurrency_limit`, `default_mv_resource_group_spill_mem_limit_threshold`.
 
 ### classifier
 
@@ -318,16 +346,6 @@ You can view the resource group that a query hits from the `ResourceGroup` colum
 - If the query is not under the management of resource groups, the column value is an empty string `""`.
 - If the query is under the management of resource groups but doesn't match any classifier, the column value is an empty string `""`. But this query is assigned to the default resource group `default_wg`.
 
-The resource limits of `default_wg` are as follows:
-
-- `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
-- `mem_limit`: 100%.
-- `concurrency_limit`: 0.
-- `big_query_cpu_second_limit`: 0.
-- `big_query_scan_rows_limit`: 0.
-- `big_query_mem_limit`: 0.
-- `spill_mem_limit_threshold`: 1.
-
 ### Monitoring resource groups
 
 You can set up [monitoring and alerting](../monitoring/Monitor_and_Alert.md) for your resource groups.
@@ -343,9 +361,9 @@ The following FE metrics only provide statistics within the current FE node:
 | starrocks_fe_query_resource_group               | Count | Instantaneous | The number of queries historically run in this resource group (including those currently running). |
 | starrocks_fe_query_resource_group_latency       | ms    | Instantaneous | The query latency percentile for this resource group. The label `type` indicates specific percentiles, including `mean`, `75_quantile`, `95_quantile`, `98_quantile`, `99_quantile`, `999_quantile`. |
 | starrocks_fe_query_resource_group_err           | Count | Instantaneous | The number of queries in this resource group that encountered an error. |
-| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
+| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
 
 ### BE metrics
 
@@ -365,7 +383,7 @@ The following FE metrics only provide statistics within the current FE node:
 
 ### View resource group usage information
 
-From v3.1.4 onwards, StarRocks supports the SQL statement [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/Administration/SHOW_USAGE_RESOURCE_GROUPS.md), which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
+From v3.1.4 onwards, StarRocks supports the SQL statement [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/cluster-management/resource_group/SHOW_USAGE_RESOURCE_GROUPS.md), which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
 
 - `Name`: The name of the resource group.
 - `Id`: The ID of the resource group.
@@ -395,11 +413,3 @@ MySQL [(none)]> SHOW USAGE RESOURCE GROUPS;
 | wg2        | 0  | 127.0.0.1 | 0.400           | 4               | 8                |
 +------------+----+-----------+-----------------+-----------------+------------------+
 ```
-
-## What to do next
-
-After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
-
-- [Memory management](./Memory_management.md)
-
-- [Query management](./Query_management.md)

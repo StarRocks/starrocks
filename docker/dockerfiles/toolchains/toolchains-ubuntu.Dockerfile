@@ -13,3 +13,4 @@ RUN apt-get update -y && \
 
 ENV JAVA_HOME=/lib/jvm/default-java
 ENV STARROCKS_LINKER=lld
+ENV LANG=en_US.utf8

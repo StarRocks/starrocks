@@ -35,7 +35,7 @@ void HashTableProbeState::consider_probe_time_locality() {
         if ((probe_chunks & (detect_step - 1)) == 0) {
             int window_size = std::min(active_coroutines * 4, 50);
             if (probe_row_count > window_size) {
-                phmap::flat_hash_map<uint32_t, uint32_t> occurrence;
+                phmap::flat_hash_map<uint32_t, uint32_t, StdHash<uint32_t>> occurrence;
                 occurrence.reserve(probe_row_count);
                 uint32_t unique_size = 0;
                 bool enable_interleaving = true;
@@ -226,6 +226,8 @@ void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_item
                 JoinHashMapHelper::calc_bucket_num<Slice>(probe_state->probe_slice[i], table_items.bucket_size);
         ptr += probe_state->probe_slice[i].size;
     }
+
+    probe_state->null_array = nullptr;
 
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];

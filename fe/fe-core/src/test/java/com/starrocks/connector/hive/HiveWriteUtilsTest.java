@@ -40,10 +40,10 @@ public class HiveWriteUtilsTest {
     @Test
     public void checkLocationProp() {
         Map<String, String> conf = new HashMap<>();
-        conf.put("location", "xxx");
+        conf.put("external_location", "xxx");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Can't create non-managed Hive table. Only supports creating hive table under Database location. " +
-                        "You could execute command without location properties",
+                        "You could execute command without external_location properties",
                 () -> HiveWriteUtils.checkLocationProperties(conf));
     }
 
@@ -95,5 +95,10 @@ public class HiveWriteUtilsTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to create directory",
                 () -> HiveWriteUtils.createDirectory(path, new Configuration()));
+    }
+
+    @Test
+    public void testFileCreateByQuery() {
+        Assert.assertFalse(HiveWriteUtils.fileCreatedByQuery("000000_0", "aaaa-bbbb"));
     }
 }

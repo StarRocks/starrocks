@@ -139,6 +139,7 @@ public:
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
+    uint32_t max_one_element_serialize_size() const override;
 
     MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
 
@@ -156,7 +157,7 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string get_name() const override { return std::string{"object"}; }
 

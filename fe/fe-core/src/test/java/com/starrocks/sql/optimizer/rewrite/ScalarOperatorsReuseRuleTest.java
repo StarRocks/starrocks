@@ -58,6 +58,20 @@ public class ScalarOperatorsReuseRuleTest extends PlanTestBase {
                     "  |  <slot 2> : random()\n" +
                     "  |  <slot 3> : random()");
         }
+
+        {
+            String query = "select a, b, a + b from (select random() * 1000 a, random() * 1000 b from t0) t";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "1:Project\n" +
+                    "  |  <slot 4> : 9: multiply\n" +
+                    "  |  <slot 5> : 10: multiply\n" +
+                    "  |  <slot 6> : 9: multiply + 10: multiply\n" +
+                    "  |  common expressions:\n" +
+                    "  |  <slot 7> : random()\n" +
+                    "  |  <slot 8> : random()\n" +
+                    "  |  <slot 9> : 7: random * 1000.0\n" +
+                    "  |  <slot 10> : 8: random * 1000.0");
+        }
     }
 
     @Test

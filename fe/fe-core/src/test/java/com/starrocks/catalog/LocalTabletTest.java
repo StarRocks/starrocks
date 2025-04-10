@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -194,8 +195,9 @@ public class LocalTabletTest {
                 -1, 10, 10, ReplicaState.NORMAL, -1, 9);
         tablet.addReplica(versionIncompleteReplica, false);
         tablet.addReplica(normalReplica, false);
-        Assert.assertEquals(LocalTablet.TabletStatus.COLOCATE_REDUNDANT,
-                tablet.getColocateHealthStatus(9, 1, Sets.newHashSet(10002L)));
+        Assert.assertEquals(LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT,
+                TabletChecker.getColocateTabletHealthStatus(
+                        tablet, 9, 1, Sets.newHashSet(10002L)));
     }
 
 
@@ -247,5 +249,18 @@ public class LocalTabletTest {
         replica.setState(ReplicaState.DECOMMISSION);
         Assert.assertEquals(-1L, tablet.getQuorumVersion(2));
         replica.setState(ReplicaState.NORMAL);
+    }
+
+    @Test
+    public void testGetQueryableReplicaWithErrorState() {
+        List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
+                new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
+                new Replica(10003, 20003, ReplicaState.NORMAL, 10, -1));
+        LocalTablet tablet = new LocalTablet(10004, replicas);
+        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 3);
+        replicas.get(0).setIsErrorState(true);
+        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 2);
+        replicas.get(1).setIsErrorState(true);
+        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 1);
     }
 }

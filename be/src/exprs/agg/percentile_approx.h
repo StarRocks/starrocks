@@ -48,7 +48,11 @@ public:
             column_value = down_cast<const DoubleColumn*>(columns[0])->get_data()[row_num];
         }
 
-        DCHECK(!columns[1]->only_null());
+        if (columns[1]->only_null()) {
+            ctx->set_error("For percentile_approx the second argument is expected to be non-null.", false);
+            return;
+        }
+
         DCHECK(!columns[1]->is_null(0));
 
         data(state).percentile->add(implicit_cast<float>(column_value));

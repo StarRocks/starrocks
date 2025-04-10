@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 4
 description: Data Lakehouse with Apache Hudi
 toc_max_heading_level: 3
 ---
-import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -164,7 +164,7 @@ Open a browser to [http://localhost:9000/](http://localhost:9000/) and authentic
 
 In the left navigation select **Buckets**, and then **Create Bucket +**. Name the bucket `huditest` and select **Create Bucket**
 
-![Create bucket huditest](../assets/quick-start/hudi-test-bucket.png)
+![Create bucket huditest](../_assets/quick-start/hudi-test-bucket.png)
 
 ## Create and populate a table, then sync it to Hive
 

@@ -347,7 +347,7 @@ void NullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const 
         return;
     }
 
-    auto null_data = _null_column->get_data();
+    const auto& null_data = _null_column->get_data();
     uint32_t value = 0x9e3779b9;
     while (from < to) {
         uint32_t new_from = from + 1;
@@ -372,7 +372,7 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
         return;
     }
 
-    auto null_data = _null_column->get_data();
+    const auto& null_data = _null_column->get_data();
     // NULL is treat as 0 when crc32 hash for data loading
     static const int INT_VALUE = 0;
     while (from < to) {
@@ -410,11 +410,12 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return xor_checksum;
 }
 
-void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     if (_has_null && _null_column->get_data()[idx]) {
-        buf->push_null();
+        buf->push_null(is_binary_protocol);
     } else {
-        _data_column->put_mysql_row_buffer(buf, idx);
+        buf->update_field_pos();
+        _data_column->put_mysql_row_buffer(buf, idx, is_binary_protocol);
     }
 }
 

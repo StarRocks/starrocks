@@ -34,6 +34,9 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -64,6 +67,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
     private AgentBatchTask batchTask = null;
+
+    public LakeTableAlterMetaJobBase(JobType jobType) {
+        super(jobType);
+    }
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                                   String tableName, long timeoutMs) {
@@ -183,15 +190,15 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
         db.writeLock();
 
+        LakeTable table = (LakeTable) db.getTable(tableId);
+        if (table == null) {
+            // table has been dropped
+            LOG.warn("table does not exist, tableId:" + tableId);
+            throw new AlterCancelException("table does not exist, tableId:" + tableId);
+        }
+
         try {
-            LakeTable table = (LakeTable) db.getTable(tableId);
-            if (table == null) {
-                // table has been dropped
-                LOG.warn("table does not exist, tableId:" + tableId);
-                throw new AlterCancelException("table does not exist, tableId:" + tableId);
-            } else {
-                updateCatalog(db, table);
-            }
+            updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
@@ -203,6 +210,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             db.writeUnlock();
         }
 
+        handleMVRepair(db, table);
         LOG.info("update meta job finished: {}", jobId);
     }
 
@@ -239,12 +247,17 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     boolean publishVersion() {
         try {
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            txnInfo.commitTime = finishedTimeMs / 1000;
+            txnInfo.forcePublish = false;
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
-                            finishedTimeMs / 1000);
+                    Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion);
                 }
             }
             return true;
@@ -499,5 +512,37 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @Override
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
+
+    private void handleMVRepair(Database db, LakeTable table) {
+        if (table.getRelatedMaterializedViews().isEmpty()) {
+            return;
+        }
+
+        List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
+        db.readLock();;
+        try {
+            for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
+                long partitionId = partitionVersion.getKey();
+                Partition partition = table.getPartition(partitionId);
+                if (partition == null || table.isTempPartition(partitionId)) {
+                    continue;
+                }
+                // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for last commit
+                //  version.
+                // TODO: we may add last version time to check mv's version map with base table's version time.
+                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),  partition.getName(),
+                        partitionVersion.getValue() - 1, partitionVersion.getValue(), finishedTimeMs);
+                partitionRepairInfos.add(partitionRepairInfo);
+            }
+        } finally {
+            db.readUnlock();
+        }
+
+        if (partitionRepairInfos.isEmpty()) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
     }
 }

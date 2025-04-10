@@ -522,7 +522,7 @@ public:
         // get null info from output columns
         auto output_col_num = ctx->get_num_args() - ctx->get_nulls_first().size() - 1;
         NullColumnPtr nulls = NullColumn::create(chunk_size, false);
-        auto null_data = nulls->get_data();
+        auto& null_data = nulls->get_data();
         for (int j = 0; j < output_col_num; ++j) {
             if (src[j]->only_null()) {
                 for (int i = 0; i < chunk_size; ++i) {

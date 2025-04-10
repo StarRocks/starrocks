@@ -25,20 +25,24 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.HashCachedScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -101,7 +105,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                     new BinaryPredicateOperator(BinaryType.GT, predicate.getChild(0),
                             predicate.getChild(2));
 
-            return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, lower, upper);
+            return visitCompoundPredicate(
+                    new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, lower, upper), context);
         } else {
             ScalarOperator lower =
                     new BinaryPredicateOperator(BinaryType.GE, predicate.getChild(0),
@@ -111,7 +116,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                     new BinaryPredicateOperator(BinaryType.LE, predicate.getChild(0),
                             predicate.getChild(2));
 
-            return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lower, upper);
+            return visitCompoundPredicate(
+                    new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lower, upper), context);
         }
     }
 
@@ -129,27 +135,80 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
-
-        if (predicate.isAnd()) {
-            Set<ScalarOperator> after = Sets.newLinkedHashSet();
-            List<ScalarOperator> before = Utils.extractConjuncts(predicate);
-
-            after.addAll(before);
-            if (after.size() != before.size()) {
-                return Utils.compoundAnd(Lists.newArrayList(after));
-            }
-        } else if (predicate.isOr()) {
-            Set<ScalarOperator> after = Sets.newLinkedHashSet();
-            List<ScalarOperator> before = Utils.extractDisjunctive(predicate);
-
-            after.addAll(before);
-
-            if (after.size() != before.size()) {
-                return Utils.compoundOr(Lists.newArrayList(after));
-            }
+        if (predicate.isAnd() || predicate.isOr()) {
+            return getOptimizedCompoundTree(predicate).orElse(predicate);
         }
 
         return predicate;
+    }
+
+    @Nullable
+    private Optional<ScalarOperator> getOptimizedCompoundTree(CompoundPredicateOperator parent) {
+        // reset node first So we can apply NormalizePredicateRule to one tree many times
+        parent.setCompoundTreeUniqueLeaves(null);
+        parent.setCompoundTreeLeafNodeNumber(0);
+        Set<ScalarOperator> compoundTreeUniqueLeaves = null;
+
+        for (ScalarOperator child : parent.getChildren()) {
+            if (child != null) {
+                // child is not leaf node in Compound tree
+                if ((parent.isAnd() && OperatorType.COMPOUND.equals(child.getOpType()) &&
+                        ((CompoundPredicateOperator) child).isAnd()) ||
+                        (parent.isOr() && OperatorType.COMPOUND.equals(child.getOpType()) &&
+                                ((CompoundPredicateOperator) child).isOr())) {
+                    CompoundPredicateOperator compoundChild = (CompoundPredicateOperator) (child);
+                    if (compoundTreeUniqueLeaves == null) {
+                        compoundTreeUniqueLeaves = compoundChild.getCompoundTreeUniqueLeaves();
+                    } else {
+                        compoundTreeUniqueLeaves.addAll(compoundChild.getCompoundTreeUniqueLeaves());
+                    }
+                    parent.setCompoundTreeLeafNodeNumber(
+                            compoundChild.getCompoundTreeLeafNodeNumber() + parent.getCompoundTreeLeafNodeNumber());
+                } else {
+                    // child is leaf node in compound tree
+                    // we cache CompoundPredicate's hash value to eliminate duplicate calculations
+                    if (compoundTreeUniqueLeaves == null) {
+                        compoundTreeUniqueLeaves = Sets.newLinkedHashSet();
+                    }
+                    compoundTreeUniqueLeaves.add(new HashCachedScalarOperator(child));
+                    parent.setCompoundTreeLeafNodeNumber(1 + parent.getCompoundTreeLeafNodeNumber());
+                }
+
+                // clear child's set to save memory
+                // but if node is root node in Compound Tree, there is nothing we can do to clear its set
+                if (OperatorType.COMPOUND.equals(child.getOpType())) {
+                    CompoundPredicateOperator compoundChild = (CompoundPredicateOperator) (child);
+                    compoundChild.setCompoundTreeUniqueLeaves(null);
+                    compoundChild.setCompoundTreeLeafNodeNumber(0);
+                }
+            }
+        }
+        parent.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
+
+        // this tree can be optimized
+        if (compoundTreeUniqueLeaves != null &&
+                compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
+            ScalarOperator newTree = Utils.createCompound(parent.getCompoundType(),
+                    compoundTreeUniqueLeaves.stream().map(
+                            node -> {
+                                // unpack HashCachedScalarOperator so other places will not perceive its existence
+                                if (node instanceof HashCachedScalarOperator) {
+                                    return ((HashCachedScalarOperator) node).getOperator();
+                                }
+                                return node;
+                            }).collect(Collectors.toCollection(Lists::newLinkedList)));
+
+            // newTree's root can be or not to be compoundOperator,like "true and true" can be optimized to true which is constant operator
+            if (OperatorType.COMPOUND.equals(newTree.getOpType())) {
+                CompoundPredicateOperator compoundNewTree = (CompoundPredicateOperator) newTree;
+                compoundNewTree.setCompoundTreeLeafNodeNumber(compoundTreeUniqueLeaves.size());
+                compoundNewTree.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
+            }
+
+            return Optional.of(newTree);
+        }
+        // this tree can't be optimized
+        return Optional.empty();
     }
 
     /*
@@ -197,7 +256,12 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             result.add(newOp);
         });
 
-        return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+        ScalarOperator res = isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+        if (res instanceof CompoundPredicateOperator) {
+            return visitCompoundPredicate((CompoundPredicateOperator) res, context);
+        } else {
+            return res;
+        }
     }
 
     // rewrite collection element to subfiled

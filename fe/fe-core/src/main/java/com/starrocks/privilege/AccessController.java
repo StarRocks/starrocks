@@ -73,6 +73,11 @@ public interface AccessController {
         throw new AccessDeniedException();
     }
 
+    default void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
     default void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();

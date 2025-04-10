@@ -16,6 +16,8 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
@@ -37,6 +39,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -53,6 +56,29 @@ public class CompactionMgr {
     private Selector selector;
     private Sorter sorter;
     private CompactionScheduler compactionScheduler;
+
+    /**
+     *
+     * In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
+     * necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
+     * compaction task can be executed only after the status of the previous compaction task changes to visible or
+     * canceled.
+     * So when FE restarted, we should make sure all the active compaction transactions before restarting were tracked,
+     * and exclude them from choosing as candidates for compaction.
+     *
+     * We use `activeCompactionTransactionMap` to track all lake compaction txns that are not published on FE restart.
+     * The key of the map is the transaction id related to the compaction task, and the value is table id of the
+     * compaction task. It's possible that multiple keys have the same value, because there might be multiple compaction
+     * jobs on different partitions with the same table id.
+     *
+     * Note that, this will prevent all partitions whose tableId is maintained in the map from being compacted
+     */
+    private final ConcurrentHashMap<Long, Long> remainedActiveCompactionTxnWhenStart = new ConcurrentHashMap<>();
+
+    @VisibleForTesting
+    protected ConcurrentHashMap<Long, Long> getRemainedActiveCompactionTxnWhenStart() {
+        return remainedActiveCompactionTxnWhenStart;
+    }
 
     public CompactionMgr() {
         try {
@@ -88,6 +114,31 @@ public class CompactionMgr {
         }
     }
 
+    /**
+     * iterate all transactions and find those with LAKE_COMPACTION labels and are not finished before FE restart
+     * or Leader FE changed.
+     **/
+    public void buildActiveCompactionTransactionMap() {
+        Map<Long, Long> activeTxnStates =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLakeCompactionActiveTxnStats();
+        for (Map.Entry<Long, Long> txnState : activeTxnStates.entrySet()) {
+            // for lake compaction txn, there can only be one table id for each txn state
+            remainedActiveCompactionTxnWhenStart.put(txnState.getKey(), txnState.getValue());
+            LOG.info("Found lake compaction transaction not finished on table {}, txn_id: {}", txnState.getValue(),
+                    txnState.getKey());
+        }
+    }
+
+    protected void removeFromStartupActiveCompactionTransactionMap(long txnId) {
+        if (remainedActiveCompactionTxnWhenStart.isEmpty()) {
+            return;
+        }
+        boolean ret = remainedActiveCompactionTxnWhenStart.keySet().removeIf(key -> key == txnId);
+        if (ret) {
+            LOG.info("Removed transaction {} from startup active compaction transaction map", txnId);
+        }
+    }
+
     public void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime,
                                       Quantiles compactionScore) {
         PartitionVersion currentVersion = new PartitionVersion(version, versionTime);
@@ -97,9 +148,6 @@ public class CompactionMgr {
             }
             v.setCurrentVersion(currentVersion);
             v.setCompactionScore(compactionScore);
-            if (v.getCompactionVersion() == null) {
-                v.setCompactionVersion(new PartitionVersion(0, versionTime));
-            }
             return v;
         });
         if (LOG.isDebugEnabled()) {
@@ -108,7 +156,8 @@ public class CompactionMgr {
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
-                                         Quantiles compactionScore) {
+                                         Quantiles compactionScore, long txnId) {
+        removeFromStartupActiveCompactionTransactionMap(txnId);
         PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
@@ -116,7 +165,7 @@ public class CompactionMgr {
             }
             v.setCurrentVersion(compactionVersion);
             v.setCompactionVersion(compactionVersion);
-            v.setCompactionScore(compactionScore);
+            v.setCompactionScoreAndAdjustPunishFactor(compactionScore);
             return v;
         });
         if (LOG.isDebugEnabled()) {
@@ -127,13 +176,17 @@ public class CompactionMgr {
     @NotNull
     List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
             @NotNull Set<Long> excludeTables) {
-        return choosePartitionsToCompact(excludeTables).stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
+        Set<Long> copiedExcludeTables = new HashSet<>(excludeTables);
+        copiedExcludeTables.addAll(remainedActiveCompactionTxnWhenStart.values());
+        return choosePartitionsToCompact(copiedExcludeTables).stream().filter(p -> !excludes.contains(p))
+                .collect(Collectors.toList());
     }
 
     @NotNull
     List<PartitionIdentifier> choosePartitionsToCompact(Set<Long> excludeTables) {
-        List<PartitionStatistics> selection = sorter.sort(selector.select(partitionStatisticsHashMap.values(), excludeTables));
-        return selection.stream().map(PartitionStatistics::getPartition).collect(Collectors.toList());
+        List<PartitionStatisticsSnapshot> selection = sorter.sort(
+                selector.select(partitionStatisticsHashMap.values(), excludeTables));
+        return selection.stream().map(PartitionStatisticsSnapshot::getPartition).collect(Collectors.toList());
     }
 
     @NotNull
@@ -215,7 +268,31 @@ public class CompactionMgr {
         return compactionManager;
     }
 
+    public boolean isPartitionExist(PartitionIdentifier partition) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(partition.getDbId());
+        if (db == null) {
+            return false;
+        }
+        db.readLock();
+        try {
+            // lake table or lake materialized view
+            OlapTable table = (OlapTable) db.getTable(partition.getTableId());
+            return table != null && table.getPhysicalPartition(partition.getPartitionId()) != null;
+        } finally {
+            db.readUnlock();
+        }
+    }
+
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // partitions are added into map after loading, but they are never removed in checkpoint thread.
+        // drop partition, drop table, truncate table, drop database, ...
+        // all of above will cause partition info change, and it is difficult to call
+        // remove partition for every case, so remove non-existed partitions only when writing image
+        getAllPartitions()
+                .stream()
+                .filter(p -> !isPartitionExist(p))
+                .forEach(this::removePartition);
+
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COMPACTION_MGR, 1);
         writer.writeJson(this);
         writer.close();

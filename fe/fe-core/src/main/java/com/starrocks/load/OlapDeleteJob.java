@@ -46,6 +46,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -122,10 +123,12 @@ public class OlapDeleteJob extends DeleteJob {
             // count total replica num
             int totalReplicaNum = 0;
             for (Partition partition : partitions) {
-                for (MaterializedIndex index : partition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    for (Tablet tablet : index.getTablets()) {
-                        totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                        for (Tablet tablet : index.getTablets()) {
+                            totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
+                        }
                     }
                 }
             }
@@ -133,46 +136,48 @@ public class OlapDeleteJob extends DeleteJob {
             countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
 
             for (Partition partition : partitions) {
-                for (MaterializedIndex index : partition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    long indexId = index.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                        long indexId = index.getId();
+                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
 
-                    List<TColumn> columnsDesc = new ArrayList<>();
-                    for (Column column : olapTable.getSchemaByIndexId(indexId)) {
-                        columnsDesc.add(column.toThrift());
-                    }
+                        List<TColumn> columnsDesc = new ArrayList<>();
+                        for (Column column : olapTable.getSchemaByIndexId(indexId)) {
+                            columnsDesc.add(column.toThrift());
+                        }
 
-                    for (Tablet tablet : index.getTablets()) {
-                        long tabletId = tablet.getId();
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
 
-                        // set push type
-                        TPushType type = TPushType.DELETE;
+                            // set push type
+                            TPushType type = TPushType.DELETE;
 
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            long replicaId = replica.getId();
-                            long backendId = replica.getBackendId();
-                            countDownLatch.addMark(backendId, tabletId);
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                long replicaId = replica.getId();
+                                long backendId = replica.getBackendId();
+                                countDownLatch.addMark(backendId, tabletId);
 
-                            // create push task for each replica
-                            PushTask pushTask = new PushTask(null,
-                                    replica.getBackendId(), db.getId(), olapTable.getId(),
-                                    partition.getId(), indexId,
-                                    tabletId, replicaId, schemaHash,
-                                    -1, 0,
-                                    -1, type, conditions,
-                                    TPriority.NORMAL,
-                                    TTaskType.REALTIME_PUSH,
-                                    getTransactionId(),
-                                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
-                                            .getNextTransactionId(), columnsDesc);
-                            pushTask.setIsSchemaChanging(false);
-                            pushTask.setCountDownLatch(countDownLatch);
+                                // create push task for each replica
+                                PushTask pushTask = new PushTask(null,
+                                        replica.getBackendId(), db.getId(), olapTable.getId(),
+                                        physicalPartition.getId(), indexId,
+                                        tabletId, replicaId, schemaHash,
+                                        -1, 0,
+                                        -1, type, conditions,
+                                        TPriority.NORMAL,
+                                        TTaskType.REALTIME_PUSH,
+                                        getTransactionId(),
+                                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                                                .getNextTransactionId(), columnsDesc);
+                                pushTask.setIsSchemaChanging(false);
+                                pushTask.setCountDownLatch(countDownLatch);
 
-                            if (AgentTaskQueue.addTask(pushTask)) {
-                                batchTask.addTask(pushTask);
-                                addPushTask(pushTask);
-                                addTablet(tabletId);
+                                if (AgentTaskQueue.addTask(pushTask)) {
+                                    batchTask.addTask(pushTask);
+                                    addPushTask(pushTask);
+                                    addTablet(tabletId);
+                                }
                             }
                         }
                     }

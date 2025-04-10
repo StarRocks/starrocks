@@ -253,6 +253,19 @@ Status TabletManager::delete_tablet_metadata(int64_t tablet_id, int64_t version)
     return fs::delete_file(location);
 }
 
+Status TabletManager::tablet_metadata_exists(int64_t tablet_id, int64_t version) {
+    return tablet_metadata_exists(tablet_metadata_location(tablet_id, version));
+}
+
+Status TabletManager::tablet_metadata_exists(const std::string& path) {
+    if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
+        TRACE("got cached tablet metadata");
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->path_exists(path);
+}
+
 StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id, bool filter_tablet) {
     std::vector<std::string> objects{};
     // TODO: construct prefix in LocationProvider
@@ -422,7 +435,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
             auto index_id_iter = properties.find("indexId");
             if (index_id_iter != properties.end()) {
                 auto index_id = std::atol(index_id_iter->second.data());
-                auto res = get_tablet_schema_by_index_id(tablet_id, index_id);
+                auto res = get_tablet_schema_by_id(tablet_id, index_id);
                 if (res.ok()) {
                     return res;
                 } else if (res.status().is_not_found()) {
@@ -469,17 +482,17 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     return schema;
 }
 
-StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t tablet_id, int64_t index_id) {
+StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_id, int64_t index_id) {
     auto global_cache_key = global_schema_cache_key(index_id);
     auto schema = _metacache->lookup_tablet_schema(global_cache_key);
-    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.1", &schema);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.1", &schema);
     if (schema != nullptr) {
         return schema;
     }
     // else: Cache miss, read the schema file
     auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(index_id));
     auto schema_or = load_and_parse_schema_file(schema_file_path);
-    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.2", &schema_or);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.2", &schema_or);
     if (schema_or.ok()) {
         VLOG(3) << "Got tablet schema of id " << index_id << " for tablet " << tablet_id;
         schema = std::move(schema_or).value();
@@ -539,27 +552,37 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
 }
 
 int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
-    int64_t size = 0;
-    std::shared_lock rdlock(_meta_lock);
+    {
+        std::shared_lock rdlock(_meta_lock);
+        const auto& it = _tablet_in_writing_size.find(tablet_id);
+        if (it != _tablet_in_writing_size.end()) {
+            VLOG(1) << "tablet " << tablet_id << " in writing data size: " << it->second;
+            return it->second;
+        }
+    }
+    return add_in_writing_data_size(tablet_id, 0);
+}
+
+int64_t TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {
+    {
+        std::unique_lock wrlock(_meta_lock);
+        const auto& it = _tablet_in_writing_size.find(tablet_id);
+        if (it != _tablet_in_writing_size.end()) {
+            it->second += size;
+            return it->second;
+        }
+    }
+
+    int64_t base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+
+    std::unique_lock wrlock(_meta_lock);
     const auto& it = _tablet_in_writing_size.find(tablet_id);
     if (it != _tablet_in_writing_size.end()) {
-        size = it->second;
+        it->second += size;
+    } else {
+        _tablet_in_writing_size[tablet_id] = base_size + size;
     }
-    VLOG(1) << "tablet " << tablet_id << " in writing data size: " << size;
-    return size;
-}
-
-void TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {
-    std::unique_lock wrlock(_meta_lock);
-    _tablet_in_writing_size[tablet_id] += size;
-    VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_size[tablet_id]
-            << " size: " << size;
-}
-
-void TabletManager::remove_in_writing_data_size(int64_t tablet_id) {
-    std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "remove tablet " << tablet_id << " in writing data size: " << _tablet_in_writing_size[tablet_id];
-    _tablet_in_writing_size.erase(tablet_id);
+    return _tablet_in_writing_size[tablet_id];
 }
 
 void TabletManager::clean_in_writing_data_size() {
@@ -589,6 +612,10 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                                  TabletSchemaPtr tablet_schema) {
+    // NOTE: if partial compaction is turned on, `segment_id` might not be the same as cached segment id
+    //       for example, in tablet X, segment `a` has segment id 10, if partial compaction happens,
+    //                    in tablet X+1, segment `a` might still exists, but its actual id will not be 10.
+    //       but in meta cache, segment `a` still has segment id 10, it is not changed.
     auto segment = metacache()->lookup_segment(segment_info.path);
     if (segment == nullptr) {
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_info.path));
@@ -607,6 +634,10 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     // and many temporary segment objects generation when loading the same segment concurrently.
     RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
     return segment;
+}
+
+void TabletManager::stop() {
+    _compaction_scheduler->stop();
 }
 
 } // namespace starrocks::lake

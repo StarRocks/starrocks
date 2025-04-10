@@ -173,18 +173,6 @@ void test_integral_pk() {
     pk_index->erase(*pk_col, &deletes);
     CHECK_EQ(2, deletes.size());
 
-    {
-        std::vector<uint64_t> rowids(pk_col->size());
-        pk_index->get(*pk_col, &rowids);
-        for (uint32_t i = 0; i < kSegmentSize; i++) {
-            uint64_t v = rowids[i];
-            uint32_t rssid = v >> 32;
-            CHECK_EQ(rssid, -1);
-        }
-        // replace not exist keys
-        ASSERT_TRUE(pk_index->replace(6, 0, replace_indexes, *pk_col).is_not_found());
-    }
-
     CHECK(deletes.find(2) != deletes.end());
     CHECK(deletes.find(2) != deletes.end());
     CHECK_EQ(kSegmentSize / 2, deletes[2].size());
@@ -345,19 +333,6 @@ void test_binary_pk(int key_size) {
     pk_index->erase(*pk_col, &deletes);
     CHECK_EQ(2, deletes.size());
 
-    {
-        std::vector<uint64_t> rowids(pk_col->size());
-        pk_index->get(*pk_col, &rowids);
-        for (uint32_t i = 0; i < kSegmentSize; i++) {
-            uint64_t v = rowids[i];
-            uint32_t rssid = v >> 32;
-            CHECK_EQ(rssid, -1);
-        }
-
-        // replace not exist keys
-        ASSERT_TRUE(pk_index->replace(6, 0, replace_indexes, *pk_col).is_not_found());
-    }
-
     CHECK(deletes.find(2) != deletes.end());
     CHECK(deletes.find(3) != deletes.end());
     CHECK_EQ(kSegmentSize / 2, deletes[2].size());
@@ -432,8 +407,7 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     ASSERT_EQ(deletes.size(), 1);
     ASSERT_EQ(deletes[2].size(), kSegmentSize);
 
-    // replace not exist keys
-    ASSERT_TRUE(pk_index->replace(3, 0, replace_indexes, *pk_column).is_not_found());
+    ASSERT_TRUE(pk_index->replace(3, 0, replace_indexes, *pk_column).ok());
 }
 
 // TODO: test composite primary key

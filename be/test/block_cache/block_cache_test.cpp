@@ -69,34 +69,59 @@ TEST_F(BlockCacheTest, parse_cache_space_size_str) {
     const std::string cache_dir = "./block_disk_cache1";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
-    uint64_t mem_size = 10;
-    ASSERT_EQ(parse_mem_size("10"), mem_size);
+    size_t mem_size = 10;
+    size_t parsed_size = 0;
+    ASSERT_TRUE(parse_conf_datacache_mem_size("10", 0, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, mem_size);
+
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10K"), mem_size);
+    ASSERT_TRUE(parse_conf_datacache_mem_size("10K", 0, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, mem_size);
+
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10M"), mem_size);
+    ASSERT_TRUE(parse_conf_datacache_mem_size("10M", 0, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, mem_size);
+
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10G"), mem_size);
+    ASSERT_TRUE(parse_conf_datacache_mem_size("10G", 0, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, mem_size);
+
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10T"), mem_size);
-    ASSERT_EQ(parse_mem_size("10%", 10 * 1024), 1024);
+    ASSERT_TRUE(parse_conf_datacache_mem_size("10T", 0, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, mem_size);
+
+    ASSERT_TRUE(parse_conf_datacache_mem_size("10%", 10 * 1024, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, 1024);
 
     std::string disk_path = cache_dir;
-    uint64_t disk_size = 10;
-    ASSERT_EQ(parse_disk_size(disk_path, "10"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10K"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10M"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10G"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10T"), disk_size);
+    const int64_t kMaxLimit = 20L * 1024 * 1024 * 1024 * 1024; // 20T
+                                                               //
+    size_t disk_size = 10;
+    ASSERT_TRUE(parse_conf_datacache_disk_size(disk_path, "10", kMaxLimit, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, disk_size);
 
-    disk_size = parse_disk_size(disk_path, "10%");
-    std::error_code ec;
-    auto space_info = std::filesystem::space(disk_path, ec);
-    ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
+    disk_size *= 1024;
+    ASSERT_TRUE(parse_conf_datacache_disk_size(disk_path, "10K", kMaxLimit, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, disk_size);
+
+    disk_size *= 1024;
+    ASSERT_TRUE(parse_conf_datacache_disk_size(disk_path, "10M", kMaxLimit, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, disk_size);
+
+    disk_size *= 1024;
+    ASSERT_TRUE(parse_conf_datacache_disk_size(disk_path, "10G", kMaxLimit, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, disk_size);
+
+    disk_size *= 1024;
+    ASSERT_TRUE(parse_conf_datacache_disk_size(disk_path, "10T", kMaxLimit, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, disk_size);
+
+    // The disk size exceed disk limit
+    ASSERT_TRUE(parse_conf_datacache_disk_size(disk_path, "10T", 1024, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, 1024);
+
+    ASSERT_TRUE(parse_conf_datacache_disk_size(disk_path, "10%", kMaxLimit, &parsed_size).ok());
+    ASSERT_EQ(parsed_size, size_t(10.0 / 100.0 * kMaxLimit));
 
     fs::remove_all(cache_dir).ok();
 }
@@ -108,23 +133,23 @@ TEST_F(BlockCacheTest, parse_cache_space_paths) {
     const std::string cwd = std::filesystem::current_path().string();
     const std::string s_normal_path = fmt::format("{}/block_disk_cache2/cache1;{}/block_disk_cache2/cache2", cwd, cwd);
     std::vector<std::string> paths;
-    ASSERT_TRUE(parse_conf_datacache_paths(s_normal_path, &paths).ok());
+    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_normal_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
     const std::string s_space_path =
             fmt::format(" {}/block_disk_cache2/cache3 ; {}/block_disk_cache2/cache4 ", cwd, cwd);
-    ASSERT_TRUE(parse_conf_datacache_paths(s_space_path, &paths).ok());
+    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_space_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
     const std::string s_empty_path = fmt::format("//;{}/block_disk_cache2/cache4 ", cwd, cwd);
-    ASSERT_FALSE(parse_conf_datacache_paths(s_empty_path, &paths).ok());
+    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_empty_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 1);
 
     paths.clear();
     const std::string s_invalid_path = fmt::format(" /block_disk_cache2/cache5;{}/+/cache6", cwd, cwd);
-    ASSERT_FALSE(parse_conf_datacache_paths(s_invalid_path, &paths).ok());
+    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_invalid_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 0);
 
     fs::remove_all(cache_dir).ok();
@@ -299,6 +324,102 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     }
 
     cache->shutdown();
+    fs::remove_all(cache_dir).ok();
+}
+
+TEST_F(BlockCacheTest, update_cache_quota) {
+    const std::string cache_dir = "./block_disk_cache5";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
+    std::unique_ptr<BlockCache> cache(new BlockCache);
+    const size_t block_size = 256 * 1024;
+
+    CacheOptions options;
+    options.mem_space_size = 1 * 1024 * 1024;
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
+    options.block_size = block_size;
+    options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
+    options.enable_direct_io = false;
+    options.engine = "starcache";
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    {
+        auto metrics = cache->cache_metrics();
+        ASSERT_EQ(metrics.mem_quota_bytes, options.mem_space_size);
+        ASSERT_EQ(metrics.disk_quota_bytes, quota);
+    }
+
+    {
+        size_t new_mem_quota = 2 * 1024 * 1024;
+        ASSERT_TRUE(cache->update_mem_quota(new_mem_quota).ok());
+        auto metrics = cache->cache_metrics();
+        ASSERT_EQ(metrics.mem_quota_bytes, new_mem_quota);
+    }
+
+    {
+        size_t new_disk_quota = 100 * 1024 * 1024;
+        std::vector<DirSpace> dir_spaces;
+        dir_spaces.push_back({.path = cache_dir, .size = new_disk_quota});
+        ASSERT_TRUE(cache->update_disk_spaces(dir_spaces).ok());
+        auto metrics = cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, new_disk_quota);
+    }
+
+    cache->shutdown();
+    fs::remove_all(cache_dir).ok();
+}
+
+TEST_F(BlockCacheTest, clear_residual_blockfiles) {
+    const std::string cache_dir = "./block_disk_cache6";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
+    std::unique_ptr<BlockCache> cache(new BlockCache);
+    const size_t block_size = 256 * 1024;
+
+    CacheOptions options;
+    options.mem_space_size = 0;
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
+    options.block_size = block_size;
+    options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
+    options.enable_direct_io = false;
+    options.engine = "starcache";
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    // write cache
+    {
+        const size_t batch_size = block_size;
+        const size_t rounds = 20;
+        const std::string cache_key = "test_file";
+
+        for (size_t i = 0; i < rounds; ++i) {
+            char ch = 'a' + i % 26;
+            std::string value(batch_size, ch);
+            Status st = cache->write_buffer(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+            ASSERT_TRUE(st.ok());
+        }
+    }
+
+    {
+        std::vector<std::string> files;
+        auto st = fs::get_children(cache_dir, &files);
+        ASSERT_GT(files.size(), 0);
+    }
+
+    cache->shutdown();
+    clean_residual_datacache(cache_dir);
+
+    {
+        std::vector<std::string> files;
+        auto st = fs::get_children(cache_dir, &files);
+        ASSERT_EQ(files.size(), 0);
+    }
+
     fs::remove_all(cache_dir).ok();
 }
 

@@ -72,18 +72,22 @@ private:
     METRIC_DEFINE_UINT_GAUGE(threadpool_name##_executed_tasks_total, MetricUnit::NOUNIT);       \
     METRIC_DEFINE_UINT_GAUGE(threadpool_name##_pending_time_ns_total, MetricUnit::NANOSECONDS); \
     METRIC_DEFINE_UINT_GAUGE(threadpool_name##_execute_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT)
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT);                \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_running_threads, MetricUnit::NOUNIT);            \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_active_threads, MetricUnit::NOUNIT)
 
-#define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                           \
-    do {                                                                                                         \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_threadpool_size, [this]() { return threadpool->max_threads(); })  \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_executed_tasks_total,                                             \
-                                        [this]() { return threadpool->total_executed_tasks(); })                 \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_pending_time_ns_total,                                            \
-                                        [this]() { return threadpool->total_pending_time_ns(); })                \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_execute_time_ns_total,                                            \
-                                        [this]() { return threadpool->total_execute_time_ns(); })                \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_queue_count, [this]() { return threadpool->num_queued_tasks(); }) \
+#define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                            \
+    do {                                                                                                          \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_threadpool_size, [this]() { return threadpool->max_threads(); })   \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_executed_tasks_total,                                              \
+                                        [this]() { return threadpool->total_executed_tasks(); })                  \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_pending_time_ns_total,                                             \
+                                        [this]() { return threadpool->total_pending_time_ns(); })                 \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_execute_time_ns_total,                                             \
+                                        [this]() { return threadpool->total_execute_time_ns(); })                 \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_queue_count, [this]() { return threadpool->num_queued_tasks(); })  \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_running_threads, [this]() { return threadpool->num_threads(); })   \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_active_threads, [this]() { return threadpool->active_threads(); }) \
     } while (false)
 
 class StarRocksMetrics {
@@ -99,6 +103,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(query_scan_rows, MetricUnit::ROWS);
+    METRIC_DEFINE_INT_GAUGE(pipe_drivers, MetricUnit::NOUNIT);
 
     // counters
     METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);
@@ -140,6 +145,8 @@ public:
     METRIC_DEFINE_INT_COUNTER(finish_task_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(finish_task_requests_failed, MetricUnit::REQUESTS);
 
+    // Compaction Task Metric
+    // compaction task num, including all finished tasks and failed tasks
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_failed, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(cumulative_compaction_request_total, MetricUnit::REQUESTS);
@@ -147,12 +154,14 @@ public:
     METRIC_DEFINE_INT_COUNTER(update_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(update_compaction_request_failed, MetricUnit::REQUESTS);
 
+    // compaction task rate
     METRIC_DEFINE_INT_COUNTER(base_compaction_deltas_total, MetricUnit::ROWSETS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(cumulative_compaction_deltas_total, MetricUnit::ROWSETS);
     METRIC_DEFINE_INT_COUNTER(cumulative_compaction_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(update_compaction_deltas_total, MetricUnit::ROWSETS);
     METRIC_DEFINE_INT_COUNTER(update_compaction_bytes_total, MetricUnit::BYTES);
+
     METRIC_DEFINE_INT_COUNTER(update_compaction_outputs_total, MetricUnit::ROWSETS);
     METRIC_DEFINE_INT_COUNTER(update_compaction_outputs_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(update_compaction_duration_us, MetricUnit::MICROSECONDS);
@@ -212,6 +221,9 @@ public:
     // Accumulated time that task pends in the queue
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_pending_duration_us, MetricUnit::MICROSECONDS);
 
+    // Metrics for metadata lru cache
+    METRIC_DEFINE_INT_GAUGE(metadata_cache_bytes_total, MetricUnit::BYTES);
+
     // Metrics for delta writer
     // Accumulated time that delta writer waits for memtable flush. It's part of
     // async_delta_writer_task_execute_duration_us
@@ -250,6 +262,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_hit_cache, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_hit_cache, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(primary_key_table_error_state_total, MetricUnit::REQUESTS);
 
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
@@ -262,6 +275,7 @@ public:
     IntGaugeMetricsMap disks_data_used_capacity;
     IntGaugeMetricsMap disks_state;
 
+    // Compaction Task Metric
     // the max compaction score of all tablets.
     // Record base and cumulative scores separately, because
     // we need to get the larger of the two.
@@ -269,6 +283,23 @@ public:
     METRIC_DEFINE_INT_GAUGE(tablet_base_max_compaction_score, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(tablet_update_max_compaction_score, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(max_tablet_rowset_num, MetricUnit::NOUNIT);
+
+    // compaction task num, including waiting tasks and running tasks
+    METRIC_DEFINE_INT_GAUGE(wait_cumulative_compaction_task_num, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(wait_base_compaction_task_num, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(running_cumulative_compaction_task_num, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(running_base_compaction_task_num, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(running_update_compaction_task_num, MetricUnit::NOUNIT);
+
+    // compaction task cost time
+    METRIC_DEFINE_INT_GAUGE(cumulative_compaction_task_cost_time_ms, MetricUnit::MILLISECONDS);
+    METRIC_DEFINE_INT_GAUGE(base_compaction_task_cost_time_ms, MetricUnit::MILLISECONDS);
+    METRIC_DEFINE_INT_GAUGE(update_compaction_task_cost_time_ns, MetricUnit::NANOSECONDS);
+
+    // compaction task rate
+    METRIC_DEFINE_INT_GAUGE(base_compaction_task_byte_per_second, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(cumulative_compaction_task_byte_per_second, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(update_compaction_task_byte_per_second, MetricUnit::BYTES);
 
     // The following metrics will be calculated
     // by metric calculator
@@ -314,8 +345,30 @@ public:
     METRICS_DEFINE_THREAD_POOL(segment_flush);
     METRICS_DEFINE_THREAD_POOL(update_apply);
     METRICS_DEFINE_THREAD_POOL(pk_index_compaction);
+    METRICS_DEFINE_THREAD_POOL(compact_pool);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
+
+    // agent server thread pools
+    METRICS_DEFINE_THREAD_POOL(drop);
+    METRICS_DEFINE_THREAD_POOL(create_tablet);
+    METRICS_DEFINE_THREAD_POOL(alter_tablet);
+    METRICS_DEFINE_THREAD_POOL(clear_transaction);
+    METRICS_DEFINE_THREAD_POOL(storage_medium_migrate);
+    METRICS_DEFINE_THREAD_POOL(check_consistency);
+    METRICS_DEFINE_THREAD_POOL(manual_compaction);
+    METRICS_DEFINE_THREAD_POOL(compaction_control);
+    METRICS_DEFINE_THREAD_POOL(update_schema);
+    METRICS_DEFINE_THREAD_POOL(upload);
+    METRICS_DEFINE_THREAD_POOL(download);
+    METRICS_DEFINE_THREAD_POOL(make_snapshot);
+    METRICS_DEFINE_THREAD_POOL(release_snapshot);
+    METRICS_DEFINE_THREAD_POOL(move_dir);
+    METRICS_DEFINE_THREAD_POOL(update_tablet_meta_info);
+    METRICS_DEFINE_THREAD_POOL(drop_auto_increment_map_dir);
+    METRICS_DEFINE_THREAD_POOL(clone);
+    METRICS_DEFINE_THREAD_POOL(remote_snapshot);
+    METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
 
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);

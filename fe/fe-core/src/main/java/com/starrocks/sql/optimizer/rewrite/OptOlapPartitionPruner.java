@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -207,7 +209,7 @@ public class OptOlapPartitionPruner {
 
         scanPredicates.removeAll(prunedPartitionPredicates);
 
-        if (column.isAllowNull() && containsNullValue(column, minRange)
+        if (column.isAllowNull() && containsNullValue(minRange)
                 && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
             return null;
         }
@@ -239,7 +241,7 @@ public class OptOlapPartitionPruner {
         List<Long> specifyPartitionIds = null;
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
-        List<Long> partitionIds = Lists.newArrayList();
+        Set<Long> partitionIds = Sets.newHashSet();
         if (operator.getPartitionNames() != null) {
             for (String partName : operator.getPartitionNames().getPartitionNames()) {
                 boolean isTemp = operator.getPartitionNames().isTemp();
@@ -252,9 +254,9 @@ public class OptOlapPartitionPruner {
                 }
                 partitionIds.add(part.getId());
             }
-            specifyPartitionIds = partitionIds;
+            specifyPartitionIds = Lists.newArrayList(partitionIds);
         } else {
-            partitionIds = listPartitionInfo.getPartitionIds(false);
+            partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(false));
         }
 
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
@@ -268,8 +270,7 @@ public class OptOlapPartitionPruner {
                 if (values == null || values.isEmpty()) {
                     continue;
                 }
-                values.forEach(value ->
-                        putValueMapItem(partitionValueToIds, partitionId, value));
+                values.forEach(value -> putValueMapItem(partitionValueToIds, partitionId, value));
             }
             // single item list partition has only one column
             Column column = listPartitionInfo.getPartitionColumns().get(0);
@@ -284,6 +285,7 @@ public class OptOlapPartitionPruner {
             List<Column> columnList = listPartitionInfo.getPartitionColumns();
             for (int i = 0; i < columnList.size(); i++) {
                 ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
+                Set<Long> nullPartitionIds = new HashSet<>();
                 for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
                     Long partitionId = entry.getKey();
                     if (!partitionIds.contains(partitionId)) {
@@ -295,23 +297,29 @@ public class OptOlapPartitionPruner {
                     }
                     for (List<LiteralExpr> values : multiValues) {
                         LiteralExpr value = values.get(i);
-                        putValueMapItem(partitionValueToIds, partitionId, value);
+                        // store null partition value seperated from non-null partition values
+                        if (value.isConstantNull()) {
+                            nullPartitionIds.add(partitionId);
+                        } else {
+                            putValueMapItem(partitionValueToIds, partitionId, value);
+                        }
                     }
                 }
                 Column column = columnList.get(i);
                 ColumnRefOperator columnRefOperator = operator.getColumnReference(column);
                 columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
-                columnToNullPartitions.put(columnRefOperator, new HashSet<>());
+                columnToNullPartitions.put(columnRefOperator, nullPartitionIds);
             }
         }
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
-        PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
+        ListPartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
                 columnToNullPartitions, scalarOperatorList, specifyPartitionIds, listPartitionInfo);
+        partitionPruner.prepareDeduceExtraConjuncts(operator);
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune) {
-                return partitionIds;
+                return Lists.newArrayList(partitionIds);
             } else {
                 return prune;
             }
@@ -375,16 +383,20 @@ public class OptOlapPartitionPruner {
         return false;
     }
 
-    private static boolean containsNullValue(Column column, PartitionKey minRange) {
+    private static boolean containsNullValue(PartitionKey minRange) {
         PartitionKey nullValue = new PartitionKey();
         try {
-            nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+            for (int i = 0; i < minRange.getKeys().size(); ++i) {
+                LiteralExpr rangeKey = minRange.getKeys().get(i);
+                PrimitiveType type = minRange.getTypes().get(i);
+                nullValue.pushColumn(LiteralExpr.createInfinity(rangeKey.getType(), false), type);
+            }
+
             return minRange.compareTo(nullValue) <= 0;
         } catch (AnalysisException e) {
             return false;
         }
     }
-
 
     private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();

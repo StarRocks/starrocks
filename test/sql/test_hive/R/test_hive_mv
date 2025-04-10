@@ -20,9 +20,9 @@ insert into t1 values (1, 1, '2021-01-01'), (2, 2, '2021-02-01'), (3, 3, '2021-0
 select * from t1;
 -- result:
 3	3	2021-03-01
-2	2	2021-02-01
-4	4	2021-01-02
 1	1	2021-01-01
+4	4	2021-01-02
+2	2	2021-02-01
 -- !result
 set catalog default_catalog;
 -- result:
@@ -38,7 +38,7 @@ PARTITION BY (str2date(`k3`, '%Y-%m-%d'))
 DISTRIBUTED BY HASH(k1, k2) BUCKETS 5  as select * from hive_mv_test_${uuid0}.hive_db_${uuid0}.t1 where k2 in (2, 3);
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("mv1")
+function: wait_async_materialized_view_finish("hive_db_${uuid0}", "mv1")
 -- result:
 None
 -- !result

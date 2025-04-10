@@ -59,6 +59,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
 #include "util/uid_util.h"
@@ -80,8 +81,7 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(DataStreamSender* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
-            bool send_query_statistics_with_every_batch)
+            PlanNodeId dest_node_id, bool is_transfer_chain, bool send_query_statistics_with_every_batch)
             : _parent(parent),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
@@ -179,7 +179,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -364,8 +364,8 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
 DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc,
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
-                                   int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
-                                   bool enable_exchange_pass_through, bool enable_exchange_perf)
+                                   bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
+                                   bool enable_exchange_perf)
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
@@ -394,7 +394,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         const auto& fragment_instance_id = destinations[i].fragment_instance_id;
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
             _channel_shared_ptrs.emplace_back(new Channel(this, destinations[i].brpc_server, fragment_instance_id,
-                                                          sink.dest_node_id, per_channel_buffer_size, is_transfer_chain,
+                                                          sink.dest_node_id, is_transfer_chain,
                                                           send_query_statistics_with_every_batch));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channel_shared_ptrs.size() - 1});
             _channels.push_back(_channel_shared_ptrs.back().get());

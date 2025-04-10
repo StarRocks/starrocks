@@ -142,6 +142,11 @@ struct TNormalSetOperationNode {
   4: optional i64 first_materialized_child_idx
 }
 
+struct TNormalSelectNode {
+  1: optional list<Types.TSlotId> cse_slot_ids;
+  2: optional list<binary> cse_exprs;
+}
+
 struct TNormalPlanNode {
   1: optional Types.TPlanNodeId node_id
   2: optional PlanNodes.TPlanNodeType node_type
@@ -165,4 +170,5 @@ struct TNormalPlanNode {
   19: optional TNormalSortNode sort_node
   20: optional TNormalSortAggregationNode sort_aggregation_node
   22: optional TNormalSetOperationNode set_operation_node
+  23: optional TNormalSelectNode select_node
 }

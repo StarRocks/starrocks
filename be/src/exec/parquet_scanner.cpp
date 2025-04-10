@@ -108,14 +108,6 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         _conv_ctx.current_slot = slot_desc;
         auto* array = _batch->column(column_pos++).get();
         auto& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        // for timestamp type, _state->timezone which is specified by user. convert function
-        // obtains timezone from array. thus timezone in array should be rectified to
-        // _state->timezone.
-        if (array->type_id() == ArrowTypeId::TIMESTAMP) {
-            auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
-            auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-            mutable_timezone = _state->timezone();
-        }
         RETURN_IF_ERROR(convert_array_to_column(_conv_funcs[i].get(), num_elements, array, column, _batch_start_idx,
                                                 _chunk_start_idx, &_chunk_filter, &_conv_ctx));
     }
@@ -321,6 +313,15 @@ Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_
                                                const arrow::Array* array, const ColumnPtr& column,
                                                size_t batch_start_idx, size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
+    // for timestamp type, state->timezone which is specified by user. convert function
+    // obtains timezone from array. thus timezone in array should be rectified to
+    // state->timezone.
+    if (array->type_id() == ArrowTypeId::TIMESTAMP) {
+        auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
+        auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+        mutable_timezone = conv_ctx->state->timezone();
+    }
+
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {

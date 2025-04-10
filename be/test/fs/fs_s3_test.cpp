@@ -264,6 +264,161 @@ TEST_F(S3FileSystemTest, test_directory) {
     EXPECT_OK(fs->delete_file(S3Path("/file0")));
 }
 
+TEST_F(S3FileSystemTest, test_directory_v1) {
+    bool s3_use_list_objects_v1 = config::s3_use_list_objects_v1;
+    config::s3_use_list_objects_v1 = true;
+
+    auto now = ::time(nullptr);
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
+    bool created = false;
+
+    //
+    //  /dirname0/
+    //
+    EXPECT_OK(fs->create_dir(S3Path("/dirname0")));
+    CheckIsDirectory(fs.get(), S3Path("/dirname"), false);
+    CheckIsDirectory(fs.get(), S3Path("/dirname0"), true, true);
+    EXPECT_TRUE(fs->create_dir(S3Path("/dirname0")).is_already_exist());
+
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0"), &created));
+    EXPECT_FALSE(created);
+    CheckIsDirectory(fs.get(), S3Path("/dirname0"), true, true);
+
+    //
+    //  /dirname0/
+    //  /dirname1/
+    //
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname1"), &created));
+    EXPECT_TRUE(created);
+    CheckIsDirectory(fs.get(), S3Path("/dirname1"), true, true);
+
+    CheckIsDirectory(fs.get(), S3Path("/noexistdir"), false);
+    EXPECT_ERROR(fs->new_writable_file(S3Path("/filename/")));
+
+    //
+    //  /dirname0/
+    //  /dirname1/
+    //  /file0
+    //
+    {
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(S3Path("/file0")));
+        EXPECT_OK(of->append("hello"));
+        EXPECT_OK(of->close());
+    }
+    CheckIsDirectory(fs.get(), S3Path("/file0"), true, false);
+
+    //
+    //  /dirname0/
+    //  /dirname1/
+    //  /dirname2/0.dat
+    //  /file0
+    //
+    {
+        // NOTE: Although directory "/dirname2" does not exist, we can still create file under "/dirname2" successfully
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(S3Path("/dirname2/0.dat")));
+        EXPECT_OK(of->append("hello"));
+        EXPECT_OK(of->close());
+        CheckIsDirectory(fs.get(), S3Path("/dirname2/0.dat"), true, false);
+        CheckIsDirectory(fs.get(), S3Path("/dirname2/0"), false);
+        CheckIsDirectory(fs.get(), S3Path("/dirname2/0.da"), false);
+    }
+    CheckIsDirectory(fs.get(), S3Path("/dirname2"), true, true);
+
+    //
+    //  /dirname0/
+    //  /dirname1/
+    //  /dirname2/0.dat
+    //  /dirname2/1.dat
+    //  /file0
+    //
+    {
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(S3Path("/dirname2/1.dat")));
+        EXPECT_OK(of->append("starrocks"));
+        EXPECT_OK(of->close());
+        CheckIsDirectory(fs.get(), S3Path("/dirname2/1.dat"), true, false);
+    }
+    CheckIsDirectory(fs.get(), S3Path("/dirname2"), true, true);
+
+    //
+    //  /dirname0/
+    //  /dirname1/
+    //  /dirname2/0.dat
+    //  /dirname2/1.dat
+    //  /dirname2/subdir0/
+    //  /file0
+    //
+    EXPECT_OK(fs->create_dir(S3Path("/dirname2/subdir0")));
+    CheckIsDirectory(fs.get(), S3Path("/dirname2/subdir0"), true, true);
+
+    EXPECT_OK(fs->iterate_dir2(S3Path("/dirname2/"), [&](DirEntry entry) {
+        auto name = entry.name;
+        if (name == "0.dat") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(/* length of "hello" = */ 5, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
+        } else if (name == "1.dat") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(/* length of "starrocks" = */ 9, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
+        } else if (name == "subdir0") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(entry.is_dir.value());
+            CHECK(!entry.size.has_value());
+            CHECK(!entry.mtime.has_value());
+        } else {
+            CHECK(false) << "Unexpected file " << name;
+        }
+        return true;
+    }));
+
+    std::vector<std::string> entries;
+    auto cb = [&](std::string_view name) -> bool {
+        entries.emplace_back(name);
+        return true;
+    };
+
+    EXPECT_ERROR(fs->iterate_dir(S3Path("/nonexistdir"), cb));
+    EXPECT_ERROR(fs->delete_dir(S3Path("/nonexistdir")));
+
+    entries.clear();
+    EXPECT_OK(fs->iterate_dir(S3Path("/"), cb));
+    EXPECT_EQ("dirname0,dirname1,dirname2,file0", JoinStrings(entries, ","));
+
+    entries.clear();
+    EXPECT_OK(fs->iterate_dir(S3Path("/dirname0"), cb));
+    EXPECT_EQ("", JoinStrings(entries, ","));
+
+    entries.clear();
+    EXPECT_OK(fs->iterate_dir(S3Path("/dirname1"), cb));
+    EXPECT_EQ("", JoinStrings(entries, ","));
+
+    entries.clear();
+    EXPECT_OK(fs->iterate_dir(S3Path("/dirname2"), cb));
+    EXPECT_EQ("0.dat,1.dat,subdir0", JoinStrings(entries, ","));
+
+    entries.clear();
+    EXPECT_OK(fs->iterate_dir(S3Path("/dirname2/subdir0"), cb));
+    EXPECT_EQ("", JoinStrings(entries, ","));
+
+    EXPECT_ERROR(fs->delete_dir(S3Path("/dirname2"))); // dirname2 is not empty
+
+    EXPECT_OK(fs->delete_dir(S3Path("/dirname0")));
+    EXPECT_OK(fs->delete_dir(S3Path("/dirname1")));
+    EXPECT_OK(fs->delete_file(S3Path("/dirname2/0.dat")));
+    EXPECT_OK(fs->delete_file(S3Path("/dirname2/1.dat")));
+    EXPECT_OK(fs->delete_dir(S3Path("/dirname2/subdir0")));
+    EXPECT_ERROR(fs->delete_dir(S3Path("/dirname2"))); // "/dirname2/" is a non-exist object
+    EXPECT_OK(fs->delete_file(S3Path("/file0")));
+
+    config::s3_use_list_objects_v1 = s3_use_list_objects_v1;
+}
+
 TEST_F(S3FileSystemTest, test_delete_dir_recursive) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
 
@@ -303,6 +458,52 @@ TEST_F(S3FileSystemTest, test_delete_dir_recursive) {
     ASSERT_EQ("dirname0x", entries[0]);
     ASSERT_OK(fs->delete_dir(S3Path("/dirname0x")));
     ASSERT_TRUE(fs->delete_dir_recursive(S3Path("/")).is_not_found());
+}
+
+TEST_F(S3FileSystemTest, test_delete_dir_recursive_v1) {
+    bool s3_use_list_objects_v1 = config::s3_use_list_objects_v1;
+    config::s3_use_list_objects_v1 = true;
+
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
+
+    std::vector<std::string> entries;
+    auto cb = [&](std::string_view name) -> bool {
+        entries.emplace_back(name);
+        return true;
+    };
+
+    bool created;
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0"), &created));
+    ASSERT_OK(fs->delete_dir_recursive(S3Path("/dirname0")));
+    EXPECT_TRUE(fs->iterate_dir(S3Path("/"), cb).is_not_found());
+    ASSERT_EQ(0, entries.size());
+
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0"), &created));
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0/a"), &created));
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0/b"), &created));
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0/a/a"), &created));
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0/a/b"), &created));
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0/a/c"), &created));
+    {
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(S3Path("/dirname0/1.dat")));
+        EXPECT_OK(of->append("hello"));
+        EXPECT_OK(of->close());
+    }
+    {
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(S3Path("/dirname0/a/1.dat")));
+        EXPECT_OK(of->append("hello"));
+        EXPECT_OK(of->close());
+    }
+
+    EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0x"), &created));
+    ASSERT_OK(fs->delete_dir_recursive(S3Path("/dirname0")));
+    EXPECT_OK(fs->iterate_dir(S3Path("/"), cb));
+    ASSERT_EQ(1, entries.size());
+    ASSERT_EQ("dirname0x", entries[0]);
+    ASSERT_OK(fs->delete_dir(S3Path("/dirname0x")));
+    ASSERT_TRUE(fs->delete_dir_recursive(S3Path("/")).is_not_found());
+
+    config::s3_use_list_objects_v1 = s3_use_list_objects_v1;
 }
 
 TEST_F(S3FileSystemTest, test_delete_nonexist_file) {

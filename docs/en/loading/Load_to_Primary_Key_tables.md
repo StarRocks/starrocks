@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Change data through loading
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) or [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) or [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 StarRocks also supports partial updates and conditional updates.
 
@@ -50,19 +50,9 @@ You can decide whether to add the `__op` field based on the data changes you wan
 
 - The columns that involve data changes must include the primary key column.
 
-## Prerequisites
-
-### Broker Load
-
-See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](../loading/cloud_storage_load.md).
-
-### Routine load
-
-If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created four topics: `topic1`, `topic2`, `topic3`, and `topic4`.
-
 ## Basic operations
 
-This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
+This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md).
 
 ### UPSERT
 
@@ -107,7 +97,7 @@ If the data file you want to load involves only UPSERT operations, you do not ne
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert a record into `table1`.
 
@@ -269,7 +259,7 @@ If the data file you want to load involves only DELETE operations, you must add 
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert two records into `table2`.
 
@@ -381,7 +371,7 @@ If the data file you want to load involves both UPSERT and DELETE operations, yo
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert two records into `table3`.
 
@@ -465,11 +455,13 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 ## Partial updates
 
-Since v2.2, StarRocks supports updating only the specified columns of a Primary Key table. This section uses CSV as an example to describe how to perform partial updates.
+Primary Key tables also support partial updates, and provide two modes of partial updates, row mode and column mode, for different data update scenarios. These two modes of partial updates can minimize the overhead of partial updates as much as possible while guaranteeing query performance, ensuring real-time updates. Row mode is more suitable for real-time update scenarios involving many columns and small batches. Column mode is suitable for batch processing update scenarios involving a few columns and a large number of rows.
 
 > **NOTICE**
 >
 > When you perform a partial update, if the row to be updated does not exist, StarRocks inserts a new row, and fills default values in fields that are empty because no data updates are inserted into them.
+
+This section uses CSV as an example to describe how to perform partial updates.
 
 ### Data examples
 
@@ -503,7 +495,7 @@ Since v2.2, StarRocks supports updating only the specified columns of a Primary 
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert a record into `table4`.
 
@@ -530,7 +522,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 
   > **NOTE**
   >
-  > If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `columns` parameter to specify the columns you want to update.
+  > If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. The default is partial updates in row mode. If you need to perform partial updates in column mode, you need to set `partial_update_mode` to `column`. Additionally, you must use the `columns` parameter to specify the columns you want to update.
 
 - Run a Broker Load job:
 
@@ -551,7 +543,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 
   > **NOTE**
   >
-  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
+  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. The default is partial updates in row mode. If you need to perform partial updates in column mode, you need to set `partial_update_mode` to `column`. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
 
 - Run a Routine Load job:
 
@@ -573,7 +565,8 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 
   > **NOTE**
   >
-  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
+  > - If you choose Routine Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
+  > - Routine Load only supports partial updates in row modes and does not support partial updates in column mode.
 
 ### Query data
 
@@ -635,7 +628,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert a record into `table5`.
 

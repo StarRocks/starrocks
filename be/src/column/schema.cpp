@@ -42,9 +42,17 @@ Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key
 Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
         : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     _fields.resize(cids.size());
+    auto ori_sort_idxes = schema->sort_key_idxes();
+    std::map<ColumnId, int32_t> cids_to_field_id;
     for (int i = 0; i < cids.size(); i++) {
         DCHECK_LT(cids[i], schema->_fields.size());
         _fields[i] = schema->_fields[cids[i]];
+        cids_to_field_id[cids[i]] = i;
+    }
+    for (auto idx : ori_sort_idxes) {
+        if (cids_to_field_id.count(idx) > 0) {
+            _sort_key_idxes.emplace_back(cids_to_field_id[idx]);
+        }
     }
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);

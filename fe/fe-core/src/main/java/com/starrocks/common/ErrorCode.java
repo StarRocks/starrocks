@@ -175,7 +175,7 @@ public enum ErrorCode {
     ERR_BAD_PARTITION_STATE(5015, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition state is not NORMAL: '%s':'%s'"),
     ERR_PARTITION_HAS_LOADING_JOBS(5016, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition has loading jobs: '%s'"),
     ERR_NOT_KEY_COLUMN(5017, new byte[] {'H', 'Y', '0', '0', '0'}, "Column is not a key column: '%s'"),
-    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid value format: '%s'"),
+    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
     ERR_REPLICA_NOT_CATCH_UP_WITH_VERSION(5019, new byte[] {'H', 'Y', '0', '0', '0'},
             "Replica does not catch up with version: '%s':'%s'"),
     ERR_BACKEND_OFFLINE(5021, new byte[] {'H', 'Y', '0', '0', '0'}, "Backend is offline: '%s'"),
@@ -346,10 +346,17 @@ public enum ErrorCode {
      */
 
     /**
+     * 5400 - 5499: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5400, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated"),
+
+    /**
      * 5600 - 5699: DML operation failure
      */
     ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
-            "No files were found matching the pattern(s) or path(s): '%s'"),
+            "No files were found matching the pattern(s) or path(s): '%s'. You should check whether there are " +
+                    "files under the path, and make sure the process has the permission to access the path"),
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
     ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
@@ -358,7 +365,17 @@ public enum ErrorCode {
                     "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
                     "to ensure such load jobs can succeed"),
     ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
-            "Inserted target column count: %d doesn't match select/value column count: %d");
+            "Inserted target column count: %d doesn't match select/value column count: %d"),
+    ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
+    ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
+            "%s. Check the 'TrackingSQL' field for detailed information. If you are sure that the data has many errors, " +
+                    "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
+            "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
+            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
+            "unsupported statement in shared_nothing mode");
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";

@@ -1,16 +1,20 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
-import BEConfigMethod from '../../assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
-import PostBEConfig from '../../assets/commonMarkdown/BE_dynamic_note.md'
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
 
-import StaticBEConfigNote from '../../assets/commonMarkdown/StaticBE_config_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
 # BE Configuration
 
 <BEConfigMethod />
+
+<CNConfigMethod />
 
 
 ## View BE configuration items
@@ -340,8 +344,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Default: INFO
 - Type: String
 - Unit: -
-- Is mutable: No
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL.
+- Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
 - Introduced in: -
 
 ##### sys_log_roll_mode
@@ -491,6 +495,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### primary_key_limit_size
+
+- Default: 128
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of a key column in Primary Key tables.
+- Introduced in: v2.5
+
 ##### drop_tablet_worker_count
 
 - Default: 3
@@ -580,49 +593,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: -
 -->
 
-<!--
 ##### upload_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the upload tasks of backup jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### download_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the download tasks of restore jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### make_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
+- Description: The maximum number of threads for the make snapshot tasks on a BE node.
 - Introduced in: -
--->
 
-<!--
 ##### release_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the release snapshot tasks on a BE node.
 - Introduced in: -
--->
 
 ##### max_download_speed_kbps
 
@@ -1086,7 +1091,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction.
+- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction. This parameter is mutable when the Event-based Compaction Framework is enabled.
 - Introduced in: -
 
 ##### compaction_trace_threshold
@@ -1578,7 +1583,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
+- Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
 
 <!--
@@ -1653,11 +1658,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### stale_memtable_flush_time_sec
 
-- Default: 30
+- Default: 0
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
+- Description: 0 means prohibited. Other memtables whose last update time is greater than stale_memtable_flush_time_sec will be persisted when memory is insufficient.
 - Introduced in: -
 -->
 
@@ -2219,6 +2224,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description:
 - Introduced in: -
 -->
+
+##### query_pool_spill_mem_limit_threshold
+
+- Default: 1.0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: If automatic spilling is enabled, when the memory usage of all queries exceeds `query_pool memory limit * query_pool_spill_mem_limit_threshold`, intermediate result spilling will be triggered.
+- Introduced in: v3.2.7
 
 ##### result_buffer_cancelled_interval_time
 
@@ -3014,7 +3028,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: false
 - Type: Boolean
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description:
 - Introduced in: -
 -->
@@ -3190,7 +3204,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
+- Description: An extra agent service port for BE and CN.
 - Introduced in: -
 
 <!--
@@ -3226,6 +3240,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<!--
 ##### starlet_cache_evict_interval
 
 - Default: 60
@@ -3234,7 +3249,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval at which the system performs cache eviction in a shared-data cluster with file data cache enabled.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_low_water
 
 - Default: 0.1
@@ -3243,7 +3260,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The low water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_high_water
 
 - Default: 0.2
@@ -3252,6 +3271,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The high water at which cache eviction is stopped. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is higher than this value, cache eviction will be stopped.
 - Introduced in: v3.0
+-->
 
 <!--
 ##### starlet_cache_dir_allocate_policy
@@ -3299,11 +3319,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### starlet_use_star_cache
 
-- Default: true
+- Default: false in v3.1 and true from v3.2.3
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
+- Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
 - Introduced in: v3.1
 
 <!--
@@ -3323,7 +3343,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster.
 - Introduced in: v3.1
 
 <!--
@@ -3579,11 +3599,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_pk_compaction_max_input_rowsets
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
+- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
 <!--
@@ -3791,6 +3811,33 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the `$STARROCKS_HOME` path.
 - Introduced in: -
+
+##### datacache_block_buffer_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable Block Buffer to optimize Data Cache efficiency. When Block Buffer is enabled, the system reads the Block data from the Data Cache and caches it in a temporary buffer, thus reducing the extra overhead caused by frequent cache reads.
+- Introduced in: v3.2.0
+
+##### datacache_tiered_cache_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
+- Introduced in: v3.2.5
+
+##### query_max_memory_limit_percent
+
+- Default: 90
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
+- Introduced in: v3.1.0
 
 <!--
 ##### datacache_block_size
@@ -4200,39 +4247,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- Default: 0.8
-- Type: Double
-- Unit:
-- Is mutable: No
-- Description: The maximum memory percentage that can be used by the materialized view in a resource group.
-- Introduced in: v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- Default: 1
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### primary_key_limit_size
-
-- Default: 128
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### primary_key_batch_get_index_memory_limit
 
 - Default: 104857600
@@ -4279,7 +4293,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### get_txn_status_internal_sec
 
-- Default: 30
+- Default: 10
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
@@ -4404,6 +4418,42 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The directory used to store User-defined Functions (UDFs).
 - Introduced in: -
 
+##### default_mv_resource_group_memory_limit
+
+- Default: 0.8
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_concurrency_limit
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- Default: 0.8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
+- Introduced in: v3.1
+
 <!--
 ##### pull_load_task_dir
 
@@ -4462,10 +4512,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- Default: 60
+- Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->

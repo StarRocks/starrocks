@@ -19,19 +19,25 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
+import com.starrocks.connector.trino.TrinoParserUnsupportedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
-import io.trino.sql.parser.ParsingException;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.UnsupportedException;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.atn.ParserATNSimulator;
+import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
+import org.antlr.v4.runtime.dfa.DFA;
 import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,16 +47,24 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
+    private static final int MIN_TOKEN_LIMIT = 100;
 
     private static final String EOF = "<EOF>";
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
-        if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
-            return parseWithTrinoDialect(sql, sessionVariable);
-        } else {
-            return parseWithStarRocksDialect(sql, sessionVariable);
+        try {
+            if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
+                return parseWithTrinoDialect(sql, sessionVariable);
+            } else {
+                return parseWithStarRocksDialect(sql, sessionVariable);
+            }
+        } catch (OutOfMemoryError e) {
+            LOG.warn("parser out of memory, sql is:" + sql);
+            throw e;
         }
     }
 
@@ -58,30 +72,64 @@ public class SqlParser {
         List<StatementBase> statements = Lists.newArrayList();
         try {
             StatementSplitter splitter = new StatementSplitter(sql);
-            for (StatementSplitter.Statement statement : splitter.getCompleteStatements()) {
-                statements.add(TrinoParserUtils.toStatement(statement.statement(), sessionVariable.getSqlMode()));
+            for (int idx = 0; idx < splitter.getCompleteStatements().size(); ++idx) {
+                StatementSplitter.Statement statement = splitter.getCompleteStatements().get(idx);
+                StatementBase statementBase = TrinoParserUtils.toStatement(statement.statement(),
+                        sessionVariable.getSqlMode());
+                statementBase.setOrigStmt(new OriginStatement(sql, idx));
+                statements.add(statementBase);
             }
             if (!splitter.getPartialStatement().isEmpty()) {
-                statements.add(TrinoParserUtils.toStatement(splitter.getPartialStatement(),
-                        sessionVariable.getSqlMode()));
+                StatementBase statement = TrinoParserUtils.toStatement(splitter.getPartialStatement(),
+                        sessionVariable.getSqlMode());
+                statement.setOrigStmt(new OriginStatement(sql, splitter.getCompleteStatements().size()));
+                statements.add(statement);
             }
             if (ConnectContext.get() != null) {
                 ConnectContext.get().setRelationAliasCaseInSensitive(true);
             }
         } catch (ParsingException e) {
-            // we only support trino partial syntax, use StarRocks parser to parse now
+            // In Trino parser AstBuilder, it could throw ParsingException for unexpected exception,
+            // use StarRocks parser to parse now.
+            LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+        } catch (io.trino.sql.parser.ParsingException e) {
+            // This sql does not use Trino syntax，use StarRocks parser to parse now.
             if (sql.toLowerCase().contains("select")) {
                 LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
             }
-            return parseWithStarRocksDialect(sql, sessionVariable);
-        } catch (UnsupportedOperationException e) {
-            // For unsupported statement, use StarRocks parser to parse
-            return parseWithStarRocksDialect(sql, sessionVariable);
+            return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+        } catch (TrinoParserUnsupportedException e) {
+            // We only support Trino partial syntax now, and for Trino parser unsupported statement,
+            // try to use StarRocks parser to parse
+            return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+        } catch (UnsupportedException e) {
+            // For unsupported statement, it can not be parsed by trino or StarRocks parser, both parser
+            // can not support it now, we just throw the exception here to give user more information
+            LOG.warn("Sql [{}] are not supported by trino parser, cause by {}", sql, e);
+            throw e;
         }
         if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
             return parseWithStarRocksDialect(sql, sessionVariable);
         }
         return statements;
+    }
+
+    private static List<StatementBase> tryParseWithStarRocksDialect(String sql, SessionVariable sessionVariable,
+                                                                    Exception trinoException) {
+        try {
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        } catch (Exception starRocksException) {
+            LOG.warn("StarRocks parse sql [{}] error, cause by {}", sql, starRocksException);
+            if (trinoException instanceof UnsupportedException) {
+                throw unsupportedException(String.format("Trino parser parse sql error: [%s], " +
+                                "and StarRocks parser also can not parse: [%s]", trinoException, starRocksException));
+            } else {
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR,
+                        String.format("Trino parser parse sql error: [%s], and StarRocks parser also can not parse: [%s]",
+                        trinoException, starRocksException));
+            }
+        }
     }
 
     private static List<StatementBase> parseWithStarRocksDialect(String sql, SessionVariable sessionVariable) {
@@ -178,12 +226,20 @@ public class SqlParser {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
+        int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
         StarRocksParser parser = new StarRocksParser(tokenStream);
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
-                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
+        parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
+        if (!Config.enable_parser_context_cache) {
+            DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
+            for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
+                decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
+            }
+            parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
+        }
         try {
             // inspire by https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
             // try SLL mode with BailErrorStrategy firstly

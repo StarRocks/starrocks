@@ -47,6 +47,21 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
 };
 
+TEST_F(LakeCompactionSchedulerTest, test_task_queue) {
+    CompactionScheduler::WrapTaskQueues queue(10);
+    auto ctx = std::make_unique<CompactionTaskContext>(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
+                                                       false /* is_checker */, nullptr);
+    queue.set_target_size(5);
+    ASSERT_EQ(5, queue.target_size());
+    queue.put_by_txn_id(ctx->txn_id, ctx);
+
+    std::vector<std::unique_ptr<CompactionTaskContext>> v;
+    auto ctx2 = std::make_unique<CompactionTaskContext>(101 /* txn_id */, 102 /* tablet_id */, 1 /* version */,
+                                                        false /* is_checker */, nullptr);
+    v.push_back(std::move(ctx2));
+    queue.put_by_txn_id(101 /* txn_id */, v);
+}
+
 TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     std::vector<CompactionTaskInfo> tasks;
     _compaction_scheduler.list_tasks(&tasks);
@@ -88,6 +103,107 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     bthread_join(tid, nullptr);
 }
 
+TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
+    // set to single thread mode, so all the tasks will be in the same thread
+    _compaction_scheduler.update_compact_threads(1);
+    std::vector<CompactionTaskInfo> tasks;
+    _compaction_scheduler.list_tasks(&tasks);
+    EXPECT_EQ(0, tasks.size());
+
+    int num_tasks = 16;
+    auto l0 = std::make_shared<CountDownLatch>(1);
+    auto l1 = std::make_shared<CountDownLatch>(num_tasks);
+    auto l2 = std::make_shared<CountDownLatch>(1);
+    auto l3 = std::make_shared<CountDownLatch>(num_tasks);
+    EXPECT_EQ(num_tasks, l1->count());
+
+    std::vector<bthread_t> tids;
+    // preserve requests and responses life time
+    std::vector<std::shared_ptr<CompactRequest>> requests;
+    std::vector<std::shared_ptr<CompactResponse>> responses;
+    { // task 0: block the execution done until l2.count_down()
+        auto txn_id = next_id();
+        auto request = std::make_shared<CompactRequest>();
+        requests.push_back(request);
+        auto response = std::make_shared<CompactResponse>();
+        responses.push_back(response);
+        auto meta = generate_simple_tablet_metadata(DUP_KEYS);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(meta));
+        request->add_tablet_ids(meta->id());
+        request->set_timeout_ms(60 * 1000); // 60 seconds
+        request->set_txn_id(txn_id);
+        request->set_version(1);
+        // wait l2, count down l0
+        ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&, l1, l2, request, response]() {
+                            auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch, l0, l2);
+                            _compaction_scheduler.compact(nullptr, request.get(), response.get(), cb);
+                        }));
+        tids.push_back(tid);
+    }
+    // Wait for task0 complete
+    l0->wait();
+    // repeatedly submit num_tasks into the queue, make the thread busy before stop() invoked.
+    for (int i = 0; i < num_tasks; ++i) {
+        auto txn_id = next_id();
+        auto request = std::make_shared<CompactRequest>();
+        requests.push_back(request);
+        auto response = std::make_shared<CompactResponse>();
+        responses.push_back(response);
+        auto meta = generate_simple_tablet_metadata(DUP_KEYS);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(meta));
+        request->add_tablet_ids(meta->id());
+        request->set_timeout_ms(60 * 1000); // 60 seconds
+        request->set_txn_id(txn_id);
+        request->set_version(1);
+        // wait l2, count down l1
+        ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&, l1, l2, l3, request, response]() {
+                            auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch, l1, l2);
+                            l3->count_down();
+                            _compaction_scheduler.compact(nullptr, request.get(), response.get(), cb);
+                        }));
+        tids.push_back(tid);
+    }
+    // wait until all bthreads run
+    l3->wait();
+    // Allow all tasks to be executed
+    // because the first task is blocked by the l2 countdown, rest are all in task queue.
+    l2->count_down();
+    // expect remain tasks in task queue aborted during stop
+    _compaction_scheduler.stop();
+    // l1 should be properly count down by all the tasks
+    l1->wait();
+
+    for (auto tid : tids) {
+        bthread_join(tid, nullptr);
+    }
+
+    int aborted = 0;
+    for (auto response : responses) {
+        if (response->status().status_code() == TStatusCode::ABORTED) {
+            ++aborted;
+        }
+    }
+    // total num_tasks + 1 compact tasks submitted.
+    // expect the first one success, and then the remain `num_tasks` aborted between [1, num_tasks]
+    EXPECT_GE(aborted, 1);
+    EXPECT_LE(aborted, num_tasks);
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_submit_compact_after_stop) {
+    _compaction_scheduler.stop();
+    auto l1 = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(next_id());
+    request.set_version(1);
+    auto cb = ::google::protobuf::NewCallback(notify, l1);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    l1->wait();
+    EXPECT_EQ(response.status().status_code(), TStatusCode::ABORTED);
+}
+
 TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
     CompactRequest request;
     CompactResponse response;
@@ -97,22 +213,22 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
         cb->update_status(Status::Aborted("aborted for test"));
-        EXPECT_EQ(compaction_should_cancel(&ctx), true);
+        EXPECT_FALSE(compaction_should_cancel(&ctx).ok());
     }
 
     // not checker
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
-        EXPECT_EQ(compaction_should_cancel(&ctx), false);
+        EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
     }
 
     // is checker
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, true /* is_checker */, cb);
-        ctx.last_check_time = 0;
-        EXPECT_EQ(compaction_should_cancel(&ctx), false);
+        cb->set_last_check_time(0);
+        EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
     }
 }
 

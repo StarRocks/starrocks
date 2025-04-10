@@ -64,6 +64,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
+#include "util/stack_util.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
@@ -121,30 +122,6 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _automatic_bucket_size = table_sink.automatic_bucket_size;
     }
 
-    // profile must add to state's object pool
-    _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
-    _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
-
-    // add all counter
-    _ts_profile->runtime_profile = _profile;
-    _ts_profile->input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
-    _ts_profile->output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
-    _ts_profile->filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
-    _ts_profile->open_timer = ADD_TIMER(_profile, "OpenTime");
-    _ts_profile->close_timer = ADD_TIMER(_profile, "CloseWaitTime");
-    _ts_profile->prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
-    _ts_profile->convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
-    _ts_profile->validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
-    _ts_profile->send_data_timer = ADD_TIMER(_profile, "SendDataTime");
-    _ts_profile->pack_chunk_timer = ADD_CHILD_TIMER(_profile, "PackChunkTime", "SendDataTime");
-    _ts_profile->send_rpc_timer = ADD_CHILD_TIMER(_profile, "SendRpcTime", "SendDataTime");
-    _ts_profile->wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
-    _ts_profile->serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
-    _ts_profile->compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
-    _ts_profile->client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
-    _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
-    _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
-
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema, state));
     _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
@@ -171,15 +148,53 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapTableSink::prepare(RuntimeState* state) {
-    _span->AddEvent("prepare");
-
+void OlapTableSink::_prepare_profile(RuntimeState* state) {
+    // For pipeline, the profile will be set in OlapTableSinkOperator::prepare
+    // For non-pipeline, the profile should be created and added to state's object pool
+    if (_profile == nullptr) {
+        _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
+    }
     _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
+
+    _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
+    _ts_profile->runtime_profile = _profile;
+    _ts_profile->input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
+    _ts_profile->output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
+    _ts_profile->filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
+    _ts_profile->open_timer = ADD_TIMER(_profile, "OpenTime");
+    _ts_profile->close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _ts_profile->prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
+    _ts_profile->convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
+    _ts_profile->validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
+    _ts_profile->send_data_timer = ADD_TIMER(_profile, "SendDataTime");
+    _ts_profile->pack_chunk_timer = ADD_CHILD_TIMER(_profile, "PackChunkTime", "SendDataTime");
+    _ts_profile->send_rpc_timer = ADD_CHILD_TIMER(_profile, "SendRpcTime", "SendDataTime");
+    _ts_profile->wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
+    _ts_profile->serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
+    _ts_profile->compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _ts_profile->client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
+    _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
+    _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
     _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+}
+
+void OlapTableSink::set_profile(RuntimeProfile* profile) {
+    if (_profile != nullptr) {
+        LOG(WARNING) << "OlapTableSink profile is set duplicated, load_id: " << print_id(_load_id)
+                     << ", txn_id: " << _txn_id << ", stack\n"
+                     << get_stack_trace();
+        return;
+    }
+    _profile = profile;
+}
+
+Status OlapTableSink::prepare(RuntimeState* state) {
+    _span->AddEvent("prepare");
+    _prepare_profile(state);
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -628,6 +643,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                         return Status::EAgain("");
                     } else {
                         _automatic_partition_token->wait();
+                        RETURN_IF_ERROR(this->_automatic_partition_status);
                         // after the partition is created, go through the data again
                         RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                             &_validate_selection, &invalid_row_indexs,
@@ -635,6 +651,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                     }
                 }
             } else {
+                RETURN_IF_ERROR(this->_automatic_partition_status);
                 RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                     &_validate_selection, &invalid_row_indexs, _txn_id,
                                                                     nullptr));
@@ -657,19 +674,14 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 
             if (num_rows_after_validate - _validate_select_idx.size() > 0) {
                 std::stringstream ss;
-                if (_enable_automatic_partition) {
-                    ss << "The row create partition failed since " << _automatic_partition_status.to_string();
-                } else {
-                    ss << "The row is out of partition ranges. Please add a new partition.";
-                }
+                ss << "The row is out of partition ranges. Please add a new partition.";
                 if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
                     std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
                     state->append_error_msg_to_file(debug_row, ss.str());
                 }
                 for (auto i : invalid_row_indexs) {
                     if (state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(),
-                                                              chunk->source_filename());
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(), "");
                     } else {
                         break;
                     }
@@ -703,7 +715,7 @@ Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
     }
     _has_auto_increment = true;
 
-    auto& slot = _output_tuple_desc->slots()[_auto_increment_slot_id];
+    SlotDescriptor* slot = _output_tuple_desc->get_slot_by_id(_auto_increment_slot_id);
     RETURN_IF_ERROR(_fill_auto_increment_id_internal(chunk, slot, _schema->table_id()));
 
     return Status::OK();
@@ -895,8 +907,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
                     std::string error_msg =
                             strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg,
-                                                          chunk->source_filename());
+                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg, "");
                 }
             }
         }
@@ -932,8 +943,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                     _validate_selection[j] = VALID_SEL_FAILED;
                     // If enable_log_rejected_record is true, we need to log the rejected record.
                     if (nullable->is_null(j) && state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
-                                                              chunk->source_filename());
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
                     }
                 }
 #if BE_TEST
@@ -961,7 +971,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             if (nullable->has_null()) {
                 NullData& nulls = nullable->null_column_data();
                 for (size_t j = 0; j < num_rows; ++j) {
-                    if (nulls[j]) {
+                    if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         std::stringstream ss;
                         ss << "NULL value in non-nullable column '" << desc->col_name() << "'";
@@ -973,8 +983,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         }
 #endif
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
                         }
                     }
                 }
@@ -1013,8 +1022,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg =
                                     strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
                                                         binary->get_slice(j).size, desc->col_name(), desc->type().len);
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
                         }
                     }
                 }
@@ -1039,8 +1047,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg = strings::Substitute(
                                     "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
                                     desc->col_name(), desc->type().debug_string());
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
                         }
                     }
                 }

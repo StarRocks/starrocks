@@ -35,14 +35,14 @@
 
 namespace starrocks {
 
-struct TableInfo;
-
 struct TableInfo {
+    static const int64_t DEFAULT_MAX_FILE_SIZE = 1024L * 1024 * 1024; // 1GB;
+
     TCompressionType::type compress_type = TCompressionType::SNAPPY;
     bool enable_dictionary = true;
     std::string partition_location = "";
     std::shared_ptr<::parquet::schema::GroupNode> schema;
-    int64_t max_file_size = 1024 * 1024 * 1024; // 1GB
+    int64_t max_file_size = DEFAULT_MAX_FILE_SIZE;
     TCloudConfiguration cloud_conf;
 };
 

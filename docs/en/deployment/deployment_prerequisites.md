@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Deployment prerequisites
@@ -17,10 +17,6 @@ You can run the following command in your terminal to check if the CPUs on your 
 ```Bash
 cat /proc/cpuinfo | grep avx2
 ```
-
-> **NOTE**
->
-> ARM architecture does not support SIMD instruction sets, and therefore is less competitive than x86 architecture in some scenarios. Therefore, we only recommend deploying StarRocks on ARM architecture in a development environment.
 
 ### Memory
 
@@ -40,7 +36,7 @@ We recommend that you use 10 Gigabit Ethernet networking to ensure stable data t
 
 ## Operating system
 
-StarRocks supports deployments on CentOS Linux 7.9 or Ubuntu Linux 22.04.
+StarRocks supports deployments on Red Hat Enterprise Linux 7.9, CentOS Linux 7.9 or Ubuntu Linux 22.04.
 
 ## Software
 

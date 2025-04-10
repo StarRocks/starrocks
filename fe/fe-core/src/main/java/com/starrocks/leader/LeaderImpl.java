@@ -59,6 +59,7 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -326,6 +327,9 @@ public class LeaderImpl {
                 case COMPACTION:
                     finishCompactionTask(task, request);
                     break;
+                case COMPACTION_CONTROL:
+                    finishCompactionControlTask(task, request);
+                    break;
                 case REMOTE_SNAPSHOT:
                     finishRemoteSnapshotTask(task, request);
                     break;
@@ -440,6 +444,10 @@ public class LeaderImpl {
         AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
     }
 
+    private void finishCompactionControlTask(AgentTask task, TFinishTaskRequest request) {
+        AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+    }
+
     private void finishRemoteSnapshotTask(AgentTask task, TFinishTaskRequest request) throws MetaNotFoundException {
         try {
             GlobalStateMgr.getCurrentState().getReplicationMgr().finishRemoteSnapshotTask(
@@ -533,12 +541,12 @@ public class LeaderImpl {
                 throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
             }
 
-            Partition partition = olapTable.getPartition(partitionId);
-            if (partition == null) {
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+            if (physicalPartition == null) {
                 throw new MetaNotFoundException("cannot find partition[" + partitionId + "] when push finished");
             }
 
-            MaterializedIndex pushIndex = partition.getIndex(pushIndexId);
+            MaterializedIndex pushIndex = physicalPartition.getIndex(pushIndexId);
             if (pushIndex == null) {
                 // yiguolei: if index is dropped during load, it is not a failure.
                 // throw exception here and cause the job to cancel the task
@@ -568,7 +576,7 @@ public class LeaderImpl {
                 for (int i = 0; i < tabletMetaList.size(); i++) {
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     long tabletId = tabletIds.get(i);
-                    Replica replica = findRelatedReplica(olapTable, partition,
+                    Replica replica = findRelatedReplica(olapTable, physicalPartition,
                             backendId, tabletId, tabletMeta.getIndexId());
                     if (replica != null) {
                         olapDeleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
@@ -587,7 +595,7 @@ public class LeaderImpl {
                     checkReplica(finishTabletInfos.get(i), tabletMeta);
                     long tabletId = tabletIds.get(i);
                     Replica replica =
-                            findRelatedReplica(olapTable, partition, backendId, tabletId, tabletMeta.getIndexId());
+                            findRelatedReplica(olapTable, physicalPartition, backendId, tabletId, tabletMeta.getIndexId());
                     // if the replica is under schema change, could not find the replica with aim schema hash
                     if (replica != null) {
                         ((SparkLoadJob) job).addFinishedReplica(replica.getId(), pushTabletId, backendId);
@@ -631,7 +639,7 @@ public class LeaderImpl {
         }
     }
 
-    private Replica findRelatedReplica(OlapTable olapTable, Partition partition,
+    private Replica findRelatedReplica(OlapTable olapTable, PhysicalPartition physicalPartition,
                                        long backendId, long tabletId, long indexId)
             throws MetaNotFoundException {
         // both normal index and rolling up index are in inverted index
@@ -640,7 +648,7 @@ public class LeaderImpl {
             LOG.warn("tablet[{}] may be dropped. push index[{}]", tabletId, indexId);
             return null;
         }
-        MaterializedIndex index = partition.getIndex(indexId);
+        MaterializedIndex index = physicalPartition.getIndex(indexId);
         if (index == null) {
             if (olapTable.getState() == OlapTableState.ROLLUP) {
                 // this happens when:
@@ -1083,7 +1091,7 @@ public class LeaderImpl {
                 }
             }
 
-            List<TBackendMeta> backends = getBackendMetas();
+            List<TBackendMeta> backends = getNodeMetas();
             response.setStatus(new TStatus(TStatusCode.OK));
             response.setTable_meta(tableMeta);
             response.setBackends(backends);
@@ -1102,7 +1110,7 @@ public class LeaderImpl {
         TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
         tTabletMeta.setDb_id(tabletMeta.getDbId());
         tTabletMeta.setTable_id(tabletMeta.getTableId());
-        tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
+        tTabletMeta.setPartition_id(tabletMeta.getPhysicalPartitionId());
         tTabletMeta.setIndex_id(tabletMeta.getIndexId());
         tTabletMeta.setStorage_medium(tabletMeta.getStorageMedium());
         tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
@@ -1110,20 +1118,22 @@ public class LeaderImpl {
     }
 
     @NotNull
-    private static List<TBackendMeta> getBackendMetas() {
-        List<TBackendMeta> backends = new ArrayList<>();
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
-            TBackendMeta backendMeta = new TBackendMeta();
-            backendMeta.setBackend_id(backend.getId());
-            backendMeta.setHost(backend.getHost());
-            backendMeta.setBe_port(backend.getBePort());
-            backendMeta.setRpc_port(backend.getBrpcPort());
-            backendMeta.setHttp_port(backend.getHttpPort());
-            backendMeta.setAlive(backend.isAlive());
-            backendMeta.setState(backend.getBackendState().ordinal());
-            backends.add(backendMeta);
-        }
-        return backends;
+    private static List<TBackendMeta> getNodeMetas() {
+        List<TBackendMeta> nodeMetas = new ArrayList<>();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream().forEach(node -> {
+            if (RunMode.isSharedDataMode() || node instanceof Backend) {
+                TBackendMeta nodeMeta = new TBackendMeta();
+                nodeMeta.setBackend_id(node.getId());
+                nodeMeta.setHost(node.getHost());
+                nodeMeta.setBe_port(node.getBePort());
+                nodeMeta.setRpc_port(node.getBrpcPort());
+                nodeMeta.setHttp_port(node.getHttpPort());
+                nodeMeta.setAlive(node.isAlive());
+                nodeMeta.setState(node.getBackendState().ordinal());
+                nodeMetas.add(nodeMeta);
+            }
+        });
+        return nodeMetas;
     }
 
     @NotNull

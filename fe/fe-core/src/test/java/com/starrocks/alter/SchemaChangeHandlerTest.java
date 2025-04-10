@@ -40,6 +40,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
@@ -122,7 +123,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 Thread.sleep(1000);
             }
             LOG.info("alter job {} is done. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
 
             Database db = GlobalStateMgr.getCurrentState().getDb(alterJobV2.getDbId());
             OlapTable tbl = (OlapTable) db.getTable(alterJobV2.getTableId());
@@ -130,6 +131,49 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 Thread.sleep(1000);
             }
         }
+    }
+
+    @Test
+    public void testBuildSchemaMapAndGet() {
+        LinkedList<Column> schemaList = new LinkedList<>();
+        String colName1 = "__starrocks_shadow_c1";
+        String colName2 = "__starrocks_shadow_c2";
+        Column col1 = new Column(colName1, Type.INT);
+        Column col2 = new Column(colName2, Type.INT);
+        schemaList.add(col1);
+        schemaList.add(col2);
+
+        Map<String, Column> schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, true, true);
+        Column col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", true, true);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, true, true);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", true, true);
+        Assertions.assertNull(col);
+
+        schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, true, false);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", true, false);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, true, false);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", true, false);
+        Assertions.assertEquals(col.getName(), colName2);
+
+        schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, false, true);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", false, true);
+        Assertions.assertNull(col);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, false, true);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", false, true);
+        Assertions.assertNull(col);
+
+        schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, false, false);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", false, false);
+        Assertions.assertNull(col);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, false, false);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", false, false);
+        Assertions.assertEquals(col.getName(), colName2);
     }
 
     @Test
@@ -391,14 +435,14 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Assertions.assertDoesNotThrow(
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 100, 100,
+                        .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100, 100,
                                                      indexToNewSchemaId, false));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         Assertions.assertDoesNotThrow(
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 101, 101,
+                        .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101, 101,
                                                      indexToNewSchemaId, true));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
@@ -407,7 +451,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 102, 102, indexToNewSchemaId,
+                        .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 102, 102, indexToNewSchemaId,
                                                      false));
         tbl.setState(beforeState);
     }

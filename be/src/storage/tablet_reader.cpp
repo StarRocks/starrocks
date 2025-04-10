@@ -51,7 +51,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
 }
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                           std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema)
+                           std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaCSPtr* tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
@@ -73,7 +73,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
     _tablet_schema = !tablet_schema ? _tablet->tablet_schema() : tablet_schema;
 }
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema,
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaCSPtr& tablet_schema,
                            Schema schema)
         : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {
     _tablet_schema = tablet_schema;
@@ -284,7 +284,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges = params.short_key_ranges;
-    rs_opts.asc_hint = _is_asc_hint;
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {

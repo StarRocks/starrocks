@@ -73,6 +73,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -115,6 +116,20 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
         } else {
             this.fileContentCache = MemoryCacheHolder.INSTANCE;
+        }
+    }
+
+    @Override
+    public void close() {
+        try {
+            if (wrappedIO instanceof Closeable) {
+                ((Closeable) wrappedIO).close();
+            }
+            if (fileContentCache instanceof Closeable) {
+                ((Closeable) fileContentCache).close();
+            }
+        } catch (IOException e) {
+            LOG.error("Error closing resources", e);
         }
     }
 

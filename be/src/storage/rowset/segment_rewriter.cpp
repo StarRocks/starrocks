@@ -114,6 +114,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     seg_options.fs = fs;
     seg_options.stats = &stats;
     seg_options.chunk_size = num_rows;
+    seg_options.temporary_data = true;
 
     auto res = rowset->segments()[segment_id]->new_iterator(src_schema, seg_options);
     auto& itr = res.value();
@@ -166,7 +167,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path, const TabletSchemaCSPtr& tschema,
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
-                                const starrocks::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
+                                const starrocks::TxnLogPB_OpWrite& op_write, const starrocks::lake::Tablet* tablet) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -211,6 +212,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     seg_options.fs = fs;
     seg_options.stats = &stats;
     seg_options.chunk_size = num_rows;
+    seg_options.temporary_data = true;
 
     auto res = segment->new_iterator(src_schema, seg_options);
     auto& itr = res.value();

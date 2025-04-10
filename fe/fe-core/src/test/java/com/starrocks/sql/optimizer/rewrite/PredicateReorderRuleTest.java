@@ -273,6 +273,7 @@ public class PredicateReorderRuleTest {
                 hashJoinImplementationRule.transform(new OptExpression(logicalJoinOperator1), null).get(0);
         optExpression1.getInputs().add(optExpressionT0);
         optExpression1.getInputs().add(optExpressionT1);
+        optExpression1.setStatistics(statistics);
 
         LogicalJoinOperator.Builder builder2 = new LogicalJoinOperator.Builder();
         builder2.setPredicate(or);
@@ -281,6 +282,7 @@ public class PredicateReorderRuleTest {
                 hashJoinImplementationRule.transform(new OptExpression(logicalJoinOperator2), null).get(0);
         optExpression2.getInputs().add(optExpressionT0);
         optExpression2.getInputs().add(optExpressionT1);
+        optExpression2.setStatistics(statistics);
         //
         optExpression1 = predicateReorderRule.rewrite(optExpression1, null);
         assertEquals(optExpression1.getOp().getPredicate().getChild(0), intEq1);

@@ -23,14 +23,18 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
@@ -42,6 +46,7 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -49,9 +54,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -78,11 +86,13 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -96,6 +106,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -425,13 +436,9 @@ public class MvUtils {
                 || (operator instanceof LogicalAggregationOperator);
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(
-            MaterializedView mv,
-            String sql,
-            ColumnRefFactory columnRefFactory,
-            ConnectContext connectContext,
-            OptimizerConfig optimizerConfig,
-            boolean inlineView) {
+    public static StatementBase parse(MaterializedView mv,
+                                      String sql,
+                                      ConnectContext connectContext) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -442,6 +449,14 @@ public class MvUtils {
             LOG.warn("parse mv{}'s sql:{} failed", mv.getName(), sql, parsingException);
             return null;
         }
+        return mvStmt;
+    }
+
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(StatementBase mvStmt,
+                                                                               ColumnRefFactory columnRefFactory,
+                                                                               ConnectContext connectContext,
+                                                                               OptimizerConfig optimizerConfig,
+                                                                               boolean inlineView) {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
@@ -948,13 +963,35 @@ public class MvUtils {
         return rangeParts;
     }
 
-    public static List<Expr> convertList(Expr slotRef, List<LiteralExpr> values) {
-        List<Expr> listPart = Lists.newArrayList();
-        for (LiteralExpr value : values) {
-            BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, slotRef, value);
-            listPart.add(predicate);
+    /**
+     * Convert partition range to IN predicate
+     * @param slotRef the comparison column
+     * @param values the target partition values
+     * @return in predicate
+     */
+    public static Expr convertToInPredicate(Expr slotRef, List<Expr> values) {
+        if (values == null || values.isEmpty()) {
+            return new BoolLiteral(true);
         }
-        return listPart;
+        // to avoid duplicate values
+        return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+    }
+
+    /**
+     * Convert partition range to IN predicate scalar operator
+     * @param col the comparison operator
+     * @param values the target scalar operators
+     * @return in predicate scalar operator
+     */
+    public static ScalarOperator convertToInPredicate(ScalarOperator col,
+                                                      List<ScalarOperator> values) {
+        if (values == null || values.isEmpty()) {
+            return ConstantOperator.TRUE;
+        }
+        List<ScalarOperator> inArgs = Lists.newArrayList();
+        inArgs.add(col);
+        inArgs.addAll(values);
+        return new InPredicateOperator(false, inArgs);
     }
 
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
@@ -1084,42 +1121,6 @@ public class MvUtils {
         }
     }
 
-    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
-                                                               QueryMaterializationContext queryMaterializationContext) {
-        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
-        if (viewScans == null) {
-            return queryExpression;
-        }
-        // add a LogicalTreeAnchorOperator to replace the tree easier
-        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
-        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
-        List<Operator> viewScanOperators = Lists.newArrayList();
-        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
-        if (!viewScanOperators.isEmpty()) {
-            return null;
-        }
-        OptExpression newQuery = anchorExpr.inputAt(0);
-        deriveLogicalProperty(newQuery);
-        return newQuery;
-    }
-
-    private static void doReplaceLogicalViewScanOperator(
-            OptExpression parent,
-            int index,
-            OptExpression queryExpression,
-            List<LogicalViewScanOperator> viewScans) {
-        LogicalOperator op = queryExpression.getOp().cast();
-        if (op instanceof LogicalViewScanOperator) {
-            LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
-            parent.setChild(index, viewPlan);
-            return;
-        }
-        for (int i = 0; i < queryExpression.getInputs().size(); i++) {
-            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
-        }
-    }
-
     public static void deriveLogicalProperty(OptExpression root) {
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
@@ -1128,18 +1129,6 @@ public class MvUtils {
         ExpressionContext context = new ExpressionContext(root);
         context.deriveLogicalProperty();
         root.setLogicalProperty(context.getRootProperty());
-    }
-
-    public static OptExpression cloneExpression(OptExpression logicalTree) {
-        List<OptExpression> inputs = Lists.newArrayList();
-        for (OptExpression input : logicalTree.getInputs()) {
-            OptExpression clone = cloneExpression(input);
-            inputs.add(clone);
-        }
-        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
-        builder.withOperator(logicalTree.getOp());
-        Operator newOp = builder.build();
-        return OptExpression.create(newOp, inputs);
     }
 
     /**
@@ -1211,6 +1200,12 @@ public class MvUtils {
         }
     }
 
+    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
+        // TODO: support cte inline
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & ruleMask) != 0;
+    }
+
     public static void setAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
         op.setOpRuleMask(opRuleMask);
@@ -1221,16 +1216,189 @@ public class MvUtils {
         return (opRuleMask & OP_UNION_ALL_BIT) != 0;
     }
 
-    public static ParseNode getQueryAst(String query) {
+    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
+        // add a LogicalTreeAnchorOperator to replace the tree easier
+        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
+        if (!viewScanOperators.isEmpty()) {
+            return null;
+        }
+        OptExpression newQuery = anchorExpr.inputAt(0);
+        deriveLogicalProperty(newQuery);
+        return newQuery;
+    }
+
+    private static void doReplaceLogicalViewScanOperator(OptExpression parent,
+                                                         int index,
+                                                         OptExpression queryExpression) {
+        LogicalOperator op = queryExpression.getOp().cast();
+        if (op instanceof LogicalViewScanOperator) {
+            LogicalViewScanOperator viewScanOperator = op.cast();
+            OptExpression viewPlan = viewScanOperator.getOriginalPlanEvaluator();
+            parent.setChild(index, viewPlan);
+            return;
+        }
+        for (int i = 0; i < queryExpression.getInputs().size(); i++) {
+            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i));
+        }
+    }
+
+    public static OptExpression cloneExpression(OptExpression logicalTree) {
+        List<OptExpression> inputs = Lists.newArrayList();
+        for (OptExpression input : logicalTree.getInputs()) {
+            OptExpression clone = cloneExpression(input);
+            inputs.add(clone);
+        }
+        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
+        builder.withOperator(logicalTree.getOp());
+        Operator newOp = builder.build();
+        return OptExpression.create(newOp, inputs);
+    }
+
+
+    /**
+     * Return mv's plan context. If mv's plan context is not in cache, optimize it.
+     * @param connectContext: connect context
+     * @param mv: input mv
+     * @param isInlineView: whether to inline mv's difined query.
+     */
+    public static MvPlanContext getMVPlanContext(ConnectContext connectContext,
+                                                 MaterializedView mv,
+                                                 boolean isInlineView) {
+        // step1: get from mv plan cache
+        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContext(connectContext.getSessionVariable(), mv);
+        if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
+            // TODO: distinguish normal mv plan and view rewrite plan
+            return mvPlanContexts.get(0);
+        }
+        // step2: get from optimize
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView);
+    }
+
+    /**
+     * Get column refs of scanMvOperator by MV's defined output columns order.
+     * @param mv: mv to be referenced for output's order
+     * @param scanMvOp: scan mv operator which contains mv
+     * @return: column refs of scanMvOperator in the defined order
+     */
+    public static List<ColumnRefOperator> getMvScanOutputColumnRefs(MaterializedView mv,
+                                                                    LogicalOlapScanOperator scanMvOp) {
+        List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
+        for (Column column : MvRewritePreprocessor.getMvOutputColumns(mv)) {
+            scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
+        }
+        return scanMvOutputColumns;
+    }
+
+    public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
         try {
             List<StatementBase> statementBases =
-                    com.starrocks.sql.parser.SqlParser.parse(query, new com.starrocks.qe.SessionVariable());
+                    com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
             StatementBase stmt = statementBases.get(0);
+            Analyzer.analyze(stmt, connectContext);
             return stmt;
         } catch (ParsingException parsingException) {
             LOG.warn("Parse query {} failed:{}", query, parsingException);
         }
         return null;
+    }
+
+    public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
+        List<Expr> matches = Lists.newArrayList();
+        partitionExpr.collect(expr -> isStr2Date(expr), matches);
+        if (matches.size() != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(matches.get(0).cast());
+    }
+
+    public static boolean isStr2Date(Expr expr) {
+        return expr instanceof FunctionCallExpr
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    }
+
+    public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
+        Map<String, String> partitionProperties = new HashMap<>(4);
+        partitionProperties.put("replication_num",
+                String.valueOf(materializedView.getDefaultReplicationNum()));
+        partitionProperties.put("storage_medium", materializedView.getStorageMedium());
+        String storageCooldownTime =
+                materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
+        if (storageCooldownTime != null) {
+            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
+            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
+            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
+        }
+        return partitionProperties;
+    }
+
+    /**
+     * Trim the input set if its size is larger than maxLength.
+     * @return the trimmed set.
+     */
+    public static Set<String> shrinkToSize(Set<String> set, int maxLength) {
+        if (set != null && set.size() > maxLength) {
+            return set.stream().limit(maxLength).collect(Collectors.toSet());
+        }
+        return set;
+    }
+
+    /**
+     * Trim the input map if its size is larger than maxLength.
+     * @return the trimmed map.
+     */
+    public static Map<String, Set<String>> shrinkToSize(Map<String, Set<String>> map, int maxLength) {
+        if (map != null && map.size() > maxLength) {
+            return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+        return map;
+    }
+
+    public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
+                                                                     Collection<PartitionKey> partitionRanges) {
+        List<ScalarOperator> values = Lists.newArrayList();
+        for (PartitionKey partitionKey : partitionRanges) {
+            LiteralExpr literalExpr = partitionKey.getKeys().get(0);
+            ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+            values.add(upperBound);
+        }
+        return MvUtils.convertToInPredicate(partitionColRef, values);
+    }
+
+    /**
+     * Optimize the inlined view plan.
+     * @param logicalTree logical opt expression tree which has not been optimized
+     * @param connectContext connect context
+     * @param requiredColumns required columns
+     * @param columnRefFactory query column ref factory
+     * @return optimized view plan which has been rule based optimized
+     */
+    public static OptExpression optimizeViewPlan(OptExpression logicalTree,
+                                                 ConnectContext connectContext,
+                                                 ColumnRefSet requiredColumns,
+                                                 ColumnRefFactory columnRefFactory) {
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
+        Optimizer optimizer = new Optimizer(optimizerConfig);
+        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
+                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
+        return optimizedViewPlan;
+    }
+
+    /*
+     * Trim the input string if its length is larger than maxLength.
+     * @param input the input string
+     * @param maxLength the max length
+     */
+    public static String shrinkToSize(String input, int maxLength) {
+        if (input == null) {
+            return "";
+        }
+        return input.length() > maxLength ? input.substring(0, maxLength) : input;
     }
 }

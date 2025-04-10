@@ -327,6 +327,9 @@ public class NativeAccessController implements AccessController {
     }
 
     private static String getFullyQualifiedNameFromListAllowNull(List<String> objectTokens) {
+        if (objectTokens == null) {
+            return "";
+        }
         return objectTokens.stream()
                 .map(e -> e == null ? "null" : e)
                 .collect(Collectors.joining("."));

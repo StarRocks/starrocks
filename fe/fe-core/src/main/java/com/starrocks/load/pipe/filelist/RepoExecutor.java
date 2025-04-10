@@ -57,6 +57,7 @@ public class RepoExecutor {
     }
 
     public void executeDML(String sql) {
+        ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
 
@@ -75,10 +76,14 @@ public class RepoExecutor {
             throw new SemanticException(String.format("execute sql failed: %s", e.getMessage()), e);
         } finally {
             ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
         }
     }
 
     public List<TResultBatch> executeDQL(String sql) {
+        ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
 
@@ -100,6 +105,9 @@ public class RepoExecutor {
             throw new SemanticException("execute sql failed: " + sql, e);
         } finally {
             ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
         }
     }
 

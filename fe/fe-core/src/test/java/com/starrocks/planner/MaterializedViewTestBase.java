@@ -259,6 +259,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
             return this;
         }
+
+        public String getExecPlan() {
+            return this.rewritePlan;
+        }
     }
 
     protected MVRewriteChecker sql(String query) {
@@ -344,4 +348,16 @@ public class MaterializedViewTestBase extends PlanTestBase {
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
     }
+
+    public String getQueryPlan(String query) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
+    }
 }
+

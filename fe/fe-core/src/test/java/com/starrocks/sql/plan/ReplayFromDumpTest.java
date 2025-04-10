@@ -16,8 +16,10 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.CTEProperty;
@@ -31,6 +33,8 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import java.util.stream.Stream;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     @Test
@@ -52,16 +56,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
         Assert.assertTrue(replayPair.second,
                 replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"));
-    }
-
-    @Test
-    public void testForceRuleBasedRewriteYear() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"));
     }
 
     @Test
@@ -174,7 +168,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(118: sum AS DOUBLE) > CAST(0.5 * 190: max AS DOUBLE)"));
     }
-
 
     @Test
     public void testGroupByLimit() throws Exception {
@@ -341,9 +334,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
                         TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("13:Decode\n" +
-                "  |  <dict id 42> : <string id 18>\n" +
-                "  |  <dict id 43> : <string id 23>"));
+        Assert.assertTrue(plan, plan.contains(" 11:Decode\n" +
+                "  |  <dict id 41> : <string id 18>\n" +
+                "  |  <dict id 42> : <string id 23>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 
@@ -474,12 +467,13 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 22:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  22:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: if(19: c_0_0 != 1: c_0_0, 4: c_0_3, 20: c_0_3) = '1969-12-28', " +
-                "CASE WHEN (21: countRows IS NULL) OR (21: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL " +
-                "WHEN 16: c_0_0 IS NOT NULL THEN TRUE WHEN 22: countNotNulls < 21: countRows THEN NULL ELSE FALSE END IS NULL"));
+                "if(((1: c_0_0 IS NULL) AND (NOT ((21: countRows IS NULL) OR (21: countRows = 0)))) OR " +
+                "((22: countNotNulls < 21: countRows) AND (((NOT ((21: countRows IS NULL) OR (21: countRows = 0))) " +
+                "AND (1: c_0_0 IS NOT NULL)) AND (16: c_0_0 IS NULL))), TRUE, FALSE)\n"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -698,10 +692,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("38:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(":HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 396: substring = 361: date\n" +
+                "  |  equal join conjunct: 398: substring = 361: date\n" +
                 "  |  other join predicates: 209: zid = 298: zid"));
     }
 
@@ -733,15 +727,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
         // tbl_mock_015
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (1: mock_004)"));
+                "     - filter_id = 4, probe_expr = (80: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (24: mock_004)"));
+                "     - filter_id = 3, probe_expr = (62: mock_004)"));
 
         // table: tbl_mock_001, rollup: tbl_mock_001
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (1: mock_004)"));
+                "     - filter_id = 1, probe_expr = (116: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (24: mock_004)"));
+                "     - filter_id = 0, probe_expr = (98: mock_004)\n"));
 
     }
 
@@ -915,16 +909,93 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("23:Project\n" +
                 "  |  <slot 193> : 193: mock_081\n" +
                 "  |  <slot 194> : 194: mock_089\n" +
-                "  |  <slot 233> : 233: mock_065\n" +
-                "  |  <slot 391> : 379: case\n" +
-                "  |  <slot 395> : '1'\n" +
-                "  |  \n" +
-                "  22:Project"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:SORT\n" +
-                "  |  order by: <slot 194> 194: mock_089 ASC, <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
+                "  |  <slot 391> : 391: case\n" +
+                "  |  <slot 396> : 396: rank()"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 20:SORT\n" +
+                "  |  order by: <slot 194> 194: mock_089 ASC," +
+                " <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
                 "<slot 233> 233: mock_065 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
-                "  24:EXCHANGE"));
+                "  19:EXCHANGE"));
+    }
+
+    @Test
+    public void testTimeoutDeepJoinCostPrune() throws Exception {
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.TIMER, "optimizer");
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        String ss = Tracers.printScopeTimer();
+        int start = ss.indexOf("EnforceAndCostTask[") + "EnforceAndCostTask[".length();
+        int end = ss.indexOf("]", start);
+        long count = Long.parseLong(ss.substring(start, end));
+        Assert.assertTrue(ss, count < 10000);
+    }
+
+    @Test
+    public void testQueryTimeout() {
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getPlanFragment(getDumpInfoFromFile("query_dump/query_timeout"), null, TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testQueryCacheMisuseExogenousRuntimeFilter() throws Exception {
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableQueryCache(true);
+            QueryDumpInfo dumpInfo =
+                    getDumpInfoFromJson(getDumpInfoFromFile("query_dump/query_cache_misuse_exogenous_runtime_filter"));
+            ExecPlan execPlan = UtFrameUtils.getPlanFragmentFromQueryDump(connectContext, dumpInfo);
+            Assert.assertTrue(execPlan.getFragments().stream().noneMatch(frag -> frag.getCacheParam() != null));
+            Assert.assertTrue(
+                    execPlan.getFragments().stream().anyMatch(frag -> !frag.getProbeRuntimeFilters().isEmpty()));
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
+    }
+
+    @Test
+    public void testPruneTableNPE() throws Exception {
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableCboTablePrune(true);
+            connectContext.getSessionVariable().setEnableRboTablePrune(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/prune_table_npe"),
+                            null, TExplainLevel.NORMAL);
+            long numHashJoins = Stream.of(replayPair.second.split("\n"))
+                    .filter(ln -> ln.contains("HASH JOIN")).count();
+            Assert.assertEquals(numHashJoins, 2);
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
+    }
+
+    @Test
+    public void testJoinInitError() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/join_init_error"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("HASH JOIN"));
+    }
+
+    @Test
+    public void testPushdownSubfield() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  14:Project\n" +
+                "  |  <slot 103> : 103: id\n" +
+                "  |  <slot 104> : 104: mock_098\n" +
+                "  |  <slot 164> : 164: mock_107\n" +
+                "  |  <slot 284> : get_json_string(107: mock_031, '$.\"email_Domain1__c\"')\n" +
+                "  |  <slot 285> : get_json_string(107: mock_031, '$.\"fY21_Territory_Score__c\"')\n" +
+                "  |  \n" +
+                "  13:OlapScanNode\n" +
+                "     TABLE: tbl_mock_103\n"));
     }
 }

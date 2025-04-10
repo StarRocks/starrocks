@@ -61,6 +61,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
@@ -203,7 +204,7 @@ public class FragmentNormalizer {
     }
 
     public Integer remapSlotId(Integer slotId) {
-        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getMaxId()).asInt();
+        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getNextId()).asInt();
     }
 
     public List<Integer> remapSlotIds(List<SlotId> slotIds) {
@@ -573,11 +574,17 @@ public class FragmentNormalizer {
             if (range.isEmpty()) {
                 continue;
             }
-            range = toClosedOpenRange(range);
+
+            Optional<Range> optRange = Optional.empty();
+            try {
+                optRange = Optional.ofNullable(toClosedOpenRange(range));
+            } catch (Throwable ignored) {
+            }
+
             Map.Entry<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
             // when the range is to total cover this partition, we also cache it
-            if (!range.isEmpty()) {
-                selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
+            if (optRange.isPresent() && !optRange.get().isEmpty()) {
+                selectedRangeMap.put(partitionKeyRange.getKey(), optRange.get().toString());
             }
         }
         // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
@@ -720,7 +727,7 @@ public class FragmentNormalizer {
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();
         for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
-             currNode = currNode.getChild(0)) {
+                currNode = currNode.getChild(0)) {
             leftNodesTopDown.add(currNode);
         }
 
@@ -774,15 +781,17 @@ public class FragmentNormalizer {
         // Not cacheable unless alien GRF(s) take effects on this PlanFragment.
         // The alien GRF(s) mean the GRF(S) that not created by PlanNodes of the subtree rooted at
         // the PlanFragment.planRoot.
+
         Set<Integer> grfBuilders =
                 fragment.getProbeRuntimeFilters().values().stream().filter(RuntimeFilterDescription::isHasRemoteTargets)
                         .map(RuntimeFilterDescription::getBuildPlanNodeId).collect(Collectors.toSet());
         if (!grfBuilders.isEmpty()) {
             List<PlanFragment> rightSiblings = Lists.newArrayList();
             collectRightSiblingFragments(root, rightSiblings, Sets.newHashSet());
-            Set<Integer> acceptableGrfBuilders = rightSiblings.stream().flatMap(
-                    frag -> frag.getBuildRuntimeFilters().values().stream().map(
-                            RuntimeFilterDescription::getBuildPlanNodeId)).collect(Collectors.toSet());
+            Set<Integer> acceptableGrfBuilders = rightSiblings.stream()
+                    .flatMap(frag -> frag.getBuildRuntimeFilters().values().stream())
+                    .map(RuntimeFilterDescription::getBuildPlanNodeId)
+                    .collect(Collectors.toSet());
             boolean hasAlienGrf = !Sets.difference(grfBuilders, acceptableGrfBuilders).isEmpty();
             if (hasAlienGrf) {
                 return false;

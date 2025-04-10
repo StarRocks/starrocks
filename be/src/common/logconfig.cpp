@@ -17,6 +17,7 @@
 
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
+#include <jemalloc/jemalloc.h>
 
 #include <cerrno>
 #include <cstdio>
@@ -121,12 +122,32 @@ static void dump_trace_info() {
     start_dump = true;
 }
 
+static void dontdump_unused_pages() {
+    static bool start_dump = false;
+    if (!start_dump) {
+        std::string msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".dontdump";
+        int ret = je_mallctl(msg.c_str(), nullptr, nullptr, nullptr, 0);
+        if (ret != 0) {
+            LOG(ERROR) << "je_mallctl execute dontdump failed: " << strerror(ret);
+        } else {
+            LOG(INFO) << "je_mallctl execute dontdump success";
+        }
+    }
+    start_dump = true;
+}
+
 static void failure_writer(const char* data, int size) {
+    if (config::enable_core_file_size_optimization) {
+        dontdump_unused_pages();
+    }
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
 
 static void failure_function() {
+    if (config::enable_core_file_size_optimization) {
+        dontdump_unused_pages();
+    }
     dump_trace_info();
     std::abort();
 }
@@ -154,7 +175,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
 
     // Set log level.
-    std::string& loglevel = config::sys_log_level;
+    std::string loglevel = config::sys_log_level;
     if (iequals(loglevel, "INFO")) {
         FLAGS_minloglevel = 0;
     } else if (iequals(loglevel, "WARNING")) {
@@ -249,6 +270,20 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
 
     return StringPrintf("%02d%02d %02d:%02d:%02d.%06ld", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
                         tm_time.tm_min, tm_time.tm_sec, usecs);
+}
+
+void update_logging() {
+    if (iequals(config::sys_log_level, "INFO")) {
+        FLAGS_minloglevel = 0;
+    } else if (iequals(config::sys_log_level, "WARNING")) {
+        FLAGS_minloglevel = 1;
+    } else if (iequals(config::sys_log_level, "ERROR")) {
+        FLAGS_minloglevel = 2;
+    } else if (iequals(config::sys_log_level, "FATAL")) {
+        FLAGS_minloglevel = 3;
+    } else {
+        LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
+    }
 }
 
 } // namespace starrocks

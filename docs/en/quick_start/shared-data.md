@@ -1,15 +1,15 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 2
 description: Separate compute and storage
 ---
 
 # Separate storage and compute
 
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
 
@@ -50,6 +50,14 @@ You can use the SQL client provided in the Docker environment, or use one on you
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
+### `/etc/hosts`
+
+The ingest method used in this guide is Stream Load. Stream Load connects to the FE service to start the ingest job. The FE then assigns the job to a backend node, the CN in this guide. In order for the ingest job to connect to the CN the name of the CN must be available to your operating system. Add this line to `/etc/hosts`:
+
+```bash
+127.0.0.1 starrocks-cn
+```
+
 ---
 
 ## Terminology
@@ -72,54 +80,90 @@ This guide does not use BEs, this information is included here so that you under
 
 ---
 
-## Launch StarRocks
+## Download the lab files
 
-To run StarRocks with shared-data using Object Storage we need:
+There are three files to download:
 
-- A frontend engine (FE)
-- A compute node (CN)
-- Object Storage
+- The Docker Compose file that deploys the StarRocks and MinIO environment
+- New York City crash data
+- Weather data
 
 This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
 
-In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file.
+### Create a directory to store the lab files:
 
 ```bash
 mkdir quickstart
 cd quickstart
+```
+
+### Download the Docker Compose file
+
+```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
 ```
 
-```bash
-docker compose up -d
-```
+### Download the data
 
-Check the progress of the services. It should take around 30 seconds for the FE and CN to become healthy. The MinIO container will not show a health indicator, but you will be using the MinIO web UI and that will verify its health.
+Download these two datasets:
 
-Run `docker compose ps` until MinIO, the FE, and the CN services show a status of `healthy`:
+#### New York City crash data
 
 ```bash
-docker compose ps
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
 ```
 
-```plaintext
-SERVICE        CREATED          STATUS                    PORTS
-minio          32 seconds ago   Up 32 seconds (healthy)   0.0.0.0:9000-9001->9000-9001/tcp
-starrocks-cn   32 seconds ago   Up 31 seconds (healthy)   0.0.0.0:8040->8040/tcp
-starrocks-fe   32 seconds ago   Up 31 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
+#### Weather data
+
+```bash
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
+```
+
+---
+
+## Deploy StarRocks and MinIO
+
+```bash
+docker compose up --detach --wait --wait-timeout 120
+```
+
+It should take around 30 seconds for the FE, CN, and MinIO services to become healthy. The `quickstart-minio_mc-1` container will show a status of `Waiting` and also an exit code. An exit code of `0` indicates success.
+
+```bash
+[+] Running 4/5
+ ✔ Network quickstart_default       Created    0.0s
+ ✔ Container minio                  Healthy    6.8s
+ ✔ Container starrocks-fe           Healthy    29.3s
+ ⠼ Container quickstart-minio_mc-1  Waiting    29.3s
+ ✔ Container starrocks-cn           Healthy    29.2s
+container quickstart-minio_mc-1 exited (0)
 ```
 
 ---
 
 ## Examine MinIO credentials
 
-In order to use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access key. The access key was generated during the startup of the Docker services. To help you better understand the way that StarRocks connects to MinIO you should verify that the key exists.
+To use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access key. The access key was generated during the startup of the Docker services. To help you better understand the way that StarRocks connects to MinIO you should verify that the key exists.
 
 ### Open the MinIO web UI
 
 Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
-![View the MinIO access key](../assets/quick-start/MinIO-view-key.png)
+![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
+
+:::tip
+If there are no access keys showing in the MinIO web UI, check the logs of the `minio_mc` service:
+
+```bash
+docker compose logs minio_mc
+```
+
+Try rerunning the `minio_mc` pod:
+
+```bash
+docker compose run minio_mc
+```
+:::
 
 ---
 
@@ -129,36 +173,6 @@ Browse to http://localhost:9001/access-keys The username and password are specif
 
 ---
 
-## Download the data
-
-Download these two datasets to your FE container.
-
-### Open a shell on the FE container
-
-Open a shell and create a directory for the downloaded files:
-
-```bash
-docker compose exec starrocks-fe bash
-```
-
-```bash
-mkdir quickstart
-cd quickstart
-```
-
-### New York City crash data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
-```
-
-### Weather data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
-```
-
----
 
 ## StarRocks configuration for shared-data
 
@@ -265,7 +279,7 @@ There are many ways to load data into StarRocks. For this tutorial the simplest 
 
 :::tip
 
-Run these curl commands from the FE shell in the directory where you downloaded the dataset.
+Run these curl commands from the directory where you downloaded the dataset.
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
 
@@ -310,16 +324,12 @@ Enter host password for user 'root':
     "WriteDataTimeMs": 870,
     "CommitAndPublishTimeMs": 57,
     # highlight-start
-    "ErrorURL": "http://10.5.0.3:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
+    "ErrorURL": "http://starrocks-cn:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
     # highlight-end
 }%
 ```
 
-If there was an error the output provides a URL to see the error messages. Because the container has a private IP address you will have to view it by running curl from the container.
-
-```bash
-curl http://10.5.0.3:8040/api/_load_error_log<details from ErrorURL>
-```
+If there was an error the output provides a URL to see the error messages. The error message also contains the backend node that the Stream Load job was assigned to (`starrocks-cn`). Because you added an entry for `starrocks-cn` to the `/etc/hosts` file, you should be able to navigate to it and read the error message.
 
 Expand the summary for the content seen while developing this tutorial:
 
@@ -361,7 +371,7 @@ Open MinIO [http://localhost:9001/browser/starrocks/](http://localhost:9001/brow
 :::tip
 The folder names below `starrocks/shared/` are generated when you load the data. You should see a single directory below `shared`, and then two more below that. Inside each of those directories you will find the data, metadata, and schema entries.
 
-![MinIO object browser](../assets/quick-start/MinIO-data.png)
+![MinIO object browser](../_assets/quick-start/MinIO-data.png)
 :::
 
 ---
@@ -464,6 +474,16 @@ When using MinIO this parameter is always set to false.
 
 When this is true, a StarRocks storage volume named `builtin_storage_volume` is created using MinIO object storage, and it is set to be the default storage volume for the tables that you create.
 
+### Configuring FQDN mode
+
+The command to start the FE is also changed. The FE service command in the Docker Compose file has the option `--host_type FQDN` added. By setting `host_type` to `FQDN` the Stream Load job is forwarded to the fully qualified domain name of the CN pod, rather than the IP address. This is done because the IP address is in a range assigned to the Docker environment, and is not typically available from the host machine.
+
+These three changes allow the CN to be forwarded to from the host network:
+
+- setting `--host_type` to `FQDN`
+- exposing the CN port 8040 to the host network
+- adding an entry to the hosts file for `starrocks-cn` pointing to `127.0.0.1`
+
 ---
 
 ## Summary
@@ -486,9 +506,7 @@ There is more to learn; we intentionally glossed over the data transform done du
 
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
-[Materialized views](../cover_pages/mv_use_cases.mdx)
-
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 

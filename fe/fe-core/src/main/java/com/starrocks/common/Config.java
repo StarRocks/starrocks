@@ -76,6 +76,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * sys_log_enable_compress:
+     *      default is false. if true, then compress fe.log & fe.warn.log by gzip
      */
     @ConfField
     public static String sys_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -92,11 +95,27 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    @ConfField
+    public static boolean sys_log_enable_compress = false;
+    @ConfField
+    public static String[] sys_log_warn_modules = {};
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
     @ConfField
-    public static boolean sys_log_to_console = false;
+    public static boolean sys_log_to_console = ((System.getenv("SYS_LOG_TO_CONSOLE") != null)
+            ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false);
+
+    @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
+    public static String sys_log_format = "plaintext";
+
+    @ConfField(comment = "Max length of a log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 1MB")
+    public static int sys_log_json_max_string_length = 1048576;
+
+    @ConfField(comment = "Max length of a profile log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 100MB")
+    public static int sys_log_json_profile_max_string_length = 104857600;
 
     /**
      * audit_log_dir:
@@ -123,6 +142,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * audit_log_enable_compress:
+     *      default is false. if true, then compress fe.audit.log by gzip
      */
     @ConfField
     public static String audit_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -132,10 +154,16 @@ public class Config extends ConfigBase {
     public static String[] audit_log_modules = {"slow_query", "query"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
+    @ConfField(mutable = true)
+    public static boolean enable_qe_slow_log = true;
     @ConfField
     public static String audit_log_roll_interval = "DAY";
     @ConfField
     public static String audit_log_delete_age = "30d";
+    @ConfField(mutable = true)
+    public static boolean audit_log_json_format = false;
+    @ConfField
+    public static boolean audit_log_enable_compress = false;
 
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
@@ -259,13 +287,16 @@ public class Config extends ConfigBase {
     @ConfField
     public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
-    public static int profile_log_roll_num = 10;
+    public static int profile_log_roll_num = 5;
     @ConfField
     public static String profile_log_roll_interval = "DAY";
     @ConfField
-    public static String profile_log_delete_age = "7d";
+    public static String profile_log_delete_age = "1d";
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
+
+    @ConfField
+    public static boolean enable_profile_log_compress = false;
 
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
@@ -336,7 +367,7 @@ public class Config extends ConfigBase {
      * It will run every *task_check_interval_second* to do background job.
      */
     @ConfField
-    public static int task_check_interval_second = 4 * 3600; // 4 hours
+    public static int task_check_interval_second = 1 * 3600; // 1 hour
 
     /**
      * for task set expire time
@@ -566,16 +597,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
-    /**
-     * num of thread to handle profile processing
-     */
-    @ConfField
+    @ConfField(comment = "[DEPRECATED] Number of thread to handle profile processing")
+    @Deprecated
     public static int profile_process_threads_num = 2;
 
-    /**
-     * blocking queue size to store profile process task
-     */
-    @ConfField
+    @ConfField(comment = "[DEPRECATED] Size of blocking queue to store profile process task")
+    @Deprecated
     public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
 
     /**
@@ -1145,7 +1172,7 @@ public class Config extends ConfigBase {
      * Maximal number of connections per FE.
      */
     @ConfField
-    public static int qe_max_connection = 1024;
+    public static int qe_max_connection = 4096;
 
     /**
      * Maximal number of thread in connection-scheduler-pool.
@@ -1167,6 +1194,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Control whether to cache the ast tree of materialized view for text based rewrite")
     public static boolean enable_materialized_view_text_based_rewrite = true;
+
+    @ConfField(mutable = true, comment = "An internal optimization for external table refresh, " +
+            "only refresh affected partitions of external table, instead of all of them ")
+    public static boolean enable_materialized_view_external_table_precise_refresh = true;
 
     /**
      * Control whether to enable spill for all materialized views in the refresh mv.
@@ -1227,13 +1258,49 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = false;
+    public static boolean memory_tracker_enable = true;
 
     /**
      * Decide how often to track the memory usage of the FE process
      */
     @ConfField(mutable = true)
     public static long memory_tracker_interval_seconds = 60;
+
+    /**
+     * true to enable collect proc memory alloc profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc memory alloc profile")
+    public static boolean proc_profile_mem_enable = true;
+
+    /**
+     * true to enable collect proc cpu profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc cpu profile")
+    public static boolean proc_profile_cpu_enable = true;
+
+    /**
+     * The number of seconds between proc profile collections
+     */
+    @ConfField(mutable = true, comment = "The number of seconds between proc profile collections")
+    public static long proc_profile_collect_interval_s = 600;
+
+    /**
+     * The number of seconds it takes to collect single proc profile
+     */
+    @ConfField(mutable = true, comment = "The number of seconds it takes to collect single proc profile")
+    public static long proc_profile_collect_time_s = 300;
+
+    /**
+     * The number of days to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of days to retain profile files")
+    public static int proc_profile_file_retained_days = 2;
+
+    /**
+     * The number of bytes to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of bytes to retain profile files")
+    public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -1325,7 +1392,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean disable_load_job = false;
 
-    /*
+    /**
      * One master daemon thread will update database used data quota for db txn manager
      * every db_used_data_quota_update_interval_secs
      */
@@ -1365,6 +1432,20 @@ public class Config extends ConfigBase {
     public static boolean tablet_sched_disable_colocate_balance = false;
 
     /**
+     * Colocate balance is a very time-consuming operation,
+     * and our system should try to avoid triggering colocate balance.
+     * In the some situation, customers will stop all machines when the cluster is not in use to save machine resources.
+     * When the machine is started again, unnecessary colocate balance
+     * will be triggered due to the inconsistent start time of the machines.
+     * To avoid this situation, we introduced the tablet_sched_colocate_balance_after_system_stable_time_s parameter.
+     * If the status(alive and decommissioned) of all backend can maintain consistency within
+     * tablet_sched_colocate_balance_after_system_stable_time_s, then the colocate balance will be triggered.
+     * Default value is 15min.
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_colocate_balance_wait_system_stable_time_s = 15 * 60;
+
+    /**
      * When setting to true, disable the overall balance behavior for colocate groups which treats all the groups
      * in all databases as a whole and balances the replica distribution between all of them.
      * See `ColocateBalancer.relocateAndBalanceAllGroups` for more details.
@@ -1388,18 +1469,18 @@ public class Config extends ConfigBase {
      * k8s control place will schedule a new pod and attach the pvc to it which will
      * restore the replica to a {@link Replica.ReplicaState#NORMAL} state immediately. But normally
      * the {@link com.starrocks.clone.TabletScheduler} of Starrocks will start to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
      * After new pod scheduling is completed, {@link com.starrocks.clone.TabletScheduler} has
      * to delete the redundant healthy replica which cause resource waste and may also affect
      * the loading process.
      *
      * <p>When a backend is considered to be dead, this configuration specifies how long the
      * {@link com.starrocks.clone.TabletScheduler} should wait before starting to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
      * the external scheduler like k8s to handle the repair process before internal scheduler kicks in
      * or for the system administrator to restart and put the backend online in time.
      * To be noticed, it only affects the dead backend situation, the scheduler
-     * may still schedule {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks because of
+     * may still schedule {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks because of
      * other reasons, like manually setting a replica as bad, actively decommission a backend etc.
      *
      * <p>Currently this configuration only works for non-colocate tables, for colocate tables,
@@ -1417,8 +1498,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
 
-    // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
-    // no more balance check
+    /**
+     * If the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
+     * no more balance check
+     */
     @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
     public static int tablet_sched_max_balancing_tablets = 500;
 
@@ -1677,8 +1760,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
-    // For forward compatibility, will be removed later.
-    // check token when download image file.
+    /**
+     * For forward compatibility, will be removed later.
+     * check token when download image file.
+     */
     @ConfField
     public static boolean enable_token_check = true;
 
@@ -1806,6 +1891,12 @@ public class Config extends ConfigBase {
     public static boolean statistic_check_expire_partition = true;
 
     /**
+     * Clear stale partition statistics data job work interval
+     */
+    @ConfField(mutable = true)
+    public static long clear_stale_stats_interval_sec = 12 * 60 * 60L; // 12 hour
+
+    /**
      * The collect thread work interval
      */
     @ConfField(mutable = true)
@@ -1838,6 +1929,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_dict_columns = 100000;
 
+    @ConfField
+    public static int dict_collect_thread_pool_size = 16;
+
     /**
      * The column statistic cache update interval
      */
@@ -1865,6 +1959,16 @@ public class Config extends ConfigBase {
     // choose collect sample statistics first
     @ConfField(mutable = true)
     public static double statistic_auto_collect_sample_threshold = 0.3;
+
+    @ConfField(mutable = true, comment = "Tolerate some percent of failure for a large table, it will not affect " +
+            "the job status but improve the robustness")
+    public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
+
+    @ConfField(mutable = true, comment = "Enable V2 health calculation based on changed rows")
+    public static boolean statistic_partition_healthy_v2 = true;
+
+    @ConfField(mutable = true, comment = "Health threshold for partitions")
+    public static double statistic_partition_health__v2_threshold = 0.95;
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
@@ -2226,6 +2330,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
+    @ConfField(mutable = true, comment = "explain level of query plan in this detail")
+    public static String query_detail_explain_level = "COSTS";
+
     /**
      *  StarRocks-manager pull queries every 1 second
      *  metrics calculate query latency every 15 second
@@ -2274,6 +2381,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static long star_mgr_meta_sync_interval_sec = 600L;
+
+    /**
+     * Whether allows delete shard meta if failes to delete actual data.
+     * In extreme cases, actual data deletion might fail or timeout,
+     * and if shard meta is not deleted, the FE memory will grow,
+     * eventually cause fe frequently Full GC
+     */
+    @ConfField(mutable = true)
+    public static boolean meta_sync_force_delete_shard_meta = false;
 
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
@@ -2339,6 +2455,15 @@ public class Config extends ConfigBase {
     public static String azure_blob_sas_token = "";
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
+
+    @ConfField(mutable = true)
+    public static int star_client_read_timeout_seconds = 15;
+
+    @ConfField(mutable = true)
+    public static int star_client_list_timeout_seconds = 30;
+
+    @ConfField(mutable = true)
+    public static int star_client_write_timeout_seconds = 30;
 
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
@@ -2449,10 +2574,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static int lake_compaction_history_size = 12;
-
-    @ConfField(mutable = true)
-    public static int lake_compaction_fail_history_size = 12;
+    public static int lake_compaction_history_size = 20;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
@@ -2464,11 +2586,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
+    @ConfField(mutable = true, comment =
+            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
+    public static boolean lake_enable_balance_tablets_between_workers = false;
+
+    @ConfField(mutable = true, comment =
+            "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
+                    "calculated as f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets), " +
+                    "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
+    public static double lake_balance_tablets_threshold = 0.15;
+
     /**
      * Default lake compaction txn timeout
      */
     @ConfField(mutable = true)
     public static int lake_compaction_default_timeout_second = 86400; // 1 day
+
+    @ConfField(mutable = true)
+    public static boolean lake_compaction_allow_partial_success = false;
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
@@ -2566,6 +2701,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String profile_info_format = "default";
+
+    /**
+     * When the session variable `enable_profile` is set to `false` and `big_query_profile_threshold` is set to 0,
+     * the amount of time taken by a load exceeds the default_big_load_profile_threshold_second,
+     * a profile is generated for that load.
+     */
+    @ConfField(mutable = true)
+    public static long default_big_load_profile_threshold_second = 300;
 
     /**
      * Max number of roles that can be granted to user including all direct roles and all parent roles
@@ -2733,10 +2876,36 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
 
+    @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
+    public static int max_mv_check_base_table_change_retry_times = 10;
+
+    @ConfField(mutable = true, comment = "The max retry times for materialized view refresh retry times when failed")
+    public static int max_mv_refresh_failure_retry_times = 1;
+
+    @ConfField(mutable = true, comment = "The max retry times when materialized view refresh try lock " +
+            "timeout failed")
+    public static int max_mv_refresh_try_lock_failure_retry_times = 3;
+
+    @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
+    public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
+
+    @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
+    public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
+
+    @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
+            "occupying too much meta memory")
+    public static int max_mv_task_run_meta_message_values_length = 16;
+
+    @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
+    public static boolean enable_active_materialized_view_schema_strict_check = true;
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
     public static boolean default_mv_refresh_immediate = true;
+
+    @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
+    public static boolean enable_mv_query_context_cache = true;
 
     /**
      * The refresh partition number when refreshing materialized view at once by default.
@@ -2797,8 +2966,12 @@ public class Config extends ConfigBase {
     /**
      * mv plan cache expire interval in seconds
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
+
+    @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
+    public static int mv_plan_cache_thread_pool_size = 3;
 
     /**
      * mv plan cache expire interval in seconds
@@ -2839,13 +3012,15 @@ public class Config extends ConfigBase {
      * Replication config
      */
     @ConfField
-    public static int replication_interval_ms = 10;
+    public static int replication_interval_ms = 100;
     @ConfField(mutable = true)
     public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_max_parallel_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_replica_count = 10240; // 10240
     @ConfField(mutable = true)
-    public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    public static int replication_max_parallel_data_size_mb = 1048576; // 1T
+    @ConfField(mutable = true)
+    public static int replication_transaction_timeout_sec = 24 * 60 * 60; // 24hour
     @ConfField(mutable = true)
     public static boolean enable_legacy_compatibility_for_replication = false;
 
@@ -2870,4 +3045,16 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
+    
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
+
+    // Whether restore tables into colocate group if the
+    // backuped table is colocated
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_restore = false;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
 }

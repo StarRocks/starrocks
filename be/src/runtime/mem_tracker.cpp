@@ -36,6 +36,8 @@
 
 #include <utility>
 
+#include "service/backend_options.h"
+
 namespace starrocks {
 
 const std::string MemTracker::PEAK_MEMORY_USAGE = "PeakMemoryUsage";
@@ -134,6 +136,7 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
 std::string MemTracker::err_msg(const std::string& msg) const {
     std::stringstream str;
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
+    str << "Backend: " << BackendOptions::get_localhost() << ", ";
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {
     case MemTracker::NO_SET:

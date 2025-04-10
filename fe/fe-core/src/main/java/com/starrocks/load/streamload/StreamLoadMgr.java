@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -56,6 +57,7 @@ import java.util.stream.Collectors;
 
 public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     // label -> streamLoadTask
     private Map<String, StreamLoadTask> idToStreamLoadTask;
@@ -448,9 +450,11 @@ public class StreamLoadMgr implements MemoryTrackable {
         long dbId = streamLoadTask.getDBId();
         String label = streamLoadTask.getLabel();
 
-        dbToLabelToStreamLoadTask.get(dbId).remove(label);
-        if (dbToLabelToStreamLoadTask.get(dbId).isEmpty()) {
-            dbToLabelToStreamLoadTask.remove(dbId);
+        if (dbToLabelToStreamLoadTask.containsKey(dbId)) {
+            dbToLabelToStreamLoadTask.get(dbId).remove(label);
+            if (dbToLabelToStreamLoadTask.get(dbId).isEmpty()) {
+                dbToLabelToStreamLoadTask.remove(dbId);
+            }
         }
     }
 
@@ -639,5 +643,14 @@ public class StreamLoadMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("StreamLoad", (long) idToStreamLoadTask.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = idToStreamLoadTask.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) idToStreamLoadTask.size()));
     }
 }

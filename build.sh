@@ -18,7 +18,7 @@
 
 ##############################################################
 # This script is used to compile StarRocks
-# Usage: 
+# Usage:
 #    sh build.sh --help
 # Eg:
 #    sh build.sh                                      build all
@@ -95,7 +95,14 @@ Usage: $0 <options>
      --without-starcache
                         build Backend without starcache library
      -j                 build Backend parallel
-
+     --with-compress-debug-symbol {ON|OFF}
+                        build with compressing debug symbol. (default: $WITH_COMPRESS)
+     --with-source-file-relative-path {ON|OFF}
+                        build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
+     --without-avx2     build Backend without avx2(instruction)
+     --with-maven-batch-mode {ON|OFF}
+                        build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
+     -h,--help          Show this help message
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
@@ -110,8 +117,7 @@ Usage: $0 <options>
 
 OPTS=$(getopt \
   -n $0 \
-  -o '' \
-  -o 'h' \
+  -o 'hj:' \
   -l 'be' \
   -l 'fe' \
   -l 'spark-dpp' \
@@ -123,9 +129,13 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'without-starcache' \
+  -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
-  -o 'j:' \
+  -l 'with-compress-debug-symbol:' \
+  -l 'with-source-file-relative-path:' \
+  -l 'without-avx2' \
+  -l 'with-maven-batch-mode:' \
   -l 'help' \
   -- "$@")
 
@@ -144,10 +154,21 @@ RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
+WITH_COMPRESS=ON
 WITH_STARCACHE=ON
-WITH_BRPC_KEEPALIVE=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
+WITH_RELATIVE_SRC_PATH=ON
+
+# Default to OFF, turn it ON if current shell is non-interactive
+WITH_MAVEN_BATCH_MODE=OFF
+if [ -x "$(command -v tty)" ] ; then
+    # has `tty` and `tty` cmd indicates a non-interactive shell.
+    if ! tty -s >/dev/null 2>&1; then
+        WITH_MAVEN_BATCH_MODE=ON
+    fi
+fi
+
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -230,7 +251,10 @@ else
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
-            --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
+            --without-avx2) USE_AVX2=OFF; shift ;;
+            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
+            --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
+            --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -262,6 +286,7 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
+    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     WITH_STARCACHE      -- $WITH_STARCACHE
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
@@ -272,6 +297,8 @@ echo "Get params:
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
+    WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
+    WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
 "
 
 check_tool()
@@ -312,6 +339,12 @@ else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
 
+addon_mvn_opts=""
+if [ "x$WITH_MAVEN_BATCH_MODE" = "xON" ] ; then
+    # this option is only available with mvn >= 3.6
+    addon_mvn_opts="--batch-mode"
+fi
+
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] ; then
     if ! ${CMAKE_CMD} --version; then
@@ -342,6 +375,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       fi
       export STARLET_INSTALL_DIR
     fi
+    
+    if [ "${WITH_CLANG_TIDY}" == "ON" ];then
+        # this option cannot work with clang-14
+        WITH_COMPRESS=OFF
+    fi
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
@@ -357,9 +395,9 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
-                  -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE}          \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -376,7 +414,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
-        ${MVN_CMD} package -DskipTests
+        ${MVN_CMD} $addon_mvn_opts package -DskipTests
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -406,9 +444,9 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests
     cd ${STARROCKS_HOME}/java-extensions
-    ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
@@ -440,7 +478,6 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
@@ -508,18 +545,34 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
+    cp -r -p ${STARROCKS_HOME}/java-extensions/common-runtime/target/common-runtime-lib ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
+    if [ -d ${STARROCKS_THIRDPARTY}/installed/gcs_connector ]; then
+      cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
+    fi
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
 
+    # remove log4j
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
 
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
+    # remove zookeeper
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.5.6.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.6.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.5.6.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.6.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
+
+    rm -f ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/iceberg-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib/zookeeper-3.8.3.jar
+
     MSG="${MSG} √ ${MSG_BE}"
 fi
 

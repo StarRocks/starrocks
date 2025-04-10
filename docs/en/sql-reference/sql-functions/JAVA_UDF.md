@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Java UDFs
@@ -402,6 +403,7 @@ PROPERTIES (
 | symbol    | The name of the class for the Maven project to which the UDF belongs. The value of this parameter is in the `<package_name>.<class_name>` format. |
 | type      | The type of the UDF. Set the value to `StarrocksJar`, which specifies that the UDF is a Java-based function. |
 | file      | The HTTP URL from which you can download the JAR file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<jar_package_name>` format. |
+| isolation | (Optional) To share function instances across UDF executions and support static variables, set this to "shared". |
 
 #### Create a UDAF
 
@@ -520,7 +522,7 @@ Run the following command to query UDFs:
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md).
+For more information, see [SHOW FUNCTIONS](../sql-statements/Function/SHOW_FUNCTIONS.md).
 
 ## Drop a UDF
 
@@ -530,7 +532,7 @@ Run the following command to drop a UDF:
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-For more information, see [DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md).
+For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTION.md).
 
 ## Mapping between SQL data types and Java data types
 

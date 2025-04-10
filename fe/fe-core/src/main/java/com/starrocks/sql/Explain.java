@@ -24,6 +24,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -179,6 +180,11 @@ public class Explain {
         }
 
         @Override
+        public OperatorStr visitPhysicalProject(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            return visit(optExpression.getInputs().get(0), context);
+        }
+
+        @Override
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
@@ -198,8 +204,10 @@ public class Explain {
             int totalTabletsNum = 0;
             for (Long partitionId : scan.getSelectedPartitionId()) {
                 final Partition partition = ((OlapTable) scan.getTable()).getPartition(partitionId);
-                final MaterializedIndex selectedTable = partition.getIndex(scan.getSelectedIndexId());
-                totalTabletsNum += selectedTable.getTablets().size();
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    final MaterializedIndex selectedTable = subPartition.getIndex(scan.getSelectedIndexId());
+                    totalTabletsNum += selectedTable.getTablets().size();
+                }
             }
             String partitionAndBucketInfo = "partitionRatio: " +
                     scan.getSelectedPartitionId().size() +

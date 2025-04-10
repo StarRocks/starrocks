@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Dataphin
@@ -22,7 +22,7 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 #### Basic information
 
-![Create a StarRocks data source - 1](../../assets/Dataphin/create_sr_datasource_1.png)
+![Create a StarRocks data source - 1](../../_assets/Dataphin/create_sr_datasource_1.png)
 
 - **Name**: Required. Enter a data source name. It can only contain Chinese characters, letters, numbers, underscores (_), and hyphens (-). It cannot exceed 64 characters in length.
 
@@ -42,7 +42,7 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 #### Configuration information
 
-![Create a StarRocks data source - 2](../../assets/Dataphin/create_sr_datasource_2.png)
+![Create a StarRocks data source - 2](../../_assets/Dataphin/create_sr_datasource_2.png)
 
 - **JDBC URL**: Required. The format is `jdbc:mysql://<host>:<port>/<dbname>`. `host` is the IP address of the FE (Front End) host in the StarRocks cluster, `port` is the query port of FE, and `dbname` is the database name.
 
@@ -54,7 +54,7 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 #### Advanced settings
 
-![Create a StarRocks data source - 3](../../assets/Dataphin/create_sr_datasource_3.png)
+![Create a StarRocks data source - 3](../../_assets/Dataphin/create_sr_datasource_3.png)
 
 - **connectTimeout**: the connectTimeout  (in ms) of the database. The default value is 900000 milliseconds (15 minutes).
 
@@ -64,11 +64,11 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 #### Drag the StarRocks input component to the offline integration task canvas
 
-![Read data from StarRocks - 1](../../assets/Dataphin/read_from_sr_datasource_1.png)
+![Read data from StarRocks - 1](../../_assets/Dataphin/read_from_sr_datasource_1.png)
 
 #### StarRocks input component configuration
 
-![Read data from StarRocks - 2](../../assets/Dataphin/read_from_sr_datasource_2.png)
+![Read data from StarRocks - 2](../../_assets/Dataphin/read_from_sr_datasource_2.png)
 
 - **Step name**: Enter an appropriate name based on the scenario and location of the current component.
 
@@ -93,17 +93,17 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 #### Select and configure an output component as the destination data source
 
-![Read data from StarRocks - 3](../../assets/Dataphin/read_from_sr_datasource_3.png)
+![Read data from StarRocks - 3](../../_assets/Dataphin/read_from_sr_datasource_3.png)
 
 ### Read data from other data sources and write data to StarRocks data sources
 
 #### Configure the input component in the offline integration task, and select and configure the StarRocks output component as the destination data source
 
-![Write data to StarRocks - 1](../../assets/Dataphin/write_to_sr_datasource_1.png)
+![Write data to StarRocks - 1](../../_assets/Dataphin/write_to_sr_datasource_1.png)
 
 #### Configure StarRocks output component
 
-![Write data to StarRocks - 2](../../assets/Dataphin/write_to_sr_datasource_2.png)
+![Write data to StarRocks - 2](../../_assets/Dataphin/write_to_sr_datasource_2.png)
 
 - **Step Name**: enter an appropriate name based on the scenario and location of the current component.
 
@@ -150,7 +150,7 @@ Dataphin supports StarRocks data sources as read and write targets for realtime 
 
 2. Click **Create** to select a real-time compute table.
 
-   ![Create StarRocks meta table - 1](../../assets/Dataphin/create_sr_metatable_1.png)
+   ![Create StarRocks meta table - 1](../../_assets/Dataphin/create_sr_metatable_1.png)
 
    - **Table type**: Select **Metatable**.
 
@@ -162,11 +162,11 @@ Dataphin supports StarRocks data sources as read and write targets for realtime 
 
    - **Description**: Optional.
 
-   ![Create StarRocks meta table - 2](../../assets/Dataphin/create_sr_metatable_2.png)
+   ![Create StarRocks meta table - 2](../../_assets/Dataphin/create_sr_metatable_2.png)
 
 3. After creating a meta table, you can edit the meta table, including modifying data sources, source tables, meta table fields, and configuring meta table parameters.
 
-   ![Edit StarRocks meta table](../../assets/Dataphin/edit_sr_metatable_1.png)
+   ![Edit StarRocks meta table](../../_assets/Dataphin/edit_sr_metatable_1.png)
 
 4. Submit the meta table.
 
@@ -176,28 +176,28 @@ Dataphin supports StarRocks data sources as read and write targets for realtime 
 
 2. Click **Create Flink SQL task**.
 
-   ![Create Flink SQL task - Step 2](../../assets/Dataphin/create_flink_task_step2.png)
+   ![Create Flink SQL task - Step 2](../../_assets/Dataphin/create_flink_task_step2.png)
 
 3. Edit Flink SQL code and precompile It. Kafka meta table is used as an input table and StarRocks meta table as an output table.
 
-   ![Create Flink SQL task - Step 3 - 1](../../assets/Dataphin/create_flink_task_step3-1.png)
-​   ![Create Flink SQL task - Step 3 - 2](../../assets/Dataphin/create_flink_task_step3-2.png)
+   ![Create Flink SQL task - Step 3 - 1](../../_assets/Dataphin/create_flink_task_step3-1.png)
+​   ![Create Flink SQL task - Step 3 - 2](../../_assets/Dataphin/create_flink_task_step3-2.png)
 
 4. After the precompilation is successful, you can debug and submit the code.
 
 5. Testing in the development environment can be performed by printing logs and writing test tables. The test tables can be set in Meta Tables > Properties > debugging test configurations.
 
-   ![Create Flink SQL task - Step 5 - 1](../../assets/Dataphin/create_flink_task_step5-1.png)
-   ![Create Flink SQL task - Step 5 - 2](../../assets/Dataphin/create_flink_task_step5-2.png)
+   ![Create Flink SQL task - Step 5 - 1](../../_assets/Dataphin/create_flink_task_step5-1.png)
+   ![Create Flink SQL task - Step 5 - 2](../../_assets/Dataphin/create_flink_task_step5-2.png)
 
 6. After a task in the development environment runs normally, you can publish the task and the meta table used to the production environment.
 
-   ![Create Flink SQL task - Step 6](../../assets/Dataphin/create_flink_task_step6.png)
+   ![Create Flink SQL task - Step 6](../../_assets/Dataphin/create_flink_task_step6.png)
 
 7. Start a task in the production environment to write data from Kafka to StarRocks in real time. You can view the status and logs of each metric in the running analysis to learn about the task running status, or configure monitoring alerts for the task.
 
-   ![Create Flink SQL task - Step 7 - 1](../../assets/Dataphin/create_flink_task_step7-1.png)
-   ![Create Flink SQL task - Step 7 - 2](../../assets/Dataphin/create_flink_task_step7-2.png)
+   ![Create Flink SQL task - Step 7 - 1](../../_assets/Dataphin/create_flink_task_step7-1.png)
+   ![Create Flink SQL task - Step 7 - 2](../../_assets/Dataphin/create_flink_task_step7-2.png)
 
 ## Data warehouse or data mart
 
@@ -229,7 +229,7 @@ Dataphin can present and display information based on metadata, including table 
 
    d. Complete meta warehouse initialization
 
-   ![Metadata warehouse settings](../../assets/Dataphin/metadata_warehouse_settings_1.png)
+   ![Metadata warehouse settings](../../_assets/Dataphin/metadata_warehouse_settings_1.png)
 
 Parameters are described as follows:
 
@@ -293,7 +293,7 @@ The detailed configuration information is as follows:
 
 1. **Essential information**
 
-   ![Create compute engine - 1](../../assets/Dataphin/create_compute_engine_1.png)
+   ![Create compute engine - 1](../../_assets/Dataphin/create_compute_engine_1.png)
 
    - **Computing Engine Type**: Select **StarRocks**.
 
@@ -303,7 +303,7 @@ The detailed configuration information is as follows:
 
 2. **Configuration information**
 
-   ![Create compute engine - 2](../../assets/Dataphin/create_compute_engine_2.png)
+   ![Create compute engine - 2](../../_assets/Dataphin/create_compute_engine_2.png)
 
    - **JDBC URL**: The format is `jdbc:mysql://<Host>:<Port>/`. `Host` is the IP address of the FE Host in the StarRocks cluster. `Port` is the query Port of FE. Default value: `9030`.
 
@@ -315,7 +315,7 @@ The detailed configuration information is as follows:
 
    - **Task Resource Group**: you can specify different StarRocks resource groups for tasks with different priorities. When you select do not specify Resource Group, the StarRocks engine determines the resource group to be executed. When you select specify Resource Group, tasks with different priorities are assigned to the specified resource group by the Dataphin.If a resource group is specified in the code of an SQL task or in the materialized configuration of a logical table, the configuration of the Resource Group of the compute source task is ignored when the task is executed.
 
-   ![Create compute engine - 3](../../assets/Dataphin/create_compute_engine_3.png)
+   ![Create compute engine - 3](../../_assets/Dataphin/create_compute_engine_3.png)
 
 ##### Dataphin project
 
@@ -343,10 +343,10 @@ The detailed steps are as follows:
 
 2. Click '+' in the upper-right corner to create StarRocks SQL task.
 
-   ![Configure Dataphin project - 1](../../assets/Dataphin/configure_dataphin_project_1.png)
+   ![Configure Dataphin project - 1](../../_assets/Dataphin/configure_dataphin_project_1.png)
 
 3. Enter the name and scheduling type to create an SQL task.
 
 4. Enter SQL in the editor to start DDL and DML operations on StarRock.
 
-   ![Configure Dataphin project - 2](../../assets/Dataphin/configure_dataphin_project_2.png)
+   ![Configure Dataphin project - 2](../../_assets/Dataphin/configure_dataphin_project_2.png)

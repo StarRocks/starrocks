@@ -31,6 +31,16 @@ class Segment;
 class RandomAccessFile;
 class ColumnIterator;
 
+struct StreamChunkContainer {
+    Chunk* chunk_ptr = nullptr;
+    // [start_rowid, end_rowid) is range of this chunk_ptr
+    uint32_t start_rowid = 0;
+    uint32_t end_rowid = 0;
+
+    // whether this container contains this rowid.
+    bool contains(uint32_t rowid) { return start_rowid <= rowid && rowid < end_rowid; }
+};
+
 struct RowsetSegmentStat {
     int64_t num_rows_written = 0;
     int64_t total_row_size = 0;
@@ -106,6 +116,8 @@ struct BatchPKs {
 };
 
 using BatchPKsPtr = std::shared_ptr<BatchPKs>;
+// from source rowid -> upt rowid
+using RowidPairs = std::pair<uint32_t, uint32_t>;
 
 // `RowsetColumnUpdateState` is used for maintain the middle state when handling partial update in column mode.
 // It will be maintain in update_manager by `DynamicCache<string, RowsetColumnUpdateState>`, mapped from each rowset to it.
@@ -114,8 +126,8 @@ using BatchPKsPtr = std::shared_ptr<BatchPKs>;
 class RowsetColumnUpdateState {
 public:
     using DeltaColumnGroupPtr = std::shared_ptr<DeltaColumnGroup>;
-    // rowid -> <update file id, update_rowids>
-    using RowidsToUpdateRowids = std::map<uint32_t, std::pair<uint32_t, uint32_t>>;
+    // update file id -> <source rowid, upt rowid>
+    using UptidToRowidPairs = std::map<uint32_t, std::vector<RowidPairs>>;
 
     RowsetColumnUpdateState();
     ~RowsetColumnUpdateState();
@@ -149,6 +161,8 @@ public:
 
     // For UT test now
     const std::vector<BatchPKsPtr>& upserts() const { return _upserts; }
+
+    static int64_t calc_upt_memory_usage_per_row(Rowset* rowset);
 
 private:
     Status _load_upserts(Rowset* rowset, MemTracker* update_mem_tracker, uint32_t start_idx, uint32_t* end_idx);
@@ -187,10 +201,6 @@ private:
     // build the map from rssid to <RowsetId, segment id>
     Status _init_rowset_seg_id(Tablet* tablet);
 
-    Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid, const Schema& partial_schema,
-                                   MemTracker* tracker, Rowset* rowset, OlapReaderStatistics* stats,
-                                   std::vector<uint32_t>& rowids, Chunk* result_chunk);
-
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset,
                                                                      const TabletSchemaCSPtr& tablet_schema,
                                                                      int segment_id);
@@ -208,13 +218,16 @@ private:
                             Rowset* rowset, uint32_t rowset_id, PersistentIndexMetaPB& index_meta,
                             vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
 
+    Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
+                                       Rowset* rowset, OlapReaderStatistics* stats, MemTracker* tracker,
+                                       StreamChunkContainer container);
+
 private:
     int64_t _tablet_id = 0;
     std::once_flag _load_once_flag;
     Status _status;
     // it contains primary key seriable column for each update segment file
     std::vector<BatchPKsPtr> _upserts;
-    std::vector<ChunkUniquePtr> _update_chunk_cache;
     // total memory usage in current state.
     // it will not record the temp memory usage.
     size_t _memory_usage = 0;
@@ -228,6 +241,7 @@ private:
     // when generate delta column group finish, these fields will be filled
     bool _finalize_finished = false;
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
+    std::map<string, string> _column_to_expr_value;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {

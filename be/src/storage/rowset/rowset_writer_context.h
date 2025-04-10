@@ -90,6 +90,9 @@ public:
 
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+    // Is pk compaction output writer
+    bool is_pk_compaction = false;
+    std::map<string, string>* column_to_expr_value = nullptr;
 };
 
 } // namespace starrocks

@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.validate;
 
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -40,7 +42,6 @@ import static com.starrocks.catalog.FunctionSet.ANY_VALUE;
 import static com.starrocks.catalog.FunctionSet.APPROX_COUNT_DISTINCT;
 import static com.starrocks.catalog.FunctionSet.AVG;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION_INT;
-import static com.starrocks.catalog.FunctionSet.COUNT;
 import static com.starrocks.catalog.FunctionSet.HLL_RAW;
 import static com.starrocks.catalog.FunctionSet.INTERSECT_COUNT;
 import static com.starrocks.catalog.FunctionSet.MAX;
@@ -51,7 +52,6 @@ import static com.starrocks.catalog.FunctionSet.NDV;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_APPROX;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_CONT;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_UNION;
-import static com.starrocks.catalog.FunctionSet.STDDEV;
 import static com.starrocks.catalog.FunctionSet.SUM;
 
 public class TypeChecker implements PlanValidator.Checker {
@@ -192,7 +192,25 @@ public class TypeChecker implements PlanValidator.Checker {
             }
         }
 
+        private boolean checkDecimalType(Type decimalType) {
+            ScalarType type = (ScalarType) decimalType;
+            final int scale = type.getScalarScale();
+            final int precision = type.getScalarPrecision();
+            final PrimitiveType primitiveType = type.getPrimitiveType();
+            return scale >= 0 && scale <= precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(primitiveType);
+        }
+
         private void checkColType(ScalarOperator arg, ScalarOperator expr, Type defined, Type actual) {
+            if (actual.isDecimalV3()) {
+                checkArgument(checkDecimalType(actual),
+                        "expr '%s' invalid actual type: %s",
+                        PREFIX, expr, actual);
+            }
+            if (defined.isDecimalV3()) {
+                checkArgument(checkDecimalType(actual),
+                        "expr '%s' invalid defined type: %s",
+                        PREFIX, expr, defined);
+            }
             checkArgument(actual.matchesType(defined),
                     "%s the type of arg %s in expr '%s' is defined as %s, but the actual type is %s",
                     PREFIX, arg, expr, defined, actual);
@@ -204,6 +222,12 @@ public class TypeChecker implements PlanValidator.Checker {
                 throw new IllegalArgumentException("percentile_approx " +
                         "requires the second parameter's type is numeric constant type");
             }
+
+            if (arguments.size() == 3 && !(arguments.get(2) instanceof ConstantOperator)) {
+                throw new IllegalArgumentException("percentile_approx " +
+                        "requires the third parameter's type is numeric constant type");
+            }
+
             ConstantOperator rate = (ConstantOperator) arg1;
             if (rate.getDouble() < 0 || rate.getDouble() > 1) {
                 throw new SemanticException("percentile_approx second parameter'value must be between 0 and 1");
@@ -216,9 +240,6 @@ public class TypeChecker implements PlanValidator.Checker {
             Type[] definedTypes = aggCall.getFunction().getArgs();
             List<Type> argTypes = arguments.stream().map(ScalarOperator::getType).collect(Collectors.toList());
             switch (functionName) {
-                case COUNT:
-                case STDDEV:
-                    break;
                 case MIN:
                 case MAX:
                 case ANY_VALUE:

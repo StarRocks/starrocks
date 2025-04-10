@@ -46,15 +46,28 @@ SchemaTaskRunsScanner::~SchemaTaskRunsScanner() = default;
 
 Status SchemaTaskRunsScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    std::string task_name;
+    std::string query_id;
+    std::string task_run_state;
     TGetTasksParams task_params;
+    // task_name
+    if (_parse_expr_predicate("TASK_NAME", task_name)) {
+        task_params.__set_task_name(task_name);
+    }
+    // query_id
+    if (_parse_expr_predicate("QUERY_ID", query_id)) {
+        task_params.__set_query_id(query_id);
+    }
+    // task_run_state
+    if (_parse_expr_predicate("STATE", task_run_state)) {
+        task_params.__set_state(task_run_state);
+    }
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_task_runs(*(_param->ip), _param->port, task_params, &_task_run_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_task_runs(_ss_state, task_params, &_task_run_result));
     _task_run_index = 0;
     return Status::OK();
 }

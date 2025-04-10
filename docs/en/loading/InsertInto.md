@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Load data using INSERT
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
@@ -23,10 +23,10 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 ## Precautions
 
 - You can cancel a synchronous INSERT transaction only by pressing the **Ctrl** and **C** keys from your MySQL client.
-- You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md).
+- You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md).
 - As for the current version of StarRocks, the INSERT transaction fails by default if the data of any rows does not comply with the schema of the table. For example, the INSERT transaction fails if the length of a field in any row exceeds the length limit for the mapping field in the table. You can set the session variable `enable_insert_strict` to `false` to allow the transaction to continue by filtering out the rows that mismatch the table.
-- If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. If your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via [Routine Load](../loading/RoutineLoad.md).
-- If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#use-a-temporary-partition-to-replace-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
+- If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. If your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via Routine Load.
+- If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#use-a-temporary-partition-to-replace-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
 
 ## Preparation
 
@@ -111,15 +111,15 @@ DISTRIBUTED BY HASH(user);
 
 > **NOTICE**
 >
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 ## Insert data via INSERT INTO VALUES
 
-You can append one or more rows to a specific table by using INSERT INTO VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+You can append one or more rows to a specific table by using INSERT INTO VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 > **CAUTION**
 >
-> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/Loading_intro.md) for other options that suit your scenarios.
+> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
 
 The following example inserts two rows into the data source table `source_wiki_edit` with the label `insert_load_wikipedia`. Label is the unique identification label for each data load transaction within the database.
 
@@ -133,7 +133,7 @@ VALUES
 
 ## Insert data via INSERT INTO SELECT
 
-You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files on cloud storage. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files on cloud storage. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 ### Insert data from an internal or external table into an internal table
 
@@ -211,11 +211,11 @@ INSERT INTO insert_wiki_edit
 
 ## Overwrite data via INSERT OVERWRITE VALUES
 
-You can overwrite a specific table with one or more rows by using INSERT OVERWRITE VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+You can overwrite a specific table with one or more rows by using INSERT OVERWRITE VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 > **CAUTION**
 >
-> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/Loading_intro.md) for other options that suit your scenarios.
+> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
 
 Query the source table and the target table to make sure there is data in them.
 
@@ -251,7 +251,7 @@ VALUES
 
 ## Overwrite data via INSERT OVERWRITE SELECT
 
-You can overwrite a table with the result of a query on a data source table via INSERT OVERWRITE SELECT command. INSERT OVERWRITE SELECT statement performs ETL operations on the data from one or more internal or external tables, and overwrites an internal table with the data For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+You can overwrite a table with the result of a query on a data source table via INSERT OVERWRITE SELECT command. INSERT OVERWRITE SELECT statement performs ETL operations on the data from one or more internal or external tables, and overwrites an internal table with the data For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 > **NOTE**
 >
@@ -318,6 +318,28 @@ MySQL > select * from insert_wiki_edit;
 Empty set (0.00 sec)
 ```
 
+:::note
+For tables that use the `PARTITION BY column` strategy, INSERT OVERWRITE supports creating new partitions in the destination table by specifying the value of the partition key. Existing partitions are overwritten as usual.
+
+The following example creates the partitioned table `activity`, and creates a new partition in the table while inserting data into it:
+
+```SQL
+CREATE TABLE activity (
+id INT          NOT NULL,
+dt VARCHAR(10)  NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+PARTITION BY (`id`, `dt`)
+DISTRIBUTED BY HASH(`id`);
+
+INSERT OVERWRITE activity
+PARTITION(id='4', dt='2022-01-01')
+WITH LABEL insert_activity_auto_partition
+VALUES ('4', '2022-01-01');
+```
+
+:::
+
 - The following example overwrites the target table `insert_wiki_edit` with the `event_time` and `channel` columns from the source table. The default value is assigned to the columns into which no data is overwritten.
 
 ```SQL
@@ -373,7 +395,7 @@ mysql> SELECT * FROM insert_generated_columns;
 
 ## Load data asynchronously using INSERT
 
-Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md). This feature is supported since StarRocks v2.5.
+Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md). This feature is supported since StarRocks v2.5.
 
 - The following example asynchronously inserts the data from the source table to the target table `insert_wiki_edit`.
 
@@ -440,7 +462,7 @@ You can locate the problem by checking the log with `tracking_url`.
 
 ### Check via Information Schema
 
-You can use the [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
+You can use the [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
 Example 1: Query the results of load jobs executed on the `load_test` database, sort the results by creation time (`CREATE_TIME`) in descending order, and only return the top result.
 
@@ -488,7 +510,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-For information about the fields in the return results, see [Information Schema > loads](../reference/information_schema/loads.md).
+For information about the fields in the return results, see [Information Schema > loads](../sql-reference/information_schema/loads.md).
 
 ### Check via curl command
 

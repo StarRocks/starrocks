@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Apache Ranger 管理权限
@@ -44,7 +44,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 - 确保 StarRocks 所有 FE 机器都能够访问 Ranger。您可以在 FE 节点的机器上执行以下语句来判断:
 
   ```SQL
-  telnet <ranger-ip> <ranger-host>
+  telnet <ranger-ip> <ranger-port>
   ```
 
   如果显示 `Connected to <ip>`，则表示连接成功。
@@ -55,6 +55,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 :::note
 本步骤的主要目的是使用 Ranger 的对象名称自动补全功能，非必要步骤。在 Ranger 中授权时，通常对象的数量都较多、名称较长，Ranger 提供了自动补全功能，即输入对象名称的一部分时，Ranger 可以自动补全对象的完整名称，从而方便授权。如果您没有 Ranger 集群的操作权限或不需要此功能，可以跳过本步骤。
+需要注意，如果您并未安装此plugin，则无法使用测试连接（Test connection）功能，但这并不代表您无法成功创建 StarRocks Service。
 :::
 
 1. 在 Ranger Admin 的 `ews/webapp/WEB-INF/classes/ranger-plugins` 目录下创建 `starrocks` 文件夹。
@@ -63,7 +64,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
+2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j.jar](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
 
 3. 重启 Ranger Admin。
 
@@ -84,17 +85,23 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ```
 
    :::note
-   如果您不需要开启 Ranger 的自动补全功能，即在上一步骤中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
+   如果不需要开启 Ranger 的自动补全功能，即在上一步中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
 
    ```JSON
    "implClass": "",
+   ```
+
+   如果需要开启 Ranger 的自动补全功能，即在上一步中安装了 ranger-starrocks-plugin，需要修改 .json 文件中的 `implClass` 为 `org.apache.ranger.services.starrocks.RangerServiceStarRocks`，即：
+
+   ```JSON
+   "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
    ```
 
    :::
 
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
-   ```SQL
+   ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
@@ -102,13 +109,13 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 3. 登录 Ranger 界面 `http://<ranger-ip>:<ranger-host>/login.jsp`。可以看到界面上出现了 STARROCKS 服务。
 
-   ![home](../../assets/ranger_home.png)
+   ![home](../../_assets/ranger_home.png)
 
 4. 点击 **STARROCKS** 后的加号 (`+`) 配置 StarRocks Service 信息。
 
-   ![service config](../../assets/ranger_service_details.png)
+   ![service config](../../_assets/ranger_service_details.png)
 
-   ![property](../../assets/ranger_properties.png)
+   ![property](../../_assets/ranger_properties.png)
 
    - `Service Name`: 服务名称，必填。
    - `Display Name`: 要显示在 STARROCKS 下的服务名称。如果不指定，则显示 `Service Name`。
@@ -117,13 +124,13 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    下图展示了一个填写示例。
 
-   ![example](../../assets/ranger_show_config.png)
+   ![example](../../_assets/ranger_show_config.png)
 
    下图展示了页面上配置好的 service。
 
-   ![service](../../assets/ranger_added_service.png)
+   ![service](../../_assets/ranger_added_service.png)
 
-5. 点击 **Test connection** 测试连通性，连通成功后保存。
+5. 点击 **Test connection** 测试连通性，连通成功后保存。需要注意，如果您没有安装 ranger-starrocks-plugin，则可以跳过测试直接保存。
 6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
@@ -179,7 +186,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 对于 External Catalog，可以复用外部 Service（如 Hive Service）实现访问控制。StarRocks 支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外表时，会直接根据对应外表的 Service 来进行访问控制。用户权限与 Ranger 同名用户一致。
 
-1. 将 Hive 的 Ranger 相关配置文件 [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) 和 [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) 拷贝至所有 FE 机器的 `fe/conf` 文件下。
+1. 复制您 Hive 集群重的的 Ranger 相关配置文件 [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) 和 [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) 拷贝至所有 FE 机器的 `fe/conf` 文件下，请确保配置文件中 Ranger 的 IP 以及端口正确。
 2. 重启所有 FE。
 3. 配置 Catalog。
 

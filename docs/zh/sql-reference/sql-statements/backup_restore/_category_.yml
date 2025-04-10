@@ -1,0 +1,6 @@
+position: 130 # float position is supported
+label: '备份与恢复'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

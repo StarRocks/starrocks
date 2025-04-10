@@ -91,9 +91,9 @@ public class HiveScanner extends ConnectorScanner {
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
-        this.hiveColumnTypes = params.get("hive_column_types").split("#");
-        this.requiredFields = params.get("required_fields").split(",");
-        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
+        this.hiveColumnTypes = ScannerHelper.splitAndOmitEmptyStrings(params.get("hive_column_types"), "#");
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
         this.dataFilePath = params.get("data_file_path");
         this.blockOffset = Long.parseLong(params.get("block_offset"));
         this.blockLength = Long.parseLong(params.get("block_length"));
@@ -121,7 +121,7 @@ public class HiveScanner extends ConnectorScanner {
     }
 
     private void parseRequiredTypes() {
-        String[] hiveColumnNames = this.hiveColumnNames.split(",");
+        String[] hiveColumnNames = ScannerHelper.splitAndOmitEmptyStrings(this.hiveColumnNames, ",");
         HashMap<String, Integer> hiveColumnNameToIndex = new HashMap<>();
         HashMap<String, String> hiveColumnNameToType = new HashMap<>();
         for (int i = 0; i < hiveColumnNames.length; i++) {
@@ -196,9 +196,18 @@ public class HiveScanner extends ConnectorScanner {
         deserializer = getDeserializer(jobConf, properties, serde);
         rowInspector = getTableObjectInspector(deserializer);
         for (int i = 0; i < requiredFields.length; i++) {
-            StructField field = rowInspector.getStructFieldRef(requiredFields[i]);
-            structFields[i] = field;
-            fieldInspectors[i] = field.getFieldObjectInspector();
+            StructField field = null;
+            try {
+                // for avro file, schema could be defined in the field is `SerDe.avro.schema.url`
+                // if schema is incompatible, field can not be found.
+                field = rowInspector.getStructFieldRef(requiredFields[i]);
+            } catch (RuntimeException e) {
+                LOG.warn("Failed to find field", e);
+            }
+            if (field != null) {
+                structFields[i] = field;
+                fieldInspectors[i] = field.getFieldObjectInspector();
+            }
         }
         key = (Writable) reader.createKey();
         value = (Writable) reader.createValue();
@@ -241,7 +250,10 @@ public class HiveScanner extends ConnectorScanner {
                 }
                 Object rowData = deserializer.deserialize(value);
                 for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
+                    Object fieldData = null;
+                    if (structFields[i] != null) {
+                        fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
+                    }
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {

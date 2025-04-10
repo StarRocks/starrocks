@@ -30,12 +30,18 @@ namespace lake {
 
 class Tablet;
 class MetaFileBuilder;
+class LakePrimaryIndex;
 
 class LakeLocalPersistentIndexTabletLoader : public TabletLoader {
 public:
     LakeLocalPersistentIndexTabletLoader(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                         int64_t base_version, const MetaFileBuilder* builder)
-            : _tablet_mgr(tablet_mgr), _metadata(metadata), _base_version(base_version), _builder(builder) {}
+                                         int64_t base_version, const MetaFileBuilder* builder,
+                                         LakeLocalPersistentIndex* index)
+            : _tablet_mgr(tablet_mgr),
+              _metadata(metadata),
+              _base_version(base_version),
+              _builder(builder),
+              _index(index) {}
     ~LakeLocalPersistentIndexTabletLoader() = default;
     starrocks::Schema generate_pkey_schema() override;
     DataDir* data_dir() override;
@@ -49,11 +55,14 @@ public:
             const Schema& pkey_schema,
             const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) override;
 
+    void set_write_amp_score(double score) override;
+
 private:
     TabletManager* _tablet_mgr;
     const TabletMetadataPtr _metadata;
     int64_t _base_version;
     const MetaFileBuilder* _builder;
+    LakeLocalPersistentIndex* _index;
 };
 
 } // namespace lake

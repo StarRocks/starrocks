@@ -13,12 +13,15 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -38,7 +41,16 @@ import java.util.List;
  * which it comes from.
  */
 public class SlotRefResolver {
-    private  static final AstVisitor<Expr, Relation> EXPR_SHUTTLE = new AstVisitor<Expr, Relation>() {
+
+    static class ExprShuttle extends AstVisitor<Expr, Relation> {
+
+        private final AstVisitor<Expr, SlotRef> slotRefResolver;
+
+        // Use customized SlotRefResolver
+        public ExprShuttle(AstVisitor<Expr, SlotRef> slotRefResolver) {
+            this.slotRefResolver = slotRefResolver;
+        }
+
         @Override
         public Expr visit(ParseNode node) {
             throw new SemanticException("Cannot resolve materialized view's partition slot ref, " +
@@ -61,7 +73,7 @@ public class SlotRefResolver {
             if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
                 return slotRef;
             }
-            return node.accept(SLOT_REF_RESOLVER, slotRef);
+            return node.accept(slotRefResolver, slotRef);
         }
 
         @Override
@@ -71,9 +83,10 @@ public class SlotRefResolver {
             SlotRef slotRef = new SlotRef(field.getRelationAlias(), field.getName());
             return node.accept(SLOT_REF_RESOLVER, slotRef);
         }
-    };
+    }
 
     private static final AstVisitor<Expr, SlotRef> SLOT_REF_RESOLVER = new AstVisitor<Expr, SlotRef>() {
+
         @Override
         public Expr visit(ParseNode node) {
             throw new SemanticException("Cannot resolve materialized view's partition expression, " +
@@ -191,6 +204,75 @@ public class SlotRefResolver {
         }
     };
 
+    private static final AstVisitor<Expr, Relation> EXPR_SHUTTLE = new ExprShuttle(SLOT_REF_RESOLVER);
+
+    /**
+     * Recursive check if the query contains an unsupported window function
+     */
+    private static class WindowFunctionChecker extends AstTraverser<Expr, SlotRef> {
+
+        private CreateMaterializedViewStatement statement;
+        private Expr partitionByExpr;
+        private final ExprShuttle exprShuttle = new ExprShuttle(this);
+
+        public static void check(CreateMaterializedViewStatement statement, Expr partitionByExpr) {
+            WindowFunctionChecker checker = new WindowFunctionChecker();
+            checker.statement = statement;
+            checker.partitionByExpr = partitionByExpr;
+            partitionByExpr.accept(checker.exprShuttle, statement.getQueryStatement().getQueryRelation());
+        }
+
+        private void checkWindowFunction(SelectRelation node) {
+            for (SelectListItem item : node.getSelectList().getItems()) {
+                Expr expr = item.getExpr();
+                if (expr instanceof AnalyticExpr) {
+                    AnalyticExpr analyticExpr = expr.cast();
+                    if (analyticExpr.getPartitionExprs() == null
+                            || !analyticExpr.getPartitionExprs().contains(partitionByExpr)) {
+                        String name = partitionByExpr instanceof SlotRef ?
+                                ((SlotRef) partitionByExpr).getColumnName() : partitionByExpr.toSql();
+                        throw new SemanticException("window function %s ’s partition expressions" +
+                                " should contain the partition column %s of materialized view",
+                                analyticExpr.getFnCall().getFnName().getFunction(),
+                                name
+                        );
+                    }
+                }
+            }
+        }
+
+        @Override
+        public Expr visitSelect(SelectRelation node, SlotRef slot) {
+            // Only check the window function at the relation that SlotRef exists
+            // E.g. The Partition-By refs to c1, so we only check this relation
+            // SELECT * FROM (
+            //      SELECT c1, row_number() over (partition by ...)
+            //      FROM t1
+            // )r;
+            for (SelectListItem selectListItem : node.getSelectList().getItems()) {
+                TableName tableName = slot.getTblNameWithoutAnalyzed();
+                if (selectListItem.getAlias() == null) {
+                    if (selectListItem.getExpr() instanceof SlotRef) {
+                        SlotRef result = (SlotRef) selectListItem.getExpr();
+                        if (result.getColumnName().equalsIgnoreCase(slot.getColumnName())
+                                && (tableName == null || tableName.equals(result.getTblNameWithoutAnalyzed()))) {
+                            checkWindowFunction(node);
+                        }
+                    }
+                } else {
+                    if (tableName != null && tableName.isFullyQualified()) {
+                        continue;
+                    }
+                    if (selectListItem.getAlias().equalsIgnoreCase(slot.getColumnName())) {
+                        checkWindowFunction(node);
+                    }
+                }
+            }
+            return super.visitSelect(node, slot);
+        }
+
+    }
+
     /**
      * Resolve the expression through join/sub-query/view/set operator fo find the slot ref
      * which it comes from.
@@ -198,4 +280,9 @@ public class SlotRefResolver {
     public static Expr resolveExpr(Expr expr, QueryStatement queryStatement) {
         return expr.accept(EXPR_SHUTTLE, queryStatement.getQueryRelation());
     }
+
+    public static void checkWindowFunction(CreateMaterializedViewStatement statement, Expr partitionByExpr) {
+        WindowFunctionChecker.check(statement, partitionByExpr);
+    }
+
 }

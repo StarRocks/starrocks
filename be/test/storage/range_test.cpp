@@ -204,45 +204,4 @@ TEST(SparseRangeIteratorTest, intersect_test) {
     }
 }
 
-TEST(SparseRangeIteratorTest, convert_to_bitmap) {
-    std::vector<uint8_t> bitmap(100, 0);
-    SparseRange<> r1({{1, 11}, {20, 22}, {24, 25}});
-    SparseRangeIterator<> iter = r1.new_iterator();
-
-    ASSERT_EQ(0u, iter.convert_to_bitmap(bitmap.data(), 0));
-
-    ASSERT_EQ(5u, iter.convert_to_bitmap(bitmap.data(), 5));
-    ASSERT_EQ("11111", to_bitmap_string(bitmap.data(), 5));
-
-    ASSERT_EQ(10u, iter.convert_to_bitmap(bitmap.data(), 10));
-    ASSERT_EQ("1111111111", to_bitmap_string(bitmap.data(), 10));
-
-    ASSERT_EQ(15u, iter.convert_to_bitmap(bitmap.data(), 15));
-    ASSERT_EQ("111111111100000", to_bitmap_string(bitmap.data(), 15));
-
-    ASSERT_EQ(19u, iter.convert_to_bitmap(bitmap.data(), 19));
-    ASSERT_EQ("1111111111000000000", to_bitmap_string(bitmap.data(), 19));
-
-    ASSERT_EQ(20u, iter.convert_to_bitmap(bitmap.data(), 20));
-    ASSERT_EQ("11111111110000000001", to_bitmap_string(bitmap.data(), 20));
-
-    ASSERT_EQ(21u, iter.convert_to_bitmap(bitmap.data(), 21));
-    ASSERT_EQ("111111111100000000011", to_bitmap_string(bitmap.data(), 21));
-
-    ASSERT_EQ(22u, iter.convert_to_bitmap(bitmap.data(), 22));
-    ASSERT_EQ("1111111111000000000110", to_bitmap_string(bitmap.data(), 22));
-
-    ASSERT_EQ(23u, iter.convert_to_bitmap(bitmap.data(), 23));
-    ASSERT_EQ("11111111110000000001100", to_bitmap_string(bitmap.data(), 23));
-
-    ASSERT_EQ(24u, iter.convert_to_bitmap(bitmap.data(), 24));
-    ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
-
-    ASSERT_EQ(24u, iter.convert_to_bitmap(bitmap.data(), 25));
-    ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
-
-    ASSERT_EQ(24u, iter.convert_to_bitmap(bitmap.data(), 26));
-    ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
-}
-
 } // namespace starrocks

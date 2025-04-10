@@ -159,12 +159,42 @@ public class RoutineLoadJobTest {
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
 
         Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
-        Assert.assertEquals(new Long(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
+        Assert.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
         Assert.assertTrue(routineLoadJob.getOtherMsg(), routineLoadJob.getOtherMsg().endsWith(txnStatusChangeReasonString));
     }
 
     @Test
-    public void testGetShowInfo() throws UserException {
+    public void testPulsarGetShowInfo() {
+        {
+            // PAUSE state
+            PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+            ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+            Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
+
+            List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+                    .anyMatch(entity -> entity.equals(errorReason.toString())));
+        }
+
+        {
+            // PAUSE state
+            PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(
+                    1L, "task1", 1, 1, "http://url", "task-1", "sub-1");
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+            ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+            Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
+
+            List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+                    .anyMatch(entity -> entity.equals(errorReason.toString())));
+        }
+    }
+
+    @Test
+    public void testKafkaGetShowInfo() throws UserException {
         {
             // PAUSE state
             KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
@@ -213,6 +243,7 @@ public class RoutineLoadJobTest {
             routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
             // The job is set unstable due to the progress is too slow.
             routineLoadJob.updateSubstate();
+            Assert.assertTrue(routineLoadJob.isUnstable());
 
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertEquals("UNSTABLE", showInfo.get(7));
@@ -319,8 +350,14 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "maxBatchRows", 0);
         Deencapsulation.invoke(routineLoadJob, "updateNumOfData", 1L, 1L, 0L, 1L, 1L, false);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, Deencapsulation.getField(routineLoadJob, "state"));
-
+        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assert.assertEquals(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, reason.getCode());
+        Assert.assertEquals(
+                "Current error rows: 1 is more than max error num: 0. Check the 'TrackingSQL' field for detailed information. " +
+                        "If you are sure that the data has many errors, you can set 'max_error_number' property " +
+                        "to a greater value through ALTER ROUTINE LOAD and RESUME the job",
+                reason.getMsg());
     }
 
     @Test

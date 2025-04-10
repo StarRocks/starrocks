@@ -39,6 +39,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
+import com.starrocks.clone.TabletScheduler.PathSlot;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -46,10 +47,12 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchedule;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -67,6 +70,7 @@ public class TabletSchedCtxTest {
             .createType(PrimitiveType.TINYINT), true, null, "", "key1"));
 
     private static int TABLET_ID_1 = 50000;
+    private static int TABLET_ID_2 = 51000;
 
     private Backend be1;
     private Backend be2;
@@ -167,16 +171,20 @@ public class TabletSchedCtxTest {
         AgentBatchTask agentBatchTask = new AgentBatchTask();
         Config.recover_with_empty_tablet = false;
         SchedException schedException = Assert.assertThrows(SchedException.class, () -> tabletScheduler
-                .handleTabletByTypeAndStatus(LocalTablet.TabletStatus.REPLICA_MISSING, ctx, agentBatchTask));
+                .handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask));
         Assert.assertEquals("unable to find source replica", schedException.getMessage());
 
         Config.recover_with_empty_tablet = true;
-        tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletStatus.REPLICA_MISSING, ctx, agentBatchTask);
+        tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask);
         Assert.assertEquals(1, agentBatchTask.getTaskNum());
 
         AgentTask recoverTask = agentBatchTask.getAllTasks().get(0);
         Assert.assertEquals(be2.getId(), recoverTask.getBackendId());
         Assert.assertEquals(TABLET_ID_1, recoverTask.getTabletId());
+
+        TTabletSchedule res = ctx.toTabletScheduleThrift();
+        Assert.assertNotNull(res);
+        Assert.assertEquals(TABLET_ID_1, res.getTablet_id());
     }
 
     @Test
@@ -223,6 +231,58 @@ public class TabletSchedCtxTest {
         expectedCtx = pendingTablets.poll();
         Assert.assertNotNull(expectedCtx);
         Assert.assertEquals(ctx2.getTabletId(), expectedCtx.getTabletId());
+    }
+
+    @Test
+    public void testChooseDestReplicaForVersionIncomplete() {        
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, SCHEMA_HASH, TStorageMedium.HDD);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID_2, tabletMeta);
+        Replica replica1 = new Replica(50011, be1.getId(), 0, Replica.ReplicaState.NORMAL);
+        Replica replica2 = new Replica(50012, be2.getId(), 0, Replica.ReplicaState.NORMAL);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID_2, replica1);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID_2, replica2);
+
+        replica1.updateVersionInfo(101, 108, 101);
+        replica2.updateVersionInfo(100, 120, 100);
+        replica1.setPathHash(Long.valueOf(100));
+        replica2.setPathHash(Long.valueOf(101));
+
+        List<Replica> replicas = new ArrayList<>();
+        replicas.add(replica1);
+        replicas.add(replica2);
+        LocalTablet repairTablet = new LocalTablet(TABLET_ID_2, replicas);
+
+        TabletSchedCtx ctx =
+                new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
+                        TABLET_ID_2, System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        ctx.setTablet(repairTablet);
+        ctx.setStorageMedium(TStorageMedium.HDD);
+        ctx.setVersionInfo(101, 108, 12332);
+
+        Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
+        List<Long> pathHashes = new ArrayList<>();
+        pathHashes.add(Long.valueOf(100));
+        PathSlot slot1 = new PathSlot(pathHashes, 1000);
+        backendsWorkingSlots.put(be1.getId(), slot1);
+        pathHashes.clear();
+        pathHashes.add(Long.valueOf(101));
+        PathSlot slot2 = new PathSlot(pathHashes, 1000);
+        backendsWorkingSlots.put(be2.getId(), slot2);
+        try {
+            ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+        Assert.assertEquals(be2.getId(), ctx.getDestBackendId());
+        
+        replica2.updateVersionInfo(101, 120, 101);
+        try {
+            ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+        Assert.assertEquals(be1.getId(), ctx.getDestBackendId());
+
     }
 
 }

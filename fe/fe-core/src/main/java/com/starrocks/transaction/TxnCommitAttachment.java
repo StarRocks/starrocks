@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
@@ -103,6 +104,8 @@ public abstract class TxnCommitAttachment implements Writable {
             attachment = StreamLoadTxnCommitAttachment.loadStreamLoadTxnCommitAttachment(in);
         } else if (type == LoadJobSourceType.REPLICATION) {
             attachment = new ReplicationTxnCommitAttachment();
+        } else if (type == LoadJobSourceType.LAKE_COMPACTION) {
+            attachment = new CompactionTxnCommitAttachment();
         } else {
             throw new IOException("Unknown load job source type: " + type.name());
         }

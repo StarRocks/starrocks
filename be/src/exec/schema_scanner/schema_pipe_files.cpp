@@ -48,6 +48,8 @@ SchemaTablePipeFiles::SchemaTablePipeFiles()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaTablePipeFiles::start(RuntimeState* state) {
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     return SchemaScanner::start(state);
 }
 
@@ -58,7 +60,7 @@ Status SchemaTablePipeFiles::_list_pipe_files() {
     if (_param->current_user_ident) {
         params.__set_user_ident(*_param->current_user_ident);
     }
-    return SchemaHelper::list_pipe_files(*(_param->ip), _param->port, params, &_pipe_files_result);
+    return SchemaHelper::list_pipe_files(_ss_state, params, &_pipe_files_result);
 }
 
 Status SchemaTablePipeFiles::get_next(ChunkPtr* chunk, bool* eos) {

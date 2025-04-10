@@ -169,8 +169,13 @@ public:
         return *this;
     }
 
-    AsyncDeltaWriterBuilder& set_index_id(int64_t index_id) {
-        _index_id = index_id;
+    AsyncDeltaWriterBuilder& set_schema_id(int64_t schema_id) {
+        _schema_id = schema_id;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
         return *this;
     }
 
@@ -181,13 +186,14 @@ private:
     int64_t _txn_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
-    int64_t _index_id{0};
+    int64_t _schema_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     int64_t _immutable_tablet_size{0};
     MemTracker* _mem_tracker{nullptr};
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 
 } // namespace starrocks::lake

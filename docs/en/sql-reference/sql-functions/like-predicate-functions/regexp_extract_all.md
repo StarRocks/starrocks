@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # regexp_extract_all
@@ -12,7 +12,7 @@ In regex, groups are enclosed within the parentheses () and numbered by counting
 
 The pattern must completely match some parts of `str`. If no matches are found, an empty string is returned.
 
-This function is supported from v2.5.19.
+This function is supported from v3.1.10.
 
 ## Syntax
 

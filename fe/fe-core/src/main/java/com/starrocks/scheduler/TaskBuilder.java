@@ -84,6 +84,7 @@ public class TaskBuilder {
         task.setProperties(submitTaskStmt.getProperties());
         task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
         task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
 
         handleSpecialTaskProperties(task);
         return task;
@@ -162,13 +163,14 @@ public class TaskBuilder {
         task.setExpireTime(0L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+            task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
         }
         handleSpecialTaskProperties(task);
         return task;
     }
 
     public static Task rebuildMvTask(MaterializedView materializedView, String dbName,
-                                     Map<String, String> previousTaskProperties) {
+                                     Map<String, String> previousTaskProperties, Task previousTask) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
@@ -178,8 +180,9 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
-        if (ConnectContext.get() != null) {
-            task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        if (previousTask != null) {
+            task.setCreateUser(previousTask.getCreateUser());
+            task.setUserIdentity(previousTask.getUserIdentity());
         }
         handleSpecialTaskProperties(task);
         return task;
@@ -253,7 +256,7 @@ public class TaskBuilder {
         } else {
             Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
                      Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
-            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties);
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties, currentTask);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
             taskManager.alterTask(currentTask, changedTask, false);
             task = currentTask;
@@ -261,7 +264,7 @@ public class TaskBuilder {
 
         // for event triggered type, run task
         if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
-            taskManager.executeTask(task.getName());
+            taskManager.executeTask(task.getName(), ExecuteOption.makeMergeRedundantOption());
         }
     }
 

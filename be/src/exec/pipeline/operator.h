@@ -148,7 +148,7 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    MemTracker* mem_tracker() const { return _mem_tracker; }
+    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
@@ -172,6 +172,10 @@ public:
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
                                          FilterPtr* filter = nullptr, bool apply_filter = true);
+    // evaluate no eq join runtime in filters
+    // The no-eq join runtime filter does not have a companion bloom filter.
+    // This function only executes these filters to avoid the overhead of executing an additional runtime in filter.
+    Status eval_no_eq_join_runtime_in_filters(Chunk* chunk);
 
     // Evaluate conjuncts without cache
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter = nullptr);
@@ -321,11 +325,7 @@ private:
     void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
 
-    // All the memory usage will be automatically added to this MemTracker by memory allocate hook.
-    // DO NOT use this MemTracker manually.
-    // The MemTracker is owned by QueryContext, so that all the operators with the same plan_node_id can share
-    // the same MemTracker.
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
 };
 
 class OperatorFactory {

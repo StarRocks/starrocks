@@ -54,6 +54,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -62,6 +63,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -83,6 +85,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     private static SocketChannel socketChannel;
 
     private static PQueryStatistics statistics = new PQueryStatistics();
+
 
     @BeforeClass
     public static void setUpClass() {
@@ -164,6 +167,8 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         statistics.scanBytes = 0L;
         statistics.scanRows = 0L;
+
+        Mockito.mockStatic(AuditEncryptionChecker.class);
     }
 
     @Before
@@ -409,7 +414,6 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
-
         // Mock statement executor
         new Expectations() {
             {
@@ -585,7 +589,8 @@ public class ConnectProcessorTest extends DDLTestBase {
                 ");";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
-        processor.addRunningQueryDetail(statementBase);
+        processor.executor = new StmtExecutor(ctx, statementBase);
+        processor.executor.addRunningQueryDetail(statementBase);
 
         Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }

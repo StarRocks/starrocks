@@ -27,6 +27,8 @@ using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 
 class ScanTaskQueue;
 
+enum class ScanSchedEntityType : uint8_t { OLAP, CONNECTOR };
+
 template <typename Q>
 class WorkGroupSchedEntity;
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;

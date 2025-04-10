@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -45,6 +46,7 @@ import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.CreateRoutineLoadAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
@@ -523,7 +525,6 @@ public class CreateRoutineLoadStmtTest {
 
     @Test
     public void testKafkaOffset() {
-
         String jobName = "job1";
         String dbName = "db1";
         String tableNameString = "table1";
@@ -541,8 +542,8 @@ public class CreateRoutineLoadStmtTest {
         // 1. kafka_offsets
         // 1 -> OFFSET_BEGINNING, 2 -> OFFSET_END
         Map<String, String> customProperties = getCustomProperties();
-        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2");
-        customProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "OFFSET_BEGINNING,OFFSET_END");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, " 1 , 2 ");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, " OFFSET_BEGINNING , OFFSET_END ");
         LabelName labelName = new LabelName(dbName, jobName);
         CreateRoutineLoadStmt createRoutineLoadStmt = new CreateRoutineLoadStmt(
                 labelName, tableNameString, loadPropertyList, Maps.newHashMap(),
@@ -598,6 +599,34 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
         Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
         Assert.assertEquals(11, (long) partitionOffsets.get(2).second);
+
+        // 5. invalid partitions " 1 2 3 "
+        customProperties = getCustomProperties();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, " 1 2 3 ");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "OFFSET_BEGINNING,OFFSET_END,11");
+        customProperties.put(kafkaDefaultOffsetsKey, "10");
+        labelName = new LabelName(dbName, jobName);
+        createRoutineLoadStmt =
+                new CreateRoutineLoadStmt(labelName, tableNameString, loadPropertyList, Maps.newHashMap(),
+                        LoadDataSourceType.KAFKA.name(), customProperties);
+        CreateRoutineLoadStmt finalCreateRoutineLoadStmt = createRoutineLoadStmt;
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Invalid kafka partition: '1 2 3'. Expected values should be an integer",
+                () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt, connectContext));
+
+        // 6. invalid offset a
+        customProperties = getCustomProperties();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2,3");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "OFFSET_BEGINNING,OFFSET_END,a");
+        customProperties.put(kafkaDefaultOffsetsKey, "10");
+        labelName = new LabelName(dbName, jobName);
+        createRoutineLoadStmt =
+                new CreateRoutineLoadStmt(labelName, tableNameString, loadPropertyList, Maps.newHashMap(),
+                        LoadDataSourceType.KAFKA.name(), customProperties);
+        CreateRoutineLoadStmt finalCreateRoutineLoadStmt2 = createRoutineLoadStmt;
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Invalid kafka offset: 'a'. Expected values should be an integer, OFFSET_BEGINNING, or OFFSET_END",
+                () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt2, connectContext));
     }
 
     @Test

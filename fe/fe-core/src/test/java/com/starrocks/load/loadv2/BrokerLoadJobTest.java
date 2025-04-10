@@ -55,6 +55,7 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
@@ -390,9 +391,17 @@ public class BrokerLoadJobTest {
         brokerLoadJob2.unprotectedExecuteJob();
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
+        ConnectContext context = new ConnectContext();
+        context.setStartTime();
+        brokerLoadJob2.setConnectContext(context);
+        long createTimestamp = context.getStartTime() - 1;
+        brokerLoadJob2.createTimestamp = createTimestamp;
+        brokerLoadJob2.timeoutSecond = 0;
         brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+        Assert.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
+        Assert.assertEquals(brokerLoadJob2.createTimestamp, context.getStartTime());
 
         // test when txnOperated is false
         BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
@@ -414,6 +423,22 @@ public class BrokerLoadJobTest {
         brokerLoadJob4.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+
+        // test that timeout happens in loading task before the job timeout
+        BrokerLoadJob brokerLoadJob5 = new BrokerLoadJob();
+        new Expectations() {
+            {
+                brokerLoadJob5.isTimeout();
+                result = false;
+            }
+        };
+        brokerLoadJob5.retryTime = 1;
+        brokerLoadJob5.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = LoadErrorUtils.BACKEND_BRPC_TIMEOUT.keywords;
+        brokerLoadJob5.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob5, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
     }
 
     @Test
@@ -432,6 +457,55 @@ public class BrokerLoadJobTest {
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
+    }
+
+    @Test
+    public void testTaskOnResourceGroupTaskFailed(@Injectable long taskId, @Injectable FailMsg failMsg) {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
+
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        failMsg = new FailMsg(FailMsg.CancelType.USER_CANCEL, "Failed to allocate resource to query: pending timeout");
+        brokerLoadJob.onTaskFailed(taskId, failMsg);
+
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
+    }
+
+    @Test
+    public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
+            @Injectable long taskId, @Injectable FailMsg failMsg) throws UserException {
+        new Expectations() {
+            {
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                times = 1;
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
+        brokerLoadJob.onTaskFailed(taskId, failMsg);
+
+        new Expectations() {
+            {
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                times = 1;
+                result = new UserException("Artificial exception");
+            }
+        };
+
+        try {
+            BrokerLoadJob brokerLoadJob1 = new BrokerLoadJob();
+            failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
+            brokerLoadJob1.onTaskFailed(taskId, failMsg);
+        } catch (Exception e) {
+            Assert.fail("should not throw exception");
+        }
     }
 
     @Test

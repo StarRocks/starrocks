@@ -28,17 +28,20 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -146,29 +149,15 @@ public class Utils {
     }
 
     public static List<ColumnRefOperator> extractColumnRef(ScalarOperator root) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return new LinkedList<>();
         }
 
-        LinkedList<ColumnRefOperator> list = new LinkedList<>();
-        if (OperatorType.VARIABLE.equals(root.getOpType())) {
-            list.add((ColumnRefOperator) root);
-            return list;
-        }
-
-        for (ScalarOperator child : root.getChildren()) {
-            list.addAll(extractColumnRef(child));
-        }
-
-        return list;
+        return root.getColumnRefs();
     }
 
     public static int countColumnRef(ScalarOperator root) {
-        return countColumnRef(root, 0);
-    }
-
-    private static int countColumnRef(ScalarOperator root, int count) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return 0;
         }
 
@@ -176,8 +165,9 @@ public class Utils {
             return 1;
         }
 
+        int count = 0;
         for (ScalarOperator child : root.getChildren()) {
-            count += countColumnRef(child, count);
+            count += countColumnRef(child);
         }
 
         return count;
@@ -384,6 +374,16 @@ public class Utils {
         return count;
     }
 
+    public static boolean hasPrunableJoin(OptExpression expression) {
+        if (expression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOp = expression.getOp().cast();
+            JoinOperator joinType = joinOp.getJoinType();
+            return joinType.isInnerJoin() || joinType.isCrossJoin() ||
+                    joinType.isLeftOuterJoin() || joinType.isRightOuterJoin();
+        }
+        return expression.getInputs().stream().anyMatch(Utils::hasPrunableJoin);
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
@@ -418,6 +418,8 @@ public class Utils {
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalPaimonScanOperator) {
+                return ((LogicalPaimonScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -787,10 +789,75 @@ public class Utils {
         try {
             statisticsCalculator.estimatorStats();
         } catch (Exception e) {
-            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            LOG.warn("[query={}] Failed to calculate statistics for expression: {}",
+                    DebugUtil.getSessionQueryId(), expr, e);
             return;
         }
 
         expr.setStatistics(expressionContext.getStatistics());
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T, S extends T> Optional<S> downcast(T obj, Class<S> klass) {
+        Preconditions.checkArgument(obj != null);
+        if (obj.getClass().equals(Objects.requireNonNull(klass))) {
+            return Optional.of((S) obj);
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    public static <T, S extends T> S mustCast(T obj, Class<S> klass) {
+        return downcast(obj, klass)
+                .orElseThrow(() -> new IllegalArgumentException("Cannot cast " + obj.getClass() + " to " + klass));
+    }
+
+    // this method is useful when map is small, but key is very complex  like compound predicate with 1000 OR
+    // in which case key's hashCode() can be super slow because of bad time complexity
+    // so we can use equals' short-circuit logic to help us find whether key is in map quickly
+    // which means key's type is not same as map's key's types
+    public static <K, V> V getValueIfExists(Map<K, V> map, K key) {
+        V value = null;
+
+        if (map.size() < 4) {
+            for (Map.Entry<K, V> entry : map.entrySet()) {
+                if (entry.getKey().equals(key)) {
+                    value = entry.getValue();
+                    break;
+                }
+            }
+        } else {
+            value = map.get(key);
+        }
+
+        return value;
+    }
+
+
+    /**
+     * Add new project into input, merge input's existing project if input has one.
+     * @param input input expression
+     * @param newProjectionMap new project map to be pushed down into input
+     * @return a new expression with new project
+     */
+    public static OptExpression mergeProjection(OptExpression input,
+                                                Map<ColumnRefOperator, ScalarOperator> newProjectionMap) {
+        if (newProjectionMap == null || newProjectionMap.isEmpty()) {
+            return input;
+        }
+        Operator newOp = input.getOp();
+        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
+            newOp.setProjection(new Projection(newProjectionMap));
+        } else {
+            // merge two projections
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
+            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
+                ScalarOperator result = rewriter.rewrite(entry.getValue());
+                resultMap.put(entry.getKey(), result);
+            }
+            newOp.setProjection(new Projection(resultMap));
+        }
+        return input;
     }
 }

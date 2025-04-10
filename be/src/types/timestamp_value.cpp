@@ -652,6 +652,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 date_part_used = true;
                 break;
             case 'r':
+                tmp = val + std::min(11, (int)(val_end - val));
                 if (from_uncommon_format_str("%I:%i:%S %p", 11, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -659,6 +660,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 time_part_used = true;
                 break;
             case 'T':
+                tmp = val + std::min(8, (int)(val_end - val));
                 if (from_uncommon_format_str("%H:%i:%S", 8, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -872,8 +874,11 @@ bool TimestampValue::is_valid_non_strict() const {
     return is_valid();
 }
 
-std::string TimestampValue::to_string() const {
-    return timestamp::to_string(_timestamp);
+std::string TimestampValue::to_string(bool igonre_microsecond) const {
+    if (igonre_microsecond) {
+        return timestamp::to_string<false, true>(_timestamp);
+    }
+    return timestamp::to_string<false, false>(_timestamp);
 }
 
 int TimestampValue::to_string(char* s, size_t n) const {

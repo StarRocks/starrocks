@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -30,6 +31,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -120,7 +122,7 @@ public class DefaultWorkerProviderTest {
             nextComputeNodeIndex.setRef(0);
 
             workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
-                    numUsedComputeNodes);
+                    numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -137,6 +139,70 @@ public class DefaultWorkerProviderTest {
                         numAvailableComputeNodes++;
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * The schedule policy is suitable in shared nothing mode.
+     */
+    @Test
+    public void testSelectBackendAndComputeNode() {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getIdToBackend() {
+                return availableId2Backend;
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
+                return availableId2ComputeNode;
+            }
+        };
+
+        DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+        DefaultWorkerProvider workerProvider;
+        List<Integer> numUsedComputeNodesList = ImmutableList.of(-1, 0, 2, 3, 5, 8, 10);
+
+        // test ComputeNode only
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            for (Long selectedWorkerId : selectedWorkerIdsList) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
+                        availableId2ComputeNode.containsKey(selectedWorkerId));
+            }
+        }
+        // test Backend only
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
+            for (Long selectedWorkerId : selectedWorkerIdsList) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
+                        availableId2Backend.containsKey(selectedWorkerId));
+            }
+        }
+        // test Backend and ComputeNode
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
+            //test ComputeNode
+            for (int i = 0; i < availableId2ComputeNode.size() && i < selectedWorkerIdsList.size(); i++) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
+                        availableId2ComputeNode.containsKey(selectedWorkerIdsList.get(i)));
+            }
+            //test Backend
+            for (int i = availableId2ComputeNode.size(); i < selectedWorkerIdsList.size(); i++) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
+                        availableId2Backend.containsKey(selectedWorkerIdsList.get(i)));
             }
         }
     }
@@ -224,7 +290,7 @@ public class DefaultWorkerProviderTest {
                                                                      Map<Long, C> availableId2Worker) {
         // not allow using backup node
         Assert.assertFalse(workerProvider.allowUsingBackupNode());
-        for (long id = -1; id < 16; id++) {
+        for (long id = -1; id < 10; id++) {
             ComputeNode backend = workerProvider.getBackend(id);
             boolean isContained = workerProvider.isDataNodeAvailable(id);
             if (!availableId2Worker.containsKey(id)) {
@@ -276,6 +342,21 @@ public class DefaultWorkerProviderTest {
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         true);
         Assert.assertThrows(SchedulerException.class, workerProvider::reportDataNodeNotFoundException);
+    }
+
+    @Test
+    public void testNextWorkerOverflow() throws NonRecoverableException {
+        DefaultWorkerProvider workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = workerProvider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+        DefaultWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = workerProvider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
     }
 
     public static void testUsingWorkerHelper(DefaultWorkerProvider workerProvider, Long workerId) {

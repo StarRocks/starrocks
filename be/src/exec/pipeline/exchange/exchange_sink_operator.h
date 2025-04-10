@@ -146,7 +146,7 @@ private:
     int32_t _encode_level = 0;
     // Will set in prepare
     int32_t _be_number = 0;
-    phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>> _instance_id2channel;
+    phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>, StdHash<int64_t>> _instance_id2channel;
     std::vector<Channel*> _channels;
     // index list for channels
     // We need a random order of sending channels to avoid rpc blocking at the same time.

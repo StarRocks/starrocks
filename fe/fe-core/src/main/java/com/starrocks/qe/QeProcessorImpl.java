@@ -35,8 +35,10 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
@@ -53,28 +55,30 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
 
 public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
-
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
-    private static final long ONE_MINUTE = 60 * 1000L;
+    private static final int MEMORY_QUERY_SAMPLES = 10;
     private final Map<TUniqueId, QueryInfo> coordinatorMap = Maps.newConcurrentMap();
     private final Map<TUniqueId, Long> monitorQueryMap = Maps.newConcurrentMap();
-    private final AtomicLong lastCheckTime = new AtomicLong();
 
-    public static final QeProcessor INSTANCE;
+    public static final QeProcessorImpl INSTANCE;
+    private static final ScheduledExecutorService MONITOR_EXECUTOR;
 
     static {
         INSTANCE = new QeProcessorImpl();
+        MONITOR_EXECUTOR = Executors.newSingleThreadScheduledExecutor();
+        MONITOR_EXECUTOR.scheduleAtFixedRate(INSTANCE::scanMonitorQueries, 0, 1, TimeUnit.SECONDS);
     }
 
     private QeProcessorImpl() {
@@ -111,19 +115,18 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         if (result != null) {
             throw new UserException("queryId " + queryId + " already exists");
         }
-        scanMonitorQueries();
     }
 
+    /**
+     * Scan all monitored queries, cleanup them if expired
+     */
     private void scanMonitorQueries() {
         long now = System.currentTimeMillis();
-        long lastCheckTime = this.lastCheckTime.get();
-        if (now - lastCheckTime > ONE_MINUTE && this.lastCheckTime.compareAndSet(lastCheckTime, now)) {
-            for (Map.Entry<TUniqueId, Long> entry : monitorQueryMap.entrySet()) {
-                if (now > entry.getValue()) {
-                    LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
-                    unregisterQuery(entry.getKey());
-                    monitorQueryMap.remove(entry.getKey());
-                }
+        for (Map.Entry<TUniqueId, Long> entry : monitorQueryMap.entrySet()) {
+            if (now > entry.getValue()) {
+                LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
+                unregisterQuery(entry.getKey());
+                monitorQueryMap.remove(entry.getKey());
             }
         }
     }
@@ -171,7 +174,9 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .connId(String.valueOf(context.getConnectionId()))
                     .db(context.getDatabase())
                     .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
-                    .profile(info.getCoord().getQueryProfile()).build();
+                    .profile(info.getCoord().getQueryProfile())
+                    .warehouseName(info.coord.getWarehouseName()).build();
+
             querySet.put(queryIdStr, item);
         }
         return querySet;
@@ -188,7 +193,8 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
         if (info == null) {
-            LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+            // query is already removed which is acceptable
+            LOG.debug("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
             result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
             result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
@@ -292,8 +298,12 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(coordinatorMap) + SizeEstimator.estimate(monitorQueryMap);
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = coordinatorMap.values()
+                .stream()
+                .limit(MEMORY_QUERY_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) coordinatorMap.size()));
     }
 
     @Override

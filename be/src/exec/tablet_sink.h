@@ -87,6 +87,8 @@ public:
     // sync close() interface
     Status close(RuntimeState* state, Status close_status) override;
 
+    // This should be called in OlapTableSinkOperator::prepare only once
+    void set_profile(RuntimeProfile* profile);
     // Returns the runtime profile for the sink.
     RuntimeProfile* profile() override { return _profile; }
 
@@ -100,6 +102,8 @@ public:
     TabletSinkProfile* ts_profile() const { return _ts_profile; }
 
 private:
+    void _prepare_profile(RuntimeState* state);
+
     template <LogicalType LT>
     void _validate_decimal(RuntimeState* state, Chunk* chunk, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);

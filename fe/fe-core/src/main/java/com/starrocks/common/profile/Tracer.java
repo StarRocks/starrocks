@@ -36,6 +36,9 @@ public abstract class Tracer {
     public void log(Function<Object[], String> func, Object... args) {
     }
 
+    public void reason(String event, Object... args) {
+    }
+
     public void record(String name, String value) {
     }
 
@@ -59,6 +62,10 @@ public abstract class Tracer {
     }
 
     public String printLogs() {
+        return "";
+    }
+
+    public String printReasons() {
         return "";
     }
 

@@ -49,6 +49,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
@@ -62,6 +63,7 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,11 +72,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -93,7 +95,7 @@ public class StatisticUtils {
             .add("information_schema").build();
 
     public static ConnectContext buildConnectContext() {
-        ConnectContext context = new ConnectContext();
+        ConnectContext context = ConnectContext.buildInner();
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
@@ -101,6 +103,9 @@ public class StatisticUtils {
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.getSessionVariable().setCboCteReuse(true);
+        context.getSessionVariable().setCboCTERuseRatio(0);
+
         context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -131,7 +136,8 @@ public class StatisticUtils {
         return StatsConstants.AnalyzeType.FULL;
     }
 
-    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
+    public static void triggerCollectionOnFirstLoad(
+            TransactionState txnState, Database db, Table table, boolean sync, boolean useLock) {
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
@@ -149,15 +155,24 @@ public class StatisticUtils {
         }
         // collectPartitionIds contains partition that is first loaded.
         Set<Long> collectPartitionIds = Sets.newHashSet();
-        for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            // partition commit info id is physical partition id.
-            // statistic collect granularity is logic partition.
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition != null) {
-                Partition partition = table.getPartition(physicalPartition.getParentId());
-                if (partition != null && partition.isFirstLoad()) {
-                    collectPartitionIds.add(partition.getId());
+        if (useLock) {
+            db.readLock();
+        }
+        try {
+            for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+                // partition commit info id is physical partition id.
+                // statistic collect granularity is logic partition.
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition != null) {
+                    Partition partition = table.getPartition(physicalPartition.getParentId());
+                    if (partition != null && partition.isFirstLoad()) {
+                        collectPartitionIds.add(partition.getId());
+                    }
                 }
+            }
+        } finally {
+            if (useLock) {
+                db.readUnlock();
             }
         }
         if (collectPartitionIds.isEmpty()) {
@@ -179,6 +194,7 @@ public class StatisticUtils {
         try {
             future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
+                        analyzeStatus.setStartTime(LocalDateTime.now());
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                         statsConnectCtx.setThreadLocalInfo();
@@ -299,9 +315,44 @@ public class StatisticUtils {
         }
     }
 
+    // Don't use PartitionVisibleTime for data update checks as it's ineffective for ShareData architecture
+    @Deprecated
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
         long time = partition.getVisibleVersionTime();
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
+    }
+
+    /**
+     * In V2: use relative changed row count to decide if a partition is healthy
+     * In V1: use VISIBLE_VERSION, which doesn't work for shared-data
+     */
+    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats) {
+        long statsRowCount = 0;
+        if (Config.statistic_partition_healthy_v2) {
+            Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentStatisticStorage()
+                    .getTableStatistics(table.getId(), Lists.newArrayList(partition));
+            statsRowCount = tableStatistics.getOrDefault(partition.getId(), Optional.empty()).orElse(0L);
+        }
+
+        return isPartitionStatsHealthy(table, partition, stats, statsRowCount);
+    }
+
+    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats,
+                                                  long statsRowCount) {
+        if (stats == null || stats.isInitJobMeta()) {
+            return false;
+        }
+        if (!partition.hasData()) {
+            return true;
+        }
+        if (Config.statistic_partition_healthy_v2) {
+            long currentRowCount = partition.getRowCount();
+            double relativeError = 1.0 * Math.abs(statsRowCount - currentRowCount) /
+                    (double) (currentRowCount > 0 ? currentRowCount : 1);
+            return relativeError <= 1 - Config.statistic_partition_health__v2_threshold;
+        } else {
+            return stats.isUpdatedAfterLoad(getPartitionLastUpdateTime(partition));
+        }
     }
 
     public static boolean isEmptyTable(Table table) {
@@ -478,20 +529,52 @@ public class StatisticUtils {
     }
 
     public static String quoting(String... parts) {
-        StringJoiner joiner = new StringJoiner(".");
-        for (String part : parts) {
-            joiner.add(quoting(part));
-        }
-        return joiner.toString();
+        return Arrays.stream(parts).map(c -> "`" + c + "`").collect(Collectors.joining("."));
     }
 
-    public static String quoting(String identifier) {
-        String[] splits = identifier.split("\\.");
-        StringBuilder sb = new StringBuilder();
-        for (String split : splits) {
-            sb.append("`").append(split).append("`.");
+    public static String quoting(Table table, String columnName) {
+        if (!columnName.contains(".")) {
+            return quoting(columnName);
         }
-        return sb.substring(0, sb.length() - 1);
+        Column c = table.getColumn(columnName);
+        if (c != null) {
+            return quoting(columnName);
+        }
+
+        int start = 0;
+        int end;
+
+        StringBuilder sb = new StringBuilder();
+        while ((end = columnName.indexOf(".", start)) > 0) {
+            start = end + 1;
+            String name = columnName.substring(0, end);
+            c = table.getColumn(name);
+            if (c != null && c.getType().isStructType()) {
+                sb.append(quoting(name));
+                columnName = columnName.substring(end + 1);
+                Type type = c.getType();
+                if (!columnName.contains(".")) {
+                    sb.append(".").append(quoting(columnName));
+                } else {
+                    int subStart = 0;
+                    int pos = 0;
+                    int subEnd;
+                    while ((subEnd = columnName.indexOf(".", pos)) > 0 && type.isStructType()) {
+                        String subName = columnName.substring(subStart, subEnd);
+                        if (((StructType) type).containsField(subName)) {
+                            sb.append(".").append(quoting(subName));
+                            type = ((StructType) type).getField(subName).getType();
+                            subStart = subEnd + 1;
+                        }
+                        pos = subEnd + 1;
+                    }
+                    sb.append(".").append(quoting(columnName.substring(subStart)));
+                }
+                break;
+            }
+        }
+        Preconditions.checkState(sb.length() != 0, "column name is not found in table");
+        return sb.toString();
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
@@ -519,6 +602,32 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
     }
 
+    /**
+     * Change the replication_num of system table according to cluster status
+     * 1. When scale-out to greater than 3 nodes, change the replication_num to 3
+     * 3. When scale-in to less than 3 node, change it to retainedBackendNum
+     */
+    public static boolean alterSystemTableReplicationNumIfNecessary(String tableName) {
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
+        int replica = GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().mayGetTable(StatsConstants.STATISTICS_DB_NAME, tableName)
+                .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
+                .orElse((short) 1);
+
+        if (replica != expectedReplicationNum) {
+            String sql = String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
+                    StatsConstants.STATISTICS_DB_NAME, tableName, expectedReplicationNum);
+            if (StringUtils.isNotEmpty(sql)) {
+                RepoExecutor.getInstance().executeDDL(sql);
+            }
+            LOG.info("changed replication_number of table {} from {} to {}",
+                    tableName, replica, expectedReplicationNum);
+            return true;
+        }
+        return false;
+    }
+
     // only support collect statistics for slotRef and subfield expr
     public static String getColumnName(Table table, Expr column) {
         String colName;
@@ -535,7 +644,7 @@ public class StatisticUtils {
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);
         if (base == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
         }
 
         Type baseColumnType = base.getType();

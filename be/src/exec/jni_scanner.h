@@ -25,21 +25,27 @@ namespace starrocks {
 
 class JniScanner : public HdfsScanner {
 public:
+    struct CreateOptions {
+        const FSOptions* fs_options = nullptr;
+        const HiveTableDescriptor* hive_table = nullptr;
+        const THdfsScanRange* scan_range = nullptr;
+    };
+
     JniScanner(std::string factory_class, std::map<std::string, std::string> params)
             : _jni_scanner_params(std::move(params)), _jni_scanner_factory_class(std::move(factory_class)) {}
 
-    ~JniScanner() override { finalize(); }
+    ~JniScanner() override { close(); }
 
     [[nodiscard]] Status do_open(RuntimeState* runtime_state) override;
     void do_update_counter(HdfsScanProfile* profile) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    [[nodiscard]] Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    bool is_jni_scanner() override { return true; }
+    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    virtual Status update_jni_scanner_params();
+    Status reinterpret_status(const Status& st) override { return st; }
 
 protected:
-    [[nodiscard]] Status fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk,
-                                          const std::vector<SlotDescriptor*>& slot_desc_list);
+    StatusOr<size_t> fill_empty_chunk(ChunkPtr* chunk);
 
     Filter _chunk_filter;
 
@@ -58,9 +64,7 @@ private:
 
     [[nodiscard]] Status _init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state);
 
-    void _init_profile(const HdfsScannerParams& scanner_params);
-
-    [[nodiscard]] Status _init_jni_method(JNIEnv* _jni_env);
+    [[nodiscard]] Status _init_jni_method(JNIEnv* env);
 
     [[nodiscard]] Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
@@ -82,8 +86,7 @@ private:
     [[nodiscard]] Status _fill_column(FillColumnArgs* args);
 
     // fill chunk according to slot_desc_list(with or without partition columns)
-    [[nodiscard]] Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk,
-                                     const std::vector<SlotDescriptor*>& slot_desc_list);
+    StatusOr<size_t> _fill_chunk(JNIEnv* env, ChunkPtr* chunk);
 
     [[nodiscard]] Status _release_off_heap_table(JNIEnv* _jni_env);
 
@@ -113,10 +116,9 @@ private:
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
 
-class HiveJniScanner : public JniScanner {
-public:
-    HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
-            : JniScanner(std::move(factory_class), std::move(params)) {}
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-};
+std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options);
+
 } // namespace starrocks

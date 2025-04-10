@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Table Types
@@ -47,4 +47,4 @@ In the Primary Key table, the primary key and sort key are decoupled. The primar
 
   - Unique Key table and Primary Key table
 
-    StarRocks replaces each newly loaded record with the previously loaded record and retains only the most recently loaded record as a row in the table. After the loading is complete, the table does not contain rows that have the same primary key. The Unique Key table and the Primary Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
+    StarRocks replaces each previously loaded record with the newly loaded record and retains only the most recently loaded record as a row in the table. After the loading is complete, the table does not contain previous rows that have the same primary key. Only the latest record that contains the same unique key/primary key is retained. The Unique Key table and the Primary Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.

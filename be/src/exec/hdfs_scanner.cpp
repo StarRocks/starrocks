@@ -19,49 +19,10 @@
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
+#include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
 namespace starrocks {
-
-class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
-public:
-    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
-            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
-
-    ~CountedSeekableInputStream() override = default;
-
-    StatusOr<int64_t> read(void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        _stats->bytes_read += size;
-        return _stream->read_at_fully(offset, data, size);
-    }
-
-    StatusOr<std::string_view> peek(int64_t count) override {
-        auto st = _stream->peek(count);
-        return st;
-    }
-
-    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-private:
-    std::shared_ptr<io::SeekableInputStream> _stream;
-    HdfsScanStats* _stats;
-};
 
 bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
     // if there is no conjuncts, then there is no lazy materialization slot.
@@ -84,9 +45,9 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     _scanner_params = scanner_params;
 
     RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
-    Status status = do_init(runtime_state, scanner_params);
+    RETURN_IF_ERROR(do_init(runtime_state, scanner_params));
 
-    return status;
+    return Status::OK();
 }
 
 Status HdfsScanner::_build_scanner_context() {
@@ -102,17 +63,24 @@ Status HdfsScanner::_build_scanner_context() {
         partition_values.emplace_back(std::move(partition_value_column));
     }
 
+    ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
+
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
 
-        HdfsScannerContext::ColumnInfo column;
-        column.slot_desc = slot;
-        column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
-        column.decode_needed =
-                slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
-                                                    _scanner_params.slots_of_mutli_slot_conjunct.end();
-        ctx.materialized_columns.emplace_back(std::move(column));
+        // if `can_use_any_column`, we can set this column to non-existed column without reading it.
+        if (_scanner_params.can_use_any_column) {
+            ctx.update_with_none_existed_slot(slot);
+        } else {
+            HdfsScannerContext::ColumnInfo column;
+            column.slot_desc = slot;
+            column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
+            column.decode_needed =
+                    slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
+                                                        _scanner_params.slots_of_mutli_slot_conjunct.end();
+            ctx.materialized_columns.emplace_back(std::move(column));
+        }
     }
 
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
@@ -123,8 +91,7 @@ Status HdfsScanner::_build_scanner_context() {
         ctx.partition_columns.emplace_back(std::move(column));
     }
 
-    ctx.tuple_desc = _scanner_params.tuple_desc;
-    ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
+    ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
@@ -135,6 +102,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
+    ctx.datacache_evict_probability = _scanner_params.datacache_evict_probability;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_app_stats;
@@ -191,24 +159,22 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
+void HdfsScanner::close() noexcept {
     VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
               << "], rows = " << _app_stats.rows_read;
 
+    if (!_runtime_state) {
+        return;
+    }
+
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
-    do_close(runtime_state);
+    do_close(_runtime_state);
     _file.reset(nullptr);
     _mor_processor->close(_runtime_state);
-}
-
-void HdfsScanner::finalize() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
-    }
 }
 
 Status HdfsScanner::open_random_access_file() {
@@ -324,6 +290,19 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
 
 void HdfsScanner::do_update_counter(HdfsScanProfile* profile) {}
 
+Status HdfsScanner::reinterpret_status(const Status& st) {
+    auto msg = fmt::format("file = {}", _scanner_params.path);
+
+    Status ret = st;
+    // After catching the AWS 404 file not found error and returning it to the FE,
+    // the FE will refresh the file information of table and re-execute the SQL operation.
+    if (st.is_io_error() && st.message().starts_with("code=404")) {
+        ret = Status::RemoteFileNotFound(st.message());
+    }
+
+    return ret.clone_and_append(msg);
+}
+
 void HdfsScanner::update_counter() {
     HdfsScanProfile* profile = _scanner_params.profile;
     if (profile == nullptr) return;
@@ -379,40 +358,96 @@ void HdfsScanner::update_counter() {
     do_update_counter(profile);
 }
 
-void HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
+void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
+    not_existed_slots.push_back(slot);
+    SlotId slot_id = slot->id();
+    if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
+        for (ExprContext* expr_ctx : conjunct_ctxs_by_slot[slot_id]) {
+            conjunct_ctxs_of_non_existed_slots.emplace_back(expr_ctx);
+        }
+        conjunct_ctxs_by_slot.erase(slot_id);
+    }
+}
+
+Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
     std::vector<ColumnInfo> updated_columns;
+
+    // special handling for ___count__ optimization.
+    {
+        for (auto& column : materialized_columns) {
+            if (column.name() == "___count___") {
+                return_count_column = true;
+                break;
+            }
+        }
+
+        if (return_count_column && materialized_columns.size() != 1) {
+            return Status::InternalError("Plan inconsistency. ___count___ column should be unique.");
+        }
+    }
 
     for (auto& column : materialized_columns) {
         auto col_name = column.formatted_name(case_sensitive);
         // if `can_use_any_column`, we can set this column to non-existed column without reading it.
-        if (names.find(col_name) == names.end() || can_use_any_column) {
-            not_existed_slots.push_back(column.slot_desc);
-            SlotId slot_id = column.slot_id();
-            if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
-                for (ExprContext* ctx : conjunct_ctxs_by_slot[slot_id]) {
-                    conjunct_ctxs_of_non_existed_slots.emplace_back(ctx);
-                }
-                conjunct_ctxs_by_slot.erase(slot_id);
-            }
+        if (names.find(col_name) == names.end()) {
+            update_with_none_existed_slot(column.slot_desc);
         } else {
             updated_columns.emplace_back(column);
         }
     }
 
     materialized_columns.swap(updated_columns);
+    return Status::OK();
 }
 
-void HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty()) return;
+Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.empty()) return Status::OK();
     ChunkPtr& ck = (*chunk);
-    for (auto* slot_desc : not_existed_slots) {
-        auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        if (row_count > 0) {
-            col->append_default(row_count);
+
+    // special handling for ___count___ optimization
+    {
+        for (auto* slot_desc : not_existed_slots) {
+            if (slot_desc->col_name() == "___count___") {
+                return_count_column = true;
+                break;
+            }
         }
+        if (return_count_column && not_existed_slots.size() != 1) {
+            return Status::InternalError("Plan inconsistency. ___count___ column should be unique.");
+        }
+    }
+
+    if (return_count_column) {
+        auto* slot_desc = not_existed_slots[0];
+        TypeDescriptor desc;
+        desc.type = TYPE_BIGINT;
+        auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
+        col->append_datum(int64_t(1));
+        col->assign(row_count, 0);
         ck->append_or_update_column(std::move(col), slot_desc->id());
+    } else {
+        for (auto* slot_desc : not_existed_slots) {
+            auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+            if (row_count > 0) {
+                col->append_default(row_count);
+            }
+            ck->append_or_update_column(std::move(col), slot_desc->id());
+        }
     }
     ck->set_num_rows(row_count);
+    return Status::OK();
+}
+
+void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.empty() || row_count < 0) return;
+    ChunkPtr& ck = (*chunk);
+    auto* slot_desc = not_existed_slots[0];
+    TypeDescriptor desc;
+    desc.type = TYPE_BIGINT;
+    auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
+    col->append_datum(int64_t(row_count));
+    ck->append_or_update_column(std::move(col), slot_desc->id());
+    ck->set_num_rows(1);
 }
 
 Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
@@ -438,7 +473,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
@@ -553,6 +588,14 @@ void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* s
     if (split_tasks->size() > 0) {
         _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
+}
+
+CompressionTypePB HdfsScanner::get_compression_type_from_path(const std::string& filename) {
+    ssize_t end = filename.size() - 1;
+    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
+    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
+    const std::string& ext = filename.substr(end + 1);
+    return CompressionUtils::to_compression_pb(ext);
 }
 
 } // namespace starrocks

@@ -26,6 +26,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
@@ -58,6 +60,7 @@ import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.HIVE;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -343,7 +346,9 @@ public class HiveMetadata implements ConnectorMetadata {
 
         HiveCommitter committer = new HiveCommitter(
                 hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
-        committer.commit(partitionUpdates);
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.commit")) {
+            committer.commit(partitionUpdates);
+        }
     }
 
     @Override

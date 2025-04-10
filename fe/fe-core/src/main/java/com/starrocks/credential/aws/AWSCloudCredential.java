@@ -14,17 +14,6 @@
 
 package com.starrocks.credential.aws;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.BasicSessionCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.InstanceProfileCredentialsProvider;
-import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
-import com.amazonaws.client.builder.AwsClientBuilder;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.google.common.base.Preconditions;
 import com.staros.proto.AwsAssumeIamRoleCredentialInfo;
 import com.staros.proto.AwsCredentialInfo;
@@ -37,11 +26,33 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
+import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider;
+import org.apache.hadoop.fs.s3a.Constants;
+import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
+import org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider;
+import org.apache.hadoop.fs.s3a.auth.IAMInstanceCredentialsProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.profiles.ProfileFile;
+import software.amazon.awssdk.profiles.ProfileFileSystemSetting;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.StsClientBuilder;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
+import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
+
 
 /**
  * Authenticating process (It's a pseudocode code):
@@ -68,6 +79,14 @@ import java.util.UUID;
  * }
  */
 public class AWSCloudCredential implements CloudCredential {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AWSCloudCredential.class);
+
+    private static final String DEFAULT_CREDENTIAL_PROVIDER = OverwriteAwsDefaultCredentialsProvider.class.getName();
+    private static final String IAM_CREDENTIAL_PROVIDER = IAMInstanceCredentialsProvider.class.getName();
+    private static final String ASSUME_ROLE_CREDENTIAL_PROVIDER = AssumedRoleCredentialProvider.class.getName();
+    private static final String SIMPLE_CREDENTIAL_PROVIDER = SimpleAWSCredentialsProvider.class.getName();
+    private static final String TEMPORARY_CREDENTIAL_PROVIDER = TemporaryAWSCredentialsProvider.class.getName();
 
     private final boolean useAWSSDKDefaultBehavior;
 
@@ -131,117 +150,119 @@ public class AWSCloudCredential implements CloudCredential {
         return secretKey;
     }
 
-    public AWSCredentialsProvider generateAWSCredentialsProvider() {
-        AWSCredentialsProvider awsCredentialsProvider = getBaseAWSCredentialsProvider();
+    public AwsCredentialsProvider generateAWSCredentialsProvider() {
+        AwsCredentialsProvider awsCredentialsProvider =
+                getBaseAWSCredentialsProvider(useAWSSDKDefaultBehavior, useInstanceProfile, accessKey, secretKey,
+                        sessionToken);
         if (!iamRoleArn.isEmpty()) {
-            // Generate random session name
-            String sessionName = UUID.randomUUID().toString();
-            STSAssumeRoleSessionCredentialsProvider.Builder builder =
-                    new STSAssumeRoleSessionCredentialsProvider.Builder(iamRoleArn, sessionName);
-            if (!externalId.isEmpty()) {
-                builder.withExternalId(externalId);
-            }
-            AWSSecurityTokenServiceClientBuilder stsBuilder = AWSSecurityTokenServiceClientBuilder.standard()
-                    .withCredentials(awsCredentialsProvider);
-            if (!stsRegion.isEmpty()) {
-                stsBuilder.setRegion(stsRegion);
-            }
-            if (!stsEndpoint.isEmpty()) {
-                // Glue is using aws sdk v1. If the user provides the sts endpoint, the sts region must also be specified.
-                // But in aws sdk v2, user only need to provide one of the two
-                Preconditions.checkArgument(!stsRegion.isEmpty(),
-                        String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
-                stsBuilder.setEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(stsEndpoint, stsRegion));
-            }
-            AWSSecurityTokenService token = stsBuilder.build();
-            builder.withStsClient(token);
-            awsCredentialsProvider = builder.build();
+            awsCredentialsProvider =
+                    getAssumeRoleCredentialsProvider(awsCredentialsProvider, iamRoleArn, externalId, stsRegion, stsEndpoint);
         }
         return awsCredentialsProvider;
     }
 
-    private AWSCredentialsProvider getBaseAWSCredentialsProvider() {
+    private StsAssumeRoleCredentialsProvider getAssumeRoleCredentialsProvider(AwsCredentialsProvider baseCredentials,
+                                                                              String iamRoleArn, String externalId,
+                                                                              String region, String endpoint) {
+        // Build sts client
+        StsClientBuilder stsClientBuilder = StsClient.builder().credentialsProvider(baseCredentials);
+        if (!region.isEmpty()) {
+            stsClientBuilder.region(Region.of(region));
+        }
+        if (!endpoint.isEmpty()) {
+            stsClientBuilder.endpointOverride(URI.create(endpoint));
+        }
+
+        // Build AssumeRoleRequest
+        AssumeRoleRequest.Builder assumeRoleBuilder = AssumeRoleRequest.builder();
+        assumeRoleBuilder.roleArn(iamRoleArn);
+        assumeRoleBuilder.roleSessionName(UUID.randomUUID().toString());
+        if (!externalId.isEmpty()) {
+            assumeRoleBuilder.externalId(externalId);
+        }
+
+        return StsAssumeRoleCredentialsProvider.builder()
+                .stsClient(stsClientBuilder.build())
+                .refreshRequest(assumeRoleBuilder.build())
+                .build();
+    }
+
+    private AwsCredentialsProvider getBaseAWSCredentialsProvider(boolean useAWSSDKDefaultBehavior,
+                                                                 boolean useInstanceProfile,
+                                                                 String accessKey, String secretKey,
+                                                                 String sessionToken) {
         if (useAWSSDKDefaultBehavior) {
-            return new DefaultAWSCredentialsProviderChain();
+            return DefaultCredentialsProvider.builder().build();
         } else if (useInstanceProfile) {
-            return new InstanceProfileCredentialsProvider(true);
+            return InstanceProfileCredentialsProvider.builder().build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
-                // Build temporary aws credentials with session token
-                AWSCredentials awsCredentials = new BasicSessionCredentials(accessKey, secretKey, sessionToken);
-                return new AWSStaticCredentialsProvider(awsCredentials);
+                return StaticCredentialsProvider.create(
+                        AwsSessionCredentials.create(accessKey, secretKey, sessionToken));
             } else {
-                return new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
+                return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
             }
         } else {
-            Preconditions.checkArgument(false, "Unreachable");
-            return new AnonymousAWSCredentialsProvider();
+            LOG.info("User didn't configure any credentials in aws credential, " +
+                    "we will use AWS DefaultCredentialsProvider instead");
+            return DefaultCredentialsProvider.builder().build();
         }
     }
 
     private void applyAssumeRole(String baseCredentialsProvider, Configuration configuration) {
-        configuration.set("fs.s3a.assumed.role.credentials.provider", baseCredentialsProvider);
+        configuration.set(Constants.ASSUMED_ROLE_CREDENTIALS_PROVIDER, baseCredentialsProvider);
         // Original "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider" don't support external id,
         // so we use our own AssumedRoleCredentialProvider.
-        configuration.set("fs.s3a.aws.credentials.provider",
-                "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
-        configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
+        configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, ASSUME_ROLE_CREDENTIAL_PROVIDER);
+        configuration.set(Constants.ASSUMED_ROLE_ARN, iamRoleArn);
         if (!stsRegion.isEmpty()) {
-            configuration.set("fs.s3a.assumed.role.sts.endpoint.region", stsRegion);
+            configuration.set(Constants.ASSUMED_ROLE_STS_ENDPOINT_REGION, stsRegion);
         }
         if (!stsEndpoint.isEmpty()) {
             // Hadoop is using aws sdk v1. If the user provides the sts endpoint, the sts region must also be specified.
             // But in aws sdk v2, user only need to provide one of the two
             Preconditions.checkArgument(!stsRegion.isEmpty(),
                     String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
-            configuration.set("fs.s3a.assumed.role.sts.endpoint", stsEndpoint);
+            configuration.set(Constants.ASSUMED_ROLE_STS_ENDPOINT, stsEndpoint);
         }
         configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
-        // TODO(SmithCruise) Not support assume role in none-ec2 machine
-        // if (!region.isEmpty()) {
-        // configuration.set("fs.s3a.assumed.role.sts.endpoint.region", region);
-        // }
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
         if (useAWSSDKDefaultBehavior) {
             if (!iamRoleArn.isEmpty()) {
-                applyAssumeRole("com.amazonaws.auth.DefaultAWSCredentialsProviderChain", configuration);
+                applyAssumeRole(DEFAULT_CREDENTIAL_PROVIDER, configuration);
             } else {
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
+                configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, DEFAULT_CREDENTIAL_PROVIDER);
             }
         } else if (useInstanceProfile) {
             if (!iamRoleArn.isEmpty()) {
-                applyAssumeRole("com.amazonaws.auth.InstanceProfileCredentialsProvider", configuration);
+                applyAssumeRole(IAM_CREDENTIAL_PROVIDER, configuration);
             } else {
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "com.amazonaws.auth.InstanceProfileCredentialsProvider");
+                configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, IAM_CREDENTIAL_PROVIDER);
             }
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
-            configuration.set("fs.s3a.access.key", accessKey);
-            configuration.set("fs.s3a.secret.key", secretKey);
+            configuration.set(Constants.ACCESS_KEY, accessKey);
+            configuration.set(Constants.SECRET_KEY, secretKey);
             if (!iamRoleArn.isEmpty()) {
-                applyAssumeRole("org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider", configuration);
+                applyAssumeRole(SIMPLE_CREDENTIAL_PROVIDER, configuration);
             } else {
                 if (!sessionToken.isEmpty()) {
-                    configuration.set("fs.s3a.session.token", sessionToken);
-                    configuration.set("fs.s3a.aws.credentials.provider",
-                            "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider");
+                    configuration.set(Constants.SESSION_TOKEN, sessionToken);
+                    configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, TEMPORARY_CREDENTIAL_PROVIDER);
                 } else {
-                    configuration.set("fs.s3a.aws.credentials.provider",
-                            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
+                    configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, SIMPLE_CREDENTIAL_PROVIDER);
                 }
             }
         } else {
             Preconditions.checkArgument(false, "Unreachable");
         }
         if (!region.isEmpty()) {
-            configuration.set("fs.s3a.endpoint.region", region);
+            configuration.set(Constants.AWS_REGION, region);
         }
         if (!endpoint.isEmpty()) {
-            configuration.set("fs.s3a.endpoint", endpoint);
+            configuration.set(Constants.ENDPOINT, endpoint);
         }
     }
 
@@ -329,5 +350,23 @@ public class AWSCloudCredential implements CloudCredential {
         s3FileStoreInfo.setCredential(awsCredentialInfo.build());
         fileStore.setS3FsInfo(s3FileStoreInfo.build());
         return fileStore.build();
+    }
+
+    public Region tryToResolveRegion() {
+        if (!region.isEmpty()) {
+            return Region.of(region);
+        }
+        Region region = Region.of("us-east-1");
+        try {
+            DefaultAwsRegionProviderChain providerChain = DefaultAwsRegionProviderChain.builder()
+                    .profileFile(ProfileFile::defaultProfileFile)
+                    .profileName(ProfileFileSystemSetting.AWS_PROFILE.getStringValueOrThrow()).build();
+            region = providerChain.getRegion();
+        } catch (Exception e) {
+            LOG.info(
+                    "AWS sdk unable to load region from DefaultAwsRegionProviderChain, using default region us-east-1 instead",
+                    e);
+        }
+        return region;
     }
 }

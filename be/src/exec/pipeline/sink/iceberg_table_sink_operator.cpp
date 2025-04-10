@@ -31,7 +31,7 @@ Status IcebergTableSinkOperator::prepare(RuntimeState* state) {
 void IcebergTableSinkOperator::close(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
         }
     }
     Operator::close(state);
@@ -55,6 +55,12 @@ bool IcebergTableSinkOperator::is_finished() const {
         if (!writer.second->closed()) {
             return false;
         }
+
+        auto st = writer.second->get_io_status();
+        if (!st.ok()) {
+            LOG(WARNING) << "cancel fragment: " << st.message();
+            _fragment_ctx->cancel(st);
+        }
     }
 
     return true;
@@ -62,14 +68,12 @@ bool IcebergTableSinkOperator::is_finished() const {
 
 Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        _is_audit_report_done = false;
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx(),
-                                                                         &_is_audit_report_done);
+        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     }
 
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
         }
     }
 
@@ -80,10 +84,6 @@ Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 bool IcebergTableSinkOperator::pending_finish() const {
-    // audit report not finish, we need check until finish
-    if (!_is_audit_report_done) {
-        return true;
-    }
     return !is_finished();
 }
 

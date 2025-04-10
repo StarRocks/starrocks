@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Function;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -129,7 +130,7 @@ public class FunctionName implements Writable {
     public TFunctionName toThrift() {
         TFunctionName name = new TFunctionName(fn_);
         name.setDb_name(db_);
-        name.setFunction_name(fn_);
+        name.setFunction_name(Function.rectifyFunctionName(fn_));
         return name;
     }
 

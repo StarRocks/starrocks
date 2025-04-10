@@ -103,6 +103,7 @@ public class LoadStmtTest {
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` FORMAT AS CSV (SKIP_HEADER = 2 TRIM_SPACE = TRUE ENCLOSE = \"'\" ESCAPE = \"|\")) WITH BROKER (\"username\"=\"sr\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` FORMAT AS CSV (SKIP_HEADER = 2 TRIM_SPACE = TRUE ENCLOSE = \"'\" ESCAPE = \"|\")) WITH BROKER PROPERTIES (\"merge_condition\"=\"sr\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` FORMAT AS CSV (SKIP_HEADER = 2 TRIM_SPACE = TRUE ENCLOSE = \"\" ESCAPE = \"\")) WITH BROKER (\"username\"=\"sr\")");
     }
 
     @Test

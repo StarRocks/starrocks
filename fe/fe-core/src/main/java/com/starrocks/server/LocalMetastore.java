@@ -38,7 +38,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -70,12 +69,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -101,7 +98,6 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -114,7 +110,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -131,16 +126,22 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.mv.MVMetaVersionRepairer;
+import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
@@ -183,10 +184,8 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
@@ -199,6 +198,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -227,8 +227,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
-import com.starrocks.sql.ast.SetListItem;
-import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -245,6 +243,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -258,7 +257,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -271,6 +269,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -281,7 +280,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
-public class LocalMetastore implements ConnectorMetadata {
+public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
 
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
@@ -341,15 +340,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 OlapTable olapTable = (OlapTable) table;
                 long tableId = olapTable.getId();
                 for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                    long partitionId = partition.getId();
+                    long physicalPartitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partition.getParentId()).getStorageMedium();
                     for (MaterializedIndex index : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = index.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                                table.isCloudNativeTableOrMaterializedView());
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
+                                indexId, schemaHash, medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
@@ -526,7 +525,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // 4. drop mv task
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            List<Long> dropTaskIdList = taskManager.showTasks(dbName)
+            TGetTasksParams tasksParams = new TGetTasksParams();
+            tasksParams.setDb(dbName);
+            List<Long> dropTaskIdList = taskManager.filterTasks(tasksParams)
                     .stream().map(Task::getId).collect(Collectors.toList());
             taskManager.dropTasks(dropTaskIdList, false);
 
@@ -887,7 +888,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 || partitionDesc instanceof MultiItemListPartitionDesc
                 || partitionDesc instanceof SingleRangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
+            addPartitions(db, tableName, Lists.newArrayList(partitionDesc), addPartitionClause);
         } else if (partitionDesc instanceof RangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
             addPartitions(db, tableName,
@@ -1382,6 +1383,7 @@ public class LocalMetastore implements ConnectorMetadata {
             checkPartitionType(partitionInfo);
 
             // analyze add partition
+            upgradeDeprecatedSingleItemListPartitionDesc(olapTable, partitionDescs, addPartitionClause, partitionInfo);
             analyzeAddPartition(olapTable, partitionDescs, addPartitionClause, partitionInfo);
 
             // get distributionInfo
@@ -1390,8 +1392,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
-
-            copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTable = getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } catch (AnalysisException | NotImplementedException e) {
@@ -1465,6 +1466,29 @@ public class LocalMetastore implements ConnectorMetadata {
         } catch (DdlException e) {
             cleanTabletIdSetForAll(tabletIdSetForAll);
             throw e;
+        }
+    }
+
+    /**
+     * {@link SingleItemListPartitionDesc}
+     */
+    private void upgradeDeprecatedSingleItemListPartitionDesc(OlapTable table,
+                                                              List<PartitionDesc> partitionDescs,
+                                                              AddPartitionClause addPartitionClause,
+                                                              PartitionInfo partitionInfo) throws AnalysisException {
+        if (!partitionInfo.isListPartition()) {
+            return;
+        }
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        boolean addSingleColumnPartition = partitionDescs.get(0) instanceof SingleItemListPartitionDesc;
+        if (addSingleColumnPartition &&
+                !listPartitionInfo.isMultiColumnPartition() &&
+                listPartitionInfo.isDeFactoMultiItemPartition()) {
+            Preconditions.checkState(partitionDescs.size() == 1);
+            MultiItemListPartitionDesc newDesc =
+                    ((SingleItemListPartitionDesc) partitionDescs.get(0)).upgradeToMultiItem();
+            partitionDescs.set(0, newDesc);
+            addPartitionClause.setPartitionDesc(newDesc);
         }
     }
 
@@ -1614,8 +1638,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
             Range<PartitionKey> partitionRange = null;
-            if (partitionInfo instanceof RangePartitionInfo && partition != null) {
-                partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+            if (partition != null) {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
+                if (partitionInfo instanceof RangePartitionInfo) {
+                    partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                }
             }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             if (olapTable instanceof MaterializedView) {
@@ -1624,10 +1651,11 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
+                    MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
+                        Database mvDb = getDb(mvId.getDbId());
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), materializedView.getName(), false, null,
+                                mvDb.getFullName(), materializedView.getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 }
@@ -1694,7 +1722,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     createShardGroup(db.getId(), olapTable.getId(), id);
         }
 
-        PhysicalPartitionImpl physicalParition = new PhysicalPartitionImpl(
+        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(
                 id, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -1716,15 +1744,15 @@ public class LocalMetastore implements ConnectorMetadata {
                         tabletMeta, tabletIdSet);
             } else {
                 createOlapTablets(olapTable, index, Replica.ReplicaState.NORMAL, distributionInfo,
-                        physicalParition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
+                        physicalPartition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
             }
             if (index.getId() != olapTable.getBaseIndexId()) {
                 // add rollup index to partition
-                physicalParition.createRollupIndex(index);
+                physicalPartition.createRollupIndex(index);
             }
         }
 
-        return physicalParition;
+        return physicalPartition;
     }
 
     public void addSubPartitions(Database db, String tableName,
@@ -1741,7 +1769,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Only support adding physical partition to random distributed table");
             }
 
-            copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTable = getShadowCopyTable(olapTable);
         } finally {
             db.readUnlock();
         }
@@ -1765,12 +1793,18 @@ public class LocalMetastore implements ConnectorMetadata {
                     + "(" + db.getId() + ") has been dropped");
         }
         try {
+            olapTable = checkTable(db, tableName);
             // check if meta changed
             checkIfMetaChange(olapTable, copiedTable, tableName);
+
+            if (olapTable.getPartition(partition.getId()) == null) {
+                throw new DdlException("Partition[" + partition.getName() + "]' has been dropped.");
+            }
 
             for (PhysicalPartition subPartition : subPartitions) {
                 // add sub partition
                 partition.addSubPartition(subPartition);
+                olapTable.addPhysicalPartition(subPartition);
             }
 
             // add partition log
@@ -1785,9 +1819,18 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+            if (olapTable == null) {
+                LOG.warn("replay add sub partition failed, table is null, info: {}", info);
+                return;
+            }
             Partition partition = olapTable.getPartition(info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay add sub partition failed, partition is null, info: {}", info);
+                return;
+            }
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
+            olapTable.addPhysicalPartition(physicalPartition);
 
             if (!isCheckpointThread()) {
                 // add to inverted index
@@ -1795,9 +1838,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
-                            index.getId(), schemaHash, olapTable.getPartitionInfo().getDataProperty(
-                            info.getPartitionId()).getStorageMedium());
+                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(),
+                            physicalPartition.getId(), index.getId(), schemaHash, olapTable.getPartitionInfo().getDataProperty(
+                            info.getPartitionId()).getStorageMedium(), false);
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
@@ -1895,14 +1938,19 @@ public class LocalMetastore implements ConnectorMetadata {
             numReplicas += partition.storageReplicaCount();
         }
 
-        if (numReplicas > Config.create_table_max_serial_replicas) {
-            LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
-                    partitions.size(), db.getFullName(), table.getName(), numReplicas);
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
-        } else {
-            LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
-                    partitions.size(), db.getFullName(), table.getName(), numReplicas);
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+        try {
+            GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
+            if (numReplicas > Config.create_table_max_serial_replicas) {
+                LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
+            } else {
+                LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
         }
     }
 
@@ -2036,7 +2084,7 @@ public class LocalMetastore implements ConnectorMetadata {
         boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
         boolean createSchemaFile = true;
         LOG.debug("build create replica tasks for index {} db {} table {} partition {}",
-                index, dbId, table.getId(), partition); 
+                index, dbId, table.getId(), partition);
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
@@ -2208,7 +2256,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return colocateTableIndex;
     }
 
-    void setLakeStorageInfo(Database db, OlapTable table, String storageVolumeId, Map<String, String> properties)
+    public void setLakeStorageInfo(Database db, OlapTable table, String storageVolumeId, Map<String, String> properties)
             throws DdlException {
         DataCacheInfo dataCacheInfo = null;
         try {
@@ -2283,6 +2331,10 @@ public class LocalMetastore implements ConnectorMetadata {
             CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
             table.onCreate(db);
+        } catch (SerializeException e) {
+            db.unRegisterTableUnlocked(table);
+            LOG.warn("create table failed", e);
+            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), e.getMessage());
         } finally {
             db.writeUnlock();
         }
@@ -2297,6 +2349,8 @@ public class LocalMetastore implements ConnectorMetadata {
             table.onReload();
         } catch (Throwable e) {
             LOG.error("replay create table failed: {}", table, e);
+            // Rethrow, we should not eat the exception when replaying editlog.
+            throw e;
         } finally {
             db.writeUnlock();
         }
@@ -2309,15 +2363,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 long dbId = db.getId();
                 long tableId = table.getId();
                 for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                    long partitionId = partition.getId();
+                    long physicalPartitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partition.getParentId()).getStorageMedium();
                     for (MaterializedIndex mIndex : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                                table.isCloudNativeTableOrMaterializedView());
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
+                                indexId, schemaHash, medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
@@ -2458,10 +2512,10 @@ public class LocalMetastore implements ConnectorMetadata {
                     // randomly choose backends
                     if (Config.enable_strict_storage_medium_check) {
                         chosenBackendIds =
-                                chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
+                                chosenBackendIdBySeq(replicationNum, table.getLocation(), tabletMeta.getStorageMedium());
                     } else {
                         try {
-                            chosenBackendIds = chosenBackendIdBySeq(replicationNum);
+                            chosenBackendIds = chosenBackendIdBySeq(replicationNum, table.getLocation());
                         } catch (DdlException ex) {
                             throw new DdlException(String.format("%s, table=%s, default_replication_num=%d",
                                     ex.getMessage(), table.getName(), Config.default_replication_num));
@@ -2504,11 +2558,13 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     // create replicas for tablet with random chosen backends
-    private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
+    private List<Long> chosenBackendIdBySeq(int replicationNum, Multimap<String, String> locReq,
+                                            TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds =
-                GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIdsByStorageMedium(replicationNum,
-                        true, true, storageMedium);
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
+                        .seqChooseBackendIdsByStorageMedium(replicationNum,
+                        true, true, locReq, storageMedium);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             throw new DdlException(
                     "Failed to find enough hosts with storage medium " + storageMedium +
@@ -2521,9 +2577,10 @@ public class LocalMetastore implements ConnectorMetadata {
         return chosenBackendIds;
     }
 
-    private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIds(replicationNum, true, true);
+    private List<Long> chosenBackendIdBySeq(int replicationNum, Multimap<String, String> locReq) throws DdlException {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> chosenBackendIds = systemInfoService.getNodeSelector()
+                .seqChooseBackendIds(replicationNum, true, true, locReq);
         if (!CollectionUtils.isEmpty(chosenBackendIds)) {
             return chosenBackendIds;
         } else if (replicationNum > 1) {
@@ -2630,7 +2687,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("replay add replica failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            PhysicalPartition partition = getPhysicalPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay add replica failed, partition is null, info: {}", info);
                 return;
@@ -2677,7 +2734,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("replay update replica failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            PhysicalPartition partition = getPhysicalPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay update replica failed, partition is null, info: {}", info);
                 return;
@@ -2717,7 +2774,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("replay delete replica failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            PhysicalPartition partition = getPhysicalPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay delete replica failed, partition is null, info: {}", info);
                 return;
@@ -2738,6 +2795,16 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        if (info.getReplicaInfoList() != null) {
+            for (ReplicaPersistInfo persistInfo : info.getReplicaInfoList()) {
+                replayDeleteReplica(persistInfo);
+            }
+        } else {
+            LOG.warn("invalid BatchDeleteReplicaInfo, replicaInfoList is null");
+        }
+    }
+
     @Override
     public Table getTable(String dbName, String tblName) {
         Database database = getDb(dbName);
@@ -2745,6 +2812,18 @@ public class LocalMetastore implements ConnectorMetadata {
             return null;
         }
         return database.getTable(tblName);
+    }
+
+    public Table getTable(Long dbId, Long tableId) {
+        Database database = getDb(dbId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
+    }
+
+    public Optional<Table> mayGetTable(String dbName, String tblName) {
+        return Optional.ofNullable(getTable(dbName, tblName));
     }
 
     @Override
@@ -2816,6 +2895,14 @@ public class LocalMetastore implements ConnectorMetadata {
         return partition;
     }
 
+    public PhysicalPartition getPhysicalPartitionIncludeRecycleBin(OlapTable table, long physicalPartitionId) {
+        PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
+        if (partition == null) {
+            partition = recycleBin.getPhysicalPartition(physicalPartitionId);
+        }
+        return partition;
+    }
+
     public Collection<Partition> getPartitionsIncludeRecycleBin(OlapTable table) {
         Collection<Partition> partitions = new ArrayList<>(table.getPartitions());
         partitions.addAll(recycleBin.getPartitions(table.getId()));
@@ -2825,6 +2912,12 @@ public class LocalMetastore implements ConnectorMetadata {
     public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable table) {
         Collection<Partition> partitions = table.getAllPartitions();
         partitions.addAll(recycleBin.getPartitions(table.getId()));
+        return partitions;
+    }
+
+    public Collection<PhysicalPartition> getAllPhysicalPartitionsIncludeRecycleBin(OlapTable table) {
+        Collection<PhysicalPartition> partitions = table.getAllPhysicalPartitions();
+        partitions.addAll(recycleBin.getPhysicalPartitions(table.getId()));
         return partitions;
     }
 
@@ -3047,10 +3140,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // create partition info
         PartitionInfo partitionInfo = buildPartitionInfo(stmt);
-        if (partitionInfo instanceof ListPartitionInfo && ((ListPartitionInfo) partitionInfo).getPartitionColumns()
-                .stream().anyMatch(Column::isAllowNull)) {
-            throw new DdlException("List partition columns must not be nullable in Materialized view for now.");
-        }
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
@@ -3120,8 +3209,8 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView materializedView;
         if (RunMode.isSharedNothingMode()) {
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
-                materializedView =
-                        MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
+                materializedView = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                        .createSinkTable(stmt, partitionInfo, mvId, db.getId());
                 materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
             } else {
                 materializedView =
@@ -3155,6 +3244,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
+        materializedView.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
         // set partitionRefTableExprs
         materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
         // set base index id
@@ -3188,7 +3278,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
-        DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
+        DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
+        PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned);
 
         try {
             Set<Long> tabletIdSet = new HashSet<>();
@@ -3205,11 +3296,11 @@ public class LocalMetastore implements ConnectorMetadata {
                         storageInfo == null ? null : storageInfo.getDataCacheInfo());
                 Long version = Partition.PARTITION_INIT_VERSION;
                 Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
-                buildPartitions(db, materializedView, partition.getSubPartitions().stream().collect(Collectors.toList()));
+                buildPartitions(db, materializedView, new ArrayList<>(partition.getSubPartitions()));
                 materializedView.addPartition(partition);
             }
 
-            MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().prepareMaintenanceWork(stmt, materializedView);
 
             String storageVolumeId = "";
             if (materializedView.isCloudNativeMaterializedView()) {
@@ -3243,227 +3334,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
         long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
         long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
-        return ThreadLocalRandom.current().nextLong(randomInterval);
-    }
-
-    private DataProperty analyzeMVDataProperties(Database db,
-                                                 MaterializedView materializedView,
-                                                 Map<String, String> properties,
-                                                 boolean isNonPartitioned) throws DdlException {
-        DataProperty dataProperty = null;
-        try {
-            // replicated storage
-            materializedView.setEnableReplicatedStorage(
-                    PropertyAnalyzer.analyzeBooleanProp(
-                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                            Config.enable_replicated_storage_as_default_engine));
-
-            // replication_num
-            short replicationNum = RunMode.defaultReplicationNum();
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
-                materializedView.setReplicationNum(replicationNum);
-            }
-            // bloom_filter_columns
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
-                List<Column> baseSchema = materializedView.getColumns();
-                Set<String> bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
-                        materializedView.getKeysType() == KeysType.PRIMARY_KEYS);
-                if (bfColumns != null && bfColumns.isEmpty()) {
-                    bfColumns = null;
-                }
-                double bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
-                if (bfColumns != null && bfFpp == 0) {
-                    bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
-                } else if (bfColumns == null) {
-                    bfFpp = 0;
-                }
-                materializedView.setBloomFilterInfo(bfColumns, bfFpp);
-            }
-            // mv_rewrite_staleness second.
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
-                Integer maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
-                materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
-                materializedView.getTableProperty().getProperties().put(
-                        PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND, maxMVRewriteStaleness.toString());
-            }
-            // set storage medium
-            boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
-            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty(), false);
-            if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
-                materializedView.setStorageMedium(dataProperty.getStorageMedium());
-                // set storage cooldown time into table property,
-                // because we don't have property in MaterializedView
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
-                                String.valueOf(dataProperty.getCooldownTimeMs()));
-            }
-            // partition ttl
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-                if (isNonPartitioned) {
-                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL
-                            + " is only supported by partitioned materialized-view");
-                }
-
-                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
-                materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
-            }
-
-            // partition ttl number
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
-                int number = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
-                materializedView.getTableProperty().setPartitionTTLNumber(number);
-                if (isNonPartitioned) {
-                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
-                            + " does not support non-partitioned materialized view.");
-                }
-            }
-            // partition auto refresh partitions limit
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
-                int limit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
-                materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
-                if (isNonPartitioned) {
-                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
-                            + " does not support non-partitioned materialized view.");
-                }
-            }
-            // partition refresh number
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
-                int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
-                materializedView.getTableProperty().setPartitionRefreshNumber(number);
-                if (isNonPartitioned) {
-                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER
-                            + " does not support non-partitioned materialized view.");
-                }
-            }
-            // exclude trigger tables
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
-                StringBuilder tableSb = new StringBuilder();
-                for (int i = 1; i <= tables.size(); i++) {
-                    TableName tableName = tables.get(i - 1);
-                    if (tableName.getDb() == null) {
-                        tableSb.append(tableName.getTbl());
-                    } else {
-                        tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
-                    }
-                    if (i != tables.size()) {
-                        tableSb.append(",");
-                    }
-                }
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
-                materializedView.getTableProperty().setExcludedTriggerTables(tables);
-            }
-            // resource_group
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
-                String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
-                if (GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
-                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
-                            + " " + resourceGroup + " does not exist.");
-                }
-                materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
-                materializedView.getTableProperty().setResourceGroup(resourceGroup);
-            }
-            // force external query rewrite
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
-                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
-                TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
-                properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
-                materializedView.getTableProperty().getProperties().
-                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, String.valueOf(value));
-                materializedView.getTableProperty().setForceExternalTableQueryRewrite(value);
-            }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
-                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
-                TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeQueryRewriteMode(propertyValue);
-                properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
-                materializedView.getTableProperty().getProperties().
-                        put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, String.valueOf(value));
-                materializedView.getTableProperty().setQueryRewriteConsistencyMode(value);
-            }
-            // unique keys
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-                List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,
-                        materializedView);
-                materializedView.setUniqueConstraints(uniqueConstraints);
-            }
-            // foreign keys
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-                List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(
-                        properties, db, materializedView);
-                materializedView.setForeignKeyConstraints(foreignKeyConstraints);
-            }
-            // colocate_with
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
-                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-                if (StringUtils.isNotEmpty(colocateGroup) &&
-                        !materializedView.getDefaultDistributionInfo().supportColocate()) {
-                    throw new AnalysisException(": random distribution does not support 'colocate_with'");
-                }
-                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
-                        materializedView.isCloudNativeMaterializedView());
-            }
-            // lake storage info
-            if (materializedView.isCloudNativeMaterializedView()) {
-                String volume = "";
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
-                    volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
-                }
-                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-                svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
-                String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
-                setLakeStorageInfo(db, materializedView, storageVolumeId, properties);
-            }
-
-            // datacache.partition_duration
-            if (materializedView.isCloudNativeMaterializedView()) {
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
-                    PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
-                    materializedView.setDataCachePartitionDuration(duration);
-                }
-            }
-
-            // session properties
-            if (!properties.isEmpty()) {
-                // analyze properties
-                List<SetListItem> setListItems = Lists.newArrayList();
-                for (Map.Entry<String, String> entry : properties.entrySet()) {
-                    if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
-                        throw new AnalysisException("Analyze materialized properties failed " +
-                                "because unknown properties: " + properties +
-                                ", please add `session.` prefix if you want add session variables for mv(" +
-                                "eg, \"session.query_timeout\"=\"30000000\").");
-                    }
-                    String varKey = entry.getKey().substring(
-                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
-                    SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
-                    VariableMgr.checkSystemVariableExist(variable);
-                    setListItems.add(variable);
-                }
-                SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
-
-                // set properties if there are no exceptions
-                materializedView.getTableProperty().getProperties().putAll(properties);
-            }
-        } catch (AnalysisException e) {
-            if (materializedView.isCloudNativeMaterializedView()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                        .unbindTableToStorageVolume(materializedView.getId());
-            }
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
-        }
-        return dataProperty;
+        return randomInterval > 0 ? ThreadLocalRandom.current().nextLong(randomInterval) : randomInterval;
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
@@ -3501,7 +3372,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView.RefreshMoment refreshMoment = materializedView.getRefreshScheme().getMoment();
 
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MaterializedViewMgr.getInstance().startMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().startMaintainMV(materializedView);
             return;
         }
 
@@ -3570,7 +3441,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getName(), refreshType, executeOption);
 
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MaterializedViewMgr.getInstance().onTxnPublish(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onTxnPublish(materializedView);
         } else if (refreshType != MaterializedView.RefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
@@ -3634,20 +3505,22 @@ public class LocalMetastore implements ConnectorMetadata {
         String dbName = refreshMaterializedViewStatement.getMvName().getDb();
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
-        PartitionRangeDesc range =
-                refreshMaterializedViewStatement.getPartitionRangeDesc();
-
+        PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
         return refreshMaterializedView(dbName, mvName, force, range, Constants.TaskRunPriority.HIGH.value(),
-                false, true, refreshMaterializedViewStatement.isSync());
+               Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
     }
 
     @Override
-    public void cancelRefreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+    public void cancelRefreshMaterializedView(
+            CancelRefreshMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
+        String dbName = stmt.getMvName().getDb();
+        String mvName = stmt.getMvName().getTbl();
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        boolean isForce = stmt.isForce();
         if (refreshTask != null) {
-            taskManager.killTask(refreshTask.getName(), true);
+            taskManager.killTask(refreshTask.getName(), isForce);
         }
     }
 
@@ -3896,7 +3769,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
-        Map<String, Object> results = validateToBeModifiedProps(properties);
+        Map<String, Object> results = validateToBeModifiedProps(properties, table);
 
         TableProperty tableProperty = table.getTableProperty();
         for (String key : results.keySet()) {
@@ -3947,11 +3820,18 @@ public class LocalMetastore implements ConnectorMetadata {
                                 ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
-
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+                String location = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+                table.setLocation(location);
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
-    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties) throws DdlException {
+    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties, OlapTable table) throws DdlException {
         Map<String, Object> results = Maps.newHashMap();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             try {
@@ -3985,6 +3865,13 @@ public class LocalMetastore implements ConnectorMetadata {
             } catch (AnalysisException ex) {
                 throw new RuntimeException(ex.getMessage());
             }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (table.getColocateGroup() != null) {
+                throw new DdlException("Cannot set location for colocate table");
+            }
+            String locations = PropertyAnalyzer.analyzeLocation(properties, true);
+            results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -4227,6 +4114,22 @@ public class LocalMetastore implements ConnectorMetadata {
         GlobalStateMgr.getCurrentState().getEditLog().logModifyBucketSize(info);
     }
 
+    public void modifyTableBaseCompactionForbiddenTimeRanges(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildBaseCompactionForbiddenTimeRanges();
+
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyBaseCompactionForbiddenTimeRanges(info);
+    }
+
     public void modifyTablePrimaryIndexCacheExpireSec(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
         TableProperty tableProperty = table.getTableProperty();
@@ -4255,12 +4158,14 @@ public class LocalMetastore implements ConnectorMetadata {
             modifyTableReplicatedStorage(db, table, properties);
         } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
             modifyTableAutomaticBucketSize(db, table, properties);
+        } else if (metaType == TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
+            modifyTableBaseCompactionForbiddenTimeRanges(db, table, properties);
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             modifyTablePrimaryIndexCacheExpireSec(db, table, properties);
         }
     }
 
-    public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+    public void setHasForbiddenGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
         Map<String, String> property = new HashMap<>();
         Database db = getDb(dbName);
         if (db == null) {
@@ -4275,7 +4180,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
-                olapTable.setHasForbitGlobalDict(isForbit);
+                olapTable.setHasForbiddenGlobalDict(isForbit);
                 if (isForbit) {
                     property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
                     IDictManager.getInstance().disableGlobalDict(olapTable.getId());
@@ -4327,13 +4232,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {
                     if (enAble.equals(PropertyAnalyzer.DISABLE_LOW_CARD_DICT)) {
-                        olapTable.setHasForbitGlobalDict(true);
+                        olapTable.setHasForbiddenGlobalDict(true);
                         IDictManager.getInstance().disableGlobalDict(olapTable.getId());
                     } else {
-                        olapTable.setHasForbitGlobalDict(false);
+                        olapTable.setHasForbiddenGlobalDict(false);
                         IDictManager.getInstance().enableGlobalDict(olapTable.getId());
                     }
                 }
+            } else if (opCode == OperationType.OP_SET_HAS_DELETE) {
+                olapTable.setHasDelete();
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();
                 if (tableProperty == null) {
@@ -4374,6 +4281,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     if (!olapTable.isBinlogEnabled()) {
                         olapTable.clearBinlogAvailableVersion();
                     }
+                } else if (opCode == OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
+                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                            tableId, tableProperty.getBaseCompactionForbiddenTimeRanges());
                 }
             }
         } catch (Exception ex) {
@@ -4613,14 +4523,16 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
 
                     origPartitions.put(partName, partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
                     origPartitions.put(partition.getName(), partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             }
 
-            copiedTbl = olapTable.selectiveCopy(origPartitions.keySet(), true, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTbl = getShadowCopyTable(olapTable);
         } finally {
             db.readUnlock();
         }
@@ -4730,13 +4642,14 @@ public class LocalMetastore implements ConnectorMetadata {
             // refresh mv
             Set<MvId> relatedMvs = olapTable.getRelatedMaterializedViews();
             for (MvId mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
+                MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
                 if (materializedView == null) {
-                    LOG.warn("Table related materialized view {} can not be found", mvId.getId());
+                    LOG.warn("Table related materialized view {}.{} can not be found", mvId.getDbId(), mvId.getId());
                     continue;
                 }
                 if (materializedView.isLoadTriggeredRefresh()) {
-                    refreshMaterializedView(db.getFullName(), db.getTable(mvId.getId()).getName(), false, null,
+                    Database mvDb = getDb(mvId.getDbId());
+                    refreshMaterializedView(mvDb.getFullName(), getTable(mvDb.getId(), mvId.getId()).getName(), false, null,
                             Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
             }
@@ -4949,6 +4862,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
+            partitionNames.stream().forEach(e ->
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(olapTable.getPartition(e).getId()));
             olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
 
             // write log
@@ -4977,7 +4892,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
                         replaceTempPartitionLog.getTempPartitions().get(0));
                 return;
-            } 
+            }
             olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),
@@ -5034,7 +4949,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     if (!isReplay) {
                         // Put this tablet into urgent table so that it can be repaired ASAP.
                         stateMgr.getTabletChecker().setTabletForUrgentRepair(dbId, meta.getTableId(),
-                                meta.getPartitionId());
+                                meta.getPhysicalPartitionId());
                         SetReplicaStatusOperationLog log =
                                 new SetReplicaStatusOperationLog(backendId, tabletId, status);
                         GlobalStateMgr.getCurrentState().getEditLog().logSetReplicaStatus(log);
@@ -5123,10 +5038,12 @@ public class LocalMetastore implements ConnectorMetadata {
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            for (Tablet tablet : index.getTablets()) {
-                long tabletId = tablet.getId();
-                invertedIndex.deleteTablet(tabletId);
+        for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+            for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    long tabletId = tablet.getId();
+                    invertedIndex.deleteTablet(tabletId);
+                }
             }
         }
     }
@@ -5158,7 +5075,7 @@ public class LocalMetastore implements ConnectorMetadata {
             for (Long id : sourcePartitionIds) {
                 origPartitions.put(id, olapTable.getPartition(id).getName());
             }
-            copiedTbl = olapTable.selectiveCopy(origPartitions.values(), true, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTbl = getShadowCopyTable(olapTable);
         } finally {
             db.readUnlock();
         }
@@ -5169,6 +5086,22 @@ public class LocalMetastore implements ConnectorMetadata {
     public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
                                     Map<Long, String> origPartitions) {
         return getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, false);
+    }
+
+    private OlapTable getShadowCopyTable(OlapTable olapTable) {
+        OlapTable copiedTable;
+        if (olapTable instanceof LakeMaterializedView) {
+            copiedTable = new LakeMaterializedView();
+        } else if (olapTable instanceof MaterializedView) {
+            copiedTable = new MaterializedView();
+        } else if (olapTable instanceof LakeTable) {
+            copiedTable = new LakeTable();
+        } else {
+            copiedTable = new OlapTable();
+        }
+
+        olapTable.copyOnlyForQuery(copiedTable);
+        return copiedTable;
     }
 
     @VisibleForTesting
@@ -5365,6 +5298,11 @@ public class LocalMetastore implements ConnectorMetadata {
         writer.close();
     }
 
+    /**
+     * When loading the LocalMetastore, the DB/Catalog that the materialized view depends
+     * on may not have been loaded yet, so you cannot reload the materialized view.
+     * The reload operation of a materialized view should be called by {@link GlobalStateMgr#postLoadImage()}.
+     */
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int dbSize = reader.readJson(int.class);
         for (int i = 0; i < dbSize; ++i) {
@@ -5378,13 +5316,6 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(tbl -> {
-                try {
-                    tbl.onReload();
-                } catch (Throwable e) {
-                    LOG.error("reload table failed: {}", tbl, e);
-                }
-            });
         }
 
         // put built-in database into local metastore
@@ -5421,5 +5352,50 @@ public class LocalMetastore implements ConnectorMetadata {
          * old versions of the code (defaultCluster is required for 3.0 fallback)
          */
         defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, NEXT_ID_INIT_VALUE);
+    }
+
+    @Override
+    public void handleMVRepair(Database db, Table table, List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, table, partitionRepairInfos);
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        List<Object> samples = new ArrayList<>();
+        // get every olap table's first partition
+        for (Database database : idToDb.values()) {
+            database.readLock();
+            try {
+                samples.addAll(database.getPartitionSamples());
+            } finally {
+                database.readUnlock();
+            }
+        }
+        return Lists.newArrayList(Pair.create(samples, totalCount));
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        return ImmutableMap.of("Partition", totalCount);
     }
 }

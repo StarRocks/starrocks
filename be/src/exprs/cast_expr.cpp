@@ -41,6 +41,7 @@
 #include "util/date_func.h"
 #include "util/json.h"
 #include "util/mysql_global.h"
+#include "util/numeric_types.h"
 
 namespace starrocks {
 
@@ -399,12 +400,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
-    // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
-    // finite value y where y < x.
-    // This is different from std::numeric_limits<T>::min() for floating-point types.
-    // So we use lowest instead of min for lower bound of all types.
-    return (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-           (value > (Type)std::numeric_limits<ResultType>::max());
+    return check_signed_number_overflow<Type, ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
@@ -412,8 +408,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
     // finite value y where y < x.
     // This is different from std::numeric_limits<T>::min() for floating-point types.
     // So we use lowest instead of min for lower bound of all types.
-    auto result = (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-                  (value > (Type)std::numeric_limits<ResultType>::max());
+    const auto result = NumberCheck::apply<Type, ResultType>(value);
     if (result) {
         std::stringstream ss;
         if constexpr (std::is_same_v<Type, __int128_t>) {
@@ -861,8 +856,13 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
 
         auto value = viewer.value(row);
         TimestampValue tv;
-
-        bool ret = tv.from_timestamp_literal_with_check((int64_t)value);
+        bool ret;
+        if constexpr (lt_is_decimalv2<FromType>) {
+            ret = value.value() > 0;
+        } else {
+            ret = value > 0;
+        }
+        ret = ret && tv.from_timestamp_literal_with_check(value);
         if constexpr (AllowThrowException) {
             if (!ret) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);

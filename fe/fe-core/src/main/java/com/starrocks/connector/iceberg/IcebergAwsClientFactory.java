@@ -140,7 +140,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             stsClientBuilder.region(Region.of(region));
         }
         if (!endpoint.isEmpty()) {
-            stsClientBuilder.endpointOverride(URI.create(endpoint));
+            stsClientBuilder.endpointOverride(ensureSchemeInEndpoint(endpoint));
         }
 
         // Build AssumeRoleRequest

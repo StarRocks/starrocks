@@ -106,6 +106,7 @@ public class FunctionSet {
     public static final String LOCALTIME = "localtime";
     public static final String LOCALTIMESTAMP = "localtimestamp";
     public static final String WEEKOFYEAR = "weekofyear";
+    public static final String WEEK = "week";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
     public static final String HOURS_DIFF = "hours_diff";
@@ -218,6 +219,9 @@ public class FunctionSet {
     public static final String GET_JSON_DOUBLE = "get_json_double";
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
+    public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String JSON_EXISTS = "json_exists";
+    public static final String JSON_LENGTH = "json_length";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
@@ -243,7 +247,9 @@ public class FunctionSet {
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
     public static final String MAX_BY = "max_by";
+    public static final String MAX_BY_V2 = "max_by_v2";
     public static final String MIN_BY = "min_by";
+    public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -316,6 +322,7 @@ public class FunctionSet {
     public static final String ARRAY_AVG = "array_avg";
     public static final String ARRAY_CONTAINS = "array_contains";
     public static final String ARRAY_CONTAINS_ALL = "array_contains_all";
+    public static final String ARRAY_CONTAINS_SEQ = "array_contains_seq";
     public static final String ARRAY_CUM_SUM = "array_cum_sum";
 
     public static final String ARRAY_JOIN = "array_join";
@@ -484,6 +491,9 @@ public class FunctionSet {
     public static final String SECONDS_SUB = "seconds_sub";
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
+    // table function
+    public static final String UNNEST = "unnest";
+    public static final String UNNEST_BITMAP = "unnest_bitmap";
 
     public static final String CONNECTION_ID = "connection_id";
 
@@ -494,6 +504,8 @@ public class FunctionSet {
     public static final String SCHEMA = "schema";
 
     public static final String USER = "user";
+
+    public static final String SESSION_USER = "session_user";
 
     public static final String CURRENT_USER = "current_user";
 
@@ -626,6 +638,12 @@ public class FunctionSet {
                     .add()
                     .build();
 
+    // Contains all non-deterministic functions both time and non-time functions.
+    public static final Set<String> allNonDeterministicFunctions = ImmutableSet.<String>builder()
+            .addAll(nonDeterministicFunctions)
+            .addAll(nonDeterministicTimeFunctions)
+            .build();
+
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)
@@ -687,6 +705,9 @@ public class FunctionSet {
             .add(ARRAY_AGG)
             .add(ARRAY_CONCAT)
             .add(ARRAY_SLICE)
+            .add(ARRAY_CONTAINS)
+            .add(ARRAY_CONTAINS_ALL)
+            .add(ARRAY_POSITION)
             .build();
 
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
@@ -695,6 +716,7 @@ public class FunctionSet {
             .add(DATABASE)
             .add(SCHEMA)
             .add(USER)
+            .add(SESSION_USER)
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
             .build();
@@ -842,12 +864,17 @@ public class FunctionSet {
         return null;
     }
 
-    private Function matchPolymorphicFunction(Function desc, Function.CompareMode mode, List<Function> fns) {
+    private Function matchPolymorphicFunction(Function desc, Function.CompareMode mode, List<Function> fns,
+                                              List<Function> standFns) {
         Function fn = matchFuncCandidates(desc, mode, fns);
         if (fn != null) {
             fn = PolymorphicFunctionAnalyzer.generatePolymorphicFunction(fn, desc.getArgs());
         }
         if (fn != null) {
+            Function newFn = matchStrictFunction(fn, mode, standFns);
+            if (newFn != null) {
+                return newFn;
+            }
             // check generate function is right
             return matchFuncCandidates(desc, mode, Collections.singletonList(fn));
         }
@@ -870,7 +897,7 @@ public class FunctionSet {
         }
 
         List<Function> polyFns = fns.stream().filter(Function::isPolymorphic).collect(Collectors.toList());
-        func = matchPolymorphicFunction(desc, mode, polyFns);
+        func = matchPolymorphicFunction(desc, mode, polyFns, standFns);
         if (func != null) {
             return func;
         }

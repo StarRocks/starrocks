@@ -19,6 +19,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -34,13 +36,6 @@ public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
                                   ConnectContext connectContext,
                                   boolean inlineView) {
-        return optimize(mv, connectContext, inlineView, true);
-    }
-
-    public MvPlanContext optimize(MaterializedView mv,
-                                  ConnectContext connectContext,
-                                  boolean inlineView,
-                                  boolean isOnlyValidPlan) {
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
@@ -58,19 +53,33 @@ public class MaterializedViewOptimizer {
         if (mv.getRefreshScheme().isSync()) {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
         }
-
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
+        // parse mv's defined query
+        StatementBase stmt = MvUtils.parse(mv, mvSql, connectContext);
+        if (stmt == null) {
+            return new MvPlanContext(false, "MV Plan parse failed");
+        }
+        // check whether mv's defined query contains non-deterministic functions
+        Pair<Boolean, String> containsNonDeterministicFunctions = AnalyzerUtils.containsNonDeterministicFunction(stmt);
+        if (containsNonDeterministicFunctions != null && containsNonDeterministicFunctions.first) {
+            String invalidPlanReason = String.format("MV contains non-deterministic functions(%s)",
+                    containsNonDeterministicFunctions.second);
+            return new MvPlanContext(false, invalidPlanReason);
+        }
+        // get optimized plan of mv's defined query
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig, inlineView);
+                MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
         if (plans == null) {
             return new MvPlanContext(false, "No query plan for it");
         }
         OptExpression mvPlan = plans.first;
+        boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
         // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
-        if (isOnlyValidPlan && !MvUtils.isValidMVPlan(mvPlan)) {
-            return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan, inlineView));
+        String invalidPlanReason = "";
+        if (!isValidPlan) {
+            invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
         }
-        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
     }
 }

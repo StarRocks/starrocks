@@ -1,10 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 10
+keywords: ['linshi'] 
 ---
 
 # 表概览
 
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.md'
 
 表是数据存储单元。理解 StarRocks 中的表结构，以及如何设计合理的表结构，有利于优化数据组织，提高查询效率。相比于传统的数据库，StarRocks 会以列的方式存储 JSON、ARRAY 等复杂的半结构化数据，保证高效查询。
 本文由浅入深介绍表结构。
@@ -38,7 +40,7 @@ DUPLICATE KEY(uid, name);
 
 <Replicanum />
 
-执行 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看表结构。
+执行 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看表结构。
 
 ```SQL
 MySQL [example_db]> DESCRIBE user_access;
@@ -55,7 +57,7 @@ MySQL [example_db]> DESCRIBE user_access;
 6 rows in set (0.00 sec)
 ```
 
-执行 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) 来查看建表语句。
+执行 [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) 来查看建表语句。
 
 ```SQL
 MySQL [example_db]> SHOW CREATE TABLE user_access\G
@@ -94,11 +96,11 @@ StarRocks 提供四种类型的表，包括明细表、主键表、聚合表和�
 - 聚合表适用于存储预聚合后的数据，可以降低聚合查询时所需扫描和计算的数据量，极大提高聚合查询的效率。
 - 更新表适用于实时更新的业务场景，目前已逐渐被主键表取代。
 
-### [数据分布](./Data_distribution.md)
+### [数据分布](data_distribution/Data_distribution.md)
 
 StarRocks 采用分区+分桶的两级数据分布策略，将数据均匀分布各个 BE 节点。查询时能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
 
-![img](../assets/table_design/table_overview.png)
+![img](../_assets/table_design/table_overview.png)
 
 #### 分区
 
@@ -115,11 +117,11 @@ StarRocks 提供两种分桶方式：
 - 哈希分桶：根据数据的分桶键值，将数据划分至分桶。选择查询时经常使用的条件列组成分桶键，能有效提高查询效率。
 - 随机分桶：随机划分数据至分桶。这种分桶方式更加简单易用。
 
-### [数据类型](../sql-reference/data-types/data-type-list.md)
+### [数据类型](../sql-reference/data-types/README.md)
 
 除了基本的数据类型，如数值、日期和字符串类型，StarRocks 还支持复杂的半结构化数据类型，包括 ARRAY、JSON、MAP、STRUCT。
 
-### [索引](./indexes/indexes_overview.md)
+### [索引](indexes/indexes.md)
 
 索引是一种特殊的数据结构，相当于数据的目录。查询条件命中索引列时，StarRocks 能够快速定位到满足条件的数据的位置。
 

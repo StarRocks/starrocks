@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 通过 INSERT 语句导入数据
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
@@ -12,19 +12,19 @@ import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 2.4 版本中，StarRocks 进一步支持通过 INSERT OVERWRITE 语句批量**覆盖写入**目标表。INSERT OVERWRITE 语句通过整合以下三部分操作来实现覆盖写入：
 
-1. 为目标分区[创建临时分区](../table_design/Temporary_partition.md#创建临时分区)
-2. [写入数据至临时分区](../table_design/Temporary_partition.md#导入数据至临时分区)
-3. [使用临时分区原子替换目标分区](../table_design/Temporary_partition.md#使用临时分区进行替换)
+1. 为目标分区[创建临时分区](../table_design/data_distribution/Temporary_partition.md#创建临时分区)
+2. [写入数据至临时分区](../table_design/data_distribution/Temporary_partition.md#导入数据至临时分区)
+3. [使用临时分区原子替换目标分区](../table_design/data_distribution/Temporary_partition.md#使用临时分区进行替换)
 
 如果您希望在替换前验证数据，可以根据以上步骤自行实现覆盖写入数据。
 
 ## 注意事项
 
 - 您只能在 MySQL 客户端通过 `Ctrl` + `C` 按键强制取消同步 INSERT 导入任务。
-- 您可以通过 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 创建异步 INSERT 导入任务。
+- 您可以通过 [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 创建异步 INSERT 导入任务。
 - 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
 - 频繁使用 INSERT 语句导入小批量数据会产生过多的数据版本，从而影响查询性能，因此不建议您频繁使用 INSERT 语句导入数据或将其作为生产环境的日常例行导入作业。如果您的业务场景需要流式导入或者小批量多次导入数据，建议使用 Apache Kafka® 作为数据源并通过 [Routine Load](../loading/RoutineLoad.md) 方式进行导入作业。
-- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
+- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
 
 ## 准备工作
 
@@ -109,11 +109,11 @@ DISTRIBUTED BY HASH(user);
 
 > **注意**
 >
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 通过 INSERT INTO VALUES 语句导入数据
 
-您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -137,7 +137,7 @@ VALUES
 
 ## 通过 INSERT INTO SELECT 语句导入数据
 
-您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表，甚至云存储或 HDFS 中的数据文件。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表，甚至云存储或 HDFS 中的数据文件。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 ### 通过 INSERT INTO SELECT 将内外表数据导入内表
 
@@ -219,7 +219,7 @@ INSERT INTO insert_wiki_edit
 
 ## 通过 INSERT OVERWRITE VALUES 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -259,7 +259,7 @@ VALUES
 
 ## 通过 INSERT OVERWRITE SELECT 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 > 说明
 >
@@ -299,6 +299,28 @@ Query OK, 0 rows affected (0.01 sec)
 MySQL > select * from insert_wiki_edit;
 Empty set (0.00 sec)
 ```
+
+:::note
+对于使用列表达式分区方式（`PARTITION BY column`）的表，INSERT OVERWRITE 支持通过指定分区键的值在目标表上创建不存在的分区。对于已有的分区，将正常进行覆盖写。
+
+以下示例创建了分区表 `activity`，向其中导入新数据时自动创建了先前不存在的分区：
+
+```SQL
+CREATE TABLE activity (
+id INT          NOT NULL,
+dt VARCHAR(10)  NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+PARTITION BY (`id`, `dt`)
+DISTRIBUTED BY HASH(`id`);
+
+INSERT OVERWRITE activity
+PARTITION(id='4', dt='2022-01-01')
+WITH LABEL insert_activity_auto_partition
+VALUES ('4', '2022-01-01');
+```
+
+:::
 
 - 以下示例以 `insert_load_wikipedia_ow_3` 为 Label 将源表中 `event_time` 和 `channel` 列的数据覆盖写入至目标表的对应列中。未被导入的列将被赋予默认值。
 
@@ -355,7 +377,7 @@ mysql> SELECT * FROM insert_generated_columns;
 
 ## 通过 INSERT 语句异步导入数据
 
-使用 INSERT 语句创建的同步导入任务，可能会因为会话中断或超时而失败。您可以使用 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 语句提交异步 INSERT 任务。此功能自 StarRocks v2.5 起支持。
+使用 INSERT 语句创建的同步导入任务，可能会因为会话中断或超时而失败。您可以使用 [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 语句提交异步 INSERT 任务。此功能自 StarRocks v2.5 起支持。
 
 - 以下示例将源表中的数据异步导入至目标表中。
 
@@ -427,7 +449,7 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 ### 通过 Information Schema 查看
 
-您可以通过 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 INSERT INTO 作业的结果。该功能自 3.1 版本起支持。
+您可以通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 INSERT INTO 作业的结果。该功能自 3.1 版本起支持。
 
 示例一：查看 `load_test` 数据库中导入作业的执行情况，同时指定查询结果根据作业创建时间 (`CREATE_TIME`) 按降序排列，并且最多显示一条结果数据：
 
@@ -475,7 +497,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-有关返回字段的说明，参见 [`information_schema.loads`](../reference/information_schema/loads.md)。
+有关返回字段的说明，参见 [`information_schema.loads`](../sql-reference/information_schema/loads.md)。
 
 ## 相关配置项
 

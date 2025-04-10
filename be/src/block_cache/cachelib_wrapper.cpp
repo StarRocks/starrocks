@@ -94,6 +94,14 @@ Status CacheLibWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
+Status CacheLibWrapper::update_mem_quota(size_t quota_bytes) {
+    return Status::NotSupported("not support updating memory cache quota for cachelib");
+}
+
+Status update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    return Status::NotSupported("not support updating disk cache spaces for cachelib");
+}
+
 std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
     const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
     return navy_stats;

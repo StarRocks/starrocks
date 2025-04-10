@@ -18,12 +18,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
@@ -174,6 +176,17 @@ public class ExecPlan {
 
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
+
+        if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {
+            if (FeConstants.showFragmentCost) {
+                final String prefix = "  ";
+                AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+                str.append("PLAN COST").append("\n")
+                        .append(prefix).append("CPU: ").append(auditEvent.planCpuCosts).append("\n")
+                        .append(prefix).append("Memory: ").append(auditEvent.planMemCosts).append("\n\n");
+            }
+        }
+
         if (level == null) {
             str.append(Explain.toString(physicalPlan, outputColumns));
         } else {
@@ -211,7 +224,7 @@ public class ExecPlan {
             case VERBOSE:
                 tlevel = TExplainLevel.VERBOSE;
                 break;
-            case COST:
+            case COSTS:
                 tlevel = TExplainLevel.COSTS;
                 break;
         }

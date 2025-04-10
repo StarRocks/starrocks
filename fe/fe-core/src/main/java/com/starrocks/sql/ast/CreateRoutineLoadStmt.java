@@ -23,6 +23,8 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
@@ -732,8 +734,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                                                      Map<String, String> customKafkaProperties,
                                                      List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
-        kafkaPartitionsString = kafkaPartitionsString.replaceAll(" ", "");
-        if (kafkaPartitionsString.isEmpty()) {
+        String trimedKafkaPartitionsStr = kafkaPartitionsString.trim();
+        if (trimedKafkaPartitionsStr.isEmpty()) {
             throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY + " could not be a empty string");
         }
 
@@ -743,23 +745,18 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             kafkaDefaultOffset = getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
         }
 
-        String[] kafkaPartitionsStringList = kafkaPartitionsString.split(",");
+        String[] kafkaPartitionsStringList = trimedKafkaPartitionsStr.split(",");
         for (String s : kafkaPartitionsStringList) {
-            try {
-                kafkaPartitionOffsets.add(
-                        Pair.create(getIntegerValueFromString(s, KAFKA_PARTITIONS_PROPERTY),
-                                kafkaDefaultOffset == null ? KafkaProgress.OFFSET_END_VAL : kafkaDefaultOffset));
-            } catch (AnalysisException e) {
-                throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY
-                        + " must be a number string with comma-separated");
-            }
+            kafkaPartitionOffsets.add(
+                    Pair.create(getIntegerValueFromString(s.trim(), "kafka partition"),
+                            kafkaDefaultOffset == null ? KafkaProgress.OFFSET_END_VAL : kafkaDefaultOffset));
         }
     }
 
     public static void analyzeKafkaOffsetProperty(String kafkaOffsetsString,
                                                   List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
-        kafkaOffsetsString = kafkaOffsetsString.replaceAll(" ", "");
+        kafkaOffsetsString = kafkaOffsetsString.trim();
         if (kafkaOffsetsString.isEmpty()) {
             throw new AnalysisException(KAFKA_OFFSETS_PROPERTY + " could not be a empty string");
         }
@@ -778,6 +775,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     // OFFSET_BEGINNING: -2
     // OFFSET_END: -1
     public static long getKafkaOffset(String offsetStr) throws AnalysisException {
+        offsetStr = offsetStr.trim();
         long offset = -1;
         try {
             offset = getLongValueFromString(offsetStr, "kafka offset");
@@ -953,11 +951,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (valueString.isEmpty()) {
             throw new AnalysisException(propertyName + " could not be a empty string");
         }
-        int value;
+        int value = -1;
         try {
             value = Integer.parseInt(valueString);
         } catch (NumberFormatException e) {
-            throw new AnalysisException(propertyName + " must be a integer");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, propertyName, valueString, "an integer");
         }
         return value;
     }
@@ -966,11 +964,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (valueString.isEmpty()) {
             throw new AnalysisException(propertyName + " could not be a empty string");
         }
-        long value;
+        long value = -1L;
         try {
             value = Long.valueOf(valueString);
         } catch (NumberFormatException e) {
-            throw new AnalysisException(propertyName + " must be a integer: " + valueString);
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, propertyName, valueString,
+                    String.format("an integer, %s, or %s", KafkaProgress.OFFSET_BEGINNING, KafkaProgress.OFFSET_END));
         }
         return value;
     }
@@ -994,10 +993,5 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
-    }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return true;
     }
 }

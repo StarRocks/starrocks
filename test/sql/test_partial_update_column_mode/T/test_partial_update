@@ -66,3 +66,41 @@ select * from tab3;
 
 update tab3 set v1 = 1111, v2 = (select sum(tab2.v2) from tab2);
 select * from tab3;
+
+
+-- name: test_partial_update_with_expr
+create database test_partial_update_with_expr;
+use test_partial_update_with_expr;
+CREATE TABLE `tab1` (
+  `k1` bigint(20) NOT NULL COMMENT "",
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+insert into tab1 values (101, 1, 1, '2024-08-27 00:00:00');
+insert into tab1 values (201, 2, 2, '2024-08-27 00:00:00');
+
+select count(1) from tab1 where 'v3' is not null;
+insert into tab1 (k1, v1, v2) values (301, 3, 3);
+select count(1) from tab1 where 'v3' is not null;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_5.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123433 -H column_separator:, -H columns:k1,v1,v2 ${url}/api/test_partial_update_with_expr/tab1/_stream_load
+sync;
+select count(1) from tab1 where 'v3' is not null;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:stream_load_partial_update_123434 -H column_separator:, -H columns:k1,v1,v2 ${url}/api/test_partial_update_with_expr/tab1/_stream_load
+sync;
+select count(1) from tab1 where 'v3' is not null;
+
+
+
+drop database test_partial_update_with_expr;

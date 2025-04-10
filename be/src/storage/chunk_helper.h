@@ -78,10 +78,15 @@ public:
     static void padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                      const TabletSchemaCSPtr& tschema, Chunk* chunk);
 
+    // Padding one char column
+    static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
+
     // Reorder columns of `chunk` according to the order of |tuple_desc|.
     static void reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk);
     // Reorder columns of `chunk` according to the order of |slots|.
     static void reorder_chunk(const std::vector<SlotDescriptor*>& slots, Chunk* chunk);
+
+    static ChunkPtr createDummyChunk();
 };
 
 // Accumulate small chunk into desired size

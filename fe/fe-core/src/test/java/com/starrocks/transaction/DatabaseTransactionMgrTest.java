@@ -36,9 +36,12 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -102,6 +105,34 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId = addTransactionToTransactionMgr();
     }
 
+    public void prepareCommittedTransaction() throws UserException {
+        long transactionId1 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable10,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        // commit a transaction
+        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId1);
+        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId2);
+        TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId3);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        transTablets.add(tabletCommitInfo1);
+        transTablets.add(tabletCommitInfo2);
+        transTablets.add(tabletCommitInfo3);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
+                Lists.newArrayList(), null);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId1));
+        lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable10, transactionId1);
+
+    }
+
     public Map<String, Long> addTransactionToTransactionMgr() throws UserException {
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
@@ -120,16 +151,7 @@ public class DatabaseTransactionMgrTest {
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
 
         // commit a transaction
-        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId1);
-        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId2);
-        TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId3);
-        List<TabletCommitInfo> transTablets = Lists.newArrayList();
-        transTablets.add(tabletCommitInfo1);
-        transTablets.add(tabletCommitInfo2);
-        transTablets.add(tabletCommitInfo3);
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
                 Lists.newArrayList(), null);
         DatabaseTransactionMgr masterDbTransMgr =
@@ -175,7 +197,7 @@ public class DatabaseTransactionMgrTest {
                         Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable5,
                         feTransactionSource,
-                        TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                         Config.max_load_timeout_second);
         // for test batch
         long transactionId6 = masterTransMgr
@@ -218,7 +240,6 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable8, transactionId8);
 
         Assert.assertEquals(transactionId2, masterTransMgr.getMinActiveTxnId());
-        Assert.assertEquals(transactionId5, masterTransMgr.getMinActiveCompactionTxnId());
 
         transactionGraph.add(transactionId6, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
         transactionGraph.add(transactionId7, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
@@ -231,6 +252,59 @@ public class DatabaseTransactionMgrTest {
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState1);
         return lableToTxnId;
+    }
+
+    private List<TabletCommitInfo> buildTabletCommitInfoList() {
+        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId1);
+        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId2);
+        TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId3);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        transTablets.add(tabletCommitInfo1);
+        transTablets.add(tabletCommitInfo2);
+        transTablets.add(tabletCommitInfo3);
+        return transTablets;
+    }
+
+    @Test
+    public void getLakeCompactionActiveTxnListTest() throws UserException {
+        TransactionState.TxnCoordinator feTransactionSource =
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe1");
+        long committedCompactionTransactionId = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLableCompaction1,
+                        feTransactionSource,
+                        TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                        Config.lake_compaction_default_timeout_second);
+
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, committedCompactionTransactionId, transTablets,
+                Lists.newArrayList(), null);
+        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(committedCompactionTransactionId));
+
+        long preparedCompactionTransactionId = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLableCompaction2,
+                        feTransactionSource,
+                        TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                        Config.lake_compaction_default_timeout_second);
+
+        Map<Long, Long> compactionActiveTxnMap = masterDbTransMgr.getLakeCompactionActiveTxnMap();
+        Assert.assertEquals(2, compactionActiveTxnMap.size());
+        Assert.assertTrue(compactionActiveTxnMap.containsKey(committedCompactionTransactionId));
+        Assert.assertTrue(compactionActiveTxnMap.containsKey(preparedCompactionTransactionId));
+
+        // global transaction stats check
+        Map<Long, Long> globalCompactionActiveTxnMap = masterTransMgr.getLakeCompactionActiveTxnStats();
+        Assert.assertEquals(2, globalCompactionActiveTxnMap.size());
+        Assert.assertTrue(globalCompactionActiveTxnMap.containsKey(committedCompactionTransactionId));
+        Assert.assertTrue(globalCompactionActiveTxnMap.containsKey(preparedCompactionTransactionId));
     }
 
     @Test
@@ -293,6 +367,42 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TTransactionStatus.ABORTED, masterDbTransMgr.getTxnStatus(txnId3));
     }
 
+    @Test
+    public void testFinishTransactionTableRemove() throws UserException {
+        prepareCommittedTransaction();
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(long tableId) {
+                return null;
+            }
+        };
+
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
+        masterDbTransMgr.finishTransaction(txnId, null);
+        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+    }
+
+
+    @Test
+    public void testFinishTransactionPartitionRemove() throws UserException {
+        prepareCommittedTransaction();
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long partitionId) {
+                return null;
+            }
+        };
+
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
+        masterDbTransMgr.finishTransaction(txnId, null);
+        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+    }
     @Test
     public void testAbortTransactionWithNotFoundException() throws UserException {
         DatabaseTransactionMgr masterDbTransMgr =

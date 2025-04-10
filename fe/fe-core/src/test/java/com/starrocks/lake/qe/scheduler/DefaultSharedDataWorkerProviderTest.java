@@ -31,6 +31,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.NormalBackendSelector;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -64,6 +65,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2Backend;
@@ -129,7 +132,8 @@ public class DefaultSharedDataWorkerProviderTest {
 
     private WorkerProvider newWorkerProvider() {
         return factory.captureAvailableWorkers(
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1);
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, 
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
@@ -587,7 +591,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // normal case
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider, 1);
             // the computation will not fail even though there are non-available locations
@@ -605,7 +609,7 @@ public class DefaultSharedDataWorkerProviderTest {
                     ImmutableMap.of(availNode.getId(), availNode));
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider1, 1);
             // the computation will not fail even though there are non-available locations
@@ -622,10 +626,25 @@ public class DefaultSharedDataWorkerProviderTest {
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
                     ImmutableMap.of());
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
             Assert.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
+        }
+    }
+
+    @Test
+    public void testNextWorkerOverflow() throws NonRecoverableException {
+        WorkerProvider provider =
+                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes));
+        for (int i = 0; i < 100; i++) {
+            Long workerId = provider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+        DefaultSharedDataWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = provider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
         }
     }
 }

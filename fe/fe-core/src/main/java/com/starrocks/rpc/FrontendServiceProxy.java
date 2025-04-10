@@ -48,10 +48,10 @@ public class FrontendServiceProxy {
                     if (i == retryTimes - 1 ||
                             !isConnValid ||
                             (te.getCause() instanceof SocketTimeoutException)) {
-                        LOG.warn("call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
+                        LOG.warn("call thrift rpc failed, addr: {}, retried: {}", address, i, te);
                         throw te;
                     } else {
-                        LOG.debug("call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
+                        LOG.debug("call thrift rpc failed, addr: {}, retried: {}", address, i, te);
                     }
                 }
             }

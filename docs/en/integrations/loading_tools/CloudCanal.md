@@ -1,94 +1,88 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
-# Load data using CloudCanal
+# BladePipe
 
 ## Introduction
 
-CloudCanal Community Edition is a free data migration and synchronization platform published by [ClouGence Co., Ltd](https://www.cloudcanalx.com) that integrates Schema Migration, Full Data Migration, verification, Correction, and real-time Incremental Synchronization.
-CloudCanal help users build a modern data stack in a simple way.
-![image.png](../../assets/3.11-1.png)
+BladePipe is a **real-time end-to-end data replication tool**, moving data between **30+** databases, message queues, search engines, caching systems, real-time data warehouses, data lakes and more, with **ultra-low latency**. It features efficiency, stability and scalability, compatibility with diverse database engines, one-stop management, enhanced security, and complex data transformation. BladePipe helps to break down data silos, increasing the value of data.
 
-## Download
+![image.png](../../_assets/3.11-1.png)
 
-[CloudCanal Download Link](https://www.cloudcanalx.com)
 
-[CloudCanal Quick Start](https://www.cloudcanalx.com/us/cc-doc/quick/quick_start)
+## Features
 
-## Function Description
+BladePipe presents a visualized management interface, allowing you to easily create DataJobs to achieve **schema migration, data migration, synchronization, verification and correction**, and more. In addition, it supports more refined and customized configurations by parameter settings. Now BladePipe supports data movement from the following source DataSources to StarRocks:
 
-- It is highly recommended to utilize CloudCanal version 2.2.5.0 or higher for efficient data import into StarRocks.
-- It is advisable to exercise control over the ingestion frequency when using CloudCanal to import **incremental data** into StarRocks. The default import frequency for writing data from CloudCanal to StarRocks can be adjusted using the `realFlushPauseSec` parameter, which is set to 10 seconds by default.
-- In the current community edition with a maximum memory configuration of 2GB, if DataJobs encounter OOM exceptions or significant GC pauses, it is recommended to reduce the batch size to minimize memory usage.
-  - For Full DataTask, you can adjust the `fullBatchSize` and `fullRingBufferSize` parameters.
-  - For Incremental DataTask, the `increBatchSize` and `increRingBufferSize` parameters can be adjusted accordingly.
-- Supported Source endpoints and features:
+| Source DataSource           | Schema Migration | Data Migration | Data Sync | Verification & Correction |
+| --------------------------- | ---------------- | -------------- | --------- | ------------------------- |
+| MySQL/MariaDB/AuroraMySQL   | Yes              | Yes            | Yes       | Yes                       |
+| Oracle                      | Yes              | Yes            | Yes       | Yes                       |
+| PostgreSQL/AuroraPostgreSQL | Yes              | Yes            | Yes       | Yes                       |
+| SQL Server                  | Yes              | Yes            | Yes       | Yes                       |
+| Kafka                       | No               | No             | Yes       | No                        |
+| AutoMQ                      | No               | No             | Yes       | No                        |
+| TiDB                        | Yes              | Yes            | Yes       | Yes                       |
+| Hana                        | Yes              | Yes            | Yes       | Yes                       |
+| PolarDB for MySQL           | Yes              | Yes            | Yes       | Yes                       |
+| Db2                         | Yes              | Yes            | Yes       | Yes                       |
 
-  | Source Endpoints \ Feature | Schema Migration | Full Data | Incremental | Verification |
-    | --- | --- | --- | --- | --- |
-  | Oracle                     | Yes | Yes | Yes | Yes |
-  | PostgreSQL                 | Yes | Yes | Yes | Yes |
-  | Greenplum                  | Yes | Yes | No | Yes |
-  | MySQL                      | Yes | Yes | Yes | Yes |
-  | Kafka                      | No | No | Yes | No |
-  | OceanBase                  | Yes | Yes | Yes | Yes |
-  | PolarDb for MySQL          | Yes | Yes | Yes | Yes |
-  | Db2                        | Yes | Yes | Yes | Yes |
+:::info
 
-## Typical example
+For more information on supported functions and parameter settings, refer to [BladePipe Connections](https://doc.bladepipe.com/dataMigrationAndSync/connection/mysql2?target=StarRocks).
 
-CloudCanal allows users to perform operations in a visual interface where users can seamlessly add DataSources and create DataJobs through a visual interface. This enables automated schema migration, full data migration, and real-time incremental synchronization. The following example demonstrates how to migrate and synchronize data from MySQL to StarRocks. The procedures are similar for data synchronization between other data sources and StarRocks.
+:::
 
-### Prerequisites
+## Installation
 
-First, refer to the [CloudCanal Quick Start](https://www.cloudcanalx.com/us/cc-doc/quick/quick_start) to complete the installation and deployment of the CloudCanal Community Edition.
+Follow the instructions in [Install BladePipe Worker (Docker)](https://doc.bladepipe.com/productOP/docker/install_worker_docker) or [Install BladePipe Worker (Binary)](https://doc.bladepipe.com/productOP/binary/install_worker_binary) to download and install a BladePipe Worker.
 
-### Add DataSource
+## Example
 
-- Log in to the CloudCanal platform
-- Go to **DataSource Management** -> **Add DataSource**
-- Select **StarRocks** from the options for self-built databases
+Taking a MySQL instance as an example, the following section describes how to migrate data from MySQL to StarRocks.
 
-![image.png](../../assets/3.11-2.png)
+### Add DataSources
 
-> Tips:
->
-> - Client Address: The address of the StarRocks server's MySQL client service port. CloudCanal primarily uses this address to query metadata information of the database tables.
->
-> - HTTP Address: The HTTP address is mainly used to receive data import requests from CloudCanal.
+1. Log in to the [BladePipe Cloud](https://cloud.bladepipe.com/). Click **DataSource** > **Add DataSource**.
+2. Select **StarRocks** as the **Type**, and fill in the setup form.
+   - **Client Address**：The port StarRocks provided to MySQL Client. BladePipe queries the metadata in databases via it. 
+   - **Account**: The user name of the StarRocks database. The INSERT privilege is required to write data to StarRocks. Follow the instruction provided in [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) to grant the database user the INSERT privilege.
+   - **Http Address**：The port used to receive the request from BladePipe to write data to StarRocks.
+
+   ![image.png](../../_assets/3.11-2.png)
+
+3. Click **Test Connection**. After the connection is successful, click **Add DataSource** to add the DataSource.
+4. Add a MySQL DataSource following the above steps.
 
 ### Create DataJob
 
-Once the DataSource has been added successfully, you can follow these steps to create data migration and synchronization DataJob.
+1. Click **DataJob** > [**Create DataJob**](https://doc.bladepipe.com/operation/job_manage/create_job/create_full_incre_task).
 
-- Go to **DataJob Management** -> **Create DataJob** in the CloudCanal
-- Select the source and target databases for the DataJob
-- Click Next Step
+2. Select the source and target DataSources, and click **Test Connection** to ensure the connection to the source and target DataSources are both successful.
 
-![image.png](../../assets/3.11-3.png)
+   ![image.png](../../_assets/3.11-3.png)
 
-- Choose **Incremental** and enable **Full Data**
-- Select DDL Sync
-- Click Next Step
+3. Select **Incremental** for DataJob Type, together with the **Full Data** option.
 
-![image.png](../../assets/3.11-4.png)
+   ![image.png](../../_assets/3.11-4.png)
 
-- Select the source tables you want to subscribe to. Please note that the target StarRocks tables automatically after Schema Migration are Primary Key tables, so source tables without a primary key are not currently supported**
+4. Select the tables to be replicated. **Note that the target StarRocks tables automatically created after Schema Migration have primary keys, so source tables without primary keys are not supported currently**.
 
-- Click Next Step
+   ![image.png](../../_assets/3.11-5.png)
 
-![image.png](../../assets/3.11-5.png)
+5. Select the columns to be replicated.
 
-- Configure the column mapping
-- Click Next Step
+   ![image.png](../../_assets/3.11-6.png)
 
-![image.png](../../assets/3.11-6.png)
+6. Confirm the DataJob creation.
 
-- Create DataJob
+   ![image.png](../../_assets/3.11-7.png)
 
-![image.png](../../assets/3.11-7.png)
+7. The DataJob runs automatically. BladePipe will automatically run the following DataTasks:
+   - **Schema Migration**: The schemas of the source tables will be migrated to the target instance.
+   - **Full Data**: All existing data of the source tables will be fully migrated to the target instance.
+   - **Incremental**: Ongoing data changes will be continuously synchronized to the target instance (with latency less than a minute).
 
-- Check the status of DataJob. The DataJob will automatically go through the stages of Schema Migration, Full Data, and Incremental after it has been created
+![image.png](../../_assets/3.11-8.png)
 
-![image.png](../../assets/3.11-8.png)

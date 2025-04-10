@@ -56,6 +56,13 @@ QueryContext::~QueryContext() noexcept {
     // remaining other RuntimeStates after the current RuntimeState is freed, MemChunkAllocator uses the MemTracker of the
     // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
     // segmentation fault.
+    if (_mem_tracker != nullptr) {
+        LOG(INFO) << fmt::format(
+                "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
+                "bytes:{}",
+                print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes());
+    }
+
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
         _fragment_mgr.reset();
@@ -105,36 +112,40 @@ void QueryContext::cancel(const Status& status) {
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
-                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg, RuntimeState* runtime_state) {
+                                    std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
+                                    RuntimeState* runtime_state, int connector_scan_node_number) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
         mem_tracker_counter->set(query_mem_limit);
+        size_t lowest_limit = parent->lowest_limit();
+        size_t tracker_reserve_limit = -1;
+
+        if (spill_mem_reserve_ratio.has_value()) {
+            tracker_reserve_limit = lowest_limit * spill_mem_reserve_ratio.value();
+        }
+
         if (wg != nullptr && big_query_mem_limit > 0 &&
             (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
-            _mem_tracker->set_reserve_limit(spill_mem_limit);
+            _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         } else {
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
-            _mem_tracker->set_reserve_limit(spill_mem_limit);
+            _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         }
 
-        MemTracker* p = parent;
-        while (!p->has_limit()) {
-            p = p->parent();
-        }
-        _static_query_mem_limit = p->limit();
+        _static_query_mem_limit = lowest_limit;
         if (query_mem_limit > 0) {
             _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
         }
         if (big_query_mem_limit > 0) {
             _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
         }
-        _connector_scan_operator_mem_share_arbitrator =
-                _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit));
+        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
+                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -150,17 +161,6 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                     _profile->name() + "/connector_scan", connector_scan_parent);
         }
     });
-}
-
-MemTracker* QueryContext::operator_mem_tracker(int32_t plan_node_id) {
-    std::lock_guard<std::mutex> l(_operator_mem_trackers_lock);
-    auto it = _operator_mem_trackers.find(plan_node_id);
-    if (it != _operator_mem_trackers.end()) {
-        return it->second.get();
-    }
-    auto mem_tracker = std::make_shared<MemTracker>();
-    _operator_mem_trackers[plan_node_id] = mem_tracker;
-    return mem_tracker.get();
 }
 
 Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
@@ -186,10 +186,20 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group
 void QueryContext::release_workgroup_token_once() {
     auto* old = _wg_running_query_token_atomic_ptr.load();
     if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
+        // The release_workgroup_token_once function is called by FragmentContext::cancel
+        // to detach the QueryContext from the workgroup.
+        // When the workgroup undergoes a configuration change, the old version of the workgroup is released,
+        // and a new version is created. The old workgroup will only be physically destroyed once no
+        // QueryContext is attached to it.
+        // However, the MemTracker of the old workgroup outlives the workgroup itself because
+        // it is accessed during the destruction of the QueryContext through its MemTracker
+        // (the workgroup's MemTracker serves as the parent of the QueryContext's MemTracker).
+        // To prevent the MemTracker from being released prematurely, it must be explicitly retained
+        // to ensure it remains valid until it is no longer needed.
+        _wg_mem_tracker = _wg_running_query_token_ptr->get_wg()->grab_mem_tracker();
         _wg_running_query_token_ptr.reset();
     }
 }
-
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
     std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
 }
@@ -639,6 +649,7 @@ void QueryContextManager::report_fragments(
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
 
+            // TODO: refactor me
             try {
                 try {
                     fe_connection->batchReportExecStatus(res, report_batch);
@@ -654,6 +665,7 @@ void QueryContextManager::report_fragments(
                 }
 
             } catch (TException& e) {
+                (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();

@@ -17,6 +17,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "runtime/runtime_state.h"
 
@@ -91,7 +92,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
         if (auto* scan_operator = driver->source_scan_operator()) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
-            if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+            if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
                 scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor());
             } else {
                 scan_operator->set_scan_executor(state->exec_env()->scan_executor());

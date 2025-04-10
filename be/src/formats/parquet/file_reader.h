@@ -69,12 +69,18 @@ private:
 
     Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
 
-    void _prepare_read_columns();
+    void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
 
     Status _init_group_readers();
 
-    // filter row group by min/max conjuncts
-    StatusOr<bool> _filter_group(const tparquet::RowGroup& row_group);
+    // filter row group by conjuncts
+    bool _filter_group(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_min_max_conjuncts(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_bloom_filter_min_max_conjuncts(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_more_filter(const tparquet::RowGroup& row_group);
 
     // get row group to read
     // if scan range conatain the first byte in the row group, will be read
@@ -84,7 +90,7 @@ private:
     // make min/max chunk from stats of row group meta
     // exist=true: group meta contain statistics info
     Status _read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
-                               ChunkPtr* min_chunk, ChunkPtr* max_chunk, bool* exist) const;
+                               ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
 
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
@@ -100,11 +106,10 @@ private:
 
     Status _prepare_cur_row_group();
 
-    // decode min/max value from row group stats
-    Status _decode_min_max_column(const ParquetField& field, const std::string& timezone, const TypeDescriptor& type,
-                                  const tparquet::ColumnMetaData& column_meta,
-                                  const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                  ColumnPtr* max_column, bool* decode_ok) const;
+    // get min/max value from row group stats
+    Status _get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
+                              const ParquetField* field, std::vector<std::string>& min_values,
+                              std::vector<std::string>& max_values) const;
 
     bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 

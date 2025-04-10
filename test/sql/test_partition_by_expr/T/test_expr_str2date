@@ -66,8 +66,12 @@ START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
 insert into partition_str2date values('2021-01-04','1',1.1,1);
 insert into partition_str2date values('2021-01-05','1',1.1,1);
 insert into partition_str2date values('2021-01-06','1',1.1,1);
-select * from partition_str2date;
+select * from partition_str2date order by create_time;
 select * from partition_str2date where create_time='2021-01-05';
 explain select * from partition_str2date where create_time='2021-01-05';
 select * from partition_str2date where '2021-01-05'=create_time;
 select * from partition_str2date where create_time>='2021-01-05';
+
+create table t1 (dt varchar(20), id int) partition by range(str2date(dt, "%Y-%m-%d")) (start ("2021-01-01") end ("2021-01-10") every (interval 1 day));
+create table t2 (dt varchar(20), id int) partition by range(str2date(dt, "%Y-%m")) (start ("2021-01-01") end ("2021-01-10") every (interval 1 day));
+create table t3 (dt varchar(20), id int) partition by str2date(dt, "%Y-%m-%d");

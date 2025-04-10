@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 30
 ---
 
 # 明细表
@@ -39,8 +40,8 @@ PROPERTIES (
 
 > **注意**
 >
-> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键，否则建表失败。分桶键的更多说明，请参见[分桶](../Data_distribution.md#分桶)。
-> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../Data_distribution.md#设置分桶数量)。
+> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键，否则建表失败。分桶键的更多说明，请参见[分桶](../data_distribution/Data_distribution.md#分桶)。
+> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 使用说明
 
@@ -50,12 +51,11 @@ PROPERTIES (
     > 如果未指定，则默认选择表的前三列作为排序键。
 
   - 明细表中的排序键可以为部分或全部维度列。
-
 - 建表时，支持为指标列创建 BITMAP、Bloom Filter 等索引。
 
 ## 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/loading_introduction/Loading_intro.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/Loading_intro.md)。
 
 > - 导入时，支持追加新数据，不支持修改历史数据。
 > - 如果导入两行完全相同的数据，则明细表会将这两行数据视为两行，而不是一行。

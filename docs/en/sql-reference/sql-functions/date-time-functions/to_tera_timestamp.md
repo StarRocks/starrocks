@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # to_tera_timestamp
 
 ## Description
 
-Converts the specified VARCHAR value into a DATETIME value in the specified format.
+Parses a date or time string according to the specified format and converts the string to a DATETIME  value.
 
 ## Syntax
 
@@ -16,21 +16,21 @@ DATETIME to_tera_timestamp(VARCHAR str, VARCHAR format)
 
 ## Parameters
 
-- `str`: the time expression you want to convert. It must be of the VARCHAR type.
+- `str`: the time expression to convert. It must be of the VARCHAR type.
 
-- `format`: the format of the DATETIME value to be returned.
+- `format`: the time format specifier for `str`. It is used to parse and convert the input string. `format` must match `string`. Otherwise, NULL is returned. If `format` is invalid, an error is returned.
 
   The following table describes the format elements.
 
   | **Element**           | **Description**                             |
   | --------------------- | ------------------------------------------- |
-  | [ \r \n \t - / , . ;] | Punctuation characters are ignored.         |
-  | dd                    | Day of the month. Valid values: `1` - `31`. |
-  | hh                    | Hour of the day. Valid values: `1` - `12`.  |
-  | hh24                  | Hour of the day. Valid values: `0` - `23`.  |
-  | mi                    | Minute. Valid values: `0` - `59`.           |
-  | mm                    | Month. Valid values: `01` - `12`.           |
-  | ss                    | Second. Valid values: `0` - `59`.           |
+  | [ \r \n \t - / , . ;] | Punctuation characters that are ignored in conversion       |
+  | dd                    | Day of month (1 - 31)                       |
+  | hh                    | Hour of day (1 - 12)                        |
+  | hh24                  | Hour of day (0 - 23)                        |
+  | mi                    | Minute (0 - 59)                             |
+  | mm                    | Month (01 - 12)                             |
+  | ss                    | Second (0 - 59)                             |
   | yyyy                  | 4-digit year.                               |
   | yy                    | 2-digit year.                               |
   | am                    | Meridian indicator.                         |
@@ -38,15 +38,62 @@ DATETIME to_tera_timestamp(VARCHAR str, VARCHAR format)
 
 ## Examples
 
-The following example converts the VARCHAR value `1988/04/08 2:3:4` into a DATETIME value in `yyyy/mm/dd hh24:mi:ss` format.
-
 ```SQL
-MySQL > select to_tera_timestamp("1988/04/08 2:3:4","yyyy/mm/dd hh24:mi:ss");
-+-----------------------------------------------------------+
+select to_tera_timestamp("1988/04/08","yyyy/mm/dd");
++-----------------------------------------------+
+| to_tera_timestamp('1988/04/08', 'yyyy/mm/dd') |
++-----------------------------------------------+
+| 1988-04-08 00:00:00                           |
++-----------------------------------------------+
+
+select to_tera_timestamp("04-08-1988","mm-dd-yyyy");
++-----------------------------------------------+
+| to_tera_timestamp('04-08-1988', 'mm-dd-yyyy') |
++-----------------------------------------------+
+| 1988-04-08 00:00:00                           |
++-----------------------------------------------+
+
+select to_tera_timestamp("04.1988,08","mm.yyyy,dd");
++-----------------------------------------------+
+| to_tera_timestamp('04.1988,08', 'mm.yyyy,dd') |
++-----------------------------------------------+
+| 1988-04-08 00:00:00                           |
++-----------------------------------------------+
+
+select to_tera_timestamp("1988/04/08 2","yyyy/mm/dd hh");
++----------------------------------------------------+
+| to_tera_timestamp('1988/04/08 2', 'yyyy/mm/dd hh') |
++----------------------------------------------------+
+| 1988-04-08 02:00:00                                |
++----------------------------------------------------+
+
+select to_tera_timestamp("1988/04/08 14","yyyy/mm/dd hh24");
++-------------------------------------------------------+
+| to_tera_timestamp('1988/04/08 14', 'yyyy/mm/dd hh24') |
++-------------------------------------------------------+
+| 1988-04-08 14:00:00                                   |
++-------------------------------------------------------+
+
+select to_tera_timestamp("1988/04/08 14:15","yyyy/mm/dd hh24:mi");
++-------------------------------------------------------------+
+| to_tera_timestamp('1988/04/08 14:15', 'yyyy/mm/dd hh24:mi') |
++-------------------------------------------------------------+
+| 1988-04-08 14:15:00                                         |
++-------------------------------------------------------------+
+
+select to_tera_timestamp("1988/04/08 2:3:4","yyyy/mm/dd hh24:mi:ss");
++----------------------------------------------------------------+
 | to_tera_timestamp('1988/04/08 2:3:4', 'yyyy/mm/dd hh24:mi:ss') |
-+-----------------------------------------------------------+
-| 1988-04-08 02:03:04                                       |
-+-----------------------------------------------------------+
++----------------------------------------------------------------+
+| 1988-04-08 02:03:04                                            |
++----------------------------------------------------------------+
+
+select to_tera_timestamp("1988/04/08 02 am:3:4","yyyy/mm/dd hh am:mi:ss");
++---------------------------------------------------------------------+
+| to_tera_timestamp('1988/04/08 02 am:3:4', 'yyyy/mm/dd hh am:mi:ss') |
++---------------------------------------------------------------------+
+| 1988-04-08 02:03:04                                                 |
++---------------------------------------------------------------------+
 ```
 
 ## Keywords

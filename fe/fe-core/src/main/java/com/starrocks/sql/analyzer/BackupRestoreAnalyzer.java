@@ -22,11 +22,9 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -78,7 +76,7 @@ public class BackupRestoreAnalyzer {
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
-            Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             List<TableRef> tableRefs = backupStmt.getTableRefs();
             // If TableRefs is empty, it means that we do not specify any table in Backup stmt.
             // We should backup all table in current database.
@@ -237,7 +235,7 @@ public class BackupRestoreAnalyzer {
         public Void visitRestoreStatement(RestoreStmt restoreStmt, ConnectContext context) {
             List<TableRef> tableRefs = restoreStmt.getTableRefs();
             Set<String> aliasSet = Sets.newHashSet();
-            Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             for (TableRef tableRef : tableRefs) {
                 TableName tableName = tableRef.getName();
 
@@ -392,13 +390,6 @@ public class BackupRestoreAnalyzer {
             if (tblAlias != null && tbl != tblAlias) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "table [" + alias + "] existed");
-            }
-        }
-
-        if (tbl instanceof OlapTable) {
-            PartitionInfo partitionInfo = ((OlapTable) tbl).getPartitionInfo();
-            if (partitionInfo instanceof ListPartitionInfo) {
-                throw new SemanticException("List partition table does not support backup/restore job");
             }
         }
 

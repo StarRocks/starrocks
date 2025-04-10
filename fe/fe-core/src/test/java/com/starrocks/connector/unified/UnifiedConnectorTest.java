@@ -19,6 +19,11 @@ import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonConnector;
+import com.starrocks.connector.paimon.PaimonMetadata;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -27,15 +32,24 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UnifiedConnectorTest {
+    @Mocked private PaimonConnector paimonConnector;
+    @Mocked private PaimonMetadata paimonMetadata;
 
     @Test
-    public void testCreateUnifiedConnectorFromConnectorFactory() {
+    public void testCreateUnifiedConnectorFromConnectorFactory() throws StarRocksConnectorException {
+        new Expectations() {
+            {
+                paimonConnector.getMetadata();
+                result = paimonMetadata;
+            }
+        };
         Map<String, String> properties = new HashMap<>();
         properties.put("type", "unified");
         properties.put("unified.metastore.type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+        properties.put("paimon.catalog.warehouse", "file:///tmp/");
         ConnectorContext context = new ConnectorContext("unified_catalog", "unified", properties);
-        CatalogConnector catalogConnector = ConnectorFactory.createConnector(context);
+        CatalogConnector catalogConnector = ConnectorFactory.createConnector(context, false);
         ConnectorMetadata metadata = catalogConnector.getMetadata();
         assertTrue(metadata instanceof CatalogConnectorMetadata);
         catalogConnector.shutdown();
@@ -43,10 +57,17 @@ public class UnifiedConnectorTest {
 
     @Test
     public void testCreateUnifiedConnector() {
+        new Expectations() {
+            {
+                paimonConnector.getMetadata();
+                result = paimonMetadata;
+            }
+        };
         Map<String, String> properties = new HashMap<>();
         properties.put("type", "unified");
         properties.put("unified.metastore.type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+        properties.put("paimon.catalog.warehouse", "file:///tmp/");
         ConnectorContext context = new ConnectorContext("unified_catalog", "unified", properties);
         UnifiedConnector unifiedConnector = new UnifiedConnector(context);
         ConnectorMetadata metadata = unifiedConnector.getMetadata();

@@ -26,8 +26,8 @@ public class SelectConstTest extends PlanTestBase {
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select a from (select 1 as a, 2 as b) t", "  1:Project\n" +
-                "  |  <slot 2> : 1\n" +
+        assertPlanContains("select a from (select 1 as a, 2 as b) t", "1:Project\n" +
+                "  |  <slot 4> : 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -60,22 +60,31 @@ public class SelectConstTest extends PlanTestBase {
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a", "  2:Project\n" +
-                "  |  <slot 6> : 2\n" +
-                "  |  <slot 7> : 1\n" +
+        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a", " 5:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 7> : 2\n" +
                 "  |  \n" +
-                "  1:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
+                "  4:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 1");
     }
 
     @Test
     public void testValuesNodePredicate() throws Exception {
         assertPlanContains("select database()", "<slot 2> : 'test'");
         assertPlanContains("select schema()", "<slot 2> : 'test'");
-        assertPlanContains("select user()", "<slot 2> : USER()");
-        assertPlanContains("select current_user()", "<slot 2> : CURRENT_USER()");
-        assertPlanContains("select connection_id()", "<slot 2> : CONNECTION_ID()");
+        assertPlanContains("select user()", "<slot 2> : '\\'root\\'@%'");
+        assertPlanContains("select current_user()", "<slot 2> : '\\'root\\'@\\'%\\''");
+        assertPlanContains("select connection_id()", "<slot 2> : 0");
+        assertPlanContains("select current_role()", "<slot 2> : 'root'");
     }
 
     @Test
@@ -91,12 +100,12 @@ public class SelectConstTest extends PlanTestBase {
     public void testAggWithConstant() throws Exception {
         assertPlanContains("select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a " +
                         "group by rollup(case  when c1=1 then 1 end, 1 + 1)",
-                "<slot 4> : '2'",
-                "<slot 2> : '1'",
-                "  8:REPEAT_NODE\n" +
+                "<slot 6> : if(5: expr = '1', 1, NULL)",
+                "<slot 7> : 2",
+                "  2:REPEAT_NODE\n" +
                         "  |  repeat: repeat 2 lines [[], [6], [6, 7]]\n" +
                         "  |  \n" +
-                        "  7:Project\n" +
+                        "  1:Project\n" +
                         "  |  <slot 6> : if(5: expr = '1', 1, NULL)\n" +
                         "  |  <slot 7> : 2");
     }

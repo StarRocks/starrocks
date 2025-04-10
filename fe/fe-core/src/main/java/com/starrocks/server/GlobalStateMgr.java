@@ -67,7 +67,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -90,6 +89,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -100,6 +100,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -158,10 +160,12 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
+import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -180,6 +184,7 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -189,6 +194,7 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -386,6 +392,7 @@ public class GlobalStateMgr {
     private RoutineLoadMgr routineLoadMgr;
     private StreamLoadMgr streamLoadMgr;
     private ExportMgr exportMgr;
+    private final MaterializedViewMgr materializedViewMgr;
 
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
@@ -546,6 +553,9 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionMgr compactionMgr;
 
+    // For compaction forbidden policy
+    private final CompactionControlScheduler compactionControlScheduler;
+
     private WarehouseManager warehouseMgr;
 
     private ConfigRefreshDaemon configRefreshDaemon;
@@ -564,10 +574,15 @@ public class GlobalStateMgr {
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
+    private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
 
     private MemoryUsageTracker memoryUsageTracker;
 
+    private ProcProfileCollector procProfileCollector;
+
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+
+    private final GlobalConstraintManager globalConstraintManager;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -615,7 +630,7 @@ public class GlobalStateMgr {
         return nodeMgr.getClusterInfo();
     }
 
-    private HeartbeatMgr getHeartbeatMgr() {
+    public HeartbeatMgr getHeartbeatMgr() {
         return heartbeatMgr;
     }
 
@@ -655,6 +670,10 @@ public class GlobalStateMgr {
 
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
+    }
+
+    public CompactionControlScheduler getCompactionControlScheduler() {
+        return compactionControlScheduler;
     }
 
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
@@ -701,6 +720,7 @@ public class GlobalStateMgr {
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
+        this.materializedViewMgr = new MaterializedViewMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
@@ -790,6 +810,7 @@ public class GlobalStateMgr {
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
+        this.compactionControlScheduler = new CompactionControlScheduler();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
@@ -805,6 +826,8 @@ public class GlobalStateMgr {
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
+
+        this.globalConstraintManager = new GlobalConstraintManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -829,6 +852,9 @@ public class GlobalStateMgr {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
                     loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
+                if (Config.max_broker_load_job_concurrency != pendingLoadTaskScheduler.getCorePoolSize()) {
+                    pendingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
+                }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
             }
@@ -838,10 +864,16 @@ public class GlobalStateMgr {
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+        this.procProfileCollector = new ProcProfileCollector();
     }
 
     public static void destroyCheckpoint() {
         if (CHECKPOINT != null) {
+            try {
+                CHECKPOINT.shutdown();
+            } catch (Exception e) {
+                LOG.warn("exception when destroy checkpoint", e);
+            }
             CHECKPOINT = null;
         }
     }
@@ -1085,6 +1117,10 @@ public class GlobalStateMgr {
 
     public ReplicationMgr getReplicationMgr() {
         return replicationMgr;
+    }
+
+    public GlobalConstraintManager getGlobalConstraintManager() {
+        return globalConstraintManager;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1485,6 +1521,10 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.isSharedDataMode()) {
+            // Need to rebuild active lake compaction transactions before lake scheduler starting to run
+            // Lake compactionMgr is started on all FE nodes and scheduler only starts to run when the FE is leader
+            compactionMgr.buildActiveCompactionTransactionMap();
+
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
@@ -1528,6 +1568,8 @@ public class GlobalStateMgr {
 
         lockChecker.start();
 
+        procProfileCollector.start();
+
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
     }
@@ -1563,6 +1605,8 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+    // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
@@ -1610,10 +1654,11 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
                         .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
                         .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
-                        .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                        .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                        .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
                         .build();
 
                 Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1647,6 +1692,10 @@ public class GlobalStateMgr {
                              */
                             metaMgrMustExists.remove(srMetaBlockID);
                             LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                        } catch (Throwable t) {
+                            LOG.warn("load meta block {} failed", srMetaBlockID, t);
+                            // throw the exception again, because the following steps will depend on this error.
+                            throw t;
                         } finally {
                             reader.close();
                         }
@@ -1713,7 +1762,7 @@ public class GlobalStateMgr {
                 remoteChecksum = dis.readLong();
                 checksum = loadStreamLoadManager(dis, checksum);
                 remoteChecksum = dis.readLong();
-                checksum = MaterializedViewMgr.getInstance().reload(dis, checksum);
+                checksum = materializedViewMgr.reload(dis, checksum);
                 remoteChecksum = dis.readLong();
                 globalFunctionMgr.loadGlobalFunctions(dis, checksum);
                 loadRBACPrivilege(dis);
@@ -1754,7 +1803,30 @@ public class GlobalStateMgr {
     }
 
     private void postLoadImage() {
+        onReloadTables();
         processMvRelatedMeta();
+    }
+
+    /**
+     * Call Table::onReload after load all tables, some properties like FK may depend on other databases/catalogs
+     */
+    private void onReloadTables() {
+        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        for (String dbName : dbNames) {
+            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+            if (db == null) {
+                continue;
+            }
+            for (Table table : db.getTables()) {
+                try {
+                    if (!table.isMaterializedView()) {
+                        table.onReload();
+                    }
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", table, e);
+                }
+            }
+        }
     }
 
     private void processMvRelatedMeta() {
@@ -1957,6 +2029,8 @@ public class GlobalStateMgr {
         }
     }
 
+    // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
             if (!curFile.createNewFile()) {
@@ -1999,10 +2073,11 @@ public class GlobalStateMgr {
                     insertOverwriteJobMgr.save(dos);
                     compactionMgr.save(dos);
                     streamLoadMgr.save(dos);
-                    MaterializedViewMgr.getInstance().save(dos);
+                    materializedViewMgr.save(dos);
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
                     replicationMgr.save(dos);
+                    pipeManager.getRepo().save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -2057,7 +2132,7 @@ public class GlobalStateMgr {
                 dos.writeLong(checksum);
                 checksum = streamLoadMgr.saveStreamLoadManager(dos, checksum);
                 dos.writeLong(checksum);
-                checksum = MaterializedViewMgr.getInstance().store(dos, checksum);
+                checksum = materializedViewMgr.store(dos, checksum);
                 dos.writeLong(checksum);
                 globalFunctionMgr.saveGlobalFunctions(dos, checksum);
                 saveRBACPrivilege(dos);
@@ -2369,17 +2444,16 @@ public class GlobalStateMgr {
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
-                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
-                            replayedJournalId.incrementAndGet(),
-                            entity == null ? null : GsonUtils.GSON.toJson(entity.getData()),
-                            e);
+                    LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
                     if (!readSucc) {
                         cursor.skipNext();
                     }
                     continue;
                 }
                 // handled in outer loop
-                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                LOG.warn("catch exception when replaying journal, id: {}, data: {},",
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
             }
 
@@ -2411,10 +2485,23 @@ public class GlobalStateMgr {
 
         }
         if (replayedJournalId.get() - startReplayId > 0) {
-            LOG.info("replayed journal from {} - {}", startReplayId, replayedJournalId);
+            LOG.debug("replayed journal from {} - {}", startReplayId, replayedJournalId);
             return true;
         }
         return false;
+    }
+
+    private String journalEntityToReadableString(JournalEntity entity) {
+        if (entity == null) {
+            return "null";
+        }
+        Writable data = entity.getData();
+        try {
+            return GsonUtils.GSON.toJson(data);
+        } catch (Exception e) {
+            // In older version, data may not be json, here we just return the class name.
+            return data.getClass().getName();
+        }
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
@@ -2613,7 +2700,7 @@ public class GlobalStateMgr {
             sb.append(")");
             addTableComment(sb, view);
 
-            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+            sb.append(" AS ").append(view.getInlineViewDefWithoutCredential()).append(";");
             createTableStmt.add(sb.toString());
             return;
         }
@@ -2761,6 +2848,24 @@ public class GlobalStateMgr {
                         .append(olapTable.getAutomaticBucketSize()).append("\"");
             }
 
+            // base compaction forbidden time ranges
+            if (!olapTable.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)
+                        .append("\" = \"")
+                        .append(olapTable.getBaseCompactionForbiddenTimeRanges()).append("\"");
+            }
+
+            // locations
+            if (olapTable.getLocation() != null) {
+                String locations = PropertyAnalyzer.convertLocationMapToString(olapTable.getLocation());
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)
+                        .append("\" = \"")
+                        .append(locations)
+                        .append("\"");
+            }
+
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
@@ -2871,7 +2976,8 @@ public class GlobalStateMgr {
 
                 // foreign key constraint
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))
+                        && olapTable.hasForeignKeyConstraints()) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                             .append("\" = \"");
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
@@ -3155,6 +3261,10 @@ public class GlobalStateMgr {
         localMetastore.replayDeleteReplica(info);
     }
 
+    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        localMetastore.replayBatchDeleteReplica(info);
+    }
+
     public void replayAddFrontend(Frontend fe) {
         nodeMgr.replayAddFrontend(fe);
     }
@@ -3213,6 +3323,10 @@ public class GlobalStateMgr {
 
     public Collection<Partition> getPartitionsIncludeRecycleBin(OlapTable table) {
         return localMetastore.getPartitionsIncludeRecycleBin(table);
+    }
+
+    public PhysicalPartition getPhysicalPartitionIncludeRecycleBin(OlapTable table, long partitionId) {
+        return localMetastore.getPhysicalPartitionIncludeRecycleBin(table, partitionId);
     }
 
     public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable table) {
@@ -3312,6 +3426,10 @@ public class GlobalStateMgr {
 
     public ExportMgr getExportMgr() {
         return this.exportMgr;
+    }
+
+    public MaterializedViewMgr getMaterializedViewMgr() {
+        return this.materializedViewMgr;
     }
 
     public SmallFileMgr getSmallFileMgr() {
@@ -3651,8 +3769,8 @@ public class GlobalStateMgr {
         localMetastore.modifyTableConstraint(db, tableName, properties);
     }
 
-    public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
-        localMetastore.setHasForbitGlobalDict(dbName, tableName, isForbit);
+    public void setHasForbiddenGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+        localMetastore.setHasForbiddenGlobalDict(dbName, tableName, isForbit);
     }
 
     public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {
@@ -4264,6 +4382,10 @@ public class GlobalStateMgr {
         return slotProvider;
     }
 
+    public GlobalLoadJobListenerBus getOperationListenerBus() {
+        return operationListenerBus;
+    }
+
     public ResourceUsageMonitor getResourceUsageMonitor() {
         return resourceUsageMonitor;
     }
@@ -4278,5 +4400,10 @@ public class GlobalStateMgr {
 
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
+    }
+
+    public void shutdown() {
+        // in a single thread.
+        connectorMgr.shutdown();
     }
 }

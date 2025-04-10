@@ -36,6 +36,7 @@
 
 #include "common/closure_guard.h"
 #include "common/config.h"
+#include "common/utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"
@@ -91,6 +92,87 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunks(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunks(*request, response);
+}
+
+template <typename T>
+static bool parse_from_iobuf(butil::IOBuf& iobuf, T* proto_obj) {
+    // 1. deserialize protobuf
+    size_t protobuf_size = 0;
+    if (!iobuf.cutn(&protobuf_size, sizeof(protobuf_size))) {
+        LOG(ERROR) << "Failed to read protobuf_size";
+        return false;
+    }
+    butil::IOBuf protobuf_buf;
+    if (!iobuf.cutn(&protobuf_buf, protobuf_size)) {
+        LOG(ERROR) << "Failed to cut the protobuf_size from the io buffer";
+        return false;
+    }
+    butil::IOBufAsZeroCopyInputStream wrapper(protobuf_buf);
+    if (!proto_obj->ParseFromZeroCopyStream(&wrapper)) {
+        LOG(ERROR) << "Failed to parse the protobuf";
+        return false;
+    }
+    // 2. deserialize chunks
+    if constexpr (std::is_same<T, PTabletWriterAddChunkRequest>::value) {
+        auto chunk = proto_obj->mutable_chunk();
+        if (iobuf.size() < chunk->data_size()) {
+            LOG(ERROR) << fmt::format("Not enough data in iobuf. Expected: {}, available: {}.", chunk->data_size(),
+                                      iobuf.size());
+            return false;
+        }
+        auto size = iobuf.cutn(chunk->mutable_data(), chunk->data_size());
+        if (size != chunk->data_size()) {
+            LOG(ERROR) << fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
+            return false;
+        }
+    } else if constexpr (std::is_same<T, PTabletWriterAddChunksRequest>::value) {
+        for (int i = 0; i < proto_obj->requests_size(); i++) {
+            auto chunk = proto_obj->mutable_requests(i)->mutable_chunk();
+            if (iobuf.size() < chunk->data_size()) {
+                LOG(ERROR) << fmt::format("Not enough data in iobuf. Expected: {}, available: {}.", chunk->data_size(),
+                                          iobuf.size());
+                return false;
+            }
+            auto size = iobuf.cutn(chunk->mutable_data(), chunk->data_size());
+            if (size != chunk->data_size()) {
+                LOG(ERROR) << fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
+                                                                     const PHttpRequest* request,
+                                                                     PTabletWriterAddBatchResult* response,
+                                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto add_chunk_req = std::make_shared<PTabletWriterAddChunkRequest>();
+    auto* cntl = static_cast<brpc::Controller*>(controller);
+    if (!parse_from_iobuf<PTabletWriterAddChunkRequest>(cntl->request_attachment(), add_chunk_req.get())) {
+        LOG(ERROR) << "parse from iobuf failed";
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        return;
+    }
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(*add_chunk_req, response);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller,
+                                                                      const PHttpRequest* request,
+                                                                      PTabletWriterAddBatchResult* response,
+                                                                      google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto add_chunk_req = std::make_shared<PTabletWriterAddChunksRequest>();
+    auto* cntl = static_cast<brpc::Controller*>(controller);
+    if (!parse_from_iobuf<PTabletWriterAddChunksRequest>(cntl->request_attachment(), add_chunk_req.get())) {
+        LOG(ERROR) << "parse from iobuf failed";
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        return;
+    }
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunks(*add_chunk_req, response);
 }
 
 template <typename T>

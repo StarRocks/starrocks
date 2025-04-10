@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 description: Cloud based Kafka from AutoMQ
 ---
 
 # AutoMQ Kafka
 
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.md'
 
 [AutoMQ for Kafka](https://www.automq.com/docs) is a cloud-native version of Kafka redesigned for cloud environments.
 AutoMQ Kafka is [open source](https://github.com/AutoMQ/automq-for-kafka) and fully compatible with the Kafka protocol, fully leveraging cloud benefits.
@@ -18,7 +18,7 @@ For an understanding of the basic principles of Routine Load, refer to the secti
 
 ### Prepare StarRocks and test data
 
-Ensure you have a running StarRocks cluster. For demonstration purposes, this article follow the [deployment guide](../quick_start/shared-nothing.md) to install a StarRocks cluster on a Linux machine via Docker.
+Ensure you have a running StarRocks cluster.
 
 Creating a database and a Primary Key table for testing:
 

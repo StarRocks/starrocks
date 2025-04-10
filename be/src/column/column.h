@@ -177,6 +177,7 @@ public:
         }
         return dest;
     }
+
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 
@@ -261,9 +262,7 @@ public:
     // we need one buffer to hold tmp serialize data,
     // So we need to know the max serialize_size for all column element
     // The bad thing is we couldn't get the string defined len from FE when query
-    virtual uint32_t max_one_element_serialize_size() const {
-        return 16; // For Non-string type, 16 is enough.
-    }
+    virtual uint32_t max_one_element_serialize_size() const = 0;
 
     // serialize one data,The memory must allocate firstly from mempool
     virtual uint32_t serialize(size_t idx, uint8_t* pos) = 0;
@@ -355,7 +354,7 @@ public:
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
     // Push one row to MysqlRowBuffer
-    virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
+    virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const = 0;
 
     void set_delete_state(DelCondSatisfied delete_state) { _delete_state = delete_state; }
 

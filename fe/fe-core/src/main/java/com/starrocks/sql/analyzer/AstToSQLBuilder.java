@@ -22,9 +22,11 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -36,12 +38,18 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -53,15 +61,33 @@ import static java.util.stream.Collectors.toList;
  * Such as string serialization of views
  */
 public class AstToSQLBuilder {
+    private static final Logger LOG = LogManager.getLogger(AstToSQLBuilder.class);
 
     public static String buildSimple(StatementBase statement) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
-        return new AST2SQLBuilderVisitor(sameCatalogDb, false).visit(statement);
+        return new AST2SQLBuilderVisitor(sameCatalogDb, false, true).visit(statement);
     }
 
     public static String toSQL(ParseNode statement) {
-        return new AST2SQLBuilderVisitor(false, false).visit(statement);
+        return new AST2SQLBuilderVisitor(false, false, true).visit(statement);
+    }
+
+    // for executable SQL with credential, such as pipe insert sql
+    public static String toSQLWithCredential(ParseNode statement) {
+        return new AST2SQLBuilderVisitor(false, false, false).visit(statement);
+    }
+
+    // return sql from ast or default sql if builder throws exception.
+    // for example, `select from files` needs file schema to generate sql from ast.
+    // If BE is down, the schema will be null, and an exception will be thrown when writing audit log.
+    public static String toSQLOrDefault(ParseNode statement, String defaultSql) {
+        try {
+            return toSQL(statement);
+        } catch (Exception e) {
+            LOG.info("Ast to sql failed.", e);
+            return defaultSql;
+        }
     }
 
     public static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
@@ -69,7 +95,8 @@ public class AstToSQLBuilder {
         protected final boolean simple;
         protected final boolean withoutTbl;
 
-        public AST2SQLBuilderVisitor(boolean simple, boolean withoutTbl) {
+        public AST2SQLBuilderVisitor(boolean simple, boolean withoutTbl, boolean hideCredential) {
+            super(hideCredential);
             this.simple = simple;
             this.withoutTbl = withoutTbl;
         }
@@ -303,7 +330,8 @@ public class AstToSQLBuilder {
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
 
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            List<String> childSql = Optional.ofNullable(node.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
@@ -331,7 +359,9 @@ public class AstToSQLBuilder {
             sqlBuilder.append(tableFunction.getFunctionName());
             sqlBuilder.append("(");
             sqlBuilder.append(
-                    tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+                    Optional.ofNullable(tableFunction.getChildExpressions())
+                            .orElse(Collections.emptyList()).stream().map(this::visit)
+                            .collect(Collectors.joining(",")));
             sqlBuilder.append(")");
             sqlBuilder.append(")"); // TABLE(
 
@@ -383,7 +413,13 @@ public class AstToSQLBuilder {
             }
 
             // target
-            sb.append(insert.getTableName().toSql()).append(" ");
+            if (insert.useTableFunctionAsTargetTable()) {
+                sb.append(visitFileTableFunction(
+                        new FileTableFunctionRelation(insert.getTableFunctionProperties(), NodePosition.ZERO), context));
+            } else {
+                sb.append(insert.getTableName().toSql());
+            }
+            sb.append(" ");
 
             // target partition
             if (insert.getTargetPartitionNames() != null &&
@@ -409,6 +445,28 @@ public class AstToSQLBuilder {
             if (insert.getQueryStatement() != null) {
                 sb.append(visit(insert.getQueryStatement()));
             }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCreatePipeStatement(CreatePipeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE ");
+            if (stmt.isReplace()) {
+                sb.append("OR REPLACE ");
+            }
+            sb.append("PIPE ");
+            if (stmt.isIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getPipeName()).append(" ");
+
+            Map<String, String> properties = stmt.getProperties();
+            if (properties != null && !properties.isEmpty()) {
+                sb.append("PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false, hideCredential)).append(") ");
+            }
+
+            sb.append("AS ").append(visitInsertStatement(stmt.getInsertStmt(), context));
             return sb.toString();
         }
 

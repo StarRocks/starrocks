@@ -33,8 +33,10 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.NegotiateState;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.ConnectScheduler;
@@ -89,17 +91,18 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         context.setConnectScheduler(connectScheduler);
                         // authenticate check failed.
                         result = MysqlProto.negotiate(context);
-                        if (!result.isSuccess()) {
-                            throw new AfterConnectedException("mysql negotiate failed");
+                        if (result.getState() != NegotiateState.OK) {
+                            throw new AfterConnectedException(result.getState().getMsg());
                         }
-                        if (connectScheduler.registerConnection(context)) {
-                            MysqlProto.sendResponsePacket(context);
+                        Pair<Boolean, String> registerResult = connectScheduler.registerConnection(context);
+                        if (registerResult.first) {
                             connection.setCloseListener(
                                     streamConnection -> connectScheduler.unregisterConnection(context));
-                        } else {
-                            context.getState().setError("Reach limit of connections");
                             MysqlProto.sendResponsePacket(context);
-                            throw new AfterConnectedException("Reach limit of connections");
+                        } else {
+                            context.getState().setError(registerResult.second);
+                            MysqlProto.sendResponsePacket(context);
+                            throw new AfterConnectedException(registerResult.second);
                         }
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);
@@ -119,9 +122,12 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         context.cleanup();
                         context.getState().setError(e.getMessage());
                     } finally {
-                        LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
-                                result == null ? null : result.getAuthPacket());
-                        ConnectContext.remove();
+                        // Ignore the NegotiateState.READ_FIRST_AUTH_PKG_FAILED connections,
+                        // because this maybe caused by port probe.
+                        if (result != null && result.getState() != NegotiateState.READ_FIRST_AUTH_PKG_FAILED) {
+                            LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, result.getAuthPacket());
+                            ConnectContext.remove();
+                        }
                     }
                 });
             } catch (Throwable e) {

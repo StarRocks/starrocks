@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_to_bitmap
@@ -16,7 +16,7 @@ array_to_bitmap(array)
 
 ## 参数说明
 
-`array`: array 内的元素支持的数据类型包括 INT，TINYINT，SMALLINT。
+`array`: array 内的元素支持的数据类型包括 BIGINT, INT，TINYINT，SMALLINT。
 
 ## 返回值说明
 

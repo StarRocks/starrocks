@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
+import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Test;
@@ -117,5 +118,56 @@ public class ComputeNodeTest {
         boolean needSync = node.handleHbResponse(hbResponse, false);
         Assert.assertTrue(node.getLastStartTime() == 1000000L);
         Assert.assertTrue(needSync);
+    }
+
+    BackendHbResponse generateHbResponse(ComputeNode node, TStatusCode tStatusCode, long rebootTimeSecs) {
+        if (tStatusCode != TStatusCode.OK) {
+            return new BackendHbResponse(node.getId(), "Unknown Error");
+        }
+        BackendHbResponse hbResponse =
+                new BackendHbResponse(node.getId(), node.getBePort(), node.getHttpPort(), node.getBrpcPort(),
+                        node.getStarletPort(), System.currentTimeMillis(), node.getVersion(), node.getCpuCores());
+        hbResponse.setRebootTime(rebootTimeSecs);
+        return hbResponse;
+    }
+
+    @Test
+    public void testComputeNodeLastStartTimeUpdate() {
+        int previousRetryTimes = Config.heartbeat_retry_times;
+        // no retry, set to not_alive for the first hb failure
+        Config.heartbeat_retry_times = 0;
+
+        long nodeId = 1000;
+        ComputeNode node = new ComputeNode(nodeId, "127.0.0.1", 9050);
+        long rebootTimeA = System.currentTimeMillis() / 1000 - 60;
+        BackendHbResponse hbResponse;
+
+        hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTimeA);
+        Assert.assertTrue(node.handleHbResponse(hbResponse, false));
+        Assert.assertEquals(rebootTimeA * 1000, node.getLastStartTime());
+        Assert.assertTrue(node.isAlive());
+
+        // simulate that a few intermittent heartbeat probing failures due to high load or unstable network.
+        // FE marks the BE as dead and then the node is back alive
+        hbResponse = generateHbResponse(node, TStatusCode.THRIFT_RPC_ERROR, 0);
+        Assert.assertTrue(node.handleHbResponse(hbResponse, false));
+        Assert.assertFalse(node.isAlive());
+        // BE reports heartbeat with the same rebootTime
+        hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTimeA);
+        Assert.assertTrue(node.handleHbResponse(hbResponse, false));
+        Assert.assertTrue(node.isAlive());
+        // reboot time should not change
+        Assert.assertEquals(rebootTimeA * 1000, node.getLastStartTime());
+
+        // response an OK status, but the rebootTime changed.
+        // This simulates the case that the BE is restarted quickly in between the two heartbeat probes.
+        long rebootTimeB = System.currentTimeMillis() / 1000;
+        hbResponse = generateHbResponse(node, TStatusCode.OK, rebootTimeB);
+        Assert.assertTrue(node.handleHbResponse(hbResponse, false));
+        Assert.assertTrue(node.isAlive());
+        // reboot time changed
+        Assert.assertEquals(rebootTimeB * 1000, node.getLastStartTime());
+
+        Config.heartbeat_retry_times = previousRetryTimes;
     }
 }

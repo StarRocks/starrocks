@@ -25,9 +25,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 
 public class AnalyzeTestUtil {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-    private static String DB_NAME = "test";
+    protected static ConnectContext connectContext;
+    protected static StarRocksAssert starRocksAssert;
+    protected static String DB_NAME = "test";
 
     public static void init() throws Exception {
         Config.enable_experimental_rowstore = true;
@@ -68,6 +68,30 @@ public class AnalyzeTestUtil {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v7`, `v8`, v9)\n" +
                 "DISTRIBUTED BY HASH(`v7`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
+                "  `v10` bigint NULL COMMENT \"\",\n" +
+                "  `v11` bigint NULL COMMENT \"\",\n" +
+                "  `v12` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v10`, `v11`, v12)\n" +
+                "DISTRIBUTED BY HASH(`v10`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `T3` (\n" +
+                "  `v10` bigint NULL COMMENT \"\",\n" +
+                "  `v11` bigint NULL COMMENT \"\",\n" +
+                "  `v12` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v10`, `v11`, v12)\n" +
+                "DISTRIBUTED BY HASH(`v10`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
@@ -352,8 +376,6 @@ public class AnalyzeTestUtil {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
-        } catch (Exception e) {
-            Assert.fail("analyze exception: " + e);
         }
     }
 }

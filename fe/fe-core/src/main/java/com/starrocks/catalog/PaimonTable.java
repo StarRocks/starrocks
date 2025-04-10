@@ -25,7 +25,9 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -33,13 +35,18 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 
 public class PaimonTable extends Table {
-    private final String catalogName;
-    private final String databaseName;
-    private final String tableName;
-    private final org.apache.paimon.table.Table paimonNativeTable;
-    private final List<String> partColumnNames;
-    private final List<String> paimonFieldNames;
+    private String catalogName;
+    private String databaseName;
+    private String tableName;
+    private org.apache.paimon.table.Table paimonNativeTable;
+    private List<String> partColumnNames;
+    private List<String> paimonFieldNames;
+    private Map<String, String> properties;
     private long latestSnapshotId;
+
+    public PaimonTable() {
+        super(TableType.PAIMON);
+    }
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable, long createTime) {
@@ -84,6 +91,14 @@ public class PaimonTable extends Table {
         } else {
             return paimonNativeTable.name().toString();
         }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        if (properties == null) {
+            this.properties = new HashMap<>();
+        }
+        return properties;
     }
 
     @Override

@@ -41,13 +41,17 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.annotations.SerializedName;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -60,9 +64,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -71,16 +77,28 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.thrift.TResultBatch;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.util.SizeEstimator;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -98,10 +116,13 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
@@ -169,6 +190,79 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    // NOTE: Have to be consistent with BE implementation in `time_functions.cpp`
+    public static class TimeFunctions {
+        static final int NUMBER_OF_LEAP_YEAR = 366;
+        static final int NUMBER_OF_NON_LEAP_YEAR = 365;
+
+        static long computeDayNR(long year, long month, long day) {
+            long y = year;
+            if (y == 0 && month == 0) {
+                return 0;
+            }
+            long delsum = NUMBER_OF_NON_LEAP_YEAR * y + 31 * (month - 1) + day;
+            if (month <= 2) {
+                y--;
+            } else {
+                delsum -= (month * 4 + 23) / 10;
+            }
+            long tmp = ((y / 100 + 1) * 3) / 4;
+            long result = delsum + y / 4 - tmp;
+            Preconditions.checkArgument(result >= 0);
+            return result;
+        }
+
+        static long computeWeekDay(long days, boolean sundayFirstDayOfWeek) {
+            return (days + 5 + (sundayFirstDayOfWeek ? 1 : 0)) % 7;
+        }
+
+        static long computeDaysInYear(long year) {
+            return (year & 3) == 0 && ((year % 100 != 0) || (year % 400 == 0 && (year != 0))) ? NUMBER_OF_LEAP_YEAR
+                    : NUMBER_OF_NON_LEAP_YEAR;
+        }
+
+        public static long computeWeek(long year, long month, long day, int weekBehaviour) {
+            weekBehaviour = weekBehaviour & 0x7;
+            if ((weekBehaviour & 0x1) == 0) {
+                weekBehaviour ^= 0x4;
+            }
+
+            long days = 0;
+            long dayNR = computeDayNR(year, month, day);
+            long firstDayNR = computeDayNR(year, 1, 1);
+            boolean bMondayFirst = (weekBehaviour & 0x1) != 0;
+            boolean bWeekYear = (weekBehaviour & 0x2) != 0;
+            boolean bFirstWeekDay = (weekBehaviour & 0x4) != 0;
+
+            long weekDay = computeWeekDay(firstDayNR, !bMondayFirst);
+            long yearLocal = year;
+            if (month == 1 && day <= (7 - weekDay)) {
+                if (!bWeekYear && ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4))) {
+                    return 0;
+                }
+                bWeekYear = true;
+                yearLocal--;
+                days = computeDaysInYear(yearLocal);
+                firstDayNR -= days;
+                weekDay = (weekDay + 53 * 7 - days) % 7;
+            }
+
+            if ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4)) {
+                days = dayNR - (firstDayNR + 7 - weekDay);
+            } else {
+                days = dayNR - (firstDayNR - weekDay);
+            }
+            if (bWeekYear && days >= 52 * 7) {
+                weekDay = (weekDay + computeDaysInYear(yearLocal)) % 7;
+                if ((!bFirstWeekDay && weekDay < 4) || (bFirstWeekDay && weekDay == 0)) {
+                    yearLocal++;
+                    return 1;
+                }
+            }
+            return days / 7 + 1;
+        }
+    }
+
     /**
      * date and time function
      */
@@ -182,6 +276,28 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createInt((int) Duration.between(
                 second.getDatetime().truncatedTo(ChronoUnit.DAYS),
                 first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "to_days", argTypes = {DATETIME}, returnType = INT, isMonotonic = true),
+            @ConstantFunction(name = "to_days", argTypes = {DATE}, returnType = INT, isMonotonic = true)
+    })
+    public static ConstantOperator to_days(ConstantOperator first) {
+        ConstantOperator second = ConstantOperator.createDatetime(LocalDateTime.of(0000, 01, 01, 00, 00, 00));
+        return ConstantOperator.createInt((int) Duration.between(
+                second.getDatetime().truncatedTo(ChronoUnit.DAYS),
+                first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "dayofweek", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "dayofweek", argTypes = {DATE}, returnType = INT),
+            @ConstantFunction(name = "dayofweek", argTypes = {INT}, returnType = INT)
+    })
+    public static ConstantOperator dayofweek(ConstantOperator date) {
+        // LocalDateTime.getDayOfWeek is return day of the week, such as monday is 1 and sunday is 7.
+        // function of dayofweek in starrocks monday is 2 and sunday is 1, so need mod 7 and plus 1.
+        return ConstantOperator.createInt((date.getDatetime().getDayOfWeek().getValue()) % 7 + 1);
     }
 
     @ConstantFunction.List(list = {
@@ -333,6 +449,26 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATETIME, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATE, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true)
+    })
+    public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
+        String format = fmtLiteral.getVarchar();
+        if (format.isEmpty()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
+        DateTime jodaDateTime = new DateTime(date.getDatetime()
+                .atZone(ZoneId.systemDefault()) // Associate with the default time zone of the system
+                .toInstant()
+                .toEpochMilli());
+        return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
+    }
+
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),
             @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR, isMonotonic = true)
     })
@@ -439,6 +575,26 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator year(ConstantOperator arg) {
         return ConstantOperator.createSmallInt((short) arg.getDatetime().getYear());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "week", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE}, returnType = INT)
+    })
+    public static ConstantOperator week(ConstantOperator arg) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
+        return ConstantOperator.createInt((int) result);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "week", argTypes = {DATETIME, INT}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE, INT}, returnType = INT)
+    })
+    public static ConstantOperator weekWithMode(ConstantOperator arg, ConstantOperator mode) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
+        return ConstantOperator.createInt((int) result);
     }
 
     @ConstantFunction.List(list = {
@@ -1140,15 +1296,13 @@ public class ScalarOperatorFunctions {
         if (split.isNull()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
-        final StringBuilder resultBuilder = new StringBuilder();
-        for (int i = 0; i < values.length - 1; i++) {
-            if (values[i].isNull()) {
-                continue;
-            }
-            resultBuilder.append(values[i].getVarchar()).append(split.getVarchar());
-        }
-        resultBuilder.append(values[values.length - 1].getVarchar());
-        return ConstantOperator.createVarchar(resultBuilder.toString());
+        String separator = split.getVarchar();
+        return ConstantOperator.createVarchar(
+                Arrays.stream(values)
+                        .filter(v -> !v.isNull())
+                        .map(ConstantOperator::getVarchar)
+                        .collect(Collectors.joining(separator))
+        );
     }
 
     @ConstantFunction(name = "version", argTypes = {}, returnType = VARCHAR)
@@ -1178,6 +1332,23 @@ public class ScalarOperatorFunctions {
             return ConstantOperator.createVarchar("");
         }
         return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
+    }
+
+    @ConstantFunction(name = "lower", argTypes = {VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator lower(ConstantOperator str) {
+        return ConstantOperator.createVarchar(StringUtils.lowerCase(str.getVarchar()));
+    }
+
+    @ConstantFunction(name = "upper", argTypes = {VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator upper(ConstantOperator str) {
+        return ConstantOperator.createVarchar(StringUtils.upperCase(str.getVarchar()));
+    }
+
+    @ConstantFunction(name = "replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator replace(ConstantOperator value, ConstantOperator target,
+                                           ConstantOperator replacement) {
+        return ConstantOperator.createVarchar(
+                StringUtils.replace(value.getVarchar(), target.getVarchar(), replacement.getVarchar()));
     }
 
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
@@ -1489,5 +1660,82 @@ public class ScalarOperatorFunctions {
         }
 
         return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));
+    }
+
+    public static class LookupRecord {
+
+        @SerializedName("data")
+        public List<String> data;
+
+        public static LookupRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, LookupRecord.class);
+        }
+    }
+
+    private static ConstantOperator deserializeLookupResult(List<TResultBatch> batches) {
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                String jsonString = copied.toString(Charset.defaultCharset());
+                List<String> data = LookupRecord.fromJson(jsonString).data;
+                if (CollectionUtils.isNotEmpty(data)) {
+                    return ConstantOperator.createVarchar(data.get(0));
+                } else {
+                    return ConstantOperator.NULL;
+                }
+            }
+        }
+        return ConstantOperator.NULL;
+    }
+
+    /**
+     * Lookup a value from a primary table, and evaluate in the optimizer
+     *
+     * @param tableName    table to lookup, must be a primary-key table
+     * @param lookupKey    key to lookup, must be a string type
+     * @param returnColumn column to return
+     * @return NULL if not found, otherwise return the value
+     */
+    @ConstantFunction(name = "lookup_string",
+            argTypes = {VARCHAR, VARCHAR, VARCHAR},
+            returnType = VARCHAR,
+            isMetaFunction = true)
+    public static ConstantOperator lookupString(ConstantOperator tableName,
+                                                ConstantOperator lookupKey,
+                                                ConstantOperator returnColumn) {
+        TableName tableNameValue = TableName.fromString(tableName.getVarchar());
+        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableNameValue);
+        maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
+        if (!(maybeTable.get() instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
+        }
+        OlapTable table = (OlapTable) maybeTable.get();
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be PRIMARY_KEY");
+        }
+        if (table.getKeysNum() > 1) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "too many key columns");
+        }
+        Column keyColumn = table.getKeyColumns().get(0);
+
+        String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
+                returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
+        try {
+            List<TResultBatch> result = RepoExecutor.getInstance().executeDQL(sql);
+            return deserializeLookupResult(result);
+        } catch (Throwable e) {
+            final String notFoundMessage = "query failed if record not exist in dict table";
+            Throwable root = ExceptionUtils.getRootCause(e);
+            // Record not found
+            if (e.getMessage().contains(notFoundMessage) ||
+                    root != null && root.getMessage().contains(notFoundMessage)) {
+                return ConstantOperator.NULL;
+            }
+            if (root instanceof StarRocksPlannerException) {
+                throw new SemanticException("lookup failed: " + root.getMessage(), root);
+            } else {
+                throw new SemanticException("lookup failed: " + e.getMessage(), e);
+            }
+        }
     }
 }

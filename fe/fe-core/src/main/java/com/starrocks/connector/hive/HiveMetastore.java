@@ -92,7 +92,7 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public Database getDb(String dbName) {
         org.apache.hadoop.hive.metastore.api.Database db = client.getDb(dbName);
-        return HiveMetastoreApiConverter.toDatabase(db);
+        return HiveMetastoreApiConverter.toDatabase(db, dbName);
     }
 
     @Override

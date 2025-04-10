@@ -25,8 +25,10 @@
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -36,6 +38,7 @@
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
 #include "service/staros_worker.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
@@ -52,7 +55,7 @@ DECLARE_bool(socket_keepalive);
 
 namespace starrocks {
 
-Status init_datacache(GlobalEnv* global_env) {
+Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& storage_paths) {
     if (!config::datacache_enable && config::block_cache_enable) {
         config::datacache_enable = true;
         config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
@@ -83,18 +86,24 @@ Status init_datacache(GlobalEnv* global_env) {
         if (global_env->process_mem_tracker()->has_limit()) {
             mem_limit = global_env->process_mem_tracker()->limit();
         }
-        cache_options.mem_space_size = parse_mem_size(config::datacache_mem_size, mem_limit);
+        RETURN_IF_ERROR(
+                parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit, &cache_options.mem_space_size));
+        if (config::datacache_disk_path.empty()) {
+            // If the disk cache does not be configured for datacache, set default path according storage path.
+            std::vector<std::string> datacache_paths;
+            std::for_each(storage_paths.begin(), storage_paths.end(), [&](const StorePath& root_path) {
+                datacache_paths.push_back(root_path.path + "/datacache");
+            });
+            config::datacache_disk_path = JoinStrings(datacache_paths, ";");
 
-        std::vector<std::string> paths;
-        RETURN_IF_ERROR(parse_conf_datacache_paths(config::datacache_disk_path, &paths));
-        for (auto& p : paths) {
-            int64_t disk_size = parse_disk_size(p, config::datacache_disk_size);
-            if (disk_size < 0) {
-                LOG(ERROR) << "invalid disk size for datacache: " << disk_size;
-                return Status::InvalidArgument("invalid disk size for datacache");
+            // Clear the residual datacache files
+            std::filesystem::path old_path(std::string(getenv("STARROCKS_HOME")) + "/datacache");
+            if (std::filesystem::exists(old_path)) {
+                clean_residual_datacache(old_path.string());
             }
-            cache_options.disk_spaces.push_back({.path = p, .size = static_cast<size_t>(disk_size)});
         }
+        RETURN_IF_ERROR(parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
+                                                         config::ignore_broken_disk, &cache_options.disk_spaces));
 
         // Adjust the default engine based on build switches.
         if (config::datacache_engine == "") {
@@ -150,7 +159,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": jdbc driver manager init successfully";
 
     // init network option
-    if (!BackendOptions::init()) {
+    if (!BackendOptions::init(as_cn)) {
         exit(-1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": backend network options init successfully";
@@ -177,7 +186,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
 
-    if (!init_datacache(global_env).ok()) {
+    if (!init_datacache(global_env, paths).ok()) {
         LOG(ERROR) << "Fail to init datacache";
         exit(1);
     }
@@ -186,6 +195,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     } else {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
+
+    // set up thrift client before providing any service to the external
+    // because these services may use thrift client, for example, stream
+    // load will send thrift rpc to FE after http server is started
+    ThriftRpcHelper::setup(exec_env);
 
     // Start thrift server
     int thrift_port = config::be_port;
@@ -206,9 +220,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
 
     // Configure keepalive.
-#ifdef WITH_BRPC_KEEPALIVE
     brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
-#endif
 
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
@@ -253,7 +265,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    ThriftRpcHelper::setup(exec_env);
     if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {
@@ -272,7 +283,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     LOG(INFO) << process_name << " started successfully";
 
-    while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
+    while (!process_exit_in_progress()) {
         sleep(1);
     }
 
@@ -301,6 +312,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
 
 #ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif

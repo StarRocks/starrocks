@@ -59,6 +59,12 @@ public:
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
 
+    // Update the datacache memory quota.
+    Status update_mem_quota(size_t quota_bytes);
+
+    // Update the datacache disk space infomation, such as disk quota or disk path.
+    Status update_disk_spaces(const std::vector<DirSpace>& spaces);
+
     void record_read_remote(size_t size, int64_t lateny_us);
 
     void record_read_cache(size_t size, int64_t lateny_us);
@@ -70,7 +76,13 @@ public:
 
     size_t block_size() const { return _block_size; }
 
-    bool is_initialized() { return _initialized.load(std::memory_order_relaxed); }
+    bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
+
+    bool has_mem_cache() const { return _mem_quota.load(std::memory_order_relaxed) > 0; }
+
+    bool has_disk_cache() const { return _disk_quota.load(std::memory_order_relaxed) > 0; }
+
+    bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
 
     DataCacheEngineType engine_type();
 
@@ -80,10 +92,13 @@ private:
 #ifndef BE_TEST
     BlockCache() = default;
 #endif
+    void _refresh_quota();
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;
     std::atomic<bool> _initialized = false;
+    std::atomic<size_t> _mem_quota = 0;
+    std::atomic<size_t> _disk_quota = 0;
 };
 
 } // namespace starrocks

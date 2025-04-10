@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,6 +53,8 @@ public class TableRelation extends Relation {
     private Expr partitionPredicate;
 
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+
+    private List<String> pruneScanColumns = Collections.emptyList();
 
     public TableRelation(TableName name) {
         super(name.getPos());
@@ -114,6 +117,14 @@ public class TableRelation extends Relation {
 
     public void setColumns(Map<Field, Column> columns) {
         this.columns = columns;
+    }
+
+    public List<String> getPruneScanColumns() {
+        return pruneScanColumns;
+    }
+
+    public void setPruneScanColumns(List<String> pruneScanColumns) {
+        this.pruneScanColumns = pruneScanColumns;
     }
 
     public Map<Field, Column> getColumns() {

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # JSON
@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 JSON 是一种轻量级的数据交换格式，JSON 类型的数据是一种半结构化的数据，支持树形结构。JSON 数据层次清晰，结构灵活易于阅读和处理，广泛应用于数据存储和分析场景。JSON 支持的数据类型为数字类型（NUMBER）、字符串类型（STRING）、布尔类型（BOOLEAN）、数组类型（ARRAY）、对象类型（OBJECT），以及 NULL 值。
 
-JSON 的更多介绍，请参见 [JSON 官网](http://www.json.org/?spm=a2c63.p38356.0.0.50756b9fVEfwCd)，JSON 数据的输入和输出语法，请参见 JSON 规范 [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4) 。
+JSON 的更多介绍，请参见 [JSON 官网](https://www.json.org/json-en.html)，JSON 数据的输入和输出语法，请参见 JSON 规范 [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4) 。
 
 StarRocks 支持存储和高效查询分析 JSON 数据。StarRocks 采用二进制格式编码来存储 JSON 数据，而不是直接存储所输入文本，因此在数据计算查询时，降低解析成本，从而提升查询效率。
 
@@ -53,7 +53,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
   - 如果需要将 JSON 文件中根节点的 JSON 对象导入并存储为 JSON 类型，可设置 `jsonpaths` 为 `$`。
   - 如果需要将 JSON 文件中一个 JSON 对象的值 (value) 导入并存储为 JSON 类型，可设置 `jsonpaths` 为 `$.a`（a 代表 key）。更多 JSON 路径表达式，参见 [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path)。
   
-- 方式三：通过 Broker Load 的方式导入 Parquet 文件并存储为 JSON 类型。导入方式，请参见 [Broker Load](../../sql-statements/data-manipulation/BROKER_LOAD.md)。
+- 方式三：通过 Broker Load 的方式导入 Parquet 文件并存储为 JSON 类型。导入方式，请参见 [Broker Load](../../sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 导入时支持数据类型转换如下：
 
@@ -154,7 +154,7 @@ mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
 
 ```Plain Text
 mysql> select * from tj
-       where j->'a' <= parse_json('3')
+       where j->'a' <= 3
        order by cast(j->'a' as int);
 +------+----------------------+
 | id   | j                    |

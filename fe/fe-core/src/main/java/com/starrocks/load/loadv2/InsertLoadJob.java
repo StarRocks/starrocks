@@ -141,6 +141,7 @@ public class InsertLoadJob extends LoadJob {
             this.coordinator = null;
         } finally {
             writeUnlock();
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
@@ -252,5 +253,9 @@ public class InsertLoadJob extends LoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         tableId = in.readLong();
+    }
+
+    public void setTransactionId(long txnId) {
+        this.transactionId = txnId;
     }
 }

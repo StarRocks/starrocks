@@ -18,6 +18,7 @@ package com.starrocks.connector.jdbc;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorContext;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,7 +35,7 @@ public class JDBCConnectorTest {
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         ConnectorContext context = new ConnectorContext("jdbcmysql", "jdbc", properties);
-        Assert.assertThrows(IllegalArgumentException.class, () -> new JDBCConnector(context));
+        Assert.assertThrows(StarRocksConnectorException.class, () -> new JDBCConnector(context));
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
         try {
             new JDBCConnector(context);

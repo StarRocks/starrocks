@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 严格模式
@@ -22,7 +22,7 @@ displayed_sidebar: "Chinese"
 
 - 实际导入过程中，正确的数据行和错误的数据行都有可能存在 `NULL` 值。如果目标列不允许 `NULL` 值，则 StarRocks 会报错，并把这些包含 `NULL` 值的数据行过滤掉。
 
-- 对于 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)，导入作业能够容忍的因数据质量不合格而过滤掉的错误数据行所占的最大比例，由作业的可选参数 `max_filter_ratio` 控制。[INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入方式当前不支持 `max_filter_ratio` 参数。
+- 对于 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)，导入作业能够容忍的因数据质量不合格而过滤掉的错误数据行所占的最大比例，由作业的可选参数 `max_filter_ratio` 控制。[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入方式当前不支持 `max_filter_ratio` 参数。
 
 下面以 CSV 格式的数据文件为例来说明严格模式的效果。假设目标列数据类型为 TINYINT [-128, 127]。以 `\N`（表示空值 null）、`abc`、`2000` 和 `1` 四个原始列值为例：
 
@@ -60,7 +60,7 @@ displayed_sidebar: "Chinese"
 
 ## 设置严格模式
 
-使用 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 执行数据导入时，需要通过参数 `strict_mode` 来设置严格模式。参数取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
+使用 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 执行数据导入时，需要通过参数 `strict_mode` 来设置严格模式。参数取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
 
 使用 [INSERT](../../loading/InsertInto.md) 执行数据导入时，需要通过会话变量 `enable_insert_strict` 来设置严格模式。变量取值范围：`true` 和 `false`。默认值：`true`。`true` 表示开启，`false` 表示关闭。
 
@@ -75,7 +75,7 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 ```
 
-有关 Stream Load 的语法和参数说明，请参见 [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关 Stream Load 的语法和参数说明，请参见 [STREAM LOAD](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 ### Broker Load
 
@@ -96,7 +96,7 @@ PROPERTIES
 )
 ```
 
-这里以 HDFS 数据源为例。有关 Broker Load 的语法和参数说明，请参见 [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+这里以 HDFS 数据源为例。有关 Broker Load 的语法和参数说明，请参见 [BROKER LOAD](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 ### Routine Load
 
@@ -113,7 +113,7 @@ FROM KAFKA
 )
 ```
 
-这里以 Apache Kafka® 数据源为例。有关 Routine Load 的语法和参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+这里以 Apache Kafka® 数据源为例。有关 Routine Load 的语法和参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### Spark Load
 
@@ -135,7 +135,7 @@ PROPERTIES
 )
 ```
 
-这里以 HDFS 数据源为例。有关 Spark Load 的语法和参数说明，请参见 [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)。
+这里以 HDFS 数据源为例。有关 Spark Load 的语法和参数说明，请参见 [SPARK LOAD](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)。
 
 ### INSERT
 
@@ -144,4 +144,4 @@ SET enable_insert_strict = {true | false};
 INSERT INTO <table_name> ...
 ```
 
-有关 INSERT 的语法和参数说明，请参见 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)。
+有关 INSERT 的语法和参数说明，请参见 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)。

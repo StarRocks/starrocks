@@ -193,6 +193,11 @@ public class MaterializationContext {
         return mvUsedCount;
     }
 
+    // whether this mv has been used multi times
+    public boolean isMvDuplicateUsed() {
+        return mvUsedCount > 0;
+    }
+
     public void updateMVUsedCount() {
         this.mvUsedCount += 1;
     }

@@ -67,6 +67,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
@@ -74,6 +75,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetPassVar;
@@ -1642,7 +1644,6 @@ public class PrivilegeCheckerTest {
         ShowResultSet showResultSet = executor.execute();
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
 
-
         // test OPERATE priv, can show tablet, ip:port is not hidden
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
         showResultSet = executor.execute();
@@ -1872,7 +1873,6 @@ public class PrivilegeCheckerTest {
         System.out.println(ctx.getState().getErrorMessage());
         Assert.assertTrue(ctx.getState().getErrorMessage().contains(
                 "Access denied;"));
-
 
         // can kill other user's connection/query after privilege granted
         grantRevokeSqlAsRoot("grant OPERATE on system to test");
@@ -2823,7 +2823,6 @@ public class PrivilegeCheckerTest {
             Config.enable_udf = false;
         }
 
-
         fn = FunctionName.createFnName("my_udf_json_get2");
         fn.setAsGlobalFunction();
         function = new Function(2, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
@@ -3033,7 +3032,6 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
     }
 
-
     @Test
     public void testQueryAndDML() throws Exception {
         starRocksAssert.withTable("CREATE TABLE db1.`tprimary` (\n" +
@@ -3146,7 +3144,6 @@ public class PrivilegeCheckerTest {
         String createViewSql = "create view db1.view5 as select * from db1.tbl1";
         starRocksAssert.withView(createViewSql);
 
-
         ConnectContext ctx = starRocksAssert.getCtx();
         grantRevokeSqlAsRoot("grant select on db1.tbl1 to test");
         ctxToTestUser();
@@ -3163,7 +3160,6 @@ public class PrivilegeCheckerTest {
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("mv5", res.getResultRows().get(0).get(0));
-
 
         // can show view if we have any privilege on it
         grantRevokeSqlAsRoot("grant drop on view db1.view5 to test");
@@ -3436,7 +3432,6 @@ public class PrivilegeCheckerTest {
                                 "GRANT INSERT ON TABLE db1.tbl_pipe TO USER 'test'@'%'")),
                 starRocksAssert.show("show grants for test"));
 
-
         // test desc pipe
         verifyGrantRevoke(
                 "desc pipe p1",
@@ -3609,14 +3604,13 @@ public class PrivilegeCheckerTest {
                 "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
 
-
         TableName tableName = new TableName("default_catalog", "db_for_ranger", "tbl1");
 
         Expr e = SqlParser.parseSqlToExpr("exists (select * from db_for_ranger.tbl2)", SqlModeHelper.MODE_DEFAULT);
         Map<String, Expr> e2 = new HashMap<>();
         e2.put("k1", SqlParser.parseSqlToExpr("k1+1", SqlModeHelper.MODE_DEFAULT));
         try (MockedStatic<Authorizer> authorizerMockedStatic =
-                     Mockito.mockStatic(Authorizer.class)) {
+                Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic
                     .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), Mockito.eq(tableName)))
                     .thenReturn(e);
@@ -3637,6 +3631,14 @@ public class PrivilegeCheckerTest {
             String sql = "select * from db_for_ranger.tbl1";
 
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
             Analyzer.analyze(stmt, context);
 
             QueryStatement queryStatement = (QueryStatement) stmt;
@@ -3654,6 +3656,14 @@ public class PrivilegeCheckerTest {
 
             sql = "select k1 from db_for_ranger.tbl1";
             stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
             Analyzer.analyze(stmt, context);
             queryStatement = (QueryStatement) stmt;
             Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);

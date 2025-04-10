@@ -69,7 +69,8 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 .put(ArraySliceOperator.class, (op, childOps) -> new ArraySliceOperator(op.getType(), childOps))
                 .put(CallOperator.class, (op, childOps) -> {
                     CallOperator call = (CallOperator) op;
-                    return new CallOperator(call.getFnName(), call.getType(), childOps, call.getFunction(), call.isDistinct()); })
+                    return new CallOperator(call.getFnName(), call.getType(), childOps, call.getFunction(), call.isDistinct(),
+                            call.isRemovedDistinct()); })
                 .put(PredicateOperator.class, (op, childOps) -> op)
                 .put(BetweenPredicateOperator.class, (op, childOps) -> {
                     BetweenPredicateOperator between = (BetweenPredicateOperator) op;

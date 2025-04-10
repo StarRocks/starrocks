@@ -771,6 +771,6 @@ public class StreamLoadScanNodeTest {
         Table table = new Table(1L, "table0", TableType.OLAP, columns);
         List<ImportColumnDesc> columnExprs = Lists.newArrayList();
         columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
-        Load.initColumns(table, columnExprs, null, null, null, null, null, null);
+        Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList());
     }
 }

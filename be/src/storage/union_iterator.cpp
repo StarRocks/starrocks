@@ -60,6 +60,10 @@ public:
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
+    // Union Iterator will read data in order of segment and we don't need to record the read segment record
+    // Add this function for compatibility
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
 
 private:
     std::vector<ChunkIteratorPtr> _children;
@@ -85,6 +89,21 @@ inline Status UnionIterator::do_get_next(Chunk* chunk) {
 inline Status UnionIterator::do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
     while (_cur_idx < _children.size()) {
         Status res = _children[_cur_idx]->get_next(chunk, rowid);
+        if (res.is_end_of_file()) {
+            _merged_rows += _children[_cur_idx]->merged_rows();
+            _children[_cur_idx]->close();
+            _children[_cur_idx].reset();
+            _cur_idx++;
+            continue;
+        }
+        return res;
+    }
+    return Status::EndOfFile("End of union iterator");
+}
+
+inline Status UnionIterator::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+    while (_cur_idx < _children.size()) {
+        Status res = _children[_cur_idx]->get_next(chunk, rssid_rowids);
         if (res.is_end_of_file()) {
             _merged_rows += _children[_cur_idx]->merged_rows();
             _children[_cur_idx]->close();

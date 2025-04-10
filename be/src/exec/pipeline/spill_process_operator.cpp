@@ -53,7 +53,7 @@ StatusOr<ChunkPtr> SpillProcessOperator::pull_chunk(RuntimeState* state) {
         }
     } else if (chunk_st.status().is_end_of_file()) {
         _channel->current_task().reset();
-    } else {
+    } else if (!chunk_st.status().ok()) {
         return chunk_st.status();
     }
 

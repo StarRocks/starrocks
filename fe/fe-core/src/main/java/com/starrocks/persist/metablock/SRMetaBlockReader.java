@@ -15,6 +15,7 @@
 
 package com.starrocks.persist.metablock;
 
+import com.google.gson.stream.JsonReader;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
@@ -47,6 +48,7 @@ import java.util.zip.CheckedInputStream;
  */
 public class SRMetaBlockReader {
     private static final Logger LOG = LogManager.getLogger(SRMetaBlockReader.class);
+    private static final int MAX_JSON_PRINT_LENGTH = 1000;
     private final CheckedInputStream checkedInputStream;
     private SRMetaBlockHeader header;
     private int numJsonRead;
@@ -76,18 +78,20 @@ public class SRMetaBlockReader {
         return header;
     }
 
-    private String readJsonText() throws IOException, SRMetaBlockEOFException {
+    private JsonReader getJsonReader() throws IOException, SRMetaBlockEOFException {
         if (numJsonRead >= header.getNumJson()) {
             throw new SRMetaBlockEOFException(String.format(
                     "Read json more than expect: %d >= %d", numJsonRead, header.getNumJson()));
         }
-        String s = Text.readStringWithChecksum(checkedInputStream);
+        JsonReader reader = Text.getJsonReaderWithChecksum(checkedInputStream);
         numJsonRead += 1;
-        return s;
+        return reader;
     }
 
     public <T> T readJson(Class<T> returnClass) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        return GsonUtils.GSON.fromJson(readJsonText(), returnClass);
+        try (JsonReader jsonReader = getJsonReader()) {
+            return GsonUtils.GSON.fromJson(jsonReader, returnClass);
+        }
     }
 
     public int readInt() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
@@ -95,7 +99,9 @@ public class SRMetaBlockReader {
     }
 
     public Object readJson(Type returnType) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        return GsonUtils.GSON.fromJson(readJsonText(), returnType);
+        try (JsonReader jsonReader = getJsonReader()) {
+            return GsonUtils.GSON.fromJson(jsonReader, returnType);
+        }
     }
 
     public void close() throws IOException, SRMetaBlockException {
@@ -110,7 +116,9 @@ public class SRMetaBlockReader {
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
                     header.getSrMetaBlockID(), numJsonRead, header.getNumJson(), rest);
             for (int i = 0; i != rest; ++i) {
-                LOG.warn("skip {} json: {}", i, Text.readStringWithChecksum(checkedInputStream));
+                String text = Text.readStringWithChecksum(checkedInputStream);
+                LOG.warn("skip {}th json: {}", i,
+                        text.substring(0, Math.min(MAX_JSON_PRINT_LENGTH, text.length())));
             }
         }
 

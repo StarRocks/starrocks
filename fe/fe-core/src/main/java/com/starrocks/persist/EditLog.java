@@ -36,6 +36,7 @@ package com.starrocks.persist;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.authentication.UserAuthenticationInfo;
@@ -64,6 +65,7 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteInfo;
 import com.starrocks.load.DeleteMgr;
@@ -87,7 +89,6 @@ import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -95,7 +96,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -490,6 +490,11 @@ public class EditLog {
                     globalStateMgr.replayDeleteReplica(info);
                     break;
                 }
+                case OperationType.OP_BATCH_DELETE_REPLICA: {
+                    BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
+                    globalStateMgr.replayBatchDeleteReplica(info);
+                    break;
+                }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
                     ComputeNode computeNode = (ComputeNode) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
@@ -515,7 +520,7 @@ public class EditLog {
                 case OperationType.OP_BACKEND_STATE_CHANGE:
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
@@ -574,7 +579,8 @@ public class EditLog {
                 }
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
-                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+                    if (!MetaVersion
+                            .isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
                         throw new JournalInconsistentException("Not compatible with meta version "
                                 + metaVersion.getStarRocksVersion()
                                 + ", current version is " + FeConstants.STARROCKS_META_VERSION);
@@ -857,10 +863,12 @@ public class EditLog {
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+                case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BUCKET_SIZE:
+                case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -900,6 +908,9 @@ public class EditLog {
                             globalStateMgr.getRollupHandler().replayRemoveAlterJobV2(log);
                             break;
                         case SCHEMA_CHANGE:
+                            globalStateMgr.getSchemaChangeHandler().replayRemoveAlterJobV2(log);
+                            break;
+                        case OPTIMIZE:
                             globalStateMgr.getSchemaChangeHandler().replayRemoveAlterJobV2(log);
                             break;
                         default:
@@ -1140,17 +1151,17 @@ public class EditLog {
                 }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
-                    MaterializedViewMgr.getInstance().replay(job);
+                    GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replay(job);
                     break;
                 }
                 case OperationType.OP_MV_EPOCH_UPDATE: {
                     MVEpoch epoch = (MVEpoch) journal.getData();
-                    MaterializedViewMgr.getInstance().replayEpoch(epoch);
+                    GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replayEpoch(epoch);
                     break;
                 }
                 case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
                     final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.getData();
-                    globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDropColumns(info);
+                    globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDrop(info);
                     break;
                 }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
@@ -1183,10 +1194,36 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
-                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                case OperationType.OP_DELETE_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
+                case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
                     break;
+                }
+                case OperationType.OP_DECOMMISSION_DISK: {
+                    DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                    CancelDecommissionDiskInfo info = (CancelDecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_DISABLE_DISK: {
+                    DisableDiskInfo info = (DisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DISABLE_DISK: {
+                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1216,13 +1253,12 @@ public class EditLog {
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
         long startTimeNano = System.nanoTime();
-        // do not check whether global state mgr is leader in non shared-nothing mode,
+        // do not check whether global state mgr is leader when writing star mgr journal,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
-        Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
-                                 GlobalStateMgr.getCurrentState().isLeader(),
-                                 "Current node is not leader, but " +
-                                 GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
+        Preconditions.checkState(op == OperationType.OP_STARMGR || GlobalStateMgr.getCurrentState().isLeader(),
+                "Current node is not leader, but " +
+                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1231,9 +1267,10 @@ public class EditLog {
             entity.setOpCode(op);
             entity.setData(writable);
             entity.write(buffer);
-        } catch (IOException e) {
+        } catch (IOException | JsonParseException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialize, ", e);
+            LOG.info("failed to serialize journal data", e);
+            throw new SerializeException("failed to serialize journal data");
         }
         JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
@@ -1540,6 +1577,10 @@ public class EditLog {
         }
     }
 
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
+    }
+
     public void logTimestamp(Timestamp stamp) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
@@ -1821,6 +1862,10 @@ public class EditLog {
         logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
+    public void logSetHasDelete(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_HAS_DELETE, info);
+    }
+
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
@@ -1955,6 +2000,10 @@ public class EditLog {
 
     public void logModifyBucketSize(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
+    }
+
+    public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
@@ -2209,7 +2258,7 @@ public class EditLog {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
 
-    public void logModifyTableAddOrDropColumns(TableAddOrDropColumnsInfo info) {
+    public void logModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) {
         logEdit(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
     }
 
@@ -2238,7 +2287,28 @@ public class EditLog {
         logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
     }
 
+    public void logDeleteReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
+    }
+
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    }
+
+    public void logDecommissionDisk(DecommissionDiskInfo info) {
+        logEdit(OperationType.OP_DECOMMISSION_DISK, info);
+    }
+
+    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+    }
+
+    public void logDisableDisk(DisableDiskInfo info) {
+        logEdit(OperationType.OP_DISABLE_DISK, info);
+    }
+
+    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
     }
 }

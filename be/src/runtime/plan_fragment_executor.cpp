@@ -80,9 +80,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
     _query_id = params.query_id;
 
-    LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
-              << " fragment_instance_id=" << print_id(params.fragment_instance_id)
-              << " backend_num=" << request.backend_num;
+    VLOG(1) << "Prepare(): query_id=" << print_id(_query_id)
+            << " fragment_instance_id=" << print_id(params.fragment_instance_id)
+            << " backend_num=" << request.backend_num;
 
     DCHECK(_runtime_state->chunk_size() > 0);
 
@@ -185,7 +185,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 }
 
 Status PlanFragmentExecutor::open() {
-    LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
+    VLOG(1) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     tls_thread_status.set_query_id(_runtime_state->query_id());
 
     // Only register profile report worker for broker load and insert into here,

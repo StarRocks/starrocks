@@ -79,6 +79,9 @@ CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
 // it will be set to physical memory size.
 CONF_String(mem_limit, "90%");
 
+// Enable the jemalloc tracker, which is responsible for reserving memory
+CONF_Bool(enable_jemalloc_memory_tracker, "true");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -94,11 +97,15 @@ CONF_Int32(push_worker_count_high_priority, "3");
 
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
+// The min count of thread to publish version per transaction
+CONF_mInt32(transaction_publish_version_thread_pool_num_min, "0");
 
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
 CONF_mInt32(get_pindex_worker_count, "0");
+CONF_mInt32(transaction_apply_thread_pool_num_min, "0");
+CONF_Int32(transaction_apply_worker_idle_time_ms, "500");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -119,13 +126,17 @@ CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
-CONF_Int32(upload_worker_count, "1");
+CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
-CONF_Int32(download_worker_count, "1");
+CONF_mInt32(download_worker_count, "0");
+// The buffer size to upload.
+CONF_mInt32(upload_buffer_size, "4194304");
+// The buffer size to download.
+CONF_mInt32(download_buffer_size, "4194304");
 // The count of thread to make snapshot.
 CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
-CONF_Int32(release_snapshot_worker_count, "5");
+CONF_mInt32(release_snapshot_worker_count, "5");
 // The interval time(seconds) for agent report tasks signatrue to FE.
 CONF_mInt32(report_task_interval_seconds, "10");
 // The interval time(seconds) for agent report disk state to FE.
@@ -153,6 +164,13 @@ CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
+// The replication max speed limit(KB/s).
+CONF_mInt32(replication_max_speed_limit_kbps, "50000");
+// The replication min speed limit(KB/s).
+CONF_mInt32(replication_min_speed_limit_kbps, "50");
+// The replication min speed time(seconds).
+CONF_mInt32(replication_min_speed_time_seconds, "300");
+// Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
 // The log dir.
@@ -160,7 +178,7 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 // The sys log level, INFO, WARNING, ERROR, FATAL.
-CONF_String(sys_log_level, "INFO");
+CONF_mString(sys_log_level, "INFO");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
@@ -291,7 +309,7 @@ CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 // cumulative compaction policy: max delta file's size unit:B
 CONF_mInt32(cumulative_compaction_check_interval_seconds, "1");
 CONF_mInt64(min_cumulative_compaction_num_singleton_deltas, "5");
-CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
+CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "500");
 // This config is to limit the max concurrency of running cumulative compaction tasks.
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
@@ -312,13 +330,15 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // if this value is 0, auto chunk size calculation algorithm will be used
 // set this value to none zero if auto algorithm isn't working well
 CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
-CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
+CONF_mInt64(max_update_compaction_num_singleton_deltas, "500");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
 CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 // This config defines the maximum percentage of data allowed per compaction
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
+// This config controls max memory that we can use for partial update.
+CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -383,7 +403,8 @@ CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
-CONF_mInt64(stale_memtable_flush_time_sec, "30");
+// 0 means disable
+CONF_mInt64(stale_memtable_flush_time_sec, "0");
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
@@ -415,8 +436,8 @@ CONF_mInt64(streaming_load_max_batch_size_mb, "100");
 // the channel will be removed.
 CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // The timeout of a rpc to open the tablet writer in remote BE.
-// short operation time, can set a short timeout
-CONF_Int32(tablet_writer_open_rpc_timeout_sec, "60");
+// actual timeout is min(tablet_writer_open_rpc_timeout_sec, load_timeout_sec / 2)
+CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "300");
 // make_snapshot rpc timeout
 CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // Deprecated, use query_timeout instread
@@ -504,14 +525,34 @@ CONF_mInt64(write_buffer_size, "104857600");
 CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Double(query_pool_spill_mem_limit_threshold, "1.0");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
-CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
+// It's is a soft limit, when this limit is hit,
+// memtable in delta writer will be flush to reduce memory cost.
+// Load memory beyond this limit is allowed.
+CONF_Int32(load_process_max_memory_limit_percent, "30"); // 30%
+// It's hard limit ratio, when this limit is hit, new loading task will be rejected.
+// we can caculate and got the hard limit percent.
+// E.g.
+//  load_process_max_memory_limit_percent is 30%,
+//  load_process_max_memory_hard_limit_ratio is 2.
+//  then hard limit percent is 30% * 2 = 60%.
+//  And when hard limit percent is larger than process limit percent,
+//  use process limit percent as hard limit percent.
+CONF_mDouble(load_process_max_memory_hard_limit_ratio, "2");
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
+// Metadata cache limit for shared-nothing mode. Not working for PK table now.
+// Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
+CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
+
+// if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
+// the failed apply task will retry after `retry_apply_interval_second`
+CONF_mBool(enable_retry_apply, "true");
+CONF_mInt32(retry_apply_interval_second, "30");
 
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -615,6 +656,12 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
+// If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
+// it will cause rpc to report an error. We add configuration to ignore rpc overload.
+// This may cause process memory usage to rise.
+// In the future we need to count the memory on each channel of the rpc. To do application layer rpc flow limiting.
+CONF_mBool(brpc_query_ignore_overcrowded, "false");
+CONF_mBool(brpc_load_ignore_overcrowded, "true");
 
 // Max number of txns for every txn_partition_map in txn manager.
 // this is a self-protection to avoid too many txns saving in manager.
@@ -657,6 +704,12 @@ CONF_Int32(metric_late_materialization_ratio, "1000");
 
 // Max batched bytes for each transmit request. (256KB)
 CONF_Int64(max_transmit_batched_bytes, "262144");
+// max chunk size for each tablet write request. (512MB)
+// see: https://github.com/StarRocks/starrocks/pull/50302
+// NOTE: If there are a large number of columns when loading,
+// a too small max_tablet_write_chunk_bytes may cause more frequent RPCs, which may affect performance.
+// In this case, we can try to increase the value to avoid the problem.
+CONF_mInt64(max_tablet_write_chunk_bytes, "536870912");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
@@ -710,6 +763,9 @@ CONF_mInt32(tablet_max_pending_versions, "1000");
 
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
+
+// pipeline poller timeout guard
+CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
@@ -807,10 +863,11 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
 // value is greater than 0 and less than 1000.
 // When it's 0, low speed limit check will be disabled.
-CONF_Int64(object_storage_request_timeout_ms, "-1");
+CONF_mInt64(object_storage_request_timeout_ms, "-1");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
+CONF_mBool(s3_use_list_objects_v1, "false");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
@@ -829,6 +886,7 @@ CONF_Int32(orc_loading_buffer_size, "8388608");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_late_materialization_v2_enable, "true");
+CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -865,7 +923,7 @@ CONF_String(aws_sdk_logging_trace_level, "trace");
 // to Authenticate because the request URL does not translate these special characters.
 // This is critical for Hive partitioned tables. The object key usually contains '=' like 'dt=20230101'.
 // Enabling RFC-3986 encoding will make sure these characters are properly encoded.
-CONF_mBool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
+CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
@@ -942,6 +1000,10 @@ CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
+// make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
+// NOTE: need to handle the negative value properly
+CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
+CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -963,7 +1025,7 @@ CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
-CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
@@ -1000,6 +1062,9 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
 CONF_mInt32(spill_init_partition, "16");
+// make sure 2^spill_max_partition_level < spill_max_partition_size
+CONF_Int32(spill_max_partition_level, "7");
+CONF_Int32(spill_max_partition_size, "1024");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
@@ -1026,16 +1091,16 @@ CONF_String(directory_of_inject,
             "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
 
 // Used by to_base64
-CONF_Int64(max_length_for_to_base64, "200000");
+CONF_mInt64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
-CONF_Int64(max_length_for_bitmap_function, "1000000");
+CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
-CONF_Bool(datacache_enable, "false");
-CONF_String(datacache_mem_size, "10%");
-CONF_String(datacache_disk_size, "0");
-CONF_String(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
-CONF_String(datacache_meta_path, "${STARROCKS_HOME}/datacache/");
+CONF_Bool(datacache_enable, "true");
+CONF_mString(datacache_mem_size, "10%");
+CONF_mString(datacache_disk_size, "0");
+CONF_String(datacache_disk_path, "");
+CONF_String(datacache_meta_path, "");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
 CONF_Bool(datacache_direct_io_enable, "false");
@@ -1089,7 +1154,7 @@ CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
 // if l0_mem_size exceeds this value, l0 need snapshot
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
-CONF_mBool(enable_parallel_get_and_bf, "true");
+CONF_mBool(enable_parallel_get_and_bf, "false");
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
@@ -1172,8 +1237,10 @@ CONF_mInt64(load_tablet_timeout_seconds, "60");
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 // Used by default mv resource group
-CONF_Double(default_mv_resource_group_memory_limit, "0.8");
-CONF_Int32(default_mv_resource_group_cpu_limit, "1");
+CONF_mDouble(default_mv_resource_group_memory_limit, "0.8");
+CONF_mInt32(default_mv_resource_group_cpu_limit, "1");
+CONF_mInt32(default_mv_resource_group_concurrency_limit, "0");
+CONF_mDouble(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
@@ -1191,7 +1258,7 @@ CONF_mInt32(finish_publish_version_internal, "100");
 
 CONF_mBool(enable_stream_load_verbose_log, "false");
 
-CONF_mInt32(get_txn_status_internal_sec, "30");
+CONF_mInt32(get_txn_status_internal_sec, "10");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 
@@ -1221,11 +1288,34 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
 
+// Skip get from pk index when light pk compaction publish is enabled
+CONF_mBool(enable_light_pk_compaction_publish, "true");
+
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
 
+// .crm file can be removed after 1day.
+CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
+
 // Set to true to enable socket_keepalive option in brpc
 CONF_mBool(brpc_socket_keepalive, "false");
+CONF_mBool(enable_pk_strict_memcheck, "false");
+CONF_mBool(apply_del_vec_after_all_index_filter, "true");
+CONF_mBool(skip_pk_preload, "false");
+// Reduce core file size by not dumping jemalloc retain pages
+CONF_mBool(enable_core_file_size_optimization, "true");
+
+// if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
+// for now, only support non-pk LAKE compaction in size tierd compaction.
+CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// chunk size used by lake compaction
+CONF_mInt32(lake_compaction_chunk_size, "4096");
+
+CONF_mBool(skip_schema_in_rowset_meta, "true");
+
+CONF_mInt32(max_committed_without_schema_rowset, "1000");
+
+CONF_mInt32(apply_version_slow_log_sec, "30");
 
 } // namespace starrocks::config

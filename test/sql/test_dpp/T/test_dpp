@@ -1,0 +1,29 @@
+-- name: test_dpp
+
+create external catalog hive_catalog_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+create database hive_catalog_${uuid0}.hive_db_${uuid0};
+
+create table hive_catalog_${uuid0}.hive_db_${uuid0}.fact (payload string, dt date) partition by(dt);
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.fact values ('A', date '2020-01-01'), ('B', date '2020-01-02'), ('C', date '2020-01-03');
+
+create table hive_catalog_${uuid0}.hive_db_${uuid0}.dim (dt string);
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.dim values ("2020-01-01");
+
+set disable_join_reorder = true;
+set enable_dynamic_prune_scan_range = true;
+
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt = d.dt;
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt + interval 1 day = d.dt;
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt - interval 1 day = d.dt;
+
+set enable_dynamic_prune_scan_range = false;
+
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt = d.dt;
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt + interval 1 day = d.dt;
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt - interval 1 day = d.dt;
+
+drop table hive_catalog_${uuid0}.hive_db_${uuid0}.fact force;
+drop table hive_catalog_${uuid0}.hive_db_${uuid0}.dim force;
+
+drop database hive_catalog_${uuid0}.hive_db_${uuid0};
+drop catalog hive_catalog_${uuid0};

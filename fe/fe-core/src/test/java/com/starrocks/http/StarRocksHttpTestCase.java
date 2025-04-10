@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -101,7 +102,7 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
-    private static long testBackendId1 = 1000;
+    protected static long testBackendId1 = 1000;
     private static long testBackendId2 = 1001;
     private static long testBackendId3 = 1002;
 
@@ -124,6 +125,8 @@ public abstract class StarRocksHttpTestCase {
     protected static String BASE_URL;
 
     protected String rootAuth = Credentials.basic("root", "");
+
+    protected static ObjectMapper objectMapper = new ObjectMapper();
 
     @Mocked
     private static EditLog editLog;
@@ -171,7 +174,11 @@ public abstract class StarRocksHttpTestCase {
     }
 
     public static OlapTable newTable(String name) {
-        GlobalStateMgr.getCurrentInvertedIndex().clear();
+        return newTable(name, 1024000L);
+    }
+
+    public static OlapTable newTable(String name, long replicaDataSize) {
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
         List<Column> columns = new ArrayList<>();
@@ -180,15 +187,15 @@ public abstract class StarRocksHttpTestCase {
 
         Replica replica1 =
                 new Replica(testReplicaId1, testBackendId1, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica2 =
                 new Replica(testReplicaId2, testBackendId2, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica3 =
                 new Replica(testReplicaId3, testBackendId3, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
 
         // tablet

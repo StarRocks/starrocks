@@ -32,6 +32,7 @@
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/chunk_buffer_memory_manager.h"
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -136,6 +137,11 @@ struct AggFunctionTypes {
     std::vector<bool> nulls_first;
 
     bool is_distinct = false;
+    bool is_always_nullable_result = false;
+
+    template <bool UseIntermediateAsOutput>
+    bool is_result_nullable() const;
+    bool use_nullable_fn(bool use_intermediate_as_output) const;
 };
 
 struct ColumnType {
@@ -239,8 +245,6 @@ struct AggregatorParams {
     bool has_nullable_key;
 
     void init();
-
-    ChunkUniquePtr create_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc);
 };
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
@@ -417,9 +421,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::queue<ChunkPtr> _buffer;
-    std::unique_ptr<pipeline::ChunkBufferMemoryManager> _buffer_mem_manager;
-    std::mutex _buffer_mutex;
+    std::unique_ptr<LimitedPipelineChunkBuffer<AggStatistics>> _limited_buffer;
 
     // Certain aggregates require a finalize step, which is the final step of the
     // aggregate after consuming all input rows. The finalize step converts the aggregate
@@ -504,7 +506,8 @@ public:
     void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
-    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output = nullptr);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
+                                     bool force_use_intermediate_as_output = false);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);

@@ -55,7 +55,6 @@ public class OptimizerContext {
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
-    private final List<MaterializationContext> candidateMvs;
 
     private Set<OlapTable> queryTables;
 
@@ -68,7 +67,7 @@ public class OptimizerContext {
     private boolean isShortCircuit = false;
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
-    private QueryMaterializationContext queryMaterializationContext;
+    private QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
 
     private boolean inMemoPhase = false;
 
@@ -91,7 +90,6 @@ public class OptimizerContext {
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
-        this.candidateMvs = Lists.newArrayList();
         this.queryId = UUID.randomUUID();
         this.allLogicalOlapScanOperators = Collections.emptyList();
     }
@@ -118,7 +116,6 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
-        this.candidateMvs = Lists.newArrayList();
     }
 
     public Memo getMemo() {
@@ -177,12 +174,13 @@ public class OptimizerContext {
         return optimizerConfig;
     }
 
+    /**
+     * Get all valid candidate materialized views for the query:
+     * - The materialized view is valid to rewrite by rule(SPJG)
+     * - The materialized view's refresh-ness is valid to rewrite.
+     */
     public List<MaterializationContext> getCandidateMvs() {
-        return candidateMvs;
-    }
-
-    public void addCandidateMvs(MaterializationContext candidateMv) {
-        this.candidateMvs.add(candidateMv);
+        return queryMaterializationContext.getValidCandidateMVs();
     }
 
     public void setEnableLeftRightJoinEquivalenceDerive(boolean enableLeftRightJoinEquivalenceDerive) {
@@ -203,6 +201,10 @@ public class OptimizerContext {
 
     public long optimizerElapsedMs() {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
+    }
+
+    public Stopwatch getStopwatch(RuleType ruleType) {
+        return ruleWatchMap.computeIfAbsent(ruleType, (k) -> Stopwatch.createStarted());
     }
 
     public boolean isObtainedFromInternalStatistics() {

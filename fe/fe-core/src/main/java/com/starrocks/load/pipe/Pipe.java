@@ -36,7 +36,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -154,7 +153,7 @@ public class Pipe implements GsonPostProcessable {
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
-                    pipeSource.setAutoIngest(VariableMgr.parseBooleanVariable(value));
+                    pipeSource.setAutoIngest(ParseUtil.parseBooleanValue(value, PipeAnalyzer.PROPERTY_AUTO_INGEST));
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
@@ -180,7 +179,9 @@ public class Pipe implements GsonPostProcessable {
                     }
                 }
             }
-            this.properties.put(key, value);
+            if (this.properties != properties) {
+                this.properties.put(key, value);
+            }
         }
     }
 
@@ -353,6 +354,7 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        Runnable changeStateAction = null;
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
@@ -363,7 +365,7 @@ public class Pipe implements GsonPostProcessable {
                 if (task.isError()) {
                     failedTaskExecutionCount++;
                     if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
-                        changeState(State.ERROR, false);
+                        changeStateAction = () -> changeState(State.ERROR, false);
                     }
                 }
                 if (task.isFinished()) {
@@ -377,6 +379,10 @@ public class Pipe implements GsonPostProcessable {
             for (long taskId : removeTaskId) {
                 runningTasks.remove(taskId);
             }
+        }
+
+        if (changeStateAction != null) {
+            changeStateAction.run();
         }
 
         // Persist LoadStatus
@@ -451,7 +457,7 @@ public class Pipe implements GsonPostProcessable {
                 recordTaskError(taskDesc, "create task failed");
                 return;
             }
-            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption());
+            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task.getSource().isMergeable()));
             taskDesc.onRunning();
             taskDesc.setFuture(result.getFuture());
             if (result.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {

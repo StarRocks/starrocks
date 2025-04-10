@@ -49,10 +49,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -65,6 +68,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
@@ -85,6 +89,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -110,6 +115,161 @@ public class QueryAnalyzer {
 
     public void analyze(StatementBase node, Scope parent) {
         new Visitor().process(node, parent);
+    }
+
+    private class GeneratedColumnExprMappingCollector extends AstVisitor<Void, Scope> {
+        public GeneratedColumnExprMappingCollector() {
+        }
+
+        public Void process(ParseNode node, Scope scope) {
+            if (session.getSessionVariable().isDisableGeneratedColumnRewrite()) {
+                return null;
+            }
+            return node.accept(this, scope);
+        }
+
+        private void reAnalyzeExpressionBasedOnCurrentScope(SelectRelation childSelectRelation, Scope scope,
+                                                            Map<Expr, SlotRef> resultGeneratedExprToColumnRef) {
+            if (childSelectRelation.getGeneratedExprToColumnRef() == null ||
+                    childSelectRelation.getGeneratedExprToColumnRef().isEmpty()) {
+                return;
+            }
+            // 1. get all available generated column from child selectRelation
+            // available means that:
+            // a. generated column output from child selectRelation directly.
+            // b. all reference column of generated column output from child selectRelation directly.
+            List<SlotRef> outputSlotRef = childSelectRelation.getOutputExpression()
+                                            .stream().filter(e -> e instanceof SlotRef)
+                                            .map(e -> (SlotRef) e).collect(Collectors.toList());
+            boolean hasStar = childSelectRelation.getSelectList()
+                                        .getItems().stream().anyMatch(SelectListItem::isStar);
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            for (Map.Entry<Expr, SlotRef> entry : childSelectRelation.getGeneratedExprToColumnRef().entrySet()) {
+                List<SlotRef> allRefColumns = Lists.newArrayList();
+                entry.getKey().collect(SlotRef.class, allRefColumns);
+                allRefColumns.add(entry.getValue());
+                if (hasStar || outputSlotRef.containsAll(allRefColumns)) {
+                    generatedExprToColumnRef.put(entry.getKey().clone(), (SlotRef) entry.getValue().clone());
+                }
+            }
+
+            // 2. rewrite(rename slotRef) generated column expression(unAnalyzed) using alias in current scope
+            Map<String, String> slotRefToAlias = new HashMap<>();
+            for (SelectListItem item : childSelectRelation.getSelectList().getItems()) {
+                if (item.isStar()) {
+                    slotRefToAlias.clear();
+                    break;
+                }
+
+                if (!(item.getExpr() instanceof SlotRef) || (item.getAlias() == null || item.getAlias().isEmpty())) {
+                    continue;
+                }
+
+                slotRefToAlias.put(((SlotRef) item.getExpr()).toSql(), item.getAlias());
+            }
+            List<SlotRef> allRefSlotRefs = new ArrayList<>();
+            for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
+                List<SlotRef> refColumns = Lists.newArrayList();
+                entry.getKey().collect(SlotRef.class, refColumns);
+
+                allRefSlotRefs.addAll(refColumns);
+                allRefSlotRefs.add(entry.getValue());
+            }
+            for (SlotRef slotRef : allRefSlotRefs) {
+                if (!slotRefToAlias.isEmpty()) {
+                    String alias = slotRefToAlias.get(slotRef.toSql());
+                    if (alias != null) {
+                        slotRef.setColumnName(alias);
+                    }
+                }
+                slotRef.setTblName(null);
+            }
+
+            // 3. analyze generated column expression based on current scope
+            Map<Expr, SlotRef> analyzedGeneratedExprToColumnRef = new HashMap<>();
+            for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
+                entry.getKey().reset();
+                entry.getValue().reset();
+
+                try {
+                    ExpressionAnalyzer.analyzeExpression(entry.getKey(), new AnalyzeState(), scope, session);
+                    ExpressionAnalyzer.analyzeExpression(entry.getValue(), new AnalyzeState(), scope, session);
+                } catch (Exception ignore) {
+                    // skip this generated column rewrite if hit any exception
+                    // some exception is reasonable because some of illegal generated column
+                    // rewrite will be rejected by ananlyzer exception.
+                    continue;
+                }
+                analyzedGeneratedExprToColumnRef.put(entry.getKey(), entry.getValue());
+            }
+            resultGeneratedExprToColumnRef.putAll(analyzedGeneratedExprToColumnRef);
+        }
+
+        @Override
+        public Void visitTable(TableRelation tableRelation, Scope scope) {
+            Table table = tableRelation.getTable();
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            for (Column column : table.getBaseSchema()) {
+                Expr generatedColumnExpression = column.generatedColumnExpr();
+                if (generatedColumnExpression != null) {
+                    SlotRef slotRef = new SlotRef(null, column.getName());
+                    ExpressionAnalyzer.analyzeExpression(generatedColumnExpression, new AnalyzeState(), scope, session);
+                    ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
+                    generatedExprToColumnRef.put(generatedColumnExpression, slotRef);
+                }
+            }
+            tableRelation.setGeneratedExprToColumnRef(generatedExprToColumnRef);
+            return null;
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation selectRelation, Scope scope) {
+            selectRelation.setGeneratedExprToColumnRef(selectRelation.getRelation().getGeneratedExprToColumnRef());
+            return null;
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation subquery, Scope scope) {
+            QueryRelation queryRelation = subquery.getQueryStatement().getQueryRelation();
+            if (queryRelation instanceof SelectRelation) {
+                SelectRelation childSelectRelation = (SelectRelation) queryRelation;
+                reAnalyzeExpressionBasedOnCurrentScope(childSelectRelation, scope, subquery.getGeneratedExprToColumnRef());
+            }
+            return null;
+        } 
+
+        @Override
+        public Void visitJoin(JoinRelation joinRelation, Scope scope) {
+            Relation leftRelation = joinRelation.getLeft();
+            Relation rightRelation = joinRelation.getRight();
+            joinRelation.getGeneratedExprToColumnRef().putAll(leftRelation.getGeneratedExprToColumnRef());
+            joinRelation.getGeneratedExprToColumnRef().putAll(rightRelation.getGeneratedExprToColumnRef());
+            return null;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Scope scope) {
+            QueryRelation queryRelation = node.getQueryStatement().getQueryRelation();
+            if (queryRelation instanceof SubqueryRelation) {
+                node.setGeneratedExprToColumnRef(queryRelation.getGeneratedExprToColumnRef());
+            } else if (queryRelation instanceof SelectRelation) {
+                SelectRelation childSelectRelation = (SelectRelation) queryRelation;
+                reAnalyzeExpressionBasedOnCurrentScope(childSelectRelation, scope, node.getGeneratedExprToColumnRef());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation cteRelation, Scope scope) {
+            QueryRelation queryRelation = cteRelation.getCteQueryStatement().getQueryRelation();
+            if (queryRelation instanceof SubqueryRelation) {
+                cteRelation.setGeneratedExprToColumnRef(queryRelation.getGeneratedExprToColumnRef());
+            } else if (queryRelation instanceof SelectRelation) {
+                SelectRelation childSelectRelation = (SelectRelation) queryRelation;
+                reAnalyzeExpressionBasedOnCurrentScope(childSelectRelation, scope, cteRelation.getGeneratedExprToColumnRef());
+            }
+            return null;
+        }
     }
 
     private class Visitor extends AstVisitor<Scope, Scope> {
@@ -197,25 +357,10 @@ public class QueryAnalyzer {
                 throw unsupportedException("Table function must be used with lateral join");
             }
             selectRelation.setRelation(resolvedRelation);
+            //for avoid init column meta, try to prune unused columns
+            pruneScanColumns(selectRelation, resolvedRelation);
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
-
-            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            new AstVisitor<Void, Void>() {
-                @Override
-                public Void visitTable(TableRelation tableRelation, Void context) {
-                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
-                    return null;
-                }
-
-                @Override
-                public Void visitJoin(JoinRelation joinRelation, Void context) {
-                    visit(joinRelation.getLeft());
-                    visit(joinRelation.getRight());
-                    return null;
-                }
-            }.visit(resolvedRelation);
-            analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(
@@ -230,7 +375,35 @@ public class QueryAnalyzer {
                     selectRelation.getLimit());
 
             selectRelation.fillResolvedAST(analyzeState);
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(selectRelation, sourceScope);
             return analyzeState.getOutputScope();
+        }
+
+        // for reduce meta initialization, only support simple query relation, like: select x1, x2 from t;
+        private void pruneScanColumns(SelectRelation selectRelation, Relation fromRelation) {
+            if (!session.getSessionVariable().isEnableAnalyzePhasePruneColumns() ||
+                    !(fromRelation instanceof TableRelation) ||
+                    !Objects.isNull(selectRelation.getGroupByClause()) ||
+                    !Objects.isNull(selectRelation.getHavingClause()) ||
+                    !Objects.isNull(selectRelation.getWhereClause()) ||
+                    (!Objects.isNull(selectRelation.getOrderBy()) && !selectRelation.getOrderBy().isEmpty())) {
+                return;
+            }
+
+            List<String> scanColumns = new ArrayList<>();
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                if (item.isStar() || !(item.getExpr() instanceof SlotRef)) {
+                    return;
+                }
+
+                if (((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed() != null) {
+                    // avoid struct column pruned
+                    return;
+                }
+                scanColumns.add(((SlotRef) item.getExpr()).getColumnName().toLowerCase());
+            }
+            ((TableRelation) fromRelation).setPruneScanColumns(scanColumns);
         }
 
         private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
@@ -300,6 +473,21 @@ public class QueryAnalyzer {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+
+                    // If tableRelation is an object that needs to be rewritten by policy,
+                    // then when it is changed to ViewRelation, both the view and the table
+                    // after the view is parsed also need to inherit this rewriting logic.
+                    if (tableRelation.isNeedRewrittenByPolicy()) {
+                        viewRelation.setNeedRewrittenByPolicy(true);
+
+                        new AstTraverser<Void, Void>() {
+                            @Override
+                            public Void visitRelation(Relation relation, Void context) {
+                                relation.setNeedRewrittenByPolicy(true);
+                                return null;
+                            }
+                        }.visit(queryStatement);
+                    }
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
@@ -330,7 +518,7 @@ public class QueryAnalyzer {
                     }
                 }
 
-                if (r.isPolicyRewritten()) {
+                if (!r.isNeedRewrittenByPolicy()) {
                     return r;
                 }
                 assert tableName != null;
@@ -338,7 +526,7 @@ public class QueryAnalyzer {
                 if (policyRewriteQuery == null) {
                     return r;
                 } else {
-                    r.setPolicyRewritten(true);
+                    r.setNeedRewrittenByPolicy(false);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
 
                     // If an alias exists, rewrite the alias into subquery to ensure
@@ -378,18 +566,50 @@ public class QueryAnalyzer {
                     fields.add(field);
                 }
             } else {
-                List<Column> fullSchema = node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
+                List<Column> fullSchema = table.getFullSchema();
+                Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
+
+                List<String> pruneScanColumns = node.getPruneScanColumns();
+                boolean needPruneScanColumns = pruneScanColumns != null && !pruneScanColumns.isEmpty();
+                if (needPruneScanColumns) {
+                    Set<String> fullColumnNames = new HashSet<>(fullSchema.size());
+                    for (Column column : fullSchema) {
+                        if (column.isGeneratedColumn()) {
+                            needPruneScanColumns = false;
+                            break;
+                        }
+                        fullColumnNames.add(column.getName().toLowerCase());
+                    }
+                    needPruneScanColumns &= fullColumnNames.containsAll(pruneScanColumns);
+                }
+
+                Set<String> bucketColumns = table.getDistributionColumnNames();
+                List<String> partitionColumns = table.getPartitionColumnNames();
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
+                    if (needPruneScanColumns && !column.isKey() &&
+                            bucketColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            partitionColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            pruneScanColumns.stream().noneMatch(column.getName()::equalsIgnoreCase)) {
+                        // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
+                        continue;
+                    }
                     boolean visible = baseSchema.contains(column);
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                     Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
                             column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
+                }
+
+                if (node.isBinlogQuery()) {
+                    for (Column column : getBinlogMetaColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
                 }
             }
 
@@ -417,23 +637,14 @@ public class QueryAnalyzer {
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
 
-            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            for (Column column : table.getBaseSchema()) {
-                if (column.generatedColumnExpr() != null) {
-                    Expr materializedExpression = column.generatedColumnExpr();
-                    ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
-                    SlotRef slotRef = new SlotRef(null, column.getName());
-                    ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
-                    generatedExprToColumnRef.put(materializedExpression, slotRef);
-                }
-            }
-            node.setGeneratedExprToColumnRef(generatedExprToColumnRef);
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(node, scope);
 
             return scope;
         }
 
-        private List<Column> appendBinlogMetaColumns(List<Column> schema) {
-            List<Column> columns = new ArrayList<>(schema);
+        private List<Column> getBinlogMetaColumns() {
+            List<Column> columns = new ArrayList<>();
             columns.add(new Column(BINLOG_OP_COLUMN_NAME, Type.TINYINT));
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, Type.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));
@@ -478,6 +689,10 @@ public class QueryAnalyzer {
             }
             Scope scope = new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build()));
             cteRelation.setScope(scope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(cteRelation, scope);
+
             return scope;
         }
 
@@ -582,6 +797,10 @@ public class QueryAnalyzer {
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
             }
             join.setScope(scope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(join, scope);
+
             return scope;
         }
 
@@ -703,6 +922,10 @@ public class QueryAnalyzer {
 
             analyzeOrderByClause(subquery, scope);
             subquery.setScope(scope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(subquery, scope);
+
             return scope;
         }
 
@@ -780,6 +1003,10 @@ public class QueryAnalyzer {
 
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(node, viewScope);
+
             return viewScope;
         }
 
@@ -986,32 +1213,40 @@ public class QueryAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
+            Database database;
+            try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
+                database = metadataMgr.getDb(catalogName, dbName);
+            }
 
-            Database database = metadataMgr.getDb(catalogName, dbName);
             MetaUtils.checkDbNullAndReport(database, dbName);
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
-                Pair<Table, MaterializedIndexMeta> materializedIndex =
-                        metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
-                if (materializedIndex != null) {
-                    Table mvTable = materializedIndex.first;
-                    Preconditions.checkState(mvTable != null);
-                    Preconditions.checkState(mvTable instanceof OlapTable);
-                    try {
-                        // Add read lock to avoid concurrent problems.
-                        database.readLock();
-                        OlapTable mvOlapTable = new OlapTable();
-                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
-                        // Copy the necessary olap table meta to avoid changing original meta;
-                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
-                        table = mvOlapTable;
-                    } finally {
-                        database.readUnlock();
+                try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
+                    Pair<Table, MaterializedIndexMeta> materializedIndex =
+                            metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                    if (materializedIndex != null) {
+                        Table mvTable = materializedIndex.first;
+                        Preconditions.checkState(mvTable != null);
+                        Preconditions.checkState(mvTable instanceof OlapTable);
+                        try {
+                            // Add read lock to avoid concurrent problems.
+                            database.readLock();
+                            OlapTable mvOlapTable = new OlapTable();
+                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                            // Copy the necessary olap table meta to avoid changing original meta;
+                            mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                            table = mvOlapTable;
+                        } finally {
+                            database.readUnlock();
+                        }
                     }
                 }
+
             } else {
-                table = metadataMgr.getTable(catalogName, dbName, tbName);
+                try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                    table = metadataMgr.getTable(catalogName, dbName, tbName);
+                }
             }
 
             if (table == null) {

@@ -23,6 +23,7 @@
 #include "exprs/agg/java_udaf_function.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
+#include "udf/java/java_udf.h"
 
 namespace starrocks {
 
@@ -106,7 +107,7 @@ bool FunctionContext::is_notnull_constant_column(int i) const {
     return col && col->is_constant() && !col->is_null(0);
 }
 
-starrocks::ColumnPtr FunctionContext::get_constant_column(int i) const {
+ColumnPtr FunctionContext::get_constant_column(int i) const {
     if (i < 0 || i >= _constant_columns.size()) {
         return nullptr;
     }
@@ -127,6 +128,13 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     default:
         // TODO: signal error somehow
         return nullptr;
+    }
+}
+
+void FunctionContext::release_mems() {
+    if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
+        auto env = JVMFunctionHelper::getInstance().getEnv();
+        _jvm_udaf_ctxs->states->clear(this, env);
     }
 }
 

@@ -20,6 +20,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -141,5 +143,22 @@ public class AlterUserStmtTest {
         String sql = "ALTER USER 'user' IDENTIFIED WITH authentication_ldap_sasl";
         UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testRootPassword() throws Exception {
+        String createUserSql = "CREATE USER 'admin' IDENTIFIED BY ''";
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
+        authenticationManager.createUser(createUserStmt);
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("admin", "%"));
+        starRocksAssert.getCtx().setCurrentRoleIds(new UserIdentity("admin", "%"));
+
+        AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter user root identified by \"12345\"; ", starRocksAssert.getCtx());
+        Authorizer.check(alterUserStmt, starRocksAssert.getCtx());
     }
 }

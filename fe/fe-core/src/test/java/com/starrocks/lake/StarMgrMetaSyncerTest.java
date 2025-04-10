@@ -35,10 +35,19 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.proto.DeleteTabletRequest;
+import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.StatusPB;
+import com.starrocks.pseudocluster.PseudoBackend;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -52,6 +61,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -71,12 +82,13 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private ColocateTableIndex colocateTableIndex;
 
+    long shardGroupId = 12L;
+
     @Before
     public void setUp() throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
-        long shardGroupId = 12L;
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -373,5 +385,160 @@ public class StarMgrMetaSyncerTest {
         Assert.assertEquals((long) shards.get(0), 111L);
         Assert.assertEquals((long) shards.get(1), 222L);
         Assert.assertEquals((long) shards.get(2), 333L);
+    }
+
+    @Test
+    public void testDeleteTabletsIgnoreInvalidArgumentError() {
+        Config.shard_group_clean_threshold_sec = 0;
+        long groupIdToClear = shardGroupId + 1;
+        List<Long> allShardGroupId = Lists.newArrayList(groupIdToClear);
+        // build shardGroupInfos
+        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        int numOfShards = allShardIds.size();
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        for (long groupId : allShardGroupId) {
+            ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                    .setGroupId(groupIdToClear)
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                    .addAllShardIds(allShardIds)
+                    .build();
+            shardGroupInfos.add(info);
+        }
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) throws
+                    StarClientException {
+                allShardGroupId.removeAll(groupIds);
+                for (long groupId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
+                }
+            }
+            @Mock
+            public List<ShardGroupInfo> listShardGroup() {
+                return shardGroupInfos;
+            }
+
+            @Mock
+            public List<Long> listShard(long groupId) throws DdlException {
+                if (groupId == groupIdToClear) {
+                    return allShardIds;
+                } else {
+                    return Lists.newArrayList();
+                }
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                allShardIds.removeAll(shardIds);
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return new PseudoBackend.PseudoLakeService();
+            }
+        };
+
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                resp.failedTablets = new ArrayList<>(request.tabletIds);
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        // No shards deleted
+        Assert.assertEquals(numOfShards, allShardIds.size());
+
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.INVALID_ARGUMENT.getValue();
+                resp.failedTablets = new ArrayList<>(request.tabletIds);
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        // can delete the shards, because the error is INVALID_ARGUMENT
+        Assert.assertEquals(0, allShardIds.size());
+    }
+
+    @Test
+    public void testForceDelete() {
+        Config.meta_sync_force_delete_shard_meta = true;
+        Config.shard_group_clean_threshold_sec = 0;
+        long groupIdToClear = shardGroupId + 1;
+        List<Long> allShardGroupId = Lists.newArrayList(groupIdToClear);
+        // build shardGroupInfos
+        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        int numOfShards = allShardIds.size();
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        for (long groupId : allShardGroupId) {
+            ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                    .setGroupId(groupIdToClear)
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                    .addAllShardIds(allShardIds)
+                    .build();
+            shardGroupInfos.add(info);
+        }
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) throws
+                    StarClientException {
+                allShardGroupId.removeAll(groupIds);
+                for (long groupId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
+                }
+            }
+            @Mock
+            public List<ShardGroupInfo> listShardGroup() {
+                return shardGroupInfos;
+            }
+
+            @Mock
+            public List<Long> listShard(long groupId) throws DdlException {
+                if (groupId == groupIdToClear) {
+                    return allShardIds;
+                } else {
+                    return Lists.newArrayList();
+                }
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                allShardIds.removeAll(shardIds);
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return new PseudoBackend.PseudoLakeService();
+            }
+        };
+
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) throws Exception {
+                throw new Exception("testForceDelete");
+            }
+        };
+        Config.meta_sync_force_delete_shard_meta = false;
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        Assert.assertEquals(numOfShards, allShardIds.size());
+
+        Config.meta_sync_force_delete_shard_meta = true;
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        Assert.assertEquals(0, allShardIds.size());
+
+        Config.meta_sync_force_delete_shard_meta = false;
     }
 }

@@ -383,6 +383,10 @@ public enum PrimitiveType {
         return slotSize;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
     public int getTypeSize() {
         int typeSize = 0;
         switch (this) {

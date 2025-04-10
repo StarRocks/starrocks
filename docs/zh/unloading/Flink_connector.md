@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Flink Connector 读取数据
@@ -20,21 +20,22 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
   Flink 先从 FE 节点获取查询计划 (Query Plan)，然后将获取到的查询计划作为参数，下发至 BE 节点，最后获取 BE 节点返回的数据。
 
-  ![Unload data - Flink Connector](../assets/unload_flink_connector_1.png)
+  ![Unload data - Flink Connector](../_assets/unload_flink_connector_1.png)
 
 - Flink JDBC Connector
 
   Flink JDBC Connector 仅能从 FE 单点上串行读取数据，数据读取效率较低。
 
-  ![Unload data - JDBC Connector](../assets/unload_flink_connector_2.png)
+  ![Unload data - JDBC Connector](../_assets/unload_flink_connector_2.png)
 
 ## 版本要求
 
-| Connector | Flink       | StarRocks  | Java | Scala      |
-| --------- | ----------- | ---------- | ---- | ---------- |
-| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
-| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
-| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
+| Connector | Flink                    | StarRocks  | Java | Scala      |
+| --------- | ------------------------ | ---------- | ---- | ---------- |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 及以上  | 8    | 2.11,2.12  |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 及以上  | 8    | 2.11,2.12  |
 
 ## 前提条件
 
@@ -101,7 +102,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ### 网络设置
 
-确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/management/BE_configuration.md#be_port) 端口（默认 `9060`）。
 
 ## 参数说明
 
@@ -159,6 +160,11 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
+| JSON       | STRING <br /> **说明** <br /> **自 1.2.10 版起支持。** |
+| ARRAY      | ARRAY  <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| STRUCT     | ROW    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| MAP        | MAP    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+
 
 ## 使用示例
 

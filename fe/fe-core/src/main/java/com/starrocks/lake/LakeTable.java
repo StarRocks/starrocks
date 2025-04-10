@@ -22,6 +22,7 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -160,7 +161,7 @@ public class LakeTable extends OlapTable {
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId) {
+                                          long partitionId, long shardGroupId, Database db) {
         FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
         Map<String, String> properties = new HashMap<>();
@@ -209,5 +210,11 @@ public class LakeTable extends OlapTable {
             return CatalogUtils.addEscapeCharacter(comment);
         }
         return TableType.OLAP.name();
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        setMaxColUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 }

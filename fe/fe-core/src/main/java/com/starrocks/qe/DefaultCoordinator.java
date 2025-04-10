@@ -100,8 +100,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -247,7 +247,7 @@ public class DefaultCoordinator extends Coordinator {
         FragmentInstanceExecState execState = FragmentInstanceExecState.createFakeExecution(queryId, address);
         executionDAG.addExecution(execState);
 
-        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, 1);
+        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, 1, false);
         queryProfile.attachInstances(Collections.singletonList(queryId));
         queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
 
@@ -262,7 +262,6 @@ public class DefaultCoordinator extends Coordinator {
         this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
 
-        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size());
         List<PlanFragment> fragments = jobSpec.getFragments();
         List<ScanNode> scanNodes = jobSpec.getScanNodes();
         TDescriptorTable descTable = jobSpec.getDescTable();
@@ -277,6 +276,10 @@ public class DefaultCoordinator extends Coordinator {
         if (null != shortCircuitExecutor) {
             isShortCircuit = true;
         }
+
+        this.queryProfile =
+                new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size(),
+                        isShortCircuit);
     }
 
     @Override
@@ -404,6 +407,11 @@ public class DefaultCoordinator extends Coordinator {
         return coordinatorPreprocessor.getWorkerProvider().isWorkerSelected(backendID);
     }
 
+    @Override
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
     private void lock() {
         lock.lock();
     }
@@ -450,9 +458,19 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public void onReleaseSlots() {
+        if (slot != null) {
+            GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
+            GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
+        }
+    }
+
+    @Override
     public void onFinished() {
-        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
-        GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
+        onReleaseSlots();
+        // for async profile, if Be doesn't report profile in time, we upload the most complete profile
+        // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
+        queryProfile.finishAllInstances(Status.OK);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -515,6 +533,13 @@ public class DefaultCoordinator extends Coordinator {
             // so we only set enable_profile to true when use non-pipeline engine.
             if (!jobSpec.isEnablePipeline()) {
                 jobSpec.getQueryOptions().setEnable_profile(true);
+            }
+            if (jobSpec.isBrokerLoad() && jobSpec.getQueryOptions().getBig_query_profile_threshold() == 0) {
+                jobSpec.getQueryOptions().setBig_query_profile_threshold(Config.default_big_load_profile_threshold_second * 1000);
+            }
+            // runtime load profile does not need to report too frequently
+            if (jobSpec.getQueryOptions().getRuntime_profile_report_interval() < 30) {
+                jobSpec.getQueryOptions().setRuntime_profile_report_interval(30);
             }
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(
@@ -585,9 +610,11 @@ public class DefaultCoordinator extends Coordinator {
                 throw new UserException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
                 SimpleScheduler.addToBlacklist(execution.getWorker().getId());
-                throw new RpcException(execution.getWorker().getHost(), "rpc failed");
+                throw new RpcException(
+                        String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
+                        failure);
             default:
-                throw new UserException(status.getErrorMsg());
+                throw new UserException(status.getErrorMsg(), failure);
         }
     }
 
@@ -634,8 +661,6 @@ public class DefaultCoordinator extends Coordinator {
 
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             PlanFragment fragment = execFragment.getPlanFragment();
-            fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
                 for (final FragmentInstance instance : execFragment.getInstances()) {
@@ -769,7 +794,7 @@ public class DefaultCoordinator extends Coordinator {
                 throw new RpcException("unknown", copyStatus.getErrorMsg());
             } else {
                 String errMsg = copyStatus.getErrorMsg();
-                LOG.warn("query failed: {}", errMsg);
+                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
 
                 // hide host info
                 int hostIndex = errMsg.indexOf("host");
@@ -813,7 +838,7 @@ public class DefaultCoordinator extends Coordinator {
                 queryStatus.setStatus(Status.CANCELLED);
                 queryStatus.setErrorMsg(message);
             }
-            LOG.warn("cancel execState of query, this is outside invoke");
+            LOG.info("cancel query {} because {}", connectContext.queryId, message);
             cancelInternal(reason);
         } finally {
             try {
@@ -872,55 +897,71 @@ public class DefaultCoordinator extends Coordinator {
             return;
         }
 
-        queryProfile.updateProfile(execState, params);
+        // NOTE:
+        // The exec status would affect query schedule, so it must be updated no matter what exceptions happen.
+        // Otherwise, the query might hang until timeout
+        if (!execState.updateExecStatus(params)) {
+            return;
+        }
 
-        lock();
+        String instanceId = DebugUtil.printId(params.getFragment_instance_id());
+        // Create a CompletableFuture chain for handling updates
+        CompletableFuture<Void> future = CompletableFuture.completedFuture(null)
+                .thenRun(() -> {
+                    try {
+                        queryProfile.updateProfile(execState, params);
+                        execState.updateRunningProfile(params);
+                    } catch (Throwable e) {
+                        LOG.warn("update profile failed {}", instanceId, e);
+                    }
+                })
+                .thenRun(() -> {
+                    Status status = new Status(params.status);
+                    if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
+                        ConnectContext ctx = connectContext;
+                        if (ctx != null) {
+                            ctx.setErrorCodeOnce(status.getErrorCodeString());
+                        }
+                        LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
+                                status, DebugUtil.printId(jobSpec.getQueryId()),
+                                DebugUtil.printId(params.getFragment_instance_id()),
+                                params.getBackend_id());
+                        updateStatus(status, params.getFragment_instance_id());
+                    }
+                })
+                .thenRun(() -> {
+                    if (execState.isFinished()) {
+                        try {
+                            lock();
+                            queryProfile.updateLoadInformation(execState, params);
+                        } catch (Throwable e) {
+                            LOG.warn("update load information failed {}", instanceId, e);
+                        } finally {
+                            unlock();
+                        }
+                    }
+                })
+                .thenRun(() -> {
+                    // NOTE: it's critical for query execution, and must be put after the profile update
+                    if (execState.isFinished()) {
+                        queryProfile.finishInstance(params.getFragment_instance_id());
+                    }
+                })
+                .thenRun(() -> updateJobProgress(params))
+                .handle((result, ex) -> {
+                    // all block are independent, continue the execution no matter what exception happen
+                    if (ex != null) {
+                        LOG.warn("Error occurred during fragment exec status update {}: {}", instanceId,
+                                ex.getMessage());
+                    }
+                    return null; // Return null to continue the chain
+                });
+
         try {
-            if (!execState.updateExecStatus(params)) {
-                return;
-            }
-        } finally {
-            unlock();
+            future.get();
+        } catch (Exception e) {
+            LOG.warn("Error occurred during updateFragmentExecStatus {}", instanceId, e);
         }
-
-        // print fragment instance profile
-        if (LOG.isDebugEnabled()) {
-            StringBuilder builder = new StringBuilder();
-            execState.printProfile(builder);
-            LOG.debug("profile for query_id={} instance_id={}\n{}",
-                    DebugUtil.printId(jobSpec.getQueryId()),
-                    DebugUtil.printId(params.getFragment_instance_id()),
-                    builder);
-        }
-
-        Status status = new Status(params.status);
-        // for now, abort the query if we see any error except if the error is cancelled
-        // and returned_all_results_ is true.
-        // (UpdateStatus() initiates cancellation, if it hasn't already been initiated)
-        if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
-            ConnectContext ctx = connectContext;
-            if (ctx != null) {
-                ctx.setErrorCodeOnce(status.getErrorCodeString());
-            }
-            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
-                    status, DebugUtil.printId(jobSpec.getQueryId()),
-                    DebugUtil.printId(params.getFragment_instance_id()),
-                    params.getBackend_id());
-            updateStatus(status, params.getFragment_instance_id());
-        }
-
-        if (execState.isFinished()) {
-            lock();
-            try {
-                queryProfile.updateLoadInformation(execState, params);
-            } finally {
-                unlock();
-            }
-
-            queryProfile.finishInstance(params.getFragment_instance_id());
-        }
-
-        updateJobProgress(params);
     }
 
     @Override
@@ -971,7 +1012,10 @@ public class DefaultCoordinator extends Coordinator {
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
-            queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            boolean isFinished = queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            if (!isFinished) {
+                LOG.warn("failed to get profile within {} seconds", timeout);
+            }
         }
 
         lock();
@@ -983,7 +1027,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public boolean tryProcessProfileAsync(Consumer<Boolean> task) {
-        if (executionDAG.getExecutions().isEmpty()) {
+        if (executionDAG.getExecutions().isEmpty() && (!isShortCircuit)) {
             return false;
         }
         if (!jobSpec.isNeedReport()) {
@@ -1028,9 +1072,10 @@ public class DefaultCoordinator extends Coordinator {
         final long fixedMaxWaitTime = 5;
 
         long leftTimeoutS = timeoutS;
+        boolean awaitRes = false;
         while (leftTimeoutS > 0) {
             long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            boolean awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
             if (awaitRes) {
                 return true;
             }
@@ -1046,11 +1091,19 @@ public class DefaultCoordinator extends Coordinator {
 
             leftTimeoutS -= waitTime;
         }
+
+        if (!awaitRes) {
+            LOG.warn("failed to get profile within {} seconds", timeoutS);
+        }
         return false;
     }
 
+    // build execution profile  from every BE's report
     @Override
     public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        if (isShortCircuit) {
+            return shortCircuitExecutor.buildQueryProfile(needMerge);
+        }
         return queryProfile.buildQueryProfile(needMerge);
     }
 
@@ -1105,13 +1158,15 @@ public class DefaultCoordinator extends Coordinator {
         return this.queryProfile.isProfileAlreadyReported();
     }
 
+    @Override
+    public String getWarehouseName() {
+        if (connectContext == null) {
+            return "";
+        }
+        return connectContext.getCurrentWarehouse();
+    }
+
     private void execShortCircuit() {
         shortCircuitExecutor.exec();
-        Optional<RuntimeProfile> runtimeProfile = shortCircuitExecutor.getRuntimeProfile();
-        if (jobSpec.isNeedReport() && runtimeProfile.isPresent()) {
-            RuntimeProfile profile = runtimeProfile.get();
-            profile.setName("Short Circuit Executor");
-            queryProfile.getQueryProfile().addChild(profile);
-        }
     }
 }

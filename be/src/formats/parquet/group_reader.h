@@ -54,7 +54,6 @@ struct GroupReaderParam {
         const SlotId slot_id() const { return slot_desc->id(); }
     };
 
-    const TupleDescriptor* tuple_desc = nullptr;
     // conjunct_ctxs that column is materialized in group reader
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
@@ -105,7 +104,7 @@ public:
     Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
 
     void _init_chunk_dict_column(ChunkPtr* chunk);
-    bool _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
+    StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
     Status _fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk);
 
     Status _init_column_readers();

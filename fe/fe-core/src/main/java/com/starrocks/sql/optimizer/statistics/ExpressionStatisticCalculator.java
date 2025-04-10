@@ -34,6 +34,7 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.IsoFields;
 import java.util.List;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
@@ -49,6 +50,10 @@ public class ExpressionStatisticCalculator {
     }
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount) {
+        if (Double.isNaN(rowCount)) {
+            LOG.debug("found a NaN row count when calculating column statistic for expr: {}", operator);
+            return ColumnStatistic.unknown();
+        }
         return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
     }
 
@@ -171,9 +176,10 @@ public class ExpressionStatisticCalculator {
             Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size(),
                     "column statistics missing for expr: %s. column statistics: %s",
                     call, childrenColumnStatistics);
+
             if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) ||
                     inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
-                return ColumnStatistic.unknown();
+                return deriveBasicColStats(call);
             }
 
             if (call.getChildren().size() == 0) {
@@ -261,6 +267,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.MIN:
                 case FunctionSet.ANY_VALUE:
                 case FunctionSet.AVG:
+                case FunctionSet.CONCAT:
                     maxValue = columnStatistic.getMaxValue();
                     minValue = columnStatistic.getMinValue();
                     break;
@@ -499,12 +506,15 @@ public class ExpressionStatisticCalculator {
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
                 case FunctionSet.DATE_ADD:
+                case FunctionSet.DAYS_ADD:
                     minValue = left.getMinValue() + right.getMinValue();
                     maxValue = left.getMaxValue() + right.getMaxValue();
                     break;
                 case FunctionSet.SUBTRACT:
                 case FunctionSet.TIMEDIFF:
                 case FunctionSet.DATE_SUB:
+                case FunctionSet.DAYS_SUB:
+                case FunctionSet.SECONDS_DIFF:
                     minValue = left.getMinValue() - right.getMaxValue();
                     maxValue = left.getMaxValue() - right.getMinValue();
                     break;
@@ -538,10 +548,6 @@ public class ExpressionStatisticCalculator {
                     interval = 60;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
-                    break;
-                case FunctionSet.SECONDS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
                     break;
                 case FunctionSet.MULTIPLY:
                     minValue = Math.min(Math.min(
@@ -580,6 +586,24 @@ public class ExpressionStatisticCalculator {
                     minValue = left.getMinValue();
                     maxValue = left.getMaxValue();
                     break;
+                case FunctionSet.WEEK:
+                    minValue = 0;
+                    maxValue = 53;
+                    distinctValues = Math.min(calcDistinctValForWeek(left), distinctValues);
+                    break;
+                case FunctionSet.CONCAT:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValues = Math.min(rowCount, left.getDistinctValuesCount() + right.getDistinctValuesCount());
+                    averageRowSize = left.getAverageRowSize() + right.getAverageRowSize();
+                    break;
+                case FunctionSet.LEFT:
+                case FunctionSet.RIGHT:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    averageRowSize = Math.max(1, left.getAverageRowSize() - right.getAverageRowSize());
+                    distinctValues = left.getDistinctValuesCount() * averageRowSize / left.getAverageRowSize();
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -594,15 +618,26 @@ public class ExpressionStatisticCalculator {
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
                                                             List<ColumnStatistic> childColumnStatisticList) {
+            double distinctValues;
+            double averageRowSize;
+            double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.IF:
-                    double distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
+                    distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
                             childColumnStatisticList.get(2).getDistinctValuesCount();
                     return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
                             callOperator.getType().getTypeSize(), distinctValues);
                 // use child column statistics for now
                 case FunctionSet.SUBSTRING:
                     return childColumnStatisticList.get(0);
+                case FunctionSet.CONCAT:
+                    distinctValues = Math.min(rowCount,
+                            childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount).sum());
+                    averageRowSize = childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getAverageRowSize).sum();
+                    nullsFraction = 1 - childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getNullsFraction)
+                            .reduce(1.0, (accumulator, nullFraction) -> accumulator * (1 - nullFraction));
+                    return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                            nullsFraction, averageRowSize, distinctValues);
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -610,6 +645,37 @@ public class ExpressionStatisticCalculator {
 
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
+        }
+
+        private ColumnStatistic deriveBasicColStats(CallOperator call) {
+            List<ColumnRefOperator> usedCols = call.getColumnRefs();
+            if (usedCols.size() == 0) {
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                        0, call.getType().getTypeSize(), 1);
+            } else if (usedCols.size() == 1 && !inputStatistics.getColumnStatistic(usedCols.get(0)).isUnknown()) {
+                ColumnStatistic usedStats = inputStatistics.getColumnStatistic(usedCols.get(0));
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, usedStats.getNullsFraction(),
+                        call.getType().getTypeSize(), usedStats.getDistinctValuesCount());
+            } else {
+                return ColumnStatistic.unknown();
+            }
+        }
+
+        private double calcDistinctValForWeek(ColumnStatistic col) {
+            if (col.hasNaNValue() || col.isInfiniteRange()) {
+                return 54;
+            }
+            LocalDateTime min = Utils.getDatetimeFromLong((long) col.getMinValue());
+            LocalDateTime max = Utils.getDatetimeFromLong((long) col.getMaxValue());
+
+            // the range is more than one year
+            if (min.plusYears(1).compareTo(max) <= 0) {
+                return 54;
+            } else if (min.getYear() < max.getYear()) {
+                return (54 - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)) + max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+            } else {
+                return max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + 1;
+            }
         }
     }
 }

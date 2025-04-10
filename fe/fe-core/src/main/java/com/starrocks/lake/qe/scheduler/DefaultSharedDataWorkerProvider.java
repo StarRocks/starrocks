@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -37,8 +38,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -62,8 +64,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultSharedDataWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-                                                                       boolean preferComputeNode,
-                                                                       int numUsedComputeNodes) {
+                                       boolean preferComputeNode,
+                                       int numUsedComputeNodes,
+                                       ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
             if (LOG.isDebugEnabled()) {
@@ -242,13 +245,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
-    private static ComputeNode getNextWorker(ImmutableMap<Long, ComputeNode> workers,
-                                             IntSupplier getNextWorkerNodeIndex) {
-        if (workers.isEmpty()) {
-            return null;
-        }
-        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
-        return workers.values().asList().get(index);
+    @VisibleForTesting
+    static AtomicInteger getNextComputeNodeIndexer() {
+        return NEXT_COMPUTE_NODE_INDEX;
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {

@@ -108,6 +108,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalOlapScan(LogicalOlapScanOperator node, Void context) {
         return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                ", selectedIndexId=" + node.getSelectedIndexId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
@@ -326,6 +327,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalOlapScan(PhysicalOlapScanOperator node, Void context) {
         return "PhysicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                ", selectedIndexId=" + node.getSelectedIndexId() +
                 ", outputColumns=" + node.getOutputColumns() +
                 ", projection=" + node.getProjection() +
                 ", predicate=" + node.getPredicate() +

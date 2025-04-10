@@ -143,10 +143,12 @@ public:
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
+    MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
+    MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -166,6 +168,9 @@ private:
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
+
+    // Track usage of jemalloc
+    std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
@@ -208,6 +213,8 @@ private:
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
     std::shared_ptr<MemTracker> _chunk_allocator_mem_tracker;
+    // record mem usage in passthrough
+    std::shared_ptr<MemTracker> _passthrough_mem_tracker;
 
     std::shared_ptr<MemTracker> _clone_mem_tracker;
 
@@ -328,6 +335,7 @@ public:
 
 private:
     void _wait_for_fragments_finish();
+    size_t _get_running_fragments_count() const;
 
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override

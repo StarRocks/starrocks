@@ -192,6 +192,9 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
 
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+            if (!StatisticAutoCollector.checkoutAnalyzeTime()) {
+                break;
+            }
             AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getCatalogName(), statsJob.getDb().getFullName(), statsJob.getTable().getName(),
                     statsJob.getTable().getUUID(), statsJob.getColumnNames(), statsJob.getType(), statsJob.getScheduleType(),
@@ -211,7 +214,7 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
         }
 
         if (!hasFailedCollectJob) {
-            setStatus(StatsConstants.ScheduleStatus.PENDING);
+            setStatus(ScheduleStatus.FINISH);
             setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }

@@ -368,7 +368,9 @@ public class InsertPlanner {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
                         targetTable);
             } finally {
-                StatementPlanner.lock(dbs);
+                try (Timer ignore2 = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(dbs);
+                }
             }
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
@@ -583,7 +585,6 @@ public class InsertPlanner {
 
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
-
             if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
                     targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 if (targetColumn.isGeneratedColumn()) {
@@ -632,14 +633,6 @@ public class InsertPlanner {
                                     "please check the associated materialized view " + targetIndexMetaName
                                     + " of target table:" + insertStatement.getTargetTable().getName());
                 }
-
-                ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
-                        new Scope(RelationId.anonymous(),
-                                new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
-                                        .map(col -> new Field(col.getName(), col.getType(),
-                                                insertStatement.getTableName(), null))
-                                        .collect(Collectors.toList()))), session);
-
                 ExpressionMapping expressionMapping =
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());
@@ -870,7 +863,7 @@ public class InsertPlanner {
 
         List<String> targetColumnNames;
         if (insertStmt.getTargetColumnNames() == null) {
-            targetColumnNames = targetTable.getColumns().stream()
+            targetColumnNames = targetTable.getFullSchema().stream()
                     .map(Column::getName).collect(Collectors.toList());
         } else {
             targetColumnNames = Lists.newArrayList(insertStmt.getTargetColumnNames());

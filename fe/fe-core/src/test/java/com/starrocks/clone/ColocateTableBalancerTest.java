@@ -105,6 +105,9 @@ public class ColocateTableBalancerTest {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
+        GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
+        ColocateTableBalancer.getInstance().setStop();
     }
 
     @Before
@@ -1086,5 +1089,40 @@ public class ColocateTableBalancerTest {
         List<List<Long>> expected = Lists.partition(
                 Lists.newArrayList(5L, 8L, 7L, 8L, 6L, 5L, 6L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
+    }
+
+    @Test
+    public void testSystemStable() throws Exception {
+        ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
+        Backend backend1 = new Backend(100001L, "192.168.0.1", 9050);
+        backend1.setAlive(true);
+        Backend backend2 = new Backend(100002L, "192.168.0.2", 9050);
+        backend2.setAlive(true);
+        SystemInfoService infoService = new SystemInfoService();
+        infoService.replayAddBackend(backend1);
+        infoService.replayAddBackend(backend2);
+
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        // set stable last time to 1s, and sleep 1s, the system becomes to stable
+        Config.tablet_sched_colocate_balance_wait_system_stable_time_s = 1;
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
+
+        // one backend is changed to not alive, the system becomes to unstable
+        backend1.setAlive(false);
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
     }
 }

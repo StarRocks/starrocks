@@ -155,7 +155,11 @@ Status PublishVersionManager::finish_publish_version_task() {
 #endif
                         remove_task_info(finish_request.task_type, finish_request.signature);
                     });
-            erase_finish_task_signature.emplace_back(signature);
+            if (st.ok()) {
+                erase_finish_task_signature.emplace_back(signature);
+            } else {
+                LOG(WARNING) << "submit finish publish task failed: " << signature;
+            }
         }
 
         std::vector<int64_t> clear_txn;
@@ -169,7 +173,11 @@ Status PublishVersionManager::finish_publish_version_task() {
 #endif
                             remove_task_info(finish_request.task_type, finish_request.signature);
                         });
-                erase_waitting_finish_task_signature.emplace_back(signature);
+                if (st.ok()) {
+                    erase_waitting_finish_task_signature.emplace_back(signature);
+                } else {
+                    LOG(WARNING) << "submit finish publish task failed: " << signature;
+                }
             }
         }
         for (auto& signature : erase_finish_task_signature) {

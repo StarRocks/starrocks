@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 降级 StarRocks
@@ -43,7 +43,7 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 
 - **通用兼容性配置**
 
-降级前，请关闭 Tablet Clone。
+降级前，请关闭 Tablet Clone。如果您已经关闭 Balancer，可以跳过该步骤。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
@@ -75,7 +75,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 
 1. 生成新的元数据快照。
 
-   a. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+   a. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 创建新的元数据快照文件。
 
    b. 通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成：
 

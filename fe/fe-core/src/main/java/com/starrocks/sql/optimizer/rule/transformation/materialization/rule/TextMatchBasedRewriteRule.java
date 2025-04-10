@@ -27,20 +27,20 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -53,6 +53,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,7 +63,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.MvRewritePreprocessor.isMVValidToRewriteQuery;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
 
@@ -80,7 +81,7 @@ public class TextMatchBasedRewriteRule extends Rule {
     );
     private final ConnectContext connectContext;
     private final StatementBase stmt;
-    private final Map<Operator, ParseNode> optToAstMap;
+    private final MVTransformerContext mvTransformerContext;
 
     // To avoid text match costing too much time, use parameters below to limit it.
     // limit for sub-query text match(default 4), no match when it <= 0
@@ -88,20 +89,19 @@ public class TextMatchBasedRewriteRule extends Rule {
     // limit for mvs which matched input query(default 64)
     private final long mvRewriteRelatedMVsLimit;
 
-    private int subQueryTextMatchCount = 1;
-
     public TextMatchBasedRewriteRule(ConnectContext connectContext,
                                      StatementBase stmt,
-                                     Map<Operator, ParseNode> optToAstMap) {
+                                     MVTransformerContext mvTransformerContext) {
         super(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE, Pattern.create(OperatorType.PATTERN));
 
         this.connectContext = connectContext;
         this.stmt = stmt;
-        this.optToAstMap = optToAstMap;
-        this.mvSubQueryTextMatchMaxCount =
-                connectContext.getSessionVariable().getMaterializedViewSubQueryTextMatchMaxCount();
+        this.mvTransformerContext = mvTransformerContext;
         this.mvRewriteRelatedMVsLimit =
                 connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        this.mvSubQueryTextMatchMaxCount =
+                connectContext.getSessionVariable().getMaterializedViewSubQueryTextMatchMaxCount();
+
     }
 
     @Override
@@ -119,33 +119,31 @@ public class TextMatchBasedRewriteRule extends Rule {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         if (!sessionVariable.isEnableMaterializedViewRewrite() ||
                 !sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
+            logMVRewrite(context, this, "Materialized view text based rewrite is disabled");
             return null;
         }
         if (stmt == null || stmt.getOrigStmt() == null || stmt.getOrigStmt().originStmt == null) {
+            logMVRewrite(context, this, "Materialized view text based rewrite is disabled: stmt is null");
+            return null;
+        }
+        QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
+        if (CollectionUtils.isEmpty(queryMaterializationContext.getRelatedMVs())) {
             return null;
         }
 
-        OptExpression rewritten = rewriteByTextMatch(input, context, parseNode);
+        CachingMvPlanContextBuilder.AstKey astKey = new CachingMvPlanContextBuilder.AstKey(parseNode);
+        OptExpression rewritten = rewriteByTextMatch(input, context, astKey);
         if (rewritten != null) {
+            logMVRewrite(context, this, "Materialized view text based rewrite failed, " +
+                    "try to rewrite sub-query again");
             return rewritten;
         }
         // try to rewrite sub-query again if exact-match failed.
-        if (optToAstMap == null || optToAstMap.isEmpty()) {
+        if (mvTransformerContext == null || mvTransformerContext.isOpASTEmpty()) {
+            logMVRewrite(context, this, "OptToAstMap is empty, no try to rewrite sub-query again");
             return null;
         }
-        return input.getOp().accept(new TextBasedRewriteVisitor(context, optToAstMap), input, connectContext);
-    }
-
-    /**
-     * Since @{LocalMetastore#createMaterializedView} uses
-     * {@code statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));} to store user's define query,
-     * and {@link AstToSQLBuilder} is not reentrant for now, so needs to normalize input query as mv's define query.
-     * TODO: This is expensive, remove this if {@link AstToSQLBuilder} is reentrant.
-     * @param queryAst : input query parse node.
-     */
-    private ParseNode normalizeAst(ParseNode queryAst) {
-        String query = AstToSQLBuilder.toSQL(queryAst);
-        return MvUtils.getQueryAst(query);
+        return input.getOp().accept(new TextBasedRewriteVisitor(context, mvTransformerContext), input, connectContext);
     }
 
     private boolean isSupportForTextBasedRewrite(OptExpression input) {
@@ -166,7 +164,7 @@ public class TextMatchBasedRewriteRule extends Rule {
      * @param ast
      * @return
      */
-    public Set<MaterializedView> getMaterializedViewsByAst(OptExpression input, ParseNode ast) {
+    public Set<MaterializedView> getMaterializedViewsByAst(OptExpression input, CachingMvPlanContextBuilder.AstKey ast) {
         CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
         Set<MaterializedView> mvs = instance.getMvsByAst(ast);
         if (mvs != null) {
@@ -184,8 +182,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 String mvNames = Joiner.on(",").join(relatedMvs.stream()
                         .map(mv -> mv.getName()).collect(Collectors.toList()));
                 LOG.warn("Related MVs: {}", mvNames);
-                CachingMvPlanContextBuilder.AstKey astKey = new CachingMvPlanContextBuilder.AstKey(ast);
-                LOG.warn("Query Key: {}", astKey);
+                LOG.warn("Query Key: {}", ast);
                 List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMvs);
                 for (CachingMvPlanContextBuilder.AstKey cacheKey : candidates) {
                     LOG.warn("Cached Key: {}", cacheKey);
@@ -199,25 +196,28 @@ public class TextMatchBasedRewriteRule extends Rule {
 
     private OptExpression rewriteByTextMatch(OptExpression input,
                                              OptimizerContext context,
-                                             ParseNode queryAst) {
+                                             CachingMvPlanContextBuilder.AstKey ast) {
         if (!isSupportForTextBasedRewrite(input)) {
+            logMVRewrite(context, this, "TEXT_BASED_REWRITE is not supported for this input");
             return null;
         }
 
+        QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
         try {
-            ParseNode normalizedAst = normalizeAst(queryAst);
-            Set<MaterializedView> candidateMvs = getMaterializedViewsByAst(input, normalizedAst);
-            logMVRewrite(context, this, "matched mvs: {}",
+            Set<MaterializedView> candidateMvs = getMaterializedViewsByAst(input, ast);
+            logMVRewrite(context, this, "TEXT_BASED_REWRITE matched mvs: {}",
                     candidateMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList()));
             if (candidateMvs.isEmpty()) {
                 return null;
             }
             int mvRelatedCount = 0;
-            Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
             for (MaterializedView mv : candidateMvs) {
-                boolean isValid = isMVValidToRewriteQuery(connectContext, mv, queryTables);
-                if (!isValid) {
-                    logMVRewrite(context, this, "MV {} cannot be used for rewrite", mv.getName());
+                Pair<Boolean, String> status = isValidForTextBasedRewrite(context, mv);
+                if (!status.first) {
+                    logMVRewrite(context, this, "MV {} cannot be used for rewrite, {}", mv.getName(), status.second);
+                    continue;
+                }
+                if (!queryMaterializationContext.getRelatedMVs().contains(mv)) {
                     continue;
                 }
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
@@ -238,7 +238,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: text matched with {}",
                         mv.getName());
 
-                MvPlanContext mvPlanContext = getMvPlanContext(mv);
+                MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);
                 if (mvPlanContext == null) {
                     logMVRewrite(context, this, "MV {} plan context is invalid", mv.getName());
                     continue;
@@ -267,16 +267,13 @@ public class TextMatchBasedRewriteRule extends Rule {
         return null;
     }
 
-    private MvPlanContext getMvPlanContext(MaterializedView mv) {
-        // step1: get from mv plan cache
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContextFromCacheIfPresent(mv);
-        if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
-            // TODO: distinguish normal mv plan and view rewrite plan
-            return mvPlanContexts.get(0);
+    public Pair<Boolean, String> isValidForTextBasedRewrite(OptimizerContext context,
+                                                            MaterializedView mv) {
+        if (!mv.isActive()) {
+            logMVRewrite(context, this, "MV is not active: {}", mv.getName());
+            return Pair.create(false, "MV is not active");
         }
-        // step2: get from optimize
-        return new MaterializedViewOptimizer().optimize(mv, connectContext, true, false);
+        return Pair.create(true, "");
     }
 
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
@@ -361,11 +358,18 @@ public class TextMatchBasedRewriteRule extends Rule {
 
     class TextBasedRewriteVisitor extends OptExpressionVisitor<OptExpression, ConnectContext> {
         private final OptimizerContext optimizerContext;
-        private final Map<Operator, ParseNode> optToAstMap;
+        private final MVTransformerContext mvTransformerContext;
+        // sub-query text match count
+        private int subQueryTextMatchCount = 0;
+
         public TextBasedRewriteVisitor(OptimizerContext optimizerContext,
-                                       Map<Operator, ParseNode> optToAstMap) {
+                                       MVTransformerContext mvTransformerContext) {
             this.optimizerContext = optimizerContext;
-            this.optToAstMap = optToAstMap;
+            this.mvTransformerContext = mvTransformerContext;
+        }
+
+        private boolean isReachLimit() {
+            return subQueryTextMatchCount > mvSubQueryTextMatchMaxCount;
         }
 
         private List<OptExpression> visitChildren(OptExpression optExpression, ConnectContext connectContext) {
@@ -376,17 +380,10 @@ public class TextMatchBasedRewriteRule extends Rule {
             return children;
         }
 
-        private boolean isReachLimit() {
-            return subQueryTextMatchCount++ > mvSubQueryTextMatchMaxCount;
-        }
-
         @Override
         public OptExpression visit(OptExpression optExpression, ConnectContext connectContext) {
             LogicalOperator op = (LogicalOperator) optExpression.getOp();
             if (SUPPORTED_REWRITE_OPERATOR_TYPES.contains(op.getOpType())) {
-                if (isReachLimit()) {
-                    return optExpression;
-                }
                 OptExpression rewritten = doRewrite(optExpression);
                 if (rewritten != null) {
                     return rewritten;
@@ -398,11 +395,17 @@ public class TextMatchBasedRewriteRule extends Rule {
 
         private OptExpression doRewrite(OptExpression input) {
             Operator op = input.getOp();
-            if (!optToAstMap.containsKey(op)) {
+            if (!mvTransformerContext.hasOpAST(op) || isReachLimit()) {
                 return null;
             }
-            ParseNode parseNode = optToAstMap.get(op);
-            OptExpression rewritten = rewriteByTextMatch(input, optimizerContext, parseNode);
+
+            // if op is in the AST map, which means op is a sub-query, then rewrite it.
+            subQueryTextMatchCount += 1;
+
+            // try to rewrite by text match
+            ParseNode parseNode = mvTransformerContext.getOpAST(op);
+            OptExpression rewritten = rewriteByTextMatch(input, optimizerContext,
+                    new CachingMvPlanContextBuilder.AstKey(parseNode));
             if (rewritten != null) {
                 return rewritten;
             }

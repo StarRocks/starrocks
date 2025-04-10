@@ -78,11 +78,12 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
 
     // load persistent index if enable persistent index meta
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
-
     if (metadata->enable_persistent_index() && (fix_size <= 128)) {
         DCHECK(_persistent_index == nullptr);
 
         switch (metadata->persistent_index_type()) {
+        // 3.2 don't support CLOUD_NATIVE, so treat it as LOCAL.
+        case PersistentIndexTypePB::CLOUD_NATIVE:
         case PersistentIndexTypePB::LOCAL: {
             // Even if `enable_persistent_index` is enabled,
             // it may not take effect if is as compute node without any storage path.
@@ -101,7 +102,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             RETURN_IF_ERROR(StorageEngine::instance()
                                     ->get_persistent_index_store(metadata->id())
                                     ->create_dir_if_path_not_exists(path));
-            _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+            _persistent_index = std::make_shared<LakeLocalPersistentIndex>(path);
             set_enable_persistent_index(true);
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
@@ -168,6 +169,27 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     LOG_IF(INFO, cost_ns >= /*10ms=*/10 * 1000 * 1000)
             << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
     return Status::OK();
+}
+
+double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
+    if (!_enable_persistent_index) {
+        return 0.0;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        return local_persistent_index->get_write_amp_score();
+    }
+    return 0.0;
+}
+
+void LakePrimaryIndex::set_local_pk_index_write_amp_score(double score) {
+    if (!_enable_persistent_index) {
+        return;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        local_persistent_index->set_write_amp_score(score);
+    }
 }
 
 } // namespace starrocks::lake

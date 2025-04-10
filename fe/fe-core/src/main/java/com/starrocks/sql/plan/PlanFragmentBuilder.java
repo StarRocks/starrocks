@@ -56,6 +56,8 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.catalog.system.information.FeMetricsSystemTable;
+import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -110,7 +112,6 @@ import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -191,6 +192,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -207,6 +209,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
@@ -258,8 +261,8 @@ public class PlanFragmentBuilder {
         PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         long dbId = GlobalStateMgr.getCurrentState().getDb(createStmt.getTableName().getDb()).getId();
-        MaterializedView view =
-                MaterializedViewMgr.getInstance().createSinkTable(createStmt, partitionInfo, mvId, dbId);
+        MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                .createSinkTable(createStmt, partitionInfo, mvId, dbId);
         TupleDescriptor tupleDesc = buildTupleDesc(execPlan, view);
         view.setMaintenancePlan(execPlan);
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
@@ -365,6 +368,10 @@ public class PlanFragmentBuilder {
         for (PlanFragment fragment : fragments) {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
+
+        fragments.forEach(PlanFragment::removeDictMappingProbeRuntimeFilters);
+        fragments.forEach(PlanFragment::collectBuildRuntimeFilters);
+        fragments.forEach(PlanFragment::collectProbeRuntimeFilters);
 
         if (useQueryCache(execPlan)) {
             for (PlanFragment fragment : execPlan.getFragments()) {
@@ -630,7 +637,7 @@ public class PlanFragmentBuilder {
             Optional.ofNullable(optExpression.getStatistics()).ifPresent(statistics -> {
                 Statistics.Builder b = Statistics.builder();
                 b.setOutputRowCount(statistics.getOutputRowCount());
-                b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
+                b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()), true);
                 projectNode.computeStatistics(b.build());
             });
 
@@ -779,19 +786,28 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                List<Long> selectedNonEmptyPartitionIds = node.getSelectedPartitionId().stream().filter(p -> {
-                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(p);
-                    return selectTabletIds != null && !selectTabletIds.isEmpty();
-                }).collect(Collectors.toList());
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
-
+                // Filter out empty partitions from all selected partitions, original selected partition ids may be
+                // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
+                // eg:
+                // partition        : 10001 -> (tablet_1)
+                //  subpartition1   : 10002 -> (tablet_2)
+                //  subpartition2   : 10004 -> (tablet_3)
+                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                // after:
+                // selected partition ids   : 10002
+                // selected tablet ids      : tablet_2
+                // total tablets num        : 1
+                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
-
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
                                 .get(physicalPartition.getId());
+                        if (CollectionUtils.isEmpty(selectTabletIds)) {
+                            continue;
+                        }
+                        selectedNonEmptyPartitionIds.add(physicalPartition.getId());
+                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
                         List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
@@ -805,6 +821,7 @@ public class PlanFragmentBuilder {
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
                     }
                 }
+                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (UserException e) {
                 throw new StarRocksPlannerException(
@@ -1151,6 +1168,7 @@ public class PlanFragmentBuilder {
             PaimonScanNode paimonScanNode =
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
             paimonScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            paimonScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1162,8 +1180,8 @@ public class PlanFragmentBuilder {
                 }
                 paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
                 HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (Exception e) {
                 LOG.warn("Paimon scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -1406,18 +1424,18 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
+            if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME) && scanNode.getLabel() == null
                     && scanNode.getJobId() == null) {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
+            if (SystemTable.needQueryFromLeader(scanNode.getTableName())) {
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
+            if (scanNode.getTableName().equalsIgnoreCase(FeMetricsSystemTable.NAME)) {
                 scanNode.computeFeNodes();
             }
 
@@ -1836,6 +1854,10 @@ public class PlanFragmentBuilder {
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
+            if (MapUtils.isEmpty(aggregations) && CollectionUtils.isEmpty(groupBys)) {
+                throw new StarRocksPlannerException(INTERNAL_ERROR, "invalid agg operator " +
+                        "without any group by key or agg function. OptExpression:\n%s", optExpr.debugString(5));
+            }
             List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
             boolean hasRemovedDistinct = node.hasRemovedDistinctFunc();
 
@@ -2443,7 +2465,7 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
             }
 
-            if (node.getCanLocalShuffle()) {
+            if (!node.getOutputRequireHashPartition()) {
                 joinNode.setCanLocalShuffle(true);
             }
 
@@ -2862,10 +2884,13 @@ public class PlanFragmentBuilder {
             // now sr only support offset on merge-exchange node
             // 1. if child is exchange node, meanings child was enforced gather property
             //   a. only limit and no offset, only need set limit on child
-            //   b. has offset, should trans Exchange to Merge-Exchange node
+            //   b. has offset
+            //      b.1 not merge exchange should trans Exchange to Merge-Exchange node
+            //      b.2 is merge exchange update offset
             // 2. if child isn't exchange node, meanings child satisfy gather property
             //   a. only limit and no offset, no need add exchange node, only need set limit on child
             //   b. has offset, need add exchange node, sr doesn't support a special node to handle offset
+
             if (limit.hasOffset()) {
                 if (!(child.getPlanRoot() instanceof ExchangeNode)) {
                     // use merge-exchange
@@ -2883,11 +2908,17 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(fragment);
                     child = fragment;
                 }
-
                 ExchangeNode exchangeNode = (ExchangeNode) child.getPlanRoot();
-                SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
-                        Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
-                exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                if (!exchangeNode.isMerge()) {
+                    SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
+                            Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
+                    exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                } else if (exchangeNode.getOffset() <= 0) {
+                    exchangeNode.setOffset(limit.getOffset());
+                } else if (exchangeNode.getOffset() > 0) {
+                    exchangeNode.setOffset(limit.getOffset() + exchangeNode.getOffset());
+                }
+
                 exchangeNode.computeStatistics(optExpression.getStatistics());
             }
 
@@ -3330,30 +3361,29 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalTableFunctionTableScanOperator node =
-                    (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
+            PhysicalTableFunctionTableScanOperator node = (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
 
             TableFunctionTable table = (TableFunctionTable) node.getTable();
 
             TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
+            prepareContextSlots(node, context, tupleDesc);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.fileList());
-
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
                     "FileScanNode", files, table.fileList().size());
-            List<BrokerFileGroup> fileGroups = new ArrayList<>();
 
+            Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
+                    Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
+            List<BrokerFileGroup> fileGroups = new ArrayList<>();
             try {
-                BrokerFileGroup grp = new BrokerFileGroup(table);
+                BrokerFileGroup grp = new BrokerFileGroup(table, scanColumns);
                 fileGroups.add(grp);
             } catch (UserException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);
             }
-
-            prepareContextSlots(node, context, tupleDesc);
 
             int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, false, dop);

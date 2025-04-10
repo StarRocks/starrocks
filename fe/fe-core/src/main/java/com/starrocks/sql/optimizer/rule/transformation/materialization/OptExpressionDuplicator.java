@@ -26,6 +26,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionDisjointSet;
@@ -57,7 +58,7 @@ import java.util.Map;
 public class OptExpressionDuplicator {
     private final ColumnRefFactory columnRefFactory;
     // old ColumnRefOperator -> new ColumnRefOperator
-    private final Map<ColumnRefOperator, ScalarOperator> columnMapping;
+    private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private final ReplaceColumnRefRewriter rewriter;
     private final Table partitionByTable;
     private final Column partitionColumn;
@@ -73,13 +74,20 @@ public class OptExpressionDuplicator {
         this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();
     }
 
-    public OptExpression duplicate(OptExpression source) {
-        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
+    public OptExpression duplicate(OptExpression source, boolean isKeptPrunedPartitionPredicate) {
+        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(isKeptPrunedPartitionPredicate);
         return source.getOp().accept(visitor, source, null);
     }
 
-    public Map<ColumnRefOperator, ScalarOperator> getColumnMapping() {
+    public Map<ColumnRefOperator, ColumnRefOperator> getColumnMapping() {
         return columnMapping;
+    }
+
+    /**
+     * Rewrite input scalar input into new scalar operator by new column mapping.
+     */
+    public ScalarOperator rewriteAfterDuplicate(ScalarOperator input) {
+        return rewriter.rewrite(input);
     }
 
     public List<ColumnRefOperator> getMappedColumns(List<ColumnRefOperator> originColumns) {
@@ -91,6 +99,12 @@ public class OptExpressionDuplicator {
     }
 
     class OptExpressionDuplicatorVisitor extends OptExpressionVisitor<OptExpression, Void> {
+        private final boolean isKeptPrunedPartitionPredicate;
+
+        public OptExpressionDuplicatorVisitor(boolean isKeptPrunedPartitionPredicate) {
+            this.isKeptPrunedPartitionPredicate = isKeptPrunedPartitionPredicate;
+        }
+
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             Operator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
@@ -130,14 +144,33 @@ public class OptExpressionDuplicator {
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
             // process HashDistributionSpec
-            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
-                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+            LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
+                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
-                            columnRefFactory, columnMapping);
-                    LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
+                                    columnRefFactory, columnMapping);
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                }
+                List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
+                if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                    List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
+                    for (ScalarOperator predicate : prunedPartitionPredicates) {
+                        ScalarOperator newPredicate = rewriter.rewrite(predicate);
+                        newPrunedPartitionPredicates.add(newPredicate);
+                    }
+                    olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
+
+                    // TODO: this is a temporary solution, it is removed in the later version.
+                    // For union rewrite, input query's selected partitions should be kept but it will be removed in
+                    // MVPartitionPruner. So we need to keep the pruned partition predicates.
+                    if (isKeptPrunedPartitionPredicate) {
+                        ScalarOperator predicate = Utils.compoundAnd(olapScan.getPredicate(),
+                                Utils.compoundAnd(newPrunedPartitionPredicates));
+                        olapScanBuilder.setPredicate(predicate);
+                    }
                 }
             }
 
@@ -160,7 +193,9 @@ public class OptExpressionDuplicator {
             ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
 
-            return OptExpression.create(opBuilder.build());
+            // process external table scan operator's predicates
+            LogicalScanOperator newScanOperator = (LogicalScanOperator) opBuilder.build();
+            return OptExpression.create(newScanOperator);
         }
 
         @Override
@@ -271,7 +306,7 @@ public class OptExpressionDuplicator {
         private HashDistributionSpec processHashDistributionSpec(
                 HashDistributionSpec originSpec,
                 ColumnRefFactory columnRefFactory,
-                Map<ColumnRefOperator, ScalarOperator> columnMapping) {
+                Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
 
             // HashDistributionDesc
             List<DistributionCol> newColumns = Lists.newArrayList();

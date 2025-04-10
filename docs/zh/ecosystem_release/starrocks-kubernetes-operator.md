@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # starrocks-kubernetes-operator
@@ -149,7 +149,7 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
     3. 执行 `helm upgrade` 命令，使用调整后的 **values.yaml** 文件安装 Chart `kube-starrocks`。
 
          ```Bash
-         helm upgrade <release-name> starrocks-community/kube-starrocks -f values-v1.8.0.yaml
+         helm upgrade <release-name> starrocks/kube-starrocks -f values-v1.8.0.yaml
          ```
 
   - 将两个子 Chart `operator` 和 `starrocks` 添加到父 Chart kube-starrocks 中。您可以通过指定相应的子 Chart 来安装 StarRocks Operator 或 StarRocks 集群。这样，您可以更灵活地管理 StarRocks 集群，例如部署一个 StarRocks Operator 和多个 StarRocks 集群。

@@ -40,7 +40,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
@@ -57,16 +56,12 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -75,6 +70,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
@@ -87,17 +83,26 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.planner.PartitionColumnFilter;
-import com.starrocks.planner.RangePartitionPruner;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -106,7 +111,6 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -164,8 +168,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         }
 
         DeleteJob deleteJob = null;
+        Table table = null;
         try {
-            Table table = null;
             long transactionId = -1L;
             List<Partition> partitions = Lists.newArrayList();
             db.readLock();
@@ -200,6 +204,13 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
 
             deleteJob.run(stmt, db, table, partitions);
+        } catch (QueryStateException e) {
+            // If delete success, it will throw QueryStateException(QueryState.MysqlStateType.OK, sb.toString()).
+            if (e.getQueryState().getStateType() == QueryState.MysqlStateType.OK) {
+                // trigger after a delete job finished
+                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDeleteJobTransactionFinish(db, table);
+            }
+            throw e;
         } finally {
             if (!FeConstants.runningUnitTest) {
                 clearJob(deleteJob);
@@ -220,28 +231,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         Preconditions.checkState(partitionNames != null);
         boolean noPartitionSpecified = partitionNames.isEmpty();
         if (noPartitionSpecified) {
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            if (partitionInfo.isRangePartition()) {
-                partitionNames = extractPartitionNamesByCondition(olapTable, conditions);
-                if (partitionNames.isEmpty()) {
-                    LOG.info("The delete statement [{}] prunes all partitions",
-                            stmt.getOrigStmt().originStmt);
-                    return null;
-                }
-            } else if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                // this is a unpartitioned table, use table name as partition name
-                partitionNames.add(olapTable.getName());
-            } else if (partitionInfo.getType() == PartitionType.LIST) {
-                // TODO: support list partition prune
-                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
-                if (partitionIds.isEmpty()) {
-                    return null;
-                }
-                for (Long partitionId : partitionIds) {
-                    Partition partition = olapTable.getPartition(partitionId);
-                    partitionNames.add(partition.getName());
-                }
+            partitionNames = partitionPruneForDelete(stmt, olapTable);
+
+            if (partitionNames.isEmpty()) {
+                LOG.info("The delete statement [{}] prunes all partitions", stmt.getOrigStmt().originStmt);
+                return null;
             }
         }
 
@@ -253,7 +247,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
             partitions.add(partition);
             short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
-            partitionReplicaNum.put(partition.getId(), replicationNum);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                partitionReplicaNum.put(physicalPartition.getId(), replicationNum);
+            }
         }
 
         // check conditions
@@ -293,112 +289,46 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     @VisibleForTesting
-    public List<String> extractPartitionNamesByCondition(DeleteStmt stmt, OlapTable olapTable)
-            throws DdlException, AnalysisException {
-        return extractPartitionNamesByCondition(olapTable, stmt.getDeleteConditions());
+    public List<String> extractPartitionNamesByCondition(DeleteStmt stmt, OlapTable olapTable) throws DdlException {
+        return partitionPruneForDelete(stmt, olapTable);
     }
 
-    public List<String> extractPartitionNamesByCondition(OlapTable olapTable, List<Predicate> conditions)
-            throws DdlException, AnalysisException {
-        List<String> partitionNames = Lists.newArrayList();
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(olapTable,
-                rangePartitionInfo.getPartitionColumns(), conditions);
-        Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-        if (columnFilters.isEmpty()) {
-            partitionNames.addAll(olapTable.getPartitionNames());
-        } else {
-            RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
-                    rangePartitionInfo.getPartitionColumns(), columnFilters);
-            Collection<Long> selectedPartitionIds = pruner.prune();
-
-            if (selectedPartitionIds == null) {
-                partitionNames.addAll(olapTable.getPartitionNames());
-            } else {
-                for (Long partitionId : selectedPartitionIds) {
-                    Partition partition = olapTable.getPartition(partitionId);
-                    partitionNames.add(partition.getName());
-                }
+    /**
+     * Construct a fake sql then leverage the optimizer to prune partitions
+     *
+     * @return pruned partitions with delete conditions
+     */
+    private List<String> partitionPruneForDelete(DeleteStmt stmt, OlapTable table) {
+        String tableName = stmt.getTableName().toSql();
+        String predicate = stmt.getWherePredicate().toSql();
+        String fakeSql = String.format("SELECT * FROM %s WHERE %s", tableName, predicate);
+        PhysicalOlapScanOperator physicalOlapScanOperator;
+        ConnectContext currentSession = ConnectContext.get();
+        try {
+            // Bypass the privilege check, as current user may have only the DELETE privilege but not SELECT
+            currentSession.setBypassAuthorizerCheck(true);
+            List<StatementBase> parse = SqlParser.parse(fakeSql, currentSession.getSessionVariable());
+            StatementBase selectStmt = parse.get(0);
+            Analyzer.analyze(selectStmt, ConnectContext.get());
+            ExecPlan plan = StatementPlanner.plan(selectStmt, ConnectContext.get());
+            List<PhysicalOlapScanOperator> physicalOlapScanOperators =
+                    Utils.extractPhysicalOlapScanOperator(plan.getPhysicalPlan());
+            // it's supposed to be empty set
+            if (CollectionUtils.isEmpty(physicalOlapScanOperators)) {
+                return Lists.newArrayList();
             }
+            physicalOlapScanOperator = physicalOlapScanOperators.get(0);
+        } catch (Exception e) {
+            LOG.warn("failed to do partition pruning for delete {}", stmt.toString(), e);
+            return Lists.newArrayList(table.getVisiblePartitionNames());
+        } finally {
+            currentSession.setBypassAuthorizerCheck(false);
         }
-        return partitionNames;
-    }
-
-    private Map<String, PartitionColumnFilter> extractColumnFilter(Table table, List<Column> partitionColumns,
-                                                                   List<Predicate> conditions)
-            throws DdlException, AnalysisException {
-        Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
-        List<Predicate> deleteConditions = conditions;
-        Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        for (Column column : table.getBaseSchema()) {
-            nameToColumn.put(column.getName(), column);
-        }
-        for (Predicate condition : deleteConditions) {
-            SlotRef slotRef = (SlotRef) condition.getChild(0);
-            String columnName = slotRef.getColumnName();
-
-            // filter condition is not partition column;
-            if (partitionColumns.stream().noneMatch(e -> e.getName().equals(columnName))) {
-                continue;
-            }
-
-            if (!nameToColumn.containsKey(columnName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, table.getName());
-            }
-            if (condition instanceof BinaryPredicate) {
-                BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
-                LiteralExpr literalExpr = (LiteralExpr) binaryPredicate.getChild(1);
-                Column column = nameToColumn.get(columnName);
-                literalExpr = LiteralExpr.create(literalExpr.getStringValue(),
-                        Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
-                PartitionColumnFilter filter = columnFilters.getOrDefault(slotRef.getColumnName(),
-                        new PartitionColumnFilter());
-                switch (binaryPredicate.getOp()) {
-                    case EQ:
-                        filter.setLowerBound(literalExpr, true);
-                        filter.setUpperBound(literalExpr, true);
-                        break;
-                    case LE:
-                        filter.setUpperBound(literalExpr, true);
-                        filter.lowerBoundInclusive = true;
-                        break;
-                    case LT:
-                        filter.setUpperBound(literalExpr, false);
-                        filter.lowerBoundInclusive = true;
-                        break;
-                    case GE:
-                        filter.setLowerBound(literalExpr, true);
-                        break;
-                    case GT:
-                        filter.setLowerBound(literalExpr, false);
-                        break;
-                    default:
-                        break;
-                }
-                columnFilters.put(slotRef.getColumnName(), filter);
-            } else if (condition instanceof InPredicate) {
-                InPredicate inPredicate = (InPredicate) condition;
-                if (inPredicate.isNotIn()) {
-                    continue;
-                }
-                List<LiteralExpr> list = Lists.newArrayList();
-                Column column = nameToColumn.get(columnName);
-                for (int i = 1; i < inPredicate.getChildren().size(); i++) {
-                    LiteralExpr literalExpr = (LiteralExpr) inPredicate.getChild(i);
-                    literalExpr = LiteralExpr.create(literalExpr.getStringValue(),
-                            Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
-                    list.add(literalExpr);
-                }
-
-                PartitionColumnFilter filter = columnFilters.getOrDefault(slotRef.getColumnName(),
-                        new PartitionColumnFilter());
-                filter.setInPredicateLiterals(list);
-                columnFilters.put(slotRef.getColumnName(), filter);
-            }
-
-        }
-        return columnFilters;
+        List<Long> selectedPartitionId = physicalOlapScanOperator.getSelectedPartitionId();
+        return ListUtils.emptyIfNull(selectedPartitionId)
+                .stream()
+                .map(x -> table.getPartition(x).getName())
+                .collect(Collectors.toList());
     }
 
     /**
@@ -872,4 +802,14 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return ImmutableMap.of("DeleteInfo", count);
     }
 
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = dbToDeleteInfos.values()
+                .stream()
+                .filter(infos -> !infos.isEmpty())
+                .map(infos -> infos.stream().findAny().get())
+                .collect(Collectors.toList());
+        long size = dbToDeleteInfos.values().stream().mapToInt(List::size).sum();
+        return Lists.newArrayList(Pair.create(samples, size));
+    }
 }

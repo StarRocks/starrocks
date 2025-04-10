@@ -280,6 +280,10 @@ public class HeartbeatMgr extends FrontendDaemon {
                 copiedMasterInfo.setBackend_id(computeNodeId);
                 copiedMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId());
                 copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
+                if (computeNode instanceof Backend) {
+                    copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
+                    copiedMasterInfo.setDecommissioned_disks(((Backend) computeNode).getDecommissionedDisks());
+                }
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;

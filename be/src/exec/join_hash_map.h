@@ -653,7 +653,7 @@ private:
     HashTableProbeState::ProbeCoroutine _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                        const Buffer<CppType>& probe_data);
 
-    template <bool first_probe, bool init_match = false>
+    template <bool first_probe>
     void _probe_coroutine(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     // for one key left outer join

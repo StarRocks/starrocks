@@ -41,6 +41,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -99,47 +100,61 @@ public class CatalogMgr {
         createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
     }
 
+    // please keep connector and catalog create together, they need keep in consistent asap.
     public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
             throws DdlException {
-        if (Strings.isNullOrEmpty(type)) {
-            throw new DdlException("Missing properties 'type'");
-        }
-
-        readLock();
-        try {
-            Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-        } finally {
-            readUnlock();
-        }
-
+        CatalogConnector connector = null;
+        Catalog catalog = null;
         writeLock();
         try {
+            if (Strings.isNullOrEmpty(type)) {
+                throw new DdlException("Missing properties 'type'");
+            }
+
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
-            if (null == connector) {
-                LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
-                throw new DdlException("connector create failed");
-            }
-            long id = isResourceMappingCatalog(catalogName) ?
-                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
-                    GlobalStateMgr.getCurrentState().getNextId();
-            Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
-            String serviceName = properties.get("ranger.plugin.hive.service.name");
-            if (serviceName == null || serviceName.isEmpty()) {
-                if (Config.access_control.equals("ranger")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+
+            try {
+                Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+                String serviceName = properties.get("ranger.plugin.hive.service.name");
+                if (serviceName == null || serviceName.isEmpty()) {
+                    if (Config.access_control.equals("ranger")) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                    } else {
+                        Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                    }
                 } else {
-                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
                 }
-            } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+
+                connector = connectorMgr.createConnector(
+                        new ConnectorContext(catalogName, type, properties), false);
+                if (null == connector) {
+                    LOG.error("{} connector [{}] create failed", type, catalogName);
+                    throw new DdlException("connector create failed");
+                }
+                long id = isResourceMappingCatalog(catalogName) ?
+                        ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                        GlobalStateMgr.getCurrentState().getNextId();
+                catalog = new ExternalCatalog(id, catalogName, comment, properties);
+                catalogs.put(catalogName, catalog);
+
+                if (!isResourceMappingCatalog(catalogName)) {
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
+                }
+            } catch (StarRocksConnectorException e) {
+                LOG.error("connector create failed. catalog [{}] ", catalogName, e);
+                throw new DdlException(String.format("connector create failed {%s}", e.getMessage()));
+            }
+        } catch (Exception e) {
+            if (connector != null && connectorMgr.connectorExists(catalogName)) {
+                connectorMgr.removeConnector(catalogName);
             }
 
-            catalogs.put(catalogName, catalog);
-
-            if (!isResourceMappingCatalog(catalogName)) {
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
+            if (catalog != null) {
+                catalogs.remove(catalogName);
             }
+
+            throw e;
         } finally {
             writeUnLock();
         }
@@ -181,7 +196,7 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
 
-                if (serviceName.isEmpty()) {
+                if (Strings.isNullOrEmpty(serviceName)) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else {
@@ -237,50 +252,68 @@ public class CatalogMgr {
         return !Strings.isNullOrEmpty(name) && !isInternalCatalog(name) && !isResourceMappingCatalog(name);
     }
 
+    // please keep connector and catalog create together, they need keep in consistent asap.
     public void replayCreateCatalog(Catalog catalog) throws DdlException {
         String type = catalog.getType();
         String catalogName = catalog.getName();
         Map<String, String> config = catalog.getConfig();
-        if (Strings.isNullOrEmpty(type)) {
-            throw new DdlException("Missing properties 'type'");
-        }
+        CatalogConnector catalogConnector = null;
 
-        // skip unsupported connector type
-        if (!ConnectorType.isSupport(type)) {
-            LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
-            return;
-        }
-
-        readLock();
         try {
-            Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-        } finally {
-            readUnlock();
-        }
-
-        CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-        if (catalogConnector == null) {
-            LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
-            throw new DdlException("connector create failed");
-        }
-
-        Map<String, String> properties = catalog.getConfig();
-        String serviceName = properties.get("ranger.plugin.hive.service.name");
-        if (serviceName == null || serviceName.isEmpty()) {
-            if (Config.access_control.equals("ranger")) {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
-            } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+            if (Strings.isNullOrEmpty(type)) {
+                throw new DdlException("Missing properties 'type'");
             }
-        } else {
-            Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
-        }
 
-        writeLock();
-        try {
-            catalogs.put(catalogName, catalog);
-        } finally {
-            writeUnLock();
+            // skip unsupported connector type
+            if (!ConnectorType.isSupport(type)) {
+                LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
+                return;
+            }
+
+            readLock();
+            try {
+                Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+            } finally {
+                readUnlock();
+            }
+
+            Map<String, String> properties = catalog.getConfig();
+            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            if (serviceName == null || serviceName.isEmpty()) {
+                if (Config.access_control.equals("ranger")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                }
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+            }
+
+            try {
+                catalogConnector = connectorMgr.createConnector(
+                        new ConnectorContext(catalogName, type, config), true);
+                if (catalogConnector == null) {
+                    LOG.error("{} connector [{}] create failed.", type, catalogName);
+                    throw new DdlException("connector create failed");
+                }
+            } catch (StarRocksConnectorException e) {
+                LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
+                throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
+            }
+
+            writeLock();
+            try {
+                catalogs.put(catalogName, catalog);
+            } finally {
+                writeUnLock();
+            }
+        } catch (Exception e) {
+            if (catalogConnector != null && connectorMgr.connectorExists(catalogName)) {
+                connectorMgr.removeConnector(catalogName);
+            }
+
+            catalogs.remove(catalogName);
+            throw e;
         }
     }
 
@@ -312,7 +345,7 @@ public class CatalogMgr {
             String catalogName = log.getCatalogName();
             Map<String, String> properties = log.getProperties();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
-            if (serviceName.isEmpty()) {
+            if (Strings.isNullOrEmpty(serviceName)) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else {
@@ -516,15 +549,15 @@ public class CatalogMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            int serializedCatalogsSize = reader.readInt();
-            for (int i = 0; i < serializedCatalogsSize; ++i) {
-                Catalog catalog = reader.readJson(Catalog.class);
+        int serializedCatalogsSize = reader.readInt();
+        for (int i = 0; i < serializedCatalogsSize; ++i) {
+            Catalog catalog = reader.readJson(Catalog.class);
+            try {
                 replayCreateCatalog(catalog);
+            } catch (Exception e) {
+                LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
             }
-            loadResourceMappingCatalog();
-        } catch (DdlException e) {
-            throw new IOException(e);
         }
+        loadResourceMappingCatalog();
     }
 }

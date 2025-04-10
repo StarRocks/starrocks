@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # element_at
@@ -27,12 +27,18 @@ element_at(any_array, position)
 
 ```plain text
 mysql> select element_at([2,3,11],3);
-+-----------------------+
-|  element_at([11,2,3]) |
-+-----------------------+
-|                     11 |
-+-----------------------+
-1 row in set (0.00 sec)
++---------------+
+| [2, 3, 11][3] |
++---------------+
+|            11 |
++---------------+
+
+mysql> select element_at(["a","b","c"],1);
++--------------------+
+| ['a', 'b', 'c'][1] |
++--------------------+
+| a                  |
++--------------------+
 ```
 
 ## keyword

@@ -58,6 +58,11 @@ public:
         _max_memory_usage = max_memory_usage;
     }
 
+    void clear() {
+        _memory_usage = 0;
+        _buffered_num_rows = 0;
+    }
+
 private:
     std::atomic<size_t> _max_memory_usage{128UL * 1024 * 1024 * 1024}; // 128GB
     size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL;         // 128MB

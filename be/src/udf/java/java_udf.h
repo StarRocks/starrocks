@@ -36,9 +36,10 @@ extern "C" JNIEnv* getJNIEnv(void);
     jmethodID _value_of_##TYPE;     \
     jmethodID _val_##TYPE;
 
-#define DECLARE_NEW_BOX(TYPE, CLAZZ) \
-    jobject new##CLAZZ(TYPE value);  \
-    TYPE val##TYPE(jobject obj);
+#define DECLARE_NEW_BOX(PRIM_CLAZZ, TYPE, CLAZZ) \
+    jobject new##CLAZZ(TYPE value);              \
+    TYPE val##TYPE(jobject obj);                 \
+    jclass TYPE##_class() { return _class_##PRIM_CLAZZ; }
 
 namespace starrocks {
 class DirectByteBuffer;
@@ -58,6 +59,7 @@ public:
     // Arrays.toString()
     std::string array_to_string(jobject object);
     // Object::toString()
+    bool equals(jobject obj1, jobject obj2);
     std::string to_string(jobject obj);
     std::string to_cxx_string(jstring str);
     std::string dumpExceptionString(jthrowable throwable);
@@ -71,6 +73,7 @@ public:
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
+    jobject batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end);
 
     // batch update single
     void batch_update_single(AggBatchCallStub* stub, int state, jobject* input, int cols, int rows);
@@ -87,7 +90,7 @@ public:
     void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
     // batch call evalute by callstub
-    jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
+    StatusOr<jobject> batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
     // batch call method by reflect
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols, int rows);
     // batch call no-args function by reflect
@@ -115,19 +118,18 @@ public:
     jobject list_get(jobject obj, int idx);
     int list_size(jobject obj);
 
-    DECLARE_NEW_BOX(uint8_t, Boolean)
-    DECLARE_NEW_BOX(int8_t, Byte)
-    DECLARE_NEW_BOX(int16_t, Short)
-    DECLARE_NEW_BOX(int32_t, Integer)
-    DECLARE_NEW_BOX(int64_t, Long)
-    DECLARE_NEW_BOX(float, Float)
-    DECLARE_NEW_BOX(double, Double)
+    DECLARE_NEW_BOX(boolean, uint8_t, Boolean)
+    DECLARE_NEW_BOX(byte, int8_t, Byte)
+    DECLARE_NEW_BOX(short, int16_t, Short)
+    DECLARE_NEW_BOX(int, int32_t, Integer)
+    DECLARE_NEW_BOX(long, int64_t, Long)
+    DECLARE_NEW_BOX(float, float, Float)
+    DECLARE_NEW_BOX(double, double, Double)
 
     jobject newString(const char* data, size_t size);
 
-    Slice sliceVal(jstring jstr);
-    size_t string_length(jstring jstr);
     Slice sliceVal(jstring jstr, std::string* buffer);
+    jclass string_clazz() { return _string_class; }
     // replace '.' as '/'
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);
@@ -176,6 +178,7 @@ private:
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
     jmethodID _batch_update_state;
+    jmethodID _batch_create_bytebuf;
     jmethodID _batch_call;
     jmethodID _batch_call_no_args;
     jmethodID _int_batch_call;
@@ -214,11 +217,12 @@ private:
         env->ExceptionClear();                                                     \
     }
 
-#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                                     \
-    if (auto e = env->ExceptionOccurred()) {                                                   \
-        LOCAL_REF_GUARD(e);                                                                    \
-        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);             \
-        return Status::InternalError(JVMFunctionHelper::getInstance().dumpExceptionString(e)); \
+#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                         \
+    if (auto e = env->ExceptionOccurred()) {                                       \
+        LOCAL_REF_GUARD(e);                                                        \
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
+        env->ExceptionClear();                                                     \
+        return Status::InternalError(msg);                                         \
     }
 
 // Used for UDAF serialization and deserialization,
@@ -343,14 +347,12 @@ public:
     static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
     static inline const char* batch_evaluate_method_name = "batchCallV";
 
-    BatchEvaluateStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
-            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+    BatchEvaluateStub(jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
 
-    FunctionContext* ctx() { return _ctx; }
-    jobject batch_evaluate(int num_rows, jobject* input, int cols);
+    StatusOr<jobject> batch_evaluate(int num_rows, jobject* input, int cols);
 
 private:
-    FunctionContext* _ctx;
     jobject _caller;
     JVMClass _stub_clazz;
     JavaGlobalRef _stub_method;
@@ -359,10 +361,12 @@ private:
 // UDAF State Lists
 // mapping a java object as a int index
 // use get method to
+// TODO: implement a Java binder to avoid using this class
 class UDAFStateList {
 public:
     static inline const char* clazz_name = "com.starrocks.udf.FunctionStates";
-    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get, JavaGlobalRef&& add);
+    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get, JavaGlobalRef&& add,
+                  JavaGlobalRef&& remove, JavaGlobalRef&& clear);
 
     jobject handle() { return _handle.handle(); }
 
@@ -375,14 +379,24 @@ public:
     // add a state to StateList
     int add_state(FunctionContext* ctx, JNIEnv* env, jobject state);
 
+    // remove a state from StateList
+    void remove(FunctionContext* ctx, JNIEnv* env, int state);
+
+    // clear all state in StateList
+    void clear(FunctionContext* ctx, JNIEnv* env);
+
 private:
     JavaGlobalRef _handle;
     JavaGlobalRef _get_method;
     JavaGlobalRef _batch_get_method;
     JavaGlobalRef _add_method;
+    JavaGlobalRef _remove_method;
+    JavaGlobalRef _clear_method;
     jmethodID _get_method_id;
     jmethodID _batch_get_method_id;
     jmethodID _add_method_id;
+    jmethodID _remove_method_id;
+    jmethodID _clear_method_id;
 };
 
 // For loading UDF Class

@@ -172,10 +172,10 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         });
     }
 
-    private void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
+    void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
         routineLoadTaskInfo.setLastScheduledTime(System.currentTimeMillis());
         // check if task has been abandoned
-        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
+        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getId())) {
             // task has been abandoned while renew task has been added in queue
             // or database has been deleted
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
@@ -198,7 +198,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
 
         } catch (RoutineLoadPauseException e) {
-            String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
+            String msg = "FE aborts the task with reason: failed to check task ready to execute, err: " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
                     JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg), false);
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
@@ -206,8 +206,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                     .build());
             return;
         } catch (Exception e) {
-            LOG.warn("check task ready to execute failed", e);
-            delayPutToQueue(routineLoadTaskInfo, "check task ready to execute failed, err: " + e.getMessage());
+            LOG.warn("failed to check task ready to execute", e);
+            delayPutToQueue(routineLoadTaskInfo, "failed to check task ready to execute, err: " + e.getMessage());
             return;
         }
 
@@ -297,7 +297,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void releaseBeSlot(RoutineLoadTaskInfo routineLoadTaskInfo) {
         // release the BE slot
-        routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+        routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
         // set beId to INVALID_BE_ID to avoid release slot repeatedly,
         // when job set to paused/cancelled, the slot will be release again if beId is not INVALID_BE_ID
         routineLoadTaskInfo.setBeId(RoutineLoadTaskInfo.INVALID_BE_ID);
@@ -363,7 +363,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     // throw exception if unrecoverable errors happen.
     private boolean allocateTaskToBe(RoutineLoadTaskInfo routineLoadTaskInfo) {
         if (routineLoadTaskInfo.getPreviousBeId() != -1L) {
-            if (routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+            if (routineLoadManager.takeNodeById(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getPreviousBeId()) != -1L) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                             .add("job_id", routineLoadTaskInfo.getJobId())
@@ -377,7 +377,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot();
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getJobId());
         if (beId < 0) {
             return false;
         }

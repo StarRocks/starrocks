@@ -38,40 +38,57 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,10 +96,13 @@ import org.threeten.extra.PeriodDuration;
 
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
@@ -125,6 +145,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
+
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
 
     public static final String PROPERTIES_BINLOG_VERSION = "binlog_version";
@@ -137,14 +159,14 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
-    public static final String PROPERTIES_STORAGE_TYPE_ROW = "row";
-    public static final String PROPERTIES_STORAGE_TYPE_ROW_MVCC = "row_mvcc";
 
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
+    public static final String PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = "base_compaction_forbidden_time_ranges";
 
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
@@ -205,6 +227,18 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
+
+    /**
+     * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
+     * leading and trailing space of key and value will be ignored.
+     */
+    public static final String SINGLE_LOCATION_LABEL_REGEX = "(\\*|\\s*[a-z_0-9]+\\s*:\\s*(\\*|[a-z_0-9]+)\\s*)";
+    /**
+     * Matches location labels like: ["*, a: b,  c:d", "*, a:b, *", etc.].
+     * Limit the occurrences of single location label to 10 to avoid regex overflowing the stack.
+     */
+    public static final String MULTI_LOCATION_LABELS_REGEX = "\\s*" + SINGLE_LOCATION_LABEL_REGEX +
+            "\\s*(,\\s*" + SINGLE_LOCATION_LABEL_REGEX + "){0,9}\\s*";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
                                                    DataProperty inferredDataProperty,
@@ -386,6 +420,14 @@ public class PropertyAnalyzer {
         } else {
             throw new AnalysisException("Bucket size is not set");
         }
+    }
+
+    public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
+        if (properties != null && properties.containsKey(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+            String forbiddenTimeRanges = properties.get(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+            return forbiddenTimeRanges;
+        }
+        return "";
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
@@ -587,6 +629,10 @@ public class PropertyAnalyzer {
     public static Long analyzeVersionInfo(Map<String, String> properties) throws AnalysisException {
         long versionInfo = Partition.PARTITION_INIT_VERSION;
         if (properties != null && properties.containsKey(PROPERTIES_VERSION_INFO)) {
+            if (RunMode.isSharedDataMode()) {
+                throw new AnalysisException(String.format("Does not support the table property \"%s\" in share data " +
+                        "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
+            }
             String versionInfoStr = properties.get(PROPERTIES_VERSION_INFO);
             try {
                 versionInfo = Long.parseLong(versionInfoStr);
@@ -795,6 +841,147 @@ public class PropertyAnalyzer {
         }
     }
 
+    // Convert location string like: "k1:v1,k2:v2" to map
+    // Return `{*:*}` means that we have specified '*" in location string,
+    // in this case, we will scatter replicas on all the backends which have location label,
+    // not some specified locations. So we can ignore others location labels.
+    // And the location string will be simplified to a single '*'.
+    public static Multimap<String, String> analyzeLocationStringToMap(String locations) {
+        Multimap<String, String> locationMap = HashMultimap.create();
+        String[] singleLocationStrings = locations.split(",");
+        for (String singleLocationString : singleLocationStrings) {
+            if (singleLocationString.trim().equals("*")) {
+                locationMap.put("*", "*");
+                return locationMap;
+            } else {
+                String[] kv = singleLocationString.split(":");
+                String key = kv[0].trim();
+                String value = kv[1].trim();
+                if (value.equals("*") && locationMap.containsKey(key)) {
+                    // if value is '*', and we have specified this key before,
+                    // we will ignore this key, and use '*' to replace all the values of this key.
+                    locationMap.removeAll(key);
+                }
+                locationMap.put(key, value);
+            }
+        }
+
+        return locationMap;
+    }
+
+    public static String validateTableLocationProperty(String location) throws SemanticException {
+        if (location.isEmpty()) {
+            return location;
+        }
+
+        if (location.length() > 255) {
+            throw new SemanticException("location is too long, max length is 255");
+        }
+
+        Matcher matcher = Pattern.compile(MULTI_LOCATION_LABELS_REGEX).matcher(location);
+        if (!matcher.matches()) {
+            throw new SemanticException("Invalid location format: " + location +
+                    ", should be like: '*', 'key:*', or 'k1:v1,k2:v2,k1:v11'");
+        }
+
+        // check location is valid or not
+        Multimap<String, String> locationMap = analyzeLocationStringToMap(location);
+
+        if (!locationMap.keySet().contains("*")) {
+            // check location label associated with any backend or not
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            List<Backend> backends = systemInfoService.getBackends();
+            for (String key : locationMap.keySet()) {
+                Collection<String> values = locationMap.get(key);
+                for (String value : values) {
+                    boolean isValueValid = false;
+                    for (Backend backend : backends) {
+                        Pair<String, String> backendLocKV = backend.getSingleLevelLocationKV();
+                        if (backendLocKV != null && backend.getLocation().containsKey(key) &&
+                                (Objects.equals(backendLocKV.second, value) || value.equals("*"))) {
+                            isValueValid = true;
+                            break;
+                        }
+                    }
+                    if (!isValueValid) {
+                        throw new SemanticException(
+                                "Cannot find any backend with location: " + key + ":" + value);
+                    }
+                }
+            }
+        }
+
+        return convertLocationMapToString(locationMap);
+    }
+
+    public static String convertLocationMapToString(Map<String, String> locationMap) {
+        // Convert map to multi hash map.
+        Multimap<String, String> multiLocationMap = HashMultimap.create();
+        for (Map.Entry<String, String> entry : locationMap.entrySet()) {
+            multiLocationMap.put(entry.getKey(), entry.getValue());
+        }
+
+        return convertLocationMapToString(multiLocationMap);
+    }
+
+    // Convert location map to string without head and tail space.
+    public static String convertLocationMapToString(Multimap<String, String> locationMap) {
+        if (locationMap.containsKey("*")) {
+            return "*";
+        }
+
+        return locationMap.entries().stream()
+                .map(entry -> entry.getKey() + ":" + entry.getValue())
+                .collect(Collectors.joining(","));
+    }
+
+    public static String analyzeLocation(Map<String, String> properties, boolean removeAnalyzedProp) {
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                throw new SemanticException("colocate table doesn't support location property");
+            }
+            String loc = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            // validate location format
+            String validatedLoc = validateTableLocationProperty(loc);
+            if (removeAnalyzedProp) {
+                properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            }
+            return validatedLoc;
+        } else {
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                // won't set default location prop for colocate table
+                return null;
+            }
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            long numOfBackendsWithLocationLabel =
+                    systemInfoService.getBackends().stream()
+                            .filter(backend -> !backend.getLocation().isEmpty()).count();
+            if (numOfBackendsWithLocationLabel > 0) {
+                // If location is not specified explicitly, and we have some backends with location label,
+                // return '*', meaning by default we will scatter the replicas
+                // on all the backends which have location label.
+                // So that we can identify tables before and after upgrade to newer version.
+                // For history tables which don't have location label,
+                // their replica distribution won't be changed after upgrade.
+                return "*";
+            } else {
+                // If no backend has location label, return null,
+                // meaning we won't scatter replicas based on backend location,
+                // so we won't put the location label in table properties(`show create table` won't see it).
+                // User may not want to use this feature at all,
+                // we won't add a default location property to bother users.
+                return null;
+            }
+        }
+    }
+
+    public static void analyzeLocation(OlapTable table, Map<String, String> properties) {
+        String location = PropertyAnalyzer.analyzeLocation(properties, true);
+        if (location != null) {
+            table.setLocation(location);
+        }
+    }
+
     // analyze property like : "type" = "xxx";
     public static String analyzeType(Map<String, String> properties) {
         String type = null;
@@ -968,7 +1155,7 @@ public class PropertyAnalyzer {
         if (parentTableKeyType == KeysType.AGG_KEYS) {
             throw new SemanticException(
                     String.format("do not support reference agg table:%s", parentTable.getName()));
-        } else if (parentTableKeyType == KeysType.DUP_KEYS) {
+        } else {
             // for DUP_KEYS type olap table or external table
             if (!parentTable.hasUniqueConstraints() && mvUniqueConstraints.isEmpty()) {
                 throw new SemanticException(
@@ -992,13 +1179,6 @@ public class PropertyAnalyzer {
                             String.format("columns:%s are not dup table:%s's unique constraint", parentColumns,
                                     parentTable.getName()));
                 }
-            }
-        } else {
-            // for PRIMARY_KEYS and UNIQUE_KEYS type table
-            // parent columns should be keys
-            if (!((OlapTable) parentTable).isKeySet(Sets.newHashSet(parentColumns))) {
-                throw new SemanticException(String.format("columns:%s are not key columns of table:%s",
-                        parentColumns, parentTable.getName()));
             }
         }
     }
@@ -1148,6 +1328,254 @@ public class PropertyAnalyzer {
             throw new AnalysisException(ex.getMessage());
         }
         return periodDuration;
+    }
+
+    public static void analyzeMVProperties(Database db,
+                                           MaterializedView materializedView,
+                                           Map<String, String> properties,
+                                           boolean isNonPartitioned) throws DdlException {
+        try {
+            // replicated storage
+            materializedView.setEnableReplicatedStorage(
+                    PropertyAnalyzer.analyzeBooleanProp(
+                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                            Config.enable_replicated_storage_as_default_engine));
+
+            // replication_num
+            short replicationNum = RunMode.defaultReplicationNum();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                materializedView.setReplicationNum(replicationNum);
+            }
+            // bloom_filter_columns
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+                List<Column> baseSchema = materializedView.getColumns();
+                Set<String> bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                        materializedView.getKeysType() == KeysType.PRIMARY_KEYS);
+                if (bfColumns != null && bfColumns.isEmpty()) {
+                    bfColumns = null;
+                }
+                double bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
+                if (bfColumns != null && bfFpp == 0) {
+                    bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+                } else if (bfColumns == null) {
+                    bfFpp = 0;
+                }
+                materializedView.setBloomFilterInfo(bfColumns, bfFpp);
+            }
+            // mv_rewrite_staleness second.
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+                Integer maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+                materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND, maxMVRewriteStaleness.toString());
+            }
+            // partition ttl
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL
+                            + " is only supported by partitioned materialized-view");
+                }
+
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
+                materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+
+            // partition ttl number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+                int number = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionTTLNumber(number);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
+                            + " does not support non-partitioned materialized view.");
+                }
+            }
+            // partition auto refresh partitions limit
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+                int limit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
+                materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
+                            + " does not support non-partitioned materialized view.");
+                }
+            }
+            // partition refresh number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+                int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionRefreshNumber(number);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER
+                            + " does not support non-partitioned materialized view.");
+                }
+            }
+            // exclude trigger tables
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+                StringBuilder tableSb = new StringBuilder();
+                for (int i = 1; i <= tables.size(); i++) {
+                    TableName tableName = tables.get(i - 1);
+                    if (tableName.getDb() == null) {
+                        tableSb.append(tableName.getTbl());
+                    } else {
+                        tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
+                    }
+                    if (i != tables.size()) {
+                        tableSb.append(",");
+                    }
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
+                materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
+            // resource_group
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+                String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
+                if (GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                            + " " + resourceGroup + " does not exist.");
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                materializedView.getTableProperty().setResourceGroup(resourceGroup);
+            }
+            // force external query rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+                TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+                properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+                materializedView.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, String.valueOf(value));
+                materializedView.getTableProperty().setForceExternalTableQueryRewrite(value);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+                TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeQueryRewriteMode(propertyValue);
+                properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+                materializedView.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, String.valueOf(value));
+                materializedView.getTableProperty().setQueryRewriteConsistencyMode(value);
+            }
+            // unique keys
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,
+                        materializedView);
+                materializedView.setUniqueConstraints(uniqueConstraints);
+            }
+            // foreign keys
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(
+                        properties, db, materializedView);
+                materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            }
+
+            // labels.location
+            if (!materializedView.isCloudNativeMaterializedView()) {
+                analyzeLocation(materializedView, properties);
+            }
+
+            // colocate_with
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                if (org.apache.commons.lang3.StringUtils.isNotEmpty(colocateGroup) &&
+                        !materializedView.getDefaultDistributionInfo().supportColocate()) {
+                    throw new AnalysisException(": random distribution does not support 'colocate_with'");
+                }
+                GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
+                        db, materializedView, colocateGroup, materializedView.isCloudNativeMaterializedView());
+            }
+            // compression
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPRESSION)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_COMPRESSION, str);
+                properties.remove(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+            }
+            // ORDER BY() -> sortKeys
+            if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
+                materializedView.getTableProperty().putMvSortKeys();
+            }
+
+            // lake storage info
+            if (materializedView.isCloudNativeMaterializedView()) {
+                String volume = "";
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                    volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                }
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
+                String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .setLakeStorageInfo(db, materializedView, storageVolumeId, properties);
+            }
+
+            // datacache.partition_duration
+            if (materializedView.isCloudNativeMaterializedView()) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                    PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                    materializedView.setDataCachePartitionDuration(duration);
+                }
+            }
+
+            // session properties
+            if (!properties.isEmpty()) {
+                // analyze properties
+                List<SetListItem> setListItems = Lists.newArrayList();
+                for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                        throw new AnalysisException("Analyze materialized properties failed " +
+                                "because unknown properties: " + properties +
+                                ", please add `session.` prefix if you want add session variables for mv(" +
+                                "eg, \"session.query_timeout\"=\"30000000\").");
+                    }
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                    VariableMgr.checkSystemVariableExist(variable);
+                    setListItems.add(variable);
+                }
+                SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+
+                // set properties if there are no exceptions
+                materializedView.getTableProperty().getProperties().putAll(properties);
+            }
+        } catch (AnalysisException e) {
+            if (materializedView.isCloudNativeMaterializedView()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .unbindTableToStorageVolume(materializedView.getId());
+            }
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
+        }
+    }
+
+    public static DataProperty analyzeMVDataProperty(MaterializedView materializedView,
+                                                     Map<String, String> properties) {
+        DataProperty dataProperty;
+        // set storage medium
+        boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+        try {
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                    DataProperty.getInferredDefaultDataProperty(), false);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
+            return null;
+        }
+        if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
+            materializedView.setStorageMedium(dataProperty.getStorageMedium());
+            // set storage cooldown time into table property,
+            // because we don't have property in MaterializedView
+            materializedView.getTableProperty().getProperties()
+                    .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
+                            String.valueOf(dataProperty.getCooldownTimeMs()));
+        }
+        return dataProperty;
     }
 
     /**

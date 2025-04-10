@@ -63,6 +63,7 @@ OutPut Exchange Id: 12
 |  predicates: CAST(5: l_quantity AS DECIMAL128(38,9)) < 0.2 * 47: avg
 |  cardinality: 300019
 |  column statistics:
+|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 300018.951] ESTIMATE
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
@@ -73,6 +74,7 @@ OutPut Exchange Id: 12
 |  partition by: [17: p_partkey, INT, true]
 |  cardinality: 600038
 |  column statistics:
+|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 600037.902] ESTIMATE
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
@@ -165,4 +167,3 @@ column statistics:
 * p_brand-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
 * p_container-->[-Infinity, Infinity, 0.0, 10.0, 40.0] ESTIMATE
 [end]
-

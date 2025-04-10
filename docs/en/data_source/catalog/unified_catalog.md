@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
@@ -8,7 +8,7 @@ toc_max_heading_level: 5
 A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake data sources as a unified data source without ingestion. With unified catalogs, you can:
 
 - Directly query data stored in Hive, Iceberg, Hudi, and Delta Lake without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
+- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
 - Perform operations on StarRocks to create or drop Hive and Iceberg databases and tables.
 
 To ensure successful SQL workloads on your unified data source, your StarRocks cluster must be able to access the storage system and metastore of your unified data source. StarRocks supports the following storage systems and metastores:
@@ -29,9 +29,9 @@ One unified catalog supports integrations with only a single storage system and 
 
 - See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md) to understand the file formats and data types supported.
 
-- Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
+- Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
 
-  When you create a table within a unified catalog by using the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement, use the `ENGINE` parameter to specify the table format (Hive or Iceberg).
+  When you create a table within a unified catalog by using the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement, use the `ENGINE` parameter to specify the table format (Hive or Iceberg).
 
 ## Integration preparations
 
@@ -747,13 +747,13 @@ PROPERTIES
 
 ## View unified catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a unified catalog named `unified_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a unified catalog named `unified_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG unified_catalog_glue;
@@ -763,7 +763,7 @@ SHOW CREATE CATALOG unified_catalog_glue;
 
 You can use one of the following methods to switch to a unified catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a unified catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify a unified catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -772,7 +772,7 @@ You can use one of the following methods to switch to a unified catalog and a da
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a unified catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to a unified catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -780,7 +780,7 @@ You can use one of the following methods to switch to a unified catalog and a da
 
 ## Drop a unified catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a unified catalog named `unified_catalog_glue`:
 
@@ -808,7 +808,7 @@ You can use one of the following syntaxes to view the schema of a table from a u
 
 To query data from a unified catalog, follow these steps:
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your unified data source with which the unified catalog is associated:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your unified data source with which the unified catalog is associated:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -816,7 +816,7 @@ To query data from a unified catalog, follow these steps:
 
 2. [Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -824,7 +824,7 @@ To query data from a unified catalog, follow these steps:
 
 ## Load data from Hive, Iceberg, Hudi, or Delta Lake
 
-You can use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
+You can use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
 
 The following example loads the data of the Hive table `hive_table` into the StarRocks table `test_tbl` created in the database `test_database` that belongs to the unified catalog `unified_catalog`:
 
@@ -834,7 +834,7 @@ INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 
 ## Create a database in a unified catalog
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_overview.md#catalog) privilege on a unified catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create a database in that catalog.
+Similar to the internal catalog of StarRocks, if you have the CREATE DATABASE privilege on a unified catalog, you can use the CREATE DATABASE statement to create a database in that catalog.
 
 > **NOTE**
 >
@@ -867,7 +867,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop a database from a unified catalog
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_overview.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_overview.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
 
 > **NOTE**
 >
@@ -885,7 +885,7 @@ DROP DATABASE <database_name>
 
 ## Create a table in a unified catalog
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_overview.md#database) privilege on a database created within a unified catalog, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that database.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_overview.md#database) privilege on a database created within a unified catalog, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that database.
 
 > **NOTE**
 >
@@ -893,7 +893,7 @@ Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](.
 
 StarRocks supports creating only Hive and Iceberg tables in unified catalogs.
 
-[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) to create a Hive or Iceberg table in that database:
+[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) to create a Hive or Iceberg table in that database:
 
 ```SQL
 CREATE TABLE <table_name>
@@ -919,7 +919,7 @@ PARTITION BY (id,dt);
 
 ## Sink data to a table in a unified catalog
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_overview.md#table) privilege on a table created within a unified catalog, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Unified Catalog table (currently only Parquet-formatted Unified Catalog tables are supported).
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_overview.md#table) privilege on a table created within a unified catalog, you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Unified Catalog table (currently only Parquet-formatted Unified Catalog tables are supported).
 
 > **NOTE**
 >
@@ -927,7 +927,7 @@ Similar to the internal tables of StarRocks, if you have the [INSERT](../../admi
 
 StarRocks supports sinking data only to Hive and Iceberg tables in unified catalogs.
 
-[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) to insert data into a Hive or Iceberg table in that database:
+[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to insert data into a Hive or Iceberg table in that database:
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>
@@ -954,7 +954,7 @@ VALUES
 
 ## Drop a table from a unified catalog
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_overview.md#table) privilege on a table created within a unified catalog, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that table.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_overview.md#table) privilege on a table created within a unified catalog, you can use the [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that table.
 
 > **NOTE**
 >
@@ -962,7 +962,7 @@ Similar to the internal tables of StarRocks, if you have the [DROP](../../admini
 
 StarRocks supports dropping only Hive and Iceberg tables from unified catalogs.
 
-[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) to drop a Hive or Iceberg table in that database:
+[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) to drop a Hive or Iceberg table in that database:
 
 ```SQL
 DROP TABLE <table_name>

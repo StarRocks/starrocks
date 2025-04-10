@@ -277,7 +277,7 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     auto* paths = _scan_ctx->column_access_paths();
     for (const auto& path : *paths) {
         auto& root = path->path();
-        int32_t index = _tablet->field_index_with_max_version(root);
+        int32_t index = _tablet_schema->field_index(root);
         auto field = schema->get_field_by_name(root);
         if (index >= 0 && field != nullptr) {
             auto res = path->convert_by_index(field.get(), index);
@@ -305,18 +305,24 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
-    auto tablet_schema_ptr = _tablet->tablet_schema();
-    _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
+    if (_scan_node->thrift_olap_scan_node().__isset.schema_id && _scan_node->thrift_olap_scan_node().schema_id > 0 &&
+        _scan_node->thrift_olap_scan_node().schema_id == _tablet->tablet_schema()->id()) {
+        _tablet_schema = _tablet->tablet_schema();
+    }
 
-    // if column_desc come from fe, reset tablet schema
-    if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
-        !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
-        _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema->clear_columns();
-        for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
-            _tablet_schema->append_column(TabletColumn(column_desc));
+    if (_tablet_schema == nullptr) {
+        std::shared_ptr<TabletSchema> tmp_tablet_schema = TabletSchema::copy(_tablet->tablet_schema());
+        // if column_desc come from fe, reset tablet schema
+        if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
+            !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
+            _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
+            tmp_tablet_schema->clear_columns();
+            for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
+                tmp_tablet_schema->append_column(TabletColumn(column_desc));
+            }
+            tmp_tablet_schema->generate_sort_key_idxes();
         }
-        _tablet_schema->generate_sort_key_idxes();
+        _tablet_schema = std::move(tmp_tablet_schema);
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
@@ -356,11 +362,6 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                                                _runtime_state->use_column_pool()));
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
-}
-
-const workgroup::WorkGroupScanSchedEntity* OlapChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
-    DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
 }
 
 // mapping a slot-column-id to schema-columnid

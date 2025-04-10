@@ -30,7 +30,6 @@ import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +69,8 @@ public class GroupExpression {
     private boolean isUnused = false;
 
     private Optional<Boolean> isAppliedMVRules = Optional.empty();
+    // all mv rewrite rules
+    private static final List<Rule> ALL_MV_REWRITE_RULES = RuleSet.getRewriteRulesByType(RuleSetType.ALL_MV_REWRITE);
 
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
@@ -349,9 +350,7 @@ public class GroupExpression {
 
     public boolean hasAppliedMVRules() {
         if (!isAppliedMVRules.isPresent()) {
-            List<Rule> mvRules = RuleSet.getRewriteRulesByType(Arrays.asList(RuleSetType.MULTI_TABLE_MV_REWRITE,
-                    RuleSetType.SINGLE_TABLE_MV_REWRITE));
-            isAppliedMVRules = Optional.of(mvRules.stream().anyMatch(rule -> hasRuleApplied(rule)));
+            isAppliedMVRules = Optional.of(ALL_MV_REWRITE_RULES.stream().anyMatch(rule -> hasRuleApplied(rule)));
         }
         return isAppliedMVRules.get();
     }

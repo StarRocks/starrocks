@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
 ---
 
 # 资源隔离
@@ -14,12 +15,12 @@ displayed_sidebar: "Chinese"
 
 资源隔离功能支持计划
 
-|  | 内部表 | 外部表 | 大查询熔断 | Short query 资源组 | INSERT INTO、Broker Load 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 |
-|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × |
-| 2.3 | √ | √ | √ |√ | × | × |
-| 2.4 | √ | √ | √ |√ | × | × |
-| 2.5 及以后 | √ | √ | √ |√ | √ | × |
+|  | 内部表 | 外部表 | 大查询熔断 | Short query 资源组 | INSERT 计算资源隔离 | BROKER LOAD 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 |
+|---|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × | × |
+| 2.3 | √ | √ | √ |√ | × | × | × |
+| 2.5 | √ | √ | √ |√ | √ | × | × |
+| 3.1 及以后 | √ | √ | √ |√ | √ | √ | × |
 
 ## 基本概念
 
@@ -34,11 +35,16 @@ displayed_sidebar: "Chinese"
 - `cpu_core_limit`：该资源组在当前 BE 节点可使用的 CPU 核数软上限，实际使用的 CPU 核数会根据节点资源空闲程度按比例弹性伸缩。取值为正整数。取值范围为 (1, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。
   
   > 说明：例如，在 16 核的 BE 节点中设置三个资源组 rg1、rg2、rg3，`cpu_core_limit` 分别设置为 `2`、`6`、`8`。当在该 BE 节点满载时，资源组 rg1、rg2、rg3 能分配到的 CPU 核数分别为 BE 节点总 CPU 核数 ×（2/16）= 2、 BE 节点总 CPU 核数 ×（6/16）= 6、BE 节点总 CPU 核数 ×（8/16）= 8。如果当前 BE 节点资源非满载，rg1、rg2 有负载，rg3 无负载，则 rg1、rg2 分配到的 CPU 核数分别为 BE 节点总 CPU 核数 ×（2/8）= 4、 BE 节点总 CPU 核数 ×（6/8）= 12。
+  
 - `mem_limit`：该资源组在当前 BE 节点可使用于查询的内存（query_pool）占总内存的百分比（%）。取值范围为 (0,1)。
   > 说明：query_pool 的查看方式，参见 [内存管理](Memory_management.md)。
+  
 - `concurrency_limit`：资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。只有大于 0 时才生效，默认值为 0。
-- `max_cpu_cores`：资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。默认值为 0。
+
+- `max_cpu_cores`：查询触发 FE 实行查询队列的 CPU 核数阈值，详见 [查询队列 - 资源组粒度的资源阈值](./query_queues.md#资源组粒度的资源阈值)。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。默认值为 0。
+
 - `spill_mem_limit_threshold`: 当前资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)，默认值为 1，即不生效。该参数自 v3.1.7 版本引入。
+  
   - 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过 `query_mem_limit` 的 80% 时触发中间结果落盘。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
   - 如果开启自动落盘功能且查询命中资源组（包括所有系统内建资源组）后，该查询满足以下任意情况时，都将触发中间结果落盘：
     - 当前资源组内所有查询使用的内存超过 `当前 BE 节点内存上限 * mem_limit * spill_mem_limit_threshold` 时
@@ -64,6 +70,33 @@ displayed_sidebar: "Chinese"
 >
 > - 您最多只能创建一个 `short_query` 资源组。
 > - StarRocks 不会硬限制 `short_query` 资源组的 CPU 资源。
+
+#### 系统定义资源组
+
+每个 StarRocks 示例中有两个系统定义资源组：`default_wg` 和 `default_mv_wg`。
+
+##### default_wg
+
+如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的资源配置如下：
+
+- `cpu_core_limit`：1 (&le;2.3.7 版本) 或 BE 的 CPU 核数（&gt;2.3.7版本）。
+- `mem_limit`：100%。
+- `concurrency_limit`：0。
+- `big_query_cpu_second_limit`：0。
+- `big_query_scan_rows_limit`：0。
+- `big_query_mem_limit`：0。
+- `spill_mem_limit_threshold`: 1。
+
+##### default_mv_wg
+
+如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的资源配置如下：
+
+- `cpu_core_limit`：1。
+- `mem_limit`：80%。
+- `concurrency_limit`: 0。
+- `spill_mem_limit_threshold`: 80%。
+
+您可以通过 BE 配置项 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit` 和 `default_mv_resource_group_spill_mem_limit_threshold` 调整该资源组的 CPU 上限、内存上限、并发上限和落盘阈值。
 
 ### 分类器
 
@@ -281,16 +314,6 @@ FE 节点 **fe.audit.log** 的 `ResourceGroup` 列和 `EXPLAIN VERBOSE <query>` 
 
 - 如果该查询受资源组管理，但是没有匹配到分类器，那么该列值为空字符串 `""`，表示使用默认资源组 `default_wg`。
 
-默认资源组 `default_wg` 的资源配置如下：
-
-- `cpu_core_limit`：1 (&le;2.3.7 版本) 或 BE 的 CPU 核数（&gt;2.3.7版本）。
-- `mem_limit`：100%。
-- `concurrency_limit`：0。
-- `big_query_cpu_second_limit`：0。
-- `big_query_scan_rows_limit`：0。
-- `big_query_mem_limit`：0。
-- `spill_mem_limit_threshold`: 1。
-
 ### 监控资源组
 
 您可以为资源组设置[监控与报警](../monitoring/Monitor_and_Alert.md)。
@@ -328,7 +351,7 @@ FE 节点 **fe.audit.log** 的 `ResourceGroup` 列和 `EXPLAIN VERBOSE <query>` 
 
 ### 查看资源组的使用信息
 
-从 v3.1.4 版本开始，StarRocks 支持 SQL 语句 [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/Administration/SHOW_RUNNING_QUERIES.md)，用以展示每个资源组在各个 BE 上的使用信息。各个字段的含义如下：
+从 v3.1.4 版本开始，StarRocks 支持 SQL 语句 [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/cluster-management/resource_group/SHOW_USAGE_RESOURCE_GROUPS.md)，用以展示每个资源组在各个 BE 上的使用信息。各个字段的含义如下：
 
 - `Name`：资源组的名称。
 - `Id`：资源组的 ID。

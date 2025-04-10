@@ -43,3 +43,53 @@ select c1, unnest_bitmap as c3 from t1, unnest_bitmap(c2) order by c1 desc, c3 d
 4	17
 4	16
 -- !result
+set enable_rewrite_unnest_bitmap_to_array=true;
+-- result:
+-- !result
+CREATE TABLE test_tags (
+	c1 varchar(65533) NOT NULL,
+	tag_name varchar(65533) NOT NULL,
+	tag_value varchar(65533) NOT NULL,
+	rb bitmap NOT NULL
+) ENGINE=OLAP
+    PRIMARY KEY(c1, tag_name, tag_value)
+PARTITION BY (c1)
+DISTRIBUTED BY HASH(tag_name, tag_value)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_tags(c1, tag_name, tag_value, rb) SELECT '20250114050000','a','57',bitmap_from_string("57");
+-- result:
+-- !result
+insert into test_tags(c1, tag_name, tag_value, rb) SELECT '20250114050000','a','a',bitmap_from_string("57,22253296,29101576,43027104");
+-- result:
+-- !result
+WITH result AS (SELECT rb FROM test_tags),
+     page_result AS (SELECT sub_bitmap(bitmap_union ( rb ), 0, 20 ) rb FROM result),
+     all_tag AS (SELECT tag_name, tag_value, c1, bitmap_and (t0.rb, t1.rb) rb2 FROM test_tags t0 JOIN page_result t1 WHERE bitmap_has_any ( t0.rb, t1.rb))
+SELECT tag_name, bitmap_to_string(rb2) as row_id_ FROM all_tag order by 1, 2;
+-- result:
+a	57
+a	57,22253296,29101576,43027104
+-- !result
+WITH result AS (SELECT rb FROM test_tags),
+     page_result AS (SELECT sub_bitmap(bitmap_union ( rb ), 0, 20 ) rb FROM result),
+     all_tag AS (SELECT tag_name, tag_value, c1, bitmap_and (t0.rb, t1.rb) rb2 FROM test_tags t0 JOIN page_result t1 WHERE bitmap_has_any ( t0.rb, t1.rb))
+SELECT tag_name, bitmap_to_array(rb2) as row_id_ FROM all_tag order by 1, 2;
+-- result:
+a	[57]
+a	[57,22253296,29101576,43027104]
+-- !result
+WITH result AS (SELECT rb FROM test_tags),
+     page_result AS (SELECT sub_bitmap(bitmap_union ( rb ), 0, 20 ) rb FROM result),
+     all_tag AS (SELECT tag_name, tag_value, c1, bitmap_and (t0.rb, t1.rb) rb2 FROM test_tags t0 JOIN page_result t1 WHERE bitmap_has_any ( t0.rb, t1.rb))
+SELECT tag_name, unnest as row_id_ FROM all_tag, unnest (bitmap_to_array(rb2)) order by 1, 2;
+-- result:
+a	57
+a	57
+a	22253296
+a	29101576
+a	43027104
+-- !result

@@ -35,6 +35,7 @@
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks::pipeline {
 
@@ -118,7 +119,7 @@ private:
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub = nullptr;
 
     // If pipeline level shuffle is enable, the size of the _chunks
     // equals with dop of dest pipeline
@@ -719,12 +720,12 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             _compression_scratch.resize(compressed_slice.size);
         }
 
+        COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
         }
-        COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         VLOG_ROW << "uncompressed size: " << serialized_size << ", compressed size: " << _compression_scratch.size();
     }
     return Status::OK();

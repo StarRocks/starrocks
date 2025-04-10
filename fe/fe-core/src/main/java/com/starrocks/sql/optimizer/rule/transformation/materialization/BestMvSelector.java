@@ -211,7 +211,7 @@ public class BestMvSelector {
                         expression.getStatistics(), scanOperator.getTable().getBaseSchema().size(), sortScore);
                 if (isAggregate) {
                     List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
-                            mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                            optimizerContext.getSessionVariable(), mv);
                     for (MvPlanContext planContext : planContexts) {
                         if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
                             LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();

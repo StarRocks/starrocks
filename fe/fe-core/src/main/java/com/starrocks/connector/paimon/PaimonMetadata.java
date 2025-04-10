@@ -187,7 +187,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             databases.put(dbName, db);
             return db;
         } else {
-            LOG.error("Paimon database {}.{} done not exist.", catalogName, dbName);
+            LOG.error("Paimon database {}.{} does not exist.", catalogName, dbName);
             return null;
         }
     }
@@ -211,11 +211,21 @@ public class PaimonMetadata implements ConnectorMetadata {
             String fieldName = field.name();
             DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true);
+            Column column = new Column(fieldName, fieldType, true, field.description());
             fullSchema.add(column);
         }
-        long createTime = this.getTableCreateTime(dbName, tblName);
+        long createTime = 0;
+        try {
+            createTime = getTableCreateTime(dbName, tblName);
+        } catch (Exception e) {
+            LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
+        }
+        String comment = "";
+        if (paimonNativeTable.comment().isPresent()) {
+            comment = paimonNativeTable.comment().get();
+        }
         PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable, createTime);
+        table.setComment(comment);
         tables.put(identifier, table);
         return table;
     }

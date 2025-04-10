@@ -73,8 +73,9 @@ public:
         }
         slot_descs.emplace_back();
 
-        _scanner_ctx->tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
-        _make_column_info_vector(_scanner_ctx->tuple_desc, &_scanner_ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
+        _scanner_ctx->slot_descs = tuple_desc->slots();
+        _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
         _scanner_ctx->scan_range = scan_range;
 
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
@@ -112,20 +113,20 @@ private:
 
     StatusOr<TypeDescriptor> _build_type(const ParquetField& field) {
         TypeDescriptor type;
-        if (field.type.type == TYPE_STRUCT) {
+        if (field.type == ColumnType::STRUCT) {
             type.type = TYPE_STRUCT;
             for (const auto& i : field.children) {
                 ASSIGN_OR_RETURN(auto child_type, _build_type(i));
                 type.children.emplace_back(child_type);
                 type.field_names.emplace_back(i.name);
             }
-        } else if (field.type.type == TYPE_MAP) {
+        } else if (field.type == ColumnType::MAP) {
             type.type = TYPE_MAP;
             for (const auto& i : field.children) {
                 ASSIGN_OR_RETURN(auto child_type, _build_type(i));
                 type.children.emplace_back(child_type);
             }
-        } else if (field.type.type == TYPE_ARRAY) {
+        } else if (field.type == ColumnType::ARRAY) {
             type.type = TYPE_ARRAY;
             ASSIGN_OR_RETURN(auto child_type, _build_type(field.children[0]));
             type.children.emplace_back(child_type);

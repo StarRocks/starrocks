@@ -662,7 +662,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
-                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
+                    final String fnName = kv.getValue().getFnName();
+                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)
+                            && fnName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
                         // we only need rewrite TFunction
                         Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
@@ -679,7 +681,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                         List<ScalarOperator> newArguments = Collections.singletonList(dictColumn);
                         Type[] newTypes = newArguments.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-                        String fnName = kv.getValue().getFnName();
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -933,7 +934,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
             }
-            if (table.hasForbitGlobalDict()) {
+            if (table.hasForbiddenGlobalDict()) {
+                continue;
+            }
+            // skip low-cardinality optimize for temp partition
+            // our dict collection won't collect temp partition we could support it later
+            if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
                 continue;
             }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {

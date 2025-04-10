@@ -197,6 +197,15 @@ public:
 
     static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
+    static Status CapacityLimitExceed(const Slice& msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
+
+    static Status BigQueryCpuSecondLimitExceeded(const Slice& msg) {
+        return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
+    }
+    static Status BigQueryScanRowsLimitExceeded(const Slice& msg) {
+        return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
+    }
+
     bool ok() const {
         mark_checked();
         return _state == nullptr;
@@ -210,6 +219,11 @@ public:
     bool is_mem_limit_exceeded() const {
         mark_checked();
         return code() == TStatusCode::MEM_LIMIT_EXCEEDED;
+    }
+
+    bool is_capacity_limit_exceeded() const {
+        mark_checked();
+        return code() == TStatusCode::CAPACITY_LIMIT_EXCEED;
     }
 
     bool is_thrift_rpc_error() const {
@@ -372,6 +386,9 @@ public:
 
     Status clone_and_append_context(const char* filename, int line, const char* expr) const;
 
+    Status(TStatusCode::type code, Slice msg) : Status(code, msg, {}) {}
+    Status(TStatusCode::type code, Slice msg, Slice ctx);
+
 private:
     static const char* copy_state(const char* state);
     static const char* copy_state_with_extra_ctx(const char* state, Slice ctx);
@@ -379,9 +396,6 @@ private:
     // Indicates whether this Status was the rhs of a move operation.
     static bool is_moved_from(const char* state);
     static const char* moved_from_state();
-
-    Status(TStatusCode::type code, Slice msg) : Status(code, msg, {}) {}
-    Status(TStatusCode::type code, Slice msg, Slice ctx);
 
     void mark_checked() const {
 #ifdef STARROCKS_ASSERT_STATUS_CHECKED

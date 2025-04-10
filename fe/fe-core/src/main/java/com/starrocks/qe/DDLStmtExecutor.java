@@ -319,10 +319,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt stmt,
                                                                          ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore()
-                        .cancelRefreshMaterializedView(
-                                stmt.getMvName().getDb(),
-                                stmt.getMvName().getTbl());
+                context.getGlobalStateMgr().getLocalMetastore().cancelRefreshMaterializedView(stmt);
             });
             return null;
         }

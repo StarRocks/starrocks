@@ -377,6 +377,13 @@ std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
     return {all_const, 1};
 }
 
+std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Column* column) {
+    if (column->is_constant()) {
+        return {true, 1};
+    }
+    return {false, column->size()};
+}
+
 using ColumnsConstIterator = Columns::const_iterator;
 bool ColumnHelper::is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end) {
     for (auto it = begin; it < end; ++it) {
@@ -438,6 +445,17 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
     }
 
     return res;
+}
+
+std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_array_column(const ColumnPtr& column) {
+    DCHECK(!column->is_nullable() && !column->is_constant());
+    DCHECK(column->is_array());
+
+    const ArrayColumn* array_column = down_cast<ArrayColumn*>(column.get());
+    auto elements_column = down_cast<NullableColumn*>(array_column->elements_column().get())->data_column();
+    auto null_column = down_cast<NullableColumn*>(array_column->elements_column().get())->null_column();
+    auto offsets_column = array_column->offsets_column();
+    return {offsets_column, elements_column, null_column};
 }
 
 template <class Ptr>

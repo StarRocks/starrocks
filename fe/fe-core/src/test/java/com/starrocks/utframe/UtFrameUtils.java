@@ -80,6 +80,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -103,7 +104,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
-import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -131,7 +131,6 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
@@ -143,8 +142,6 @@ import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -269,7 +266,7 @@ public class UtFrameUtils {
             feConfMap.put("aws_s3_access_key", "dummy_access_key");
             feConfMap.put("aws_s3_secret_key", "dummy_secret_key");
             // turn on mock starletAgent inside StarOS
-            StarletAgentFactory.forTest = true;
+            StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
         }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
@@ -521,6 +518,22 @@ public class UtFrameUtils {
         }
     }
 
+    public static String getFragmentPlan(ConnectContext connectContext, String sql, String traceModule) {
+        try {
+            Pair<String, Pair<ExecPlan, String>> result =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+            Pair<ExecPlan, String> execPlanWithQuery = result.second;
+            String traceLog = execPlanWithQuery.second;
+            if (!Strings.isNullOrEmpty(traceLog)) {
+                System.out.println(traceLog);
+            }
+            return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+            return null;
+        }
+    }
+
     public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
             ConnectContext connectContext, String sql, String module) throws Exception {
         if (Strings.isNullOrEmpty(module)) {
@@ -651,16 +664,7 @@ public class UtFrameUtils {
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
                         .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
-        QueryStatement queryStmt = (QueryStatement) statementBase;
-        String digest = SqlDigestBuilder.build(queryStmt);
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.reset();
-            md.update(digest.getBytes());
-            return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
-            return "";
-        }
+        return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
@@ -910,6 +914,16 @@ public class UtFrameUtils {
 
     public static void tearDownTestDump() {
         tearMockEnv();
+    }
+
+    public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
+            throws Exception {
+        String q = initMockEnv(connectContext, dumpInfo);
+        try {
+            return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
+        } finally {
+            tearMockEnv();
+        }
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
@@ -1230,6 +1244,11 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setEnableQueryCache(false);
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+
+            // Disable text based rewrite by default.
+            connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+            // disable mv analyze stats in FE UTs
+            connectContext.getSessionVariable().setAnalyzeForMv("");
         }
 
         new MockUp<PlanTestBase>() {

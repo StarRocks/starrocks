@@ -49,7 +49,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -361,5 +363,154 @@ public class KafkaRoutineLoadJobTest {
                 typeName, customProperties);
         Deencapsulation.setField(createRoutineLoadStmt, "name", jobName);
         return createRoutineLoadStmt;
+    }
+
+    @Test
+    public void testSerializationCsv(@Mocked GlobalStateMgr globalStateMgr,
+                                     @Injectable Database database,
+                                     @Injectable OlapTable table) throws UserException {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        Map<String, String> jobProperties = createRoutineLoadStmt.getJobProperties();
+        jobProperties.put("format", "csv");
+        jobProperties.put("trim_space", "true");
+        jobProperties.put("enclose", "'");
+        jobProperties.put("escape", "\\");
+        jobProperties.put("timezone", "Asia/Shanghai");
+        createRoutineLoadStmt.checkJobProperties();
+
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
+        for (String s : kafkaPartitionString.split(",")) {
+            partitionIdToOffset.add(new Pair<>(Integer.valueOf(s), 0L));
+        }
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        long dbId = 1L;
+        long tableId = 2L;
+
+        new Expectations() {
+            {
+                database.getTable(tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = dbId;
+                table.getId();
+                minTimes = 0;
+                result = tableId;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) throws UserException {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        String createSQL = "CREATE ROUTINE LOAD db1.job1 ON table1 " +
+                "PROPERTIES('format' = 'csv', 'trim_space' = 'true') " +
+                "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
+        KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+        job.setOrigStmt(new OriginStatement(createSQL, 0));
+        Assert.assertEquals("csv", job.getFormat());
+        Assert.assertTrue(job.isTrimspace());
+        Assert.assertEquals((byte) "'".charAt(0), job.getEnclose());
+        Assert.assertEquals((byte) "\\".charAt(0), job.getEscape());
+
+        String data = GsonUtils.GSON.toJson(job, KafkaRoutineLoadJob.class);
+        KafkaRoutineLoadJob newJob = GsonUtils.GSON.fromJson(data, KafkaRoutineLoadJob.class);
+        Assert.assertEquals("csv", newJob.getFormat());
+        Assert.assertTrue(newJob.isTrimspace());
+        Assert.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
+        Assert.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
+    }
+
+    @Test
+    public void testSerializationJson(@Mocked GlobalStateMgr globalStateMgr,
+                                      @Injectable Database database,
+                                      @Injectable OlapTable table) throws UserException {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        Map<String, String> jobProperties = createRoutineLoadStmt.getJobProperties();
+        jobProperties.put("format", "json");
+        jobProperties.put("strip_outer_array", "true");
+        jobProperties.put("jsonpaths", "['$.category','$.price','$.author']");
+        jobProperties.put("json_root", "");
+        jobProperties.put("timezone", "Asia/Shanghai");
+        createRoutineLoadStmt.checkJobProperties();
+
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
+        for (String s : kafkaPartitionString.split(",")) {
+            partitionIdToOffset.add(new Pair<>(Integer.valueOf(s), 0L));
+        }
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        long dbId = 1L;
+        long tableId = 2L;
+
+        new Expectations() {
+            {
+                database.getTable(tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = dbId;
+                table.getId();
+                minTimes = 0;
+                result = tableId;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) throws UserException {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        String createSQL = "CREATE ROUTINE LOAD db1.job1 ON table1 " +
+                "PROPERTIES('format' = 'json', 'strip_outer_array' = 'true') " +
+                "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
+        KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+        job.setOrigStmt(new OriginStatement(createSQL, 0));
+        Assert.assertEquals("json", job.getFormat());
+        Assert.assertTrue(job.isStripOuterArray());
+        Assert.assertEquals("['$.category','$.price','$.author']", job.getJsonPaths());
+        Assert.assertEquals("", job.getJsonRoot());
+
+        String data = GsonUtils.GSON.toJson(job, KafkaRoutineLoadJob.class);
+        KafkaRoutineLoadJob newJob = GsonUtils.GSON.fromJson(data, KafkaRoutineLoadJob.class);
+        Assert.assertEquals("json", newJob.getFormat());
+        Assert.assertTrue(newJob.isStripOuterArray());
+        Assert.assertEquals("['$.category','$.price','$.author']", newJob.getJsonPaths());
+        Assert.assertEquals("", newJob.getJsonRoot());
+    }
+
+    @Test
+    public void testGetStatistic() {
+        RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(job, "receivedBytes", 10);
+        Deencapsulation.setField(job, "totalRows", 20);
+        Deencapsulation.setField(job, "errorRows", 2);
+        Deencapsulation.setField(job, "unselectedRows", 2);
+        Deencapsulation.setField(job, "totalTaskExcutionTimeMs", 1000);
+        String statistic = job.getStatistic();
+        Assert.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
+        Assert.assertTrue(statistic.contains("\"loadRowsRate\":16"));
     }
 }

@@ -18,6 +18,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -80,6 +83,19 @@ public class PipeRepo {
             checksum ^= pipes.size();
         }
         return checksum;
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int cnt = reader.readInt();
+        for (int i = 0; i < cnt; ++i) {
+            Pipe pipe = reader.readJson(Pipe.class);
+            pipeManager.putPipe(pipe);
+        }
+        LOG.info("loaded {} pipes", cnt);
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        pipeManager.save(dos);
     }
 
     public void replay(PipeOpEntry entry) {

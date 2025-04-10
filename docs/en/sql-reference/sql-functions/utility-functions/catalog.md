@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # catalog
@@ -55,4 +55,4 @@ select catalog();
 
 ## See also
 
-[SET CATALOG](../../sql-statements/data-definition/SET_CATALOG.md): Switches to a destination catalog.
+[SET CATALOG](../../sql-statements/Catalog/SET_CATALOG.md): Switches to a destination catalog.

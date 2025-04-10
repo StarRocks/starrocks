@@ -240,8 +240,6 @@ public class BackupJobInfo implements Writable {
     public static class BackupTabletInfo {
         @SerializedName(value = "id")
         public long id;
-        @SerializedName(value = "files")
-        public List<String> files = Lists.newArrayList();
     }
 
     // eg: __db_10001/__tbl_10002/__part_10003/__idx_10002/__10004
@@ -305,11 +303,16 @@ public class BackupJobInfo implements Writable {
 
         // tbls
         for (Table tbl : tbls) {
-            OlapTable olapTbl = (OlapTable) tbl;
             BackupTableInfo tableInfo = new BackupTableInfo();
             tableInfo.id = tbl.getId();
             tableInfo.name = tbl.getName();
             jobInfo.tables.put(tableInfo.name, tableInfo);
+
+            if (tbl.isOlapView()) {
+                continue;
+            }
+
+            OlapTable olapTbl = (OlapTable) tbl;
             // partitions
             for (Partition partition : olapTbl.getPartitions()) {
                 BackupPartitionInfo partitionInfo = new BackupPartitionInfo();
@@ -327,9 +330,6 @@ public class BackupJobInfo implements Writable {
                         for (Tablet tablet : index.getTablets()) {
                             BackupTabletInfo tabletInfo = new BackupTabletInfo();
                             tabletInfo.id = tablet.getId();
-                            if (tbl.isOlapTable()) {
-                                tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
-                            }
                             idxInfo.tablets.add(tabletInfo);
                         }
                     }
@@ -348,9 +348,6 @@ public class BackupJobInfo implements Writable {
                             for (Tablet tablet : index.getTablets()) {
                                 BackupTabletInfo tabletInfo = new BackupTabletInfo();
                                 tabletInfo.id = tablet.getId();
-                                if (tbl.isOlapTable()) {
-                                    tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
-                                }
                                 idxInfo.tablets.add(tabletInfo);
                             }
                         }
@@ -458,6 +455,11 @@ public class BackupJobInfo implements Writable {
             }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
+            if (partsNames == null) {
+                // skip logical view
+                jobInfo.tables.put(tblName, tblInfo);
+                continue;
+            }
             for (String partName : partsNames) {
                 BackupPartitionInfo partInfo = new BackupPartitionInfo();
                 partInfo.name = partName;
@@ -486,10 +488,6 @@ public class BackupJobInfo implements Writable {
                         for (String tabletId : orderedTabletIds) {
                             BackupTabletInfo tabletInfo = new BackupTabletInfo();
                             tabletInfo.id = Long.valueOf(tabletId);
-                            JSONArray files = tablets.getJSONArray(tabletId);
-                            for (Object object : files) {
-                                tabletInfo.files.add((String) object);
-                            }
                             indexInfo.tablets.add(tabletInfo);
                         }
                         partInfo.indexes.put(indexInfo.name, indexInfo);
@@ -526,10 +524,6 @@ public class BackupJobInfo implements Writable {
                                 for (String tabletId : orderedTabletIds) {
                                     BackupTabletInfo tabletInfo = new BackupTabletInfo();
                                     tabletInfo.id = Long.valueOf(tabletId);
-                                    JSONArray files = tablets.getJSONArray(tabletId);
-                                    for (Object object : files) {
-                                        tabletInfo.files.add((String) object);
-                                    }
                                     indexInfo.tablets.add(tabletInfo);
                                 }
                                 subPartInfo.indexes.put(indexInfo.name, indexInfo);
@@ -626,9 +620,6 @@ public class BackupJobInfo implements Writable {
                         for (BackupTabletInfo tabletInfo : idxInfo.tablets) {
                             JSONArray files = new JSONArray();
                             tablets.put(String.valueOf(tabletInfo.id), files);
-                            for (String fileName : tabletInfo.files) {
-                                files.put(fileName);
-                            }
                             // to save the order of tablets
                             tabletsOrder.put(String.valueOf(tabletInfo.id));
                         }
@@ -653,9 +644,6 @@ public class BackupJobInfo implements Writable {
                             for (BackupTabletInfo tabletInfo : idxInfo.tablets) {
                                 JSONArray files = new JSONArray();
                                 tablets.put(String.valueOf(tabletInfo.id), files);
-                                for (String fileName : tabletInfo.files) {
-                                    files.put(fileName);
-                                }
                                 // to save the order of tablets
                                 tabletsOrder.put(String.valueOf(tabletInfo.id));
                             }

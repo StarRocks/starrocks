@@ -30,6 +30,7 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
+    bool is_literal() const override { return true; }
     std::string debug_string() const override;
 
 private:

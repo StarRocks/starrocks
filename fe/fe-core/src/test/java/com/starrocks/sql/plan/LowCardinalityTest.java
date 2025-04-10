@@ -393,6 +393,11 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" multi_distinct_count(11: S_ADDRESS), " +
                 "multi_distinct_count(12: S_COMMENT)"));
+
+        sql = "select max(a) from (select count(distinct S_ADDRESS) a from supplier)t";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "multi_distinct_count(9: count)");
+
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         sql = "select max(S_ADDRESS), count(distinct S_ADDRESS) from supplier group by S_ADDRESS;";
         plan = getFragmentPlan(sql);
@@ -834,6 +839,13 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 9> : reverse(substr(left(DictExpr(10: S_ADDRESS,[reverse(<place-holder>)])," +
                 " CAST(CAST(instr(DictExpr(10: S_ADDRESS,[reverse(<place-holder>)]), '/') AS BIGINT) - 1 AS INT)), 5))");
+    }
+
+    @Test
+    public void testLike() throws Exception {
+        String sql = "select count(*) from supplier where S_ADDRESS like 'k' AND S_ADDRESS like S_COMMENT";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "DictExpr(12: S_ADDRESS,[<place-holder> = 'k'])");
     }
 
     @Test
@@ -1453,8 +1465,8 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
-                "  |  <slot 14> : 8\n" +
-                "  |  <slot 15> : clone(8)\n" +
+                "  |  <slot 14> : clone(8)\n" +
+                "  |  <slot 15> : 8\n" +
                 "  |  \n" +
                 "  2:Decode\n" +
                 "  |  <dict id 16> : <string id 8>\n" +
@@ -1863,11 +1875,11 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select if(current_role = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:SORT\n" +
-                "  |  order by: <slot 9> 9: if ASC\n" +
+                "  |  order by: <slot 11> 11: if ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 9> : if(CURRENT_ROLE() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
+                "  |  <slot 11> : DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')])");
     }
 
     @Test
@@ -1913,4 +1925,50 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "if(DictExpr(10: S_ADDRESS,[<place-holder> = '']), '', " +
                 "substr(md5(DictExpr(10: S_ADDRESS,[<place-holder>])), 1, 3))");
     }
+
+    @Test
+    public void testRuntimeFilterOnProjectWithDictExpr() throws Exception {
+        String sql = "WITH \n" +
+                "   w1 AS (\n" +
+                "     SELECT CASE\n" +
+                "         WHEN P_NAME = 'a' THEN 'a1'\n" +
+                "         WHEN P_BRAND = 'b' THEN 'b1'\n" +
+                "         ELSE 'c1'\n" +
+                "      END as P_NAME2, P_NAME from part_v2\n" +
+                "      UNION ALL\n" +
+                "      SELECT P_NAME, P_NAME from part_v2\n" +
+                ")\n" +
+                "SELECT count(1) \n" +
+                "FROM  \n" +
+                "   w1 t1 \n" +
+                "   JOIN [broadcast] part_v2 t2 ON t1.P_NAME2 = t2.P_NAME AND t1.P_NAME = t2.P_NAME;";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 38> : <string id 2>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 1, probe_expr = (2)\n" +
+                "  |  column statistics: \n" +
+                "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  12 <-> CASE WHEN DictExpr(38: P_NAME,[<place-holder> = 'a']) THEN 'a1' WHEN " +
+                "DictExpr(39: P_BRAND,[<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  38 <-> [38: P_NAME, INT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (<slot 12>)\n" +
+                "  |  column statistics: \n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     table: part_v2, rollup: part_v2\n" +
+                "     preAggregation: on\n" +
+                "     dict_col=P_NAME,P_BRAND");
+        System.out.println(plan);
+    }
+
 }

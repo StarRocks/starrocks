@@ -167,6 +167,8 @@ public:
 
     JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
+    void release_mems();
+
     ssize_t get_group_concat_max_len() { return group_concat_max_len; }
     // min value is 4, default is 1024
     void set_group_concat_max_len(ssize_t len) { group_concat_max_len = len < 4 ? 4 : len; }

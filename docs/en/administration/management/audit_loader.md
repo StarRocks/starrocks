@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Manage audit logs within StarRocks via AuditLoader
@@ -10,7 +10,7 @@ StarRocks stores its audit logs in the local file **fe/log/fe.audit.log** rather
 
 ## Create a table to store audit logs
 
-Create a database and a table in your StarRocks cluster to store its audit logs. See [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) and [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) for detailed instructions.
+Create a database and a table in your StarRocks cluster to store its audit logs. See [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) and [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) for detailed instructions.
 
 Because the fields of audit logs vary among different StarRocks versions, you must choose among the following examples to create a table that is compatible with your StarRocks.
 
@@ -89,11 +89,14 @@ After a partition is created, you can move on to the next step.
 
 3. Modify **plugin.conf** to configure AuditLoader. You must configure the following items to make sure AuditLoader can work properly:
 
-    - `frontend_host_port`: FE IP address and HTTP port, in the format `<fe_ip>:<fe_http_port>`. The default value is `127.0.0.1:8030`.
+    - `frontend_host_port`: FE IP address and HTTP port, in the format `<fe_ip>:<fe_http_port>`. It is recommended to set it to its default value `127.0.0.1:8030`. Each FE in StarRocks manages its own Audit Log independently, and after installing the plugin, each FE will start its own background thread to fetch and save Audit Logs, and write them via Stream Load. The `frontend_host_port` configuration item is used to provide the IP and port of the HTTP protocol for the background Stream Load task of the plug-in, and this parameter does not support multiple values. The IP part of the parameter can use the IP of any FE in the cluster, but it is not recommended because if the corresponding FE crashes, the audit log writing task in the background of other FEs will also fail due to the failure of communication. It is recommended to set it to the default value `127.0.0.1:8030`, so that each FE uses its own HTTP port to communicate, thus avoiding the impact on the communication in case of an exception of the other FEs (all the write tasks will be forwarded to the FE Leader node to be executed eventually).
     - `database`: name of the database you created to host audit logs.
     - `table`: name of the table you created to host audit logs.
     - `user`: your cluster username. You MUST have the privilege to load data (LOAD_PRIV) into the table.
     - `password`: your user password.
+    - `secret_key`: the key (string, must not be longer than 16 bytes) used to encrypt the password. If this parameter is not set, it indicates that the password in **plugin.conf** will not be encrypted, and you only need to specify the plaintext password in `password`. If this parameter is specified, it indicates that the password is encrypted by this key, and you need to specify the encrypted string in `password`. The encrypted password can be generated in StarRocks using the `AES_ENCRYPT` function: `SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`.
+    - `enable_compute_all_query_digest`: whether to generate Hash SQL fingerprint for all queries (StarRocks only enable SQL fingerprint for slow queries by default). Note that the fingerprint calculation in the plugin is different from that of FE, which will [normalize the SQL statement](../Query_planning.md#sql-fingerprint), while the plugin does not. The fingerprint calculation will consume additional computing resources if this feature is enabled.
+    - `filter`: the filter conditions for audit log loading. This parameter is based on the [WHERE parameter](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties)  in Stream Load, i.e. `-H “where: <condition>”`, defaults to an empty string. Example: `filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`.
 
 4. Zip the files back into a package.
 
@@ -103,6 +106,10 @@ After a partition is created, you can move on to the next step.
 
 5. Dispatch the package to all machines that host FE nodes. Make sure all packages are stored in an identical path. Otherwise, the installation fails. Remember to copy the absolute path to the package after you dispatched the package.
 
+  > **NOTE**
+  >
+  > You can also distribute **auditloader.zip** to an HTTP service accessible to all FEs (for example, `httpd` or `nginx`) and install it using the network. Note that in both cases the **auditloader.zip** needs to be persisted in the path after the installation is performed, and the source files should not be deleted after installation.
+
 ## Install AuditLoader
 
 Execute the following statement along with the path you copied to install AuditLoader as a plugin in StarRocks:
@@ -111,11 +118,25 @@ Execute the following statement along with the path you copied to install AuditL
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
 ```
 
-See [INSTALL PLUGIN](../../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md) for detailed instructions.
+Example of installation from a local package:
+
+```SQL
+INSTALL PLUGIN FROM "<absolute_path_to_package>";
+```
+
+If you want install the plugin via a network path, you need to provide the md5 of the package in the properties of the INSTALL statement.
+
+Example:
+
+```sql
+INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5sum" = "3975F7B880C9490FE95F42E2B2A28E2D");
+```
+
+See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugin/INSTALL_PLUGIN.md) for detailed instructions.
 
 ## Verify the installation and query audit logs
 
-1. You can check if the installation is successful via [SHOW PLUGINS](../../sql-reference/sql-statements/Administration/SHOW_PLUGINS.md).
+1. You can check if the installation is successful via [SHOW PLUGINS](../../sql-reference/sql-statements/cluster-management/plugin/SHOW_PLUGINS.md).
 
     In the following example, the `Status` of the plugin `AuditLoader` is `INSTALLED`,  meaning installation is successful.
 
@@ -135,8 +156,8 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/Administration/INSTALL_P
     *************************** 2. row ***************************
         Name: AuditLoader
         Type: AUDIT
-    Description: Available for versions 2.3+. Load audit log to starrocks, and user can view the statistic of queries.
-        Version: 4.0.0
+    Description: Available for versions 2.5+. Load audit log to starrocks, and user can view the statistic of queries
+        Version: 4.2.1
     JavaVersion: 1.8.0
     ClassName: com.starrocks.plugin.audit.AuditLoaderPlugin
         SoName: NULL
@@ -194,4 +215,4 @@ If no audit logs are loaded to the table after the dynamic partition is created 
 UNINSTALL PLUGIN AuditLoader;
 ```
 
-After all configurations are set correctly, you can follow the above steps to install AuditLoader again.
+Logs of AuditLoader are printed in **fe.log** of each FE, you can retrieve them by searching the keyword `audit` in **fe.log**. After all configurations are set correctly, you can follow the above steps to install AuditLoader again.

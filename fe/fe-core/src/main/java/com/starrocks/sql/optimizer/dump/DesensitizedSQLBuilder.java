@@ -153,7 +153,7 @@ public class DesensitizedSQLBuilder {
         private final Map<String, String> desensitizedDict;
 
         public DesensitizedSQLVisitor(boolean simple, boolean withoutTbl, Map<String, String> desensitizedDict) {
-            super(simple, withoutTbl);
+            super(simple, withoutTbl, true);
             this.desensitizedDict = desensitizedDict;
         }
 
@@ -765,7 +765,7 @@ public class DesensitizedSQLBuilder {
                     column.getPrimitiveType() != PrimitiveType.BITMAP) {
                 sb.append("DEFAULT \"").append(column.getDefaultValue()).append("\" ");
             } else if (column.isGeneratedColumn()) {
-                sb.append("AS ").append(visit(column.getGeneratedColumnExpr()));
+                sb.append("AS ").append(visit(column.generatedColumnExpr()));
             }
             return sb.toString();
         }

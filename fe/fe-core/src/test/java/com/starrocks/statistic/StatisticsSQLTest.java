@@ -102,6 +102,21 @@ public class StatisticsSQLTest extends PlanTestBase {
                 ");";
         starRocksAssert.withTable(createStructTableSql);
 
+        starRocksAssert.withTable("CREATE TABLE `complex_table` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2.a2.b2['+']` bigint NULL COMMENT \"\",\n" +
+                "  `struct_a.c3.d3` STRUCT<struct_b int, " +
+                "                          `struct_c.e3` int, " +
+                "                          `struct_d.f4` struct<struct_e int, struct_f int, `struct_g.h` int>" +
+                "                          > COMMENT ''\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("stat0");
         t0StatsTableId = t0.getId();
     }
@@ -117,6 +132,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, job.columnTypes, 200);
         starRocksAssert.useDatabase("_statistics_");
+
         String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
                 t0.getId(), "v3", db.getId(), "test.stat0", "test");
         assertCContains(sql, except);
@@ -379,5 +395,19 @@ public class StatisticsSQLTest extends PlanTestBase {
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+    }
+
+    @Test
+    public void testQuota() {
+        Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("complex_table");
+        assertContains(StatisticUtils.quoting(t0, "v2.a2.b2['+']"), "`v2.a2.b2['+']`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3"), "`struct_a.c3.d3`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_b"), "`struct_a.c3.d3`.`struct_b`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_c.e3"), "`struct_a.c3.d3`.`struct_c.e3`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4"), "`struct_a.c3.d3`.`struct_d.f4`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4.struct_e"),
+                "`struct_a.c3.d3`.`struct_d.f4`.`struct_e`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4.struct_g.h"),
+                "`struct_a.c3.d3`.`struct_d.f4`.`struct_g.h`");
     }
 }

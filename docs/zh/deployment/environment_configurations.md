@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 检查环境配置
@@ -18,6 +18,7 @@ StarRocks 为不同的服务使用特定的端口。如果您在这些实例上�
 - `9020`：FE Thrift Server 端口（`rpc_port`）
 - `9030`：FE MySQL Server 端口（`query_port`）
 - `9010`：FE 内部通讯端口（`edit_log_port`）
+- `6090`：FE 云原生元数据服务 RPC 监听端口（`cloud_native_meta_port`）
 
 在 FE 实例上执行如下命令查看这些端口是否被占用：
 
@@ -26,6 +27,7 @@ netstat -tunlp | grep 8030
 netstat -tunlp | grep 9020
 netstat -tunlp | grep 9030
 netstat -tunlp | grep 9010
+netstat -tunlp | grep 6090
 ```
 
 如果上述任何端口被占用，您必须在部署 FE 节点时指定可用于替换的端口。详细说明参见 [手动部署 StarRocks - 启动 Leader FE 节点](../deployment/deploy_manually.md#第一步启动-leader-fe-节点)。
@@ -38,6 +40,7 @@ netstat -tunlp | grep 9010
 - `8040`：BE HTTP Server 端口（`be_http_port`）
 - `9050`：BE 心跳服务端口（`heartbeat_service_port`）
 - `8060`：BE bRPC 端口（`brpc_port`）
+- `9070`：BE 和 CN 的额外 Agent 服务端口。（`starlet_port`）
 
 在 BE 实例上执行如下命令查看这些端口是否被占用：
 
@@ -46,6 +49,7 @@ netstat -tunlp | grep 9060
 netstat -tunlp | grep 8040
 netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
+netstat -tunlp | grep 9070
 ```
 
 如果上述任何端口被占用，您必须在部署 BE 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 BE 服务](../deployment/deploy_manually.md#第二步启动-be-服务)。
@@ -58,7 +62,7 @@ netstat -tunlp | grep 8060
 - `8040`：CN HTTP Server 端口（`be_http_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
 - `8060`：CN bRPC 端口（`brpc_port`）
-- `9070`：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。（`starlet_port`）
+- `9070`：BE 和 CN 的额外 Agent 服务端口。（`starlet_port`）
 
 在 CN 实例上执行如下命令查看这些端口是否被占用：
 
@@ -67,6 +71,7 @@ netstat -tunlp | grep 9060
 netstat -tunlp | grep 8040
 netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
+netstat -tunlp | grep 9070
 ```
 
 如果上述任何端口被占用，您必须在部署 CN 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 CN 服务](../deployment/deploy_manually.md#第三步可选启动-cn-服务)。

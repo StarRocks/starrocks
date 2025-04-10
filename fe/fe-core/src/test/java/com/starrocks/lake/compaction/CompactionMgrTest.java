@@ -21,20 +21,39 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionMgrTest {
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+    @Mocked
+    private GlobalTransactionMgr globalTransactionMgr;
+    @Mocked
+    private Database db;
 
     @Test
     public void testChoosePartitionsToCompact() {
@@ -47,12 +66,14 @@ public class CompactionMgrTest {
 
         Set<Long> excludeTables = new HashSet<>();
         for (int i = 1; i <= Config.lake_compaction_simple_selector_threshold_versions - 1; i++) {
-            compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis(), null);
-            compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis(), null);
+            compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis(),
+                                                    Quantiles.compute(Lists.newArrayList(1d)));
+            compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis(),
+                                                    Quantiles.compute(Lists.newArrayList(1d)));
             Assert.assertEquals(0, compactionManager.choosePartitionsToCompact(excludeTables).size());
         }
         compactionManager.handleLoadingFinished(partition1, Config.lake_compaction_simple_selector_threshold_versions,
-                System.currentTimeMillis(), null);
+                System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
         List<PartitionIdentifier> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition1, compactionList.get(0));
@@ -60,7 +81,7 @@ public class CompactionMgrTest {
         Assert.assertEquals(compactionList, compactionManager.choosePartitionsToCompact(excludeTables));
 
         compactionManager.handleLoadingFinished(partition2, Config.lake_compaction_simple_selector_threshold_versions,
-                System.currentTimeMillis(), null);
+                System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
 
         compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(2, compactionList.size());
@@ -85,6 +106,65 @@ public class CompactionMgrTest {
     }
 
     @Test
+    public void testChoosePartitionsToCompactWithActiveTxnFilter() {
+        long dbId = 10001L;
+        long tableId1 = 10002L;
+        long tableId2 = 10003L;
+        long partitionId10 = 20001L;
+        long partitionId11 = 20003L;
+        long partitionId20 = 20002L;
+
+        PartitionIdentifier partition10 = new PartitionIdentifier(dbId, tableId1, partitionId10);
+        PartitionIdentifier partition11 = new PartitionIdentifier(dbId, tableId1, partitionId11);
+        PartitionIdentifier partition20 = new PartitionIdentifier(dbId, tableId2, partitionId20);
+
+        CompactionMgr compactionManager = new CompactionMgr();
+        compactionManager.handleLoadingFinished(partition10, 1, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(100d)));
+        compactionManager.handleLoadingFinished(partition11, 2, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(100d)));
+        compactionManager.handleLoadingFinished(partition20, 3, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(100d)));
+
+        // build active txn on table1
+        long txnId = 10001L;
+        Map<Long, Long> txnIdToTableIdMap = new HashMap<>();
+        txnIdToTableIdMap.put(txnId, tableId1);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+
+                globalTransactionMgr.getLakeCompactionActiveTxnStats();
+                result = txnIdToTableIdMap;
+
+            }
+        };
+        compactionManager.buildActiveCompactionTransactionMap();
+
+        Set<PartitionIdentifier> allPartitions = compactionManager.getAllPartitions();
+        Assert.assertEquals(3, allPartitions.size());
+        Assert.assertTrue(allPartitions.contains(partition10));
+        Assert.assertTrue(allPartitions.contains(partition11));
+        Assert.assertTrue(allPartitions.contains(partition20));
+
+        List<PartitionIdentifier> compactionList =
+                compactionManager.choosePartitionsToCompact(new HashSet<>(), new HashSet<>());
+        // both partition10 and partition11 are filtered because table1 has active txn
+        Assert.assertEquals(1, compactionList.size());
+        Assert.assertSame(partition20, compactionList.get(0));
+
+        Set<Long> excludeTables = new HashSet<>();
+        excludeTables.add(tableId2);
+        compactionList = compactionManager.choosePartitionsToCompact(new HashSet<>(), excludeTables);
+        // tableId2 is filtered by excludeTables
+        Assert.assertEquals(0, compactionList.size());
+    }
+
+    @Test
     public void testGetMaxCompactionScore() {
         double delta = 0.001;
 
@@ -97,7 +177,7 @@ public class CompactionMgrTest {
                 Quantiles.compute(Lists.newArrayList(1d)));
         Assert.assertEquals(1, compactionMgr.getMaxCompactionScore(), delta);
         compactionMgr.handleCompactionFinished(partition1, 3, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(2d)));
+                Quantiles.compute(Lists.newArrayList(2d)), 1234);
         Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
 
         compactionMgr.handleLoadingFinished(partition2, 2, System.currentTimeMillis(),
@@ -125,7 +205,7 @@ public class CompactionMgrTest {
                 Database db = new Database();
                 Table table = new LakeTable();
                 PhysicalPartition partition = new Partition(123, "aaa", null, null);
-                CompactionJob job = new CompactionJob(db, table, partition, txnId);
+                CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
                 r.put(partitionIdentifier, job);
                 return r;
             }
@@ -133,6 +213,7 @@ public class CompactionMgrTest {
         Assert.assertEquals(true, compactionManager.existCompaction(txnId));
     }
 
+    @Test
     public void testTriggerManualCompaction() {
         CompactionMgr compactionManager = new CompactionMgr();
         PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
@@ -143,5 +224,83 @@ public class CompactionMgrTest {
         Collection<PartitionStatistics> allStatistics = compactionManager.getAllStatistics();
         Assert.assertEquals(1, allStatistics.size());
         Assert.assertTrue(allStatistics.contains(statistics));
+    }
+
+    @Test
+    public void testSaveAndLoad() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier partition3 = new PartitionIdentifier(1, 2, 5);
+
+        compactionMgr.handleLoadingFinished(partition1, 2, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)));
+        compactionMgr.handleLoadingFinished(partition2, 3, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(2d)));
+        compactionMgr.handleLoadingFinished(partition3, 4, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(3d)));
+
+        Assert.assertEquals(3, compactionMgr.getPartitionStatsCount());
+
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public boolean isPartitionExist(PartitionIdentifier partition) {
+                if (partition.getPartitionId() == 3) {
+                    return true;
+                }
+                if (partition.getPartitionId() == 4) {
+                    return false;
+                }
+                if (partition.getPartitionId() == 5) {
+                    return false;
+                }
+                return true;
+            }
+        };
+
+        ByteArrayOutputStream bstream = new ByteArrayOutputStream();
+        DataOutputStream ostream = new DataOutputStream(bstream);
+        compactionMgr.save(ostream);
+        CompactionMgr compactionMgr2 = new CompactionMgr();
+        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bstream.toByteArray()));
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        compactionMgr2.load(reader);
+        Assert.assertEquals(1, compactionMgr2.getPartitionStatsCount());
+    }
+
+    @Test
+    public void testActiveCompactionTransactionMapOnRestart() {
+        long txnId = 10001L;
+        long tableId = 10002L;
+        Map<Long, Long> txnIdToTableIdMap = new HashMap<>();
+        txnIdToTableIdMap.put(txnId, tableId);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+
+                globalTransactionMgr.getLakeCompactionActiveTxnStats();
+                result = txnIdToTableIdMap;
+
+            }
+        };
+
+        CompactionMgr compactionMgr = new CompactionMgr();
+        compactionMgr.buildActiveCompactionTransactionMap();
+        ConcurrentHashMap<Long, Long> activeCompactionTransactionMap =
+                compactionMgr.getRemainedActiveCompactionTxnWhenStart();
+        Assert.assertEquals(1, activeCompactionTransactionMap.size());
+        Assert.assertTrue(activeCompactionTransactionMap.containsValue(tableId));
+
+        // test for removeFromStartupActiveCompactionTransactionMap
+        long nonExistedTxnId = 10003L;
+        compactionMgr.removeFromStartupActiveCompactionTransactionMap(nonExistedTxnId);
+        Assert.assertEquals(1, activeCompactionTransactionMap.size());
+
+        compactionMgr.removeFromStartupActiveCompactionTransactionMap(txnId);
+        Assert.assertEquals(0, activeCompactionTransactionMap.size());
     }
 }

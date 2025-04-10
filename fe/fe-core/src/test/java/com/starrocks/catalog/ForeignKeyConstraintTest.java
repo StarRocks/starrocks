@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -97,7 +97,7 @@ struct IOTaskExecutor {
 
     template <class Func>
     Status submit(Func&& func) {
-        workgroup::ScanTask task(wg.get(), func);
+        workgroup::ScanTask task(wg, func);
         if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {

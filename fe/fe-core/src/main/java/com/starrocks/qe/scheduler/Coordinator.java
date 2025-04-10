@@ -118,6 +118,10 @@ public abstract class Coordinator {
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
+    // Release query queue resources
+    public void onReleaseSlots() {
+    }
+
     public abstract void onFinished();
 
     public abstract LogicalSlot getSlot();
@@ -221,4 +225,7 @@ public abstract class Coordinator {
 
     public abstract boolean isProfileAlreadyReported();
 
+    public abstract String getWarehouseName();
+
+    public abstract boolean isShortCircuit();
 }

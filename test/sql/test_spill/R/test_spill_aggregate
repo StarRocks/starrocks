@@ -115,7 +115,7 @@ select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group
 -- !result
 select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 limit 100) tb;
 -- result:
-100	99	163444
+100	100	163440
 -- !result
 select count(*) from (select array_agg(c0) from t3 group by c0) tb;
 -- result:
@@ -207,4 +207,15 @@ select distinct c0, c1 from t5 order by 1, 2 limit 1;
 select count(*) from (select distinct c0, c1 from t5 limit 10) tb;
 -- result:
 10
+-- !result
+set chunk_size = 1024;
+-- result:
+-- !result
+select max(s1), avg(s2) from (select sum(c1) s1, sum(c0) s2 from t5 group by c0) tb;
+-- result:
+649999	325000.5
+-- !result
+select count(*) from (select distinct c0, c1 from t5) tb;
+-- result:
+650000
 -- !result

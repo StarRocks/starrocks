@@ -28,6 +28,7 @@
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/del_vector.h"
 #include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -219,6 +220,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, page_cache_mem_tracker);
         REG_METHOD(GlobalEnv, update_mem_tracker);
         REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
+        REG_METHOD(GlobalEnv, passthrough_mem_tracker);
         REG_METHOD(GlobalEnv, clone_mem_tracker);
         REG_METHOD(GlobalEnv, consistency_mem_tracker);
         REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
@@ -339,6 +341,16 @@ public:
         } else {
             return ret;
         }
+    }
+
+    // this method is specifically used to recover "no delete vector found" error caused by corrupt pk tablet metadata
+    static std::string reset_delvec(int64_t tablet_id, int64_t segment_id, int64_t version) {
+        auto tablet = get_tablet(tablet_id);
+        RETURN_IF_UNLIKELY_NULL(tablet, "tablet not found");
+        DelVector dv;
+        dv.init(version, nullptr, 0);
+        auto st = TabletMetaManager::set_del_vector(tablet->data_dir()->get_meta(), tablet_id, segment_id, dv);
+        return st.to_string();
     }
 
     static size_t submit_manual_compaction_task_for_table(int64_t table_id, int64_t rowset_size_threshold) {
@@ -537,6 +549,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_info);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_infos);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_meta_json);
+            REG_STATIC_METHOD(StorageEngineRef, reset_delvec);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet);
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);

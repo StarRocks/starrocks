@@ -424,6 +424,35 @@ PARALLEL_TEST(JsonParserTest, test_illegal_document_stream) {
     {"key4": 4})");
 }
 
+PARALLEL_TEST(JsonParserTest, test_big_illegal_document_stream) {
+    // ndjson with ' ', '/t', '\n'
+    std::string input = R"(   {"key1": 1} "key2": 012345678901234567890123456789012345678901234567890"} {"key3": 3})";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
+
+    auto st = parser->parse(input.data(), size, padded_size);
+
+    simdjson::ondemand::object row;
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_STREQ(parser->left_bytes_string(10).data(), R"("key2": 01)");
+}
+
 PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     // json array with ' ', '/t', '\n'
     std::string input = R"( [  {"key1": 1}, "key2": 2},    {"key3": 3},
@@ -455,6 +484,38 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     ASSERT_TRUE(st.is_data_quality_error());
     ASSERT_STREQ(parser->left_bytes_string(64).data(), R"("key2": 2},    {"key3": 3},
     {"key4": 4}])");
+}
+
+PARALLEL_TEST(JsonParserTest, test_big_illegal_json_array) {
+    // json array with ' ', '/t', '\n'
+    std::string input = R"( [  {"key1": 1}, "key2": "123456789012345678901234567890"},    {"key3": 3},
+    {"key4": 4}])";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+
+    std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
+
+    auto st = parser->parse(input.data(), size, padded_size);
+
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_STREQ(parser->left_bytes_string(10).data(), R"("key2": "1)");
 }
 
 PARALLEL_TEST(JsonParserTest, test_big_value) {
@@ -500,6 +561,93 @@ PARALLEL_TEST(JsonParserTest, test_big_json) {
 
     st = parser->advance();
     ASSERT_TRUE(st.is_end_of_file());
+}
+
+PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_array) {
+    std::string input = R"(   [{"key":1},{"key":2}]   )";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
+    auto st = parser->parse(input.data(), size, padded_size);
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_TRUE(st.get_error_msg().find(
+                        "The value is array type in json document stream, you can set strip_outer_array=true "
+                        "to parse each element of the array as individual rows") != std::string::npos);
+}
+
+PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_not_object) {
+    std::string input = R"(   1   )";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
+    auto st = parser->parse(input.data(), size, padded_size);
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_TRUE(st.get_error_msg().find("The value should be object type in json document stream") !=
+                std::string::npos);
+}
+
+PARALLEL_TEST(JsonParserTest, test_document_stream_parser_with_jsonroot_invalid_type_array) {
+    // ndjson with ' ', '/t', '\n'
+    std::string input = R"(   {"key0": [{"key1":1},{"key1":2}]}    {"key0":[{"key1":3},{"key1":4}]}  )";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    std::vector<SimpleJsonPath> jsonroot;
+    JsonFunctions::parse_json_paths("$.key0", &jsonroot);
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
+    auto st = parser->parse(input.data(), size, padded_size);
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.get_error_msg().find("The value is array type in json document stream with json root, you can set "
+                                        "strip_outer_array=true to parse each element of the array as individual rows, "
+                                        "value: [{\"key1\":1},{\"key1\":2}]") != std::string::npos);
+}
+
+PARALLEL_TEST(JsonParserTest, test_array_parser_with_jsonroot_invalid_type_array) {
+    // json array with ' ', '/t', '\n'
+    std::string input = R"([   {"key0": [{"key1":1},{"key1":2}]},    {"key0": [{"key1":3},{"key1":4}]} ])";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    std::vector<SimpleJsonPath> jsonroot;
+    JsonFunctions::parse_json_paths("$.key0", &jsonroot);
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
+    auto st = parser->parse(input.data(), size, padded_size);
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_TRUE(st.get_error_msg().find(
+                        "The value is array type in json array with json root, you can set strip_outer_array=true to "
+                        "parse each element of the array as individual rows, value: [{\"key1\":1},{\"key1\":2}]") !=
+                std::string::npos);
 }
 
 } // namespace starrocks

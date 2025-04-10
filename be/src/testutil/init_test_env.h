@@ -92,6 +92,7 @@ int init_test_env(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
+    engine->start_schedule_apply_thread();
     auto* global_env = GlobalEnv::GetInstance();
     config::disable_storage_page_cache = true;
     auto st = global_env->init();
@@ -110,6 +111,7 @@ int init_test_env(int argc, char** argv) {
     CHECK(StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
     TEST_clear_all_columns_this_thread();
+    exec_env->wait_for_finish();
     // delete engine
     StorageEngine::instance()->stop();
     // destroy exec env

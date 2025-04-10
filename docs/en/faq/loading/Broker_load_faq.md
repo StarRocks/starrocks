@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Broker Load
 
 ## 1. Does Broker Load support re-running load jobs that have been run successfully and are in the FINISHED state?
 
-Broker Load does not support re-running load jobs that have been run successfully and are in the FINISHED state. Also, to prevent data loss and duplication, Broker Load does not allow reusing the labels of successfully run load jobs. You can use [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) to view the history of load jobs and find the load job that you want to re-run. Then, you can copy the information of that load job and use the job information, except the label, to create another load job.
+Broker Load does not support re-running load jobs that have been run successfully and are in the FINISHED state. Also, to prevent data loss and duplication, Broker Load does not allow reusing the labels of successfully run load jobs. You can use [SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) to view the history of load jobs and find the load job that you want to re-run. Then, you can copy the information of that load job and use the job information, except the label, to create another load job.
 
 ## 2. When I load data from HDFS by using Broker Load, what do I do if the date and time values loaded into the destination StarRocks table are 8 hours later than the date and time values from the source data file?
 
@@ -18,11 +18,11 @@ The source data file has different column names than the destination StarRocks t
 
 ## 4. The Broker Load job does not report errors, but why am I unable to query the loaded data?
 
-Broker Load is an asynchronous loading method. The load job may still fail even if the load statement does not return errors. After you run a Broker Load job, you can use [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) to view the result and `errmsg` of the load job. Then, you can modify the job configuration and retry.
+Broker Load is an asynchronous loading method. The load job may still fail even if the load statement does not return errors. After you run a Broker Load job, you can use [SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) to view the result and `errmsg` of the load job. Then, you can modify the job configuration and retry.
 
 ## 5. What do I do if the "failed to send batch" or "TabletWriter add batch with unknown id" error occurs?
 
-The amount of time taken to write the data exceeds the upper limit, causing a timeout error. To resolve this issue, modify the settings of the [session variable](../../reference/System_variable.md) `query_timeout` and the [BE configuration item](../../administration/management/BE_configuration.md#configure-be-static-parameters) `streaming_load_rpc_max_alive_time_sec` based on your business requirements.
+The amount of time taken to write the data exceeds the upper limit, causing a timeout error. To resolve this issue, modify the settings of the [session variable](../../sql-reference/System_variable.md) `query_timeout` and the [BE configuration item](../../administration/management/BE_configuration.md#configure-be-static-parameters) `streaming_load_rpc_max_alive_time_sec` based on your business requirements.
 
 ## 6. What do I do if the "LOAD-RUN-FAIL; msg:OrcScannerAdapter::init_include_columns. col name = xxx not found" error occurs?
 
@@ -37,7 +37,7 @@ SET
 )
 ```
 
-The preceding example maps the `tmp_c1` and `tmp_c2` columns of the source data file onto the `name` and `id`  columns of the destination StarRocks table, respectively. If you do not specify the `SET` clause, the column names specified in the `column_list` parameter are used to declare the column mapping. For more information, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+The preceding example maps the `tmp_c1` and `tmp_c2` columns of the source data file onto the `name` and `id`  columns of the destination StarRocks table, respectively. If you do not specify the `SET` clause, the column names specified in the `column_list` parameter are used to declare the column mapping. For more information, see [BROKER LOAD](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 > **NOTICE**
 >

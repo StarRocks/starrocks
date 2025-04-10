@@ -27,7 +27,11 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "util/failpoint/fail_point.h"
 #include "util/race_detect.h"
+
+DEFINE_FAIL_POINT(spill_always_streaming);
+DEFINE_FAIL_POINT(spill_always_selection_streaming);
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
@@ -56,7 +60,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         _aggregator->spiller()->cancel();
     }
 
-    if (!_aggregator->spiller()->spilled()) {
+    if (!_aggregator->spiller()->spilled() && _streaming_chunks.empty()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
@@ -168,7 +172,25 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     // goal: control buffered data memory usage, aggregate data as much as possible before spill
     // this strategy is similar to the LIMITED_MEM mode in agg streaming
 
-    if (_streaming_bytes + ht_mem_usage > max_mem_usage) {
+    bool always_streaming = false;
+    bool always_selection_streaming = false;
+
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_streaming = true;
+        }
+    });
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_selection_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_selection_streaming = true;
+        }
+    });
+
+    // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    bool build_hash_table =
+            !ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage);
+    build_hash_table = build_hash_table && !always_selection_streaming;
+    if (_streaming_bytes + ht_mem_usage > max_mem_usage || always_streaming) {
         // if current memory usage exceeds limit,
         // use force streaming mode and spill all data
         SCOPED_TIMER(_aggregator->streaming_timer());
@@ -176,8 +198,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
         _add_streaming_chunk(res);
         return _spill_all_data(state, true);
-    } else if (!ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage)) {
-        // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    } else if (build_hash_table) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
@@ -224,8 +245,8 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         _aggregator->update_num_input_rows(hit_count);
         RETURN_IF_ERROR(_aggregator->check_has_error());
     }
-    // finally, check memory usage of streaming_chunks and hash table, decide wether to spill
 
+    // finally, check memory usage of streaming_chunks and hash table, decide whether to spill
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
@@ -262,11 +283,9 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_bui
             return chunk;
         }
         if (should_spill_hash_table) {
-            bool use_intermediate_as_output = true;
             if (!_aggregator->is_ht_eos()) {
                 auto chunk = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk,
-                                                                       &use_intermediate_as_output));
+                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
                 return chunk;
             }
             COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());

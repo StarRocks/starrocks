@@ -50,7 +50,6 @@
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/rowid_column_iterator.h"
-#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
@@ -109,7 +108,12 @@ public:
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
+    Status do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) override;
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override {
+        return do_get_next(chunk, rssid_rowids);
+    }
 
 private:
     struct ScanContext {
@@ -411,10 +415,16 @@ Status SegmentIterator::_init() {
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
-    RETURN_IF_ERROR(_apply_del_vector());
+    bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+    if (!apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    if (apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -423,7 +433,7 @@ Status SegmentIterator::_init() {
 
     // reverse scan_range
     if (!_opts.asc_hint) {
-        _scan_range.split_and_revese(config::desc_hint_split_range, config::vector_chunk_size);
+        _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
     }
 
     _range_iter = _scan_range.new_iterator();
@@ -458,7 +468,7 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         // cols file index -> column index in corresponding file
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first >= 0) {
-            auto column_file = dcg->column_files(parent_name(_segment->file_name()))[idx.first];
+            ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
             if (_dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
@@ -504,6 +514,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
@@ -980,6 +991,32 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
     do {
         st = _do_get_next(chunk, rowid);
     } while (st.ok() && chunk->num_rows() == 0);
+    return st;
+}
+
+Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    if (!_inited) {
+        RETURN_IF_ERROR(_init());
+        _inited = true;
+    }
+
+    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+
+    DCHECK_EQ(0, chunk->num_rows());
+
+    Status st;
+    vector<uint32_t> rowids;
+    do {
+        st = _do_get_next(chunk, &rowids);
+    } while (st.ok() && chunk->num_rows() == 0);
+    if (st.ok()) {
+        // encode rssid with rowid
+        // | rssid (32bit) | rowid (32bit) |
+        uint64_t rssid_shift = (uint64_t)(_opts.rowset_id + segment_id()) << 32;
+        for (uint32_t rowid : rowids) {
+            rssid_rowids->push_back(rssid_shift | rowid);
+        }
+    }
     return st;
 }
 
@@ -1645,8 +1682,9 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
             }
 
             IndexReadOptions opts;
-            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
+            opts.use_page_cache = !_opts.temporary_data && (config::enable_bitmap_index_memory_page_cache ||
+                                                            !config::disable_storage_page_cache);
+            opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
             opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;

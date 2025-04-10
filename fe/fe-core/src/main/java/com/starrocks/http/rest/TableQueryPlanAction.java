@@ -51,6 +51,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -208,10 +209,13 @@ public class TableQueryPlanAction extends RestBaseAction {
              * currently only used in Spark/Flink Connector
              */
             context.getSessionVariable().setSingleNodeExecPlan(true);
+            long limit = context.getSessionVariable().getSqlSelectLimit();
+            context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
             statementBase =
                     com.starrocks.sql.parser.SqlParser.parse(sql, context.getSessionVariable()).get(0);
-            execPlan = new StatementPlanner().plan(statementBase, context);
+            execPlan = StatementPlanner.plan(statementBase, context);
             context.getSessionVariable().setSingleNodeExecPlan(false);
+            context.getSessionVariable().setSqlSelectLimit(limit);
         } catch (Exception e) {
             LOG.error("error occurred when optimizing queryId: {}", context.getQueryId(), e);
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,

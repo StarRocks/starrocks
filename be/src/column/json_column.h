@@ -41,7 +41,8 @@ public:
     void append_datum(const Datum& datum) override;
     int compare_at(size_t left, size_t right, const starrocks::Column& rhs, int nan_direction_hint) const override;
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-    void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,
+                              bool is_binary_protocol = false) const override;
     std::string debug_item(size_t idx) const override;
     std::string get_name() const override;
     bool is_json() const override { return true; }

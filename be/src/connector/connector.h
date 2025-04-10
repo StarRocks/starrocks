@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "exec/pipeline/scan/morsel.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
@@ -69,7 +70,7 @@ public:
         _runtime_profile->add_info_string("DataSourceType", name());
     }
     void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
-    void set_runtime_filters(const RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
+    void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
     Status parse_runtime_filters(RuntimeState* state);
@@ -87,11 +88,16 @@ protected:
     int64_t _read_limit = -1; // no limit
     bool _has_any_predicate = false;
     std::vector<ExprContext*> _conjunct_ctxs;
-    const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
+    RuntimeFilterProbeCollector* _runtime_filters = nullptr;
+    RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
-    virtual void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
     pipeline::ScanSplitContext* _split_context = nullptr;
+
+    virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        return Status::OK();
+    }
 };
 
 class StreamDataSource : public DataSource {
@@ -110,9 +116,10 @@ using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
 public:
-    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;  // 16MB
-    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024; // 256MB
-    static constexpr int64_t PER_FIELD_MEM_BYTES = 4 * 1024 * 1024;         // 4MB
+    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;     // 16MB
+    static constexpr int64_t DEFAULT_DATA_SOURCE_MEM_BYTES = 64 * 1024 * 1024; // 64MB
+    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024;    // 256MB
+    static constexpr int64_t PER_FIELD_MEM_BYTES = 1 * 1024 * 1024;            // 1MB
 
     virtual ~DataSourceProvider() = default;
 

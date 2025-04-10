@@ -20,6 +20,7 @@
 #include <queue>
 #include <set>
 #include <unordered_set>
+#include <utility>
 
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -39,8 +40,8 @@ public:
 
     ScanTask() : ScanTask(nullptr, nullptr) {}
     explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
-    ScanTask(WorkGroup* workgroup, WorkFunction work_function)
-            : workgroup(workgroup), work_function(std::move(work_function)) {}
+    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function)
+            : workgroup(std::move(workgroup)), work_function(std::move(work_function)) {}
     ~ScanTask() = default;
 
     DISALLOW_COPY(ScanTask);
@@ -55,7 +56,7 @@ public:
     }
 
 public:
-    WorkGroup* workgroup;
+    WorkGroupPtr workgroup;
     WorkFunction work_function;
     int priority = 0;
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
@@ -153,9 +154,7 @@ private:
 
 class WorkGroupScanTaskQueue final : public ScanTaskQueue {
 public:
-    enum SchedEntityType { OLAP, CONNECTOR };
-
-    WorkGroupScanTaskQueue(SchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
+    WorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
     ~WorkGroupScanTaskQueue() override = default;
 
     void close() override;
@@ -198,7 +197,7 @@ private:
     };
     using WorkgroupSet = std::set<workgroup::WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
 
-    const SchedEntityType _sched_entity_type;
+    const ScanSchedEntityType _sched_entity_type;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;

@@ -25,6 +25,7 @@
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
+#include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -86,6 +87,47 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         FileMetaPB file_meta;
         file_meta.set_name(del_file);
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+    }
+}
+
+// check the last input rowset to determine whether this is partial compaction,
+// if is, modify last intput rowset `segments` info, for example, following
+// `e` and `f` will be removed from last input rowset.
+// before(last rowset input segments): x y a b c d e f
+// segments in compaction: a b c d
+// output segments:                    x y m n e f
+// after (last rowset input segments): a b c d
+void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& metadata,
+                                               const TxnLogPB_OpCompaction& op_compaction,
+                                               RowsetMetadataPB& last_input_rowset) {
+    if (op_compaction.input_rowsets_size() < 1) {
+        return;
+    }
+    if (op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1) != last_input_rowset.id()) {
+        return;
+    }
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().segments_size() > 0 &&
+        last_input_rowset.segments_size() > 0) {
+        // iterate all segments in last input rowset, find if any of them exists in
+        // compaction output rowset, if is, erase them from last input rowset
+        size_t before = last_input_rowset.segments_size();
+        auto iter = last_input_rowset.mutable_segments()->begin();
+        while (iter != last_input_rowset.mutable_segments()->end()) {
+            auto it = std::find_if(op_compaction.output_rowset().segments().begin(),
+                                   op_compaction.output_rowset().segments().end(),
+                                   [iter](const std::string& segment) { return *iter == segment; });
+            if (it != op_compaction.output_rowset().segments().end()) {
+                iter = last_input_rowset.mutable_segments()->erase(iter);
+            } else {
+                ++iter;
+            }
+        }
+        size_t after = last_input_rowset.segments_size();
+        if (after - before > 0) {
+            LOG(INFO) << "find partial compaction, tablet: " << metadata->id() << ", version: " << metadata->version()
+                      << ", last input rowset id: " << last_input_rowset.id()
+                      << ", uncompacted segment count: " << (before - after);
+        }
     }
 }
 
@@ -160,6 +202,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
             std::string err_msg =
                     fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
             LOG(ERROR) << err_msg;
+            StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
             if (!config::experimental_lake_ignore_pk_consistency_check) {
                 set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
                 return Status::InternalError(err_msg);
@@ -272,7 +315,8 @@ void MetaFileBuilder::_fill_delvec_cache() {
     }
 }
 
-Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec) {
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+                   DelVector* delvec) {
     // find delvec by segment id
     auto iter = metadata.delvec_meta().delvecs().find(segment_id);
     if (iter != metadata.delvec_meta().delvecs().end()) {
@@ -295,16 +339,18 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
             return Status::InternalError("Can't find delvec file name");
         }
         const auto& delvec_name = iter2->second.name();
-        RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+        RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
         ASSIGN_OR_RETURN(auto rf,
                          fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
         // parse delvec
         RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
         // put in cache
-        auto delvec_cache_ptr = std::make_shared<DelVector>();
-        delvec_cache_ptr->copy_from(*delvec);
-        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+        if (fill_cache) {
+            auto delvec_cache_ptr = std::make_shared<DelVector>();
+            delvec_cache_ptr->copy_from(*delvec);
+            tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+        }
         TRACE("end load delvec");
         return Status::OK();
     }
@@ -319,30 +365,6 @@ bool is_primary_key(TabletMetadata* metadata) {
 
 bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
-}
-
-void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite* op_write,
-                          std::unordered_map<uint32_t, FileInfo>& rssid_to_file_info) {
-    auto get_file_info_from_rowset = [&](const RowsetMetadataPB& meta, const uint32_t rowset_id) -> void {
-        bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
-        for (int i = 0; i < meta.segments_size(); i++) {
-            FileInfo segment_info{.path = meta.segments(i)};
-            if (LIKELY(has_segment_size)) {
-                segment_info.size = meta.segment_size(i);
-            }
-            rssid_to_file_info[rowset_id + i] = segment_info;
-        }
-    };
-
-    for (auto& rs : metadata.rowsets()) {
-        get_file_info_from_rowset(rs, rs.id());
-    }
-    if (op_write != nullptr) {
-        const uint32_t rowset_id = metadata.next_rowset_id();
-        for (int i = 0; i < op_write->rowset().segments_size(); i++) {
-            get_file_info_from_rowset(op_write->rowset(), rowset_id);
-        }
-    }
 }
 
 } // namespace starrocks::lake

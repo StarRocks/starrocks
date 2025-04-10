@@ -239,4 +239,25 @@ TEST_F(TabletSchemaMapTest, test_emplace_schema) {
     ASSERT_EQ(0, stats8.memory_usage);
 }
 
+TEST_F(TabletSchemaMapTest, test_get_erase) {
+    TabletSchemaMap schema_map;
+    auto src_schema_1 = _gen_schema(&schema_map, 1, 1);
+    auto src_schema_2 = _gen_schema(&schema_map, 2, 1);
+
+    auto get_schema_1 = schema_map.get(1);
+    ASSERT_TRUE(get_schema_1 == nullptr);
+
+    schema_map.emplace(src_schema_1);
+    get_schema_1 = schema_map.get(1);
+    ASSERT_TRUE(get_schema_1 != nullptr);
+    ASSERT_TRUE(get_schema_1->id() == 1);
+
+    auto get_schema_2 = schema_map.get(2);
+    ASSERT_TRUE(get_schema_2 == nullptr);
+
+    schema_map.erase(1);
+    auto get_schema_3 = schema_map.get(1);
+    ASSERT_TRUE(get_schema_3 == nullptr);
+}
+
 } // namespace starrocks

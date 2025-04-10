@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Realtime synchronization from MySQL
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
@@ -22,7 +22,7 @@ Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Fl
 
 The following figure illustrates the entire synchronization process.
 
-![img](../assets/4.9.2.png)
+![img](../_assets/4.9.2.png)
 
 Real-time synchronization from MySQL through Flink to StarRocks is implemented in two stages: synchronizing database & table schema and synchronizing data. First, the SMT converts MySQL database & table schema into table creation statements for StarRocks. Then, the Flink cluster runs Flink jobs to synchronize full and incremental MySQL data to StarRocks.
 
@@ -42,7 +42,7 @@ The synchronization process guarantees exactly-once semantics.
 
    a. The Flink SQL client executes the data loading statement `INSERT INTO SELECT` to submit one or more Flink jobs to the Flink cluster.
 
-   b. The Flink cluster runs the Flink jobs to obtain data. The [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/blob/master/docs/content/quickstart/build-real-time-data-lake-tutorial.md) first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-connector-starrocks.
+   b. The Flink cluster runs the Flink jobs to obtain data. The Flink CDC connector first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-connector-starrocks.
 
    c. flink-connector-starrocks accumulates data in mini-batches, and synchronizes each batch of data to StarRocks.
 
@@ -101,7 +101,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
       Starting taskexecutor daemon on host.
     ```
 
-2. Download [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases). This topic uses MySQL as the data source and therefore, `flink-sql-connector-mysql-cdc-x.x.x.jar` is downloaded. The connector version must match the [Flink](https://github.com/ververica/flink-cdc-connectors/releases) version. For detailed version mapping, see [Supported Flink Versions](https://ververica.github.io/flink-cdc-connectors/release-2.2/content/about.html#supported-flink-versions). This topic uses Flink 1.14.5 and you can download `flink-sql-connector-mysql-cdc-2.2.0.jar`.
+2. Download [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases). This topic uses MySQL as the data source and therefore, `flink-sql-connector-mysql-cdc-x.x.x.jar` is downloaded. The connector version must match the [Flink](https://github.com/ververica/flink-cdc-connectors/releases) version. This topic uses Flink 1.14.5 and you can download `flink-sql-connector-mysql-cdc-2.2.0.jar`.
 
     ```Bash
     wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.1.1/flink-sql-connector-mysql-cdc-2.2.0.jar
@@ -286,7 +286,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     > **NOTICE**
     >
-    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 ## Synchronize data
 
@@ -385,7 +385,7 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
 2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
 
     - Flink WebUI
-      ![img](../assets/4.9.3.png)
+      ![img](../_assets/4.9.3.png)
 
     - `bin/flink list -running`
 

@@ -59,6 +59,15 @@ public class SessionVariableConstants {
         }
     }
 
+    public enum ComputationFragmentSchedulingPolicy {
+        
+        // only select compute node in scheduler policy (default)
+        COMPUTE_NODES_ONLY,
+
+        // both select compute node and backend in scheduler policy
+        ALL_NODES
+    }
+
     public enum AggregationStage {
         AUTO,
         ONE_STAGE,

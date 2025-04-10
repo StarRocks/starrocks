@@ -22,9 +22,11 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class SessionVariablesSystemTable {
+    private static final String NAME = "session_variables";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.SESSION_VARIABLES_ID,
-                "session_variables",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("VARIABLE_NAME", ScalarType.createVarchar(64))

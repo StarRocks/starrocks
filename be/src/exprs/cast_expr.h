@@ -63,6 +63,8 @@ public:
     ~CastStringToArray() override = default;
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
+    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
+                              FunctionContext::FunctionStateScope scope) override;
 
 private:
     Slice _unquote(Slice slice) const;
@@ -71,6 +73,7 @@ private:
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;
     bool _throw_exception_if_err;
+    ColumnPtr _constant_res;
 };
 
 // Cast JsonArray to array<ANY>

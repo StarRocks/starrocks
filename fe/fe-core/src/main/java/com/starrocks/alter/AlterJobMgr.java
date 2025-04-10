@@ -64,6 +64,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -84,6 +85,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -282,7 +284,7 @@ public class AlterJobMgr {
 
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -341,10 +343,13 @@ public class AlterJobMgr {
             throw new SemanticException(String.format("number of columns changed: %d != %d",
                     existedColumns.size(), newColumns.size()));
         }
+
         for (int i = 0; i < existedColumns.size(); i++) {
             Column existed = existedColumns.get(i);
             Column created = newColumns.get(i);
-            if (!existed.isSchemaCompatible(created)) {
+            if (!isSchemaCompatible(existed, created)) {
+                LOG.warn("Active materialized view {} failed, column schema changed: {} != {}",
+                        materializedView.getName(), existed.toString(), created.toString());
                 String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
                         existed.toString(), created.toString());
                 materializedView.setInactiveAndReason(message);
@@ -353,6 +358,36 @@ public class AlterJobMgr {
         }
 
         return createStmt.getQueryStatement();
+    }
+
+    /**
+     * Check if the schema of existed and created column is compatible, if not, return false
+     * @param existed mv's existed column
+     * @param created new mv's created column
+     */
+    private static boolean isSchemaCompatible(Column existed, Column created) {
+        if (Config.enable_active_materialized_view_schema_strict_check) {
+            return existed.isSchemaCompatible(created);
+        } else {
+            return isSchemaCompatibleInLoose(existed, created);
+        }
+    }
+
+    /**
+     * Check if the schema of existed and created column is compatible in loose mode
+     * @param t1 mv's existed column
+     * @param t2 new mv's created column
+     */
+    private static boolean isSchemaCompatibleInLoose(Column t1, Column t2) {
+        // check whether the column name are the same
+        if (!t1.getName().equalsIgnoreCase(t2.getName())) {
+            return false;
+        }
+        // check whether the column primitive type are the same
+        if (!t1.getType().getPrimitiveType().equals(t2.getType().getPrimitiveType())) {
+            return false;
+        }
+        return true;
     }
 
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
@@ -620,7 +655,7 @@ public class AlterJobMgr {
             db.writeUnlock();
         }
 
-        // the following ops should done outside db lock. because it contain synchronized create operation
+        // the following ops should be done outside db lock. because it contains synchronized create operation
         if (needProcessOutsideDatabaseLock) {
             Preconditions.checkState(alterClauses.size() == 1);
             AlterClause alterClause = alterClauses.get(0);
@@ -662,6 +697,7 @@ public class AlterJobMgr {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
@@ -686,6 +722,17 @@ public class AlterJobMgr {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.BUCKET_SIZE);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+                    try {
+                        GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                                olapTable.getId(), properties.get(
+                                PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
+                    } catch (Exception e) {
+                        throw new DdlException("Failed to update base compaction forbidden time ranges for "
+                                + tableName + ": " + e.getMessage()); 
+                    }
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
@@ -898,7 +945,9 @@ public class AlterJobMgr {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
 
-            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+            // skip change storage_cooldown_ttl for shadow partition
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)
+                    && newDataProperty != null) {
                 continue;
             }
 
@@ -1012,6 +1061,10 @@ public class AlterJobMgr {
         int schemaChangeJobSize = reader.readJson(int.class);
         for (int i = 0; i != schemaChangeJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            if (alterJobV2 instanceof IForwardCompatibleObject) {
+                LOG.warn("Ignore unknown alterJobV2(id: {}) from the future version!", alterJobV2.getJobId());
+                continue;
+            }
             schemaChangeHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
@@ -1026,6 +1079,10 @@ public class AlterJobMgr {
         int materializedViewJobSize = reader.readJson(int.class);
         for (int i = 0; i != materializedViewJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            if (alterJobV2 instanceof IForwardCompatibleObject) {
+                LOG.warn("Ignore unknown MV job(id: {}) from the future version!", alterJobV2.getJobId());
+                continue;
+            }
             materializedViewHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint

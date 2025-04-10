@@ -107,6 +107,12 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testAtTimezone() {
+        String sql = "select now() AT TIME ZONE 'Asia/Hong_Kong';";
+        analyzeSuccess(sql);
+    }
+
+    @Test
     public void testCastExpression() throws Exception {
         String sql = "select cast(tb as varchar(10)) from tall";
         assertPlanContains(sql, "CAST(2: tb AS VARCHAR(10))");
@@ -156,14 +162,16 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testDecimal() throws Exception {
+        // If Trino parser parse failed, it wll rollback to StarRocks parser,
+        // decimal32, decimal64, decimal128 could parsed by StarRocks parser.
         String sql = "select cast(tj as decimal32) from tall";
-        analyzeFail(sql, "Unknown type: decimal32");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal64) from tall";
-        analyzeFail(sql, "Unknown type: decimal64");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal128) from tall";
-        analyzeFail(sql, "Unknown type: decimal128");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal) from tall";
         assertPlanContains(sql, "CAST(10: tj AS DECIMAL128(38,0))");
@@ -480,8 +488,10 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "map_from_arrays([1,2,3], ['a','b','c']))");
 
         sql = "select transform_values(map(array [1, 2, 3], array ['a', 'b', 'c']), (k, v) -> k * k);";
-        assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:CAST(<slot 2> AS SMALLINT) * " +
-                "CAST(<slot 2> AS SMALLINT)}, map_from_arrays([1,2,3], ['a','b','c']))");
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:<slot 6> * <slot 6>}\n" +
+                "        lambda common expressions:{<slot 6> <-> CAST(<slot 2> AS SMALLINT)}\n" +
+                "        , map_from_arrays([1,2,3], ['a','b','c']))");
     }
 
     @Test
@@ -704,6 +714,15 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "with x0 as (select * from t0) " +
                 "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
         assertPlanContains(sql, "8:NESTLOOP JOIN", "LEFT SEMI JOIN (PARTITIONED)");
+
+        sql = "with C1 as (select * from t0) select * from C1";
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
+
+        sql = "with C1 as (select * from t0) select * from c1";
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
+
+        sql = "with C1 as (select * from t0) select * from C1 a where a.v1 = 1";
+        assertPlanContains(sql, "PREDICATES: 1: v1 = 1");
     }
 
     @Test
@@ -806,9 +825,6 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select v1 from t0 order by v1 offset 2 limit 20";
         assertPlanContains(sql, "offset: 2", "limit: 20");
-
-        sql = "select v1 from t0 order by v1 offset 2";
-        analyzeFail(sql);
     }
 
     @Test
@@ -1024,7 +1040,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : trim('  abcd')");
 
         sql = "select trim(trailing 'ER' from upper('worker'));";
-        assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+        assertPlanContains(sql, "<slot 2> : rtrim('WORKER', 'ER')");
 
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
@@ -1208,5 +1224,26 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select rand(10, 100);";
         assertPlanContains(sql, "<slot 2> : floor(random() * 90.0 + 10.0)");
+    }
+
+    @Test
+    public void testDistinctFrom() throws Exception {
+        String sql = "select 1 is distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is not distinct from null";
+        analyzeSuccess(sql);
     }
 }

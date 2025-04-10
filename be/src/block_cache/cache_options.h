@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "common/status.h"
+
 namespace starrocks {
 
 struct DirSpace {
@@ -55,6 +57,11 @@ struct WriteCacheOptions {
     bool allow_zero_copy = false;
     std::function<void(int, const std::string&)> callback = nullptr;
 
+    // The probability to evict other items if the cache space is full, which can help avoid frequent cache replacement
+    // and improve cache hit rate sometimes.
+    // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
+    int32_t evict_probability = 100;
+
     struct Stats {
         int64_t write_mem_bytes = 0;
         int64_t write_disk_bytes = 0;
@@ -70,8 +77,17 @@ struct ReadCacheOptions {
     } stats;
 };
 
-int64_t parse_mem_size(const std::string& mem_size_str, int64_t mem_limit = -1);
+Status parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit, size_t* mem_size);
 
-int64_t parse_disk_size(const std::string& disk_path, const std::string& disk_size_str, int64_t disk_limit = -1);
+Status parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
+                                      int64_t disk_limit, size_t* disk_size);
+
+Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
+                                       bool ignore_broken_disk);
+
+Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, const std::string& config_disk_size,
+                                        bool ignore_broken_disk, std::vector<DirSpace>* disk_spaces);
+
+void clean_residual_datacache(const std::string& disk_path);
 
 } // namespace starrocks
