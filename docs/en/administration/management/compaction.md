@@ -279,5 +279,6 @@ Since Compaction is crucial for query performance, it is recommended to regularl
 
 - Try to increase the time interval between loading (avoid scenarios with intervals less than 10 seconds) and increase the batch size per load (avoid batch sizes smaller than 100 rows of data).
 - Adjust the number of parallel compaction worker threads on CN to accelerate task execution. It is recommended to set `compact_threads` to 25% of the BE/CN CPU core count in a production environment. When the cluster is idle (for example, only performing compaction and not handling queries), you can temporarily increase this value to 50%, and revert to 25% after the task is complete.
-- Monitor the Compaction Ccore, and configure alerts based on it. StarRocks' built-in Grafana monitoring template includes this metric.
+- Monitor the Compaction task status using `show proc '/compactions'` and `select * from information_schema.be_cloud_native_compactions;`.
+- Monitor the Compaction Score, and configure alerts based on it. StarRocks' built-in Grafana monitoring template includes this metric.
 - Pay attention to the resource consumption during compaction, especially memory usage. The Grafana monitoring template also includes this metric.
