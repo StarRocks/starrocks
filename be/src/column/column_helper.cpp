@@ -19,6 +19,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_view/column_view_helper.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -31,10 +32,6 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-
-NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
-
-NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
 
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
@@ -277,6 +274,18 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     return create_column(type_desc, nullable, false, 0);
 }
 
+MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+                                             long column_view_concat_rows_limit, long column_view_concat_bytes_limit) {
+    if (use_view_if_needed) {
+        auto opt_column = ColumnViewHelper::create_column_view(type_desc, nullable, column_view_concat_rows_limit,
+                                                               column_view_concat_bytes_limit);
+        if (opt_column.has_value()) {
+            return std::move(opt_column.value());
+        }
+    }
+    return create_column(type_desc, nullable);
+}
+
 struct ColumnBuilder {
     template <LogicalType ltype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
@@ -502,5 +511,4 @@ Ptr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
 
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
-
 } // namespace starrocks

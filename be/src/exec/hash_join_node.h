@@ -59,7 +59,7 @@ private:
 
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state);
     // local join includes: broadcast join and colocate join.
     Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
     void _final_update_profile() {

@@ -320,6 +320,9 @@ struct TQueryOptions {
   140: optional string catalog;
 
   141: optional i32 datacache_evict_probability;
+
+  190: optional i64 column_view_concat_rows_limit;
+  191: optional i64 column_view_concat_bytes_limit;
 }
 
 

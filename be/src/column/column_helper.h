@@ -233,6 +233,9 @@ public:
     // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
+    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+                                          long column_view_concat_rows_limit, long column_view_concat_bytes_limit);
+
     // expression trees' return column should align return type when some return columns maybe diff from the required
     // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
     // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
