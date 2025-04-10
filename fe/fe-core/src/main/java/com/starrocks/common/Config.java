@@ -3189,6 +3189,9 @@ public class Config extends ConfigBase {
     public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
     @ConfField(mutable = true)
+    public static boolean enable_partition_aggregation = false;
+
+    @ConfField(mutable = true)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = true)
     public static int pipe_scheduler_interval_millis = 1000;

@@ -445,6 +445,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (Exception e) {
                 throw new DdlException(e.getMessage());
             }
+            
+            try {
+                boolean enablePartitionAggregation = PropertyAnalyzer.analyzeEnablePartitionAggregation(properties);
+                // Not support primary key yet
+                if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    enablePartitionAggregation = false;
+                }
+                table.setEnablePartitionAggregation(enablePartitionAggregation);
+            } catch (Exception e) {
+                throw new DdlException(e.getMessage());
+            }
 
             // write quorum
             try {
