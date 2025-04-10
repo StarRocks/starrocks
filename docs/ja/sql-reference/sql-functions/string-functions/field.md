@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 この関数は v3.5 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 INT field(VARCHAR val, VARCHAR val1, val2, ...);
@@ -22,7 +22,7 @@ INT field(VARCHAR val, VARCHAR val1, val2, ...);
 - 指定された値がリスト内に見つからない場合、この関数は `0` を返します。指定された値が NULL の場合、この関数は `0` を返します。
 - 関数のすべての引数が文字列の場合、すべての引数は文字列として比較されます。すべての引数が数値の場合、それらは数値として比較されます。それ以外の場合、引数は DOUBLE として比較されます。
 
-## Examples
+## 例
 
 ```Plain Text
 MYSQL > select field('a', 'b', 'a', 'd');
@@ -33,6 +33,6 @@ MYSQL > select field('a', 'b', 'a', 'd');
 +---------------------------+
 ```
 
-## keyword
+## キーワード
 
 FIELD
