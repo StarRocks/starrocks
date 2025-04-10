@@ -27,7 +27,7 @@ Compaction Score 反映了分区的数据文件合并状态。分数越高，表
 1. FE Leader 根据每个事务的 Publish 结果计算并存储对应 Partition 的 Compaction Score 信息；
 2. FE 会按照 Partition 的 Max Compaction Score 选择分数最高的一批 Partition 作为 Compaction 任务的候选者；
 3. FE 会依次对挑选出来的 Partition 开始 Compaction 事务， 生成对应的 Tablet 子任务并下发到 CN 上，直到子任务的数量到达 FE 参数 `lake_compaction_max_tasks` 的限制；
-4. CN 会在后台以 Tablet 为单位执行 Compaction 子任务，并将结果返回给 FE。单个 CN 同时执行的子任务数量受 CN 参数 compact_threads 控制；
+4. CN 会在后台以 Tablet 为单位执行 Compaction 子任务，并将结果返回给 FE。单个 CN 同时执行的子任务数量受 CN 参数 `compact_threads` 控制；
 5. FE 收集所有子任务的结果，然后进行 Compaction 事务提交；
 6. FE 将成功提交的 Compaction 事务进行 Publish。
 
