@@ -315,6 +315,26 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.4.0
 
+### enable_parquet_reader_bloom_filter
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否在读取 Parquet 文件时启用 Bloom Filter 优化。
+  * `true`（默认）：读取 Parquet 文件时启用 Bloom Filter 优化。
+  * `false`：读取 Parquet 文件时禁用 Bloom Filter 优化。
+* 引入版本：v3.5.0
+
+### enable_parquet_reader_page_index
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否在读取 Parquet 文件时启用 Page Index 优化。
+  * `true`（默认）：读取 Parquet 文件时启用 Page Index 优化。
+  * `false`：读取 Parquet 文件时禁用 Page Index 优化。
+* 引入版本：v3.5.0
+
 ### follower_query_forward_mode
 
 * 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
@@ -762,6 +782,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### lower_case_table_names (global)
 
 用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
+
+### lower_upper_support_utf8
+
+* 默认值：false
+* 类型：Boolean
+* 单位：-
+* 描述：是否在 `lower` 和 `upper` 函数中支持 UTF-8 字符的大小写转换。有效值：
+  * `true`：支持 UTF-8 字符的大小写转换。
+  * `false`（默认）：不支持 UTF-8 字符的大小写转换。
+* 引入版本：v3.5.0
 
 ### materialized_view_rewrite_mode（3.2 及以后）
 
