@@ -19,7 +19,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class DistinctJoinTest extends TPCDS1TTestBase {
+public class DeduplicateSemiInputTest extends TPCDS1TTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TPCDS1TTestBase.beforeClass();
