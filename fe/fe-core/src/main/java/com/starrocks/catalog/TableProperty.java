@@ -971,6 +971,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public boolean enablePartitionAggregation() {
+        return enablePartitionAggregation;
+    }
+
     public int primaryIndexCacheExpireSec() {
         return primaryIndexCacheExpireSec;
     }

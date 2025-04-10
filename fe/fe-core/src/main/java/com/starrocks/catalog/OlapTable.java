@@ -2468,6 +2468,13 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public Boolean enablePartitionAggregation() {
+        if (tableProperty != null) {
+            return tableProperty.enablePartitionAggregation();
+        }
+        return false;
+    }
+
     public int primaryIndexCacheExpireSec() {
         if (tableProperty != null) {
             return tableProperty.primaryIndexCacheExpireSec();
@@ -3435,7 +3442,9 @@ public class OlapTable extends Table {
                 properties.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, String.valueOf(indexCacheExpireSec));
             }
         }
-
+        if (enablePartitionAggregation()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, enablePartitionAggregation().toString());
+        }
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
