@@ -74,7 +74,7 @@ public class PaimonPartitionsProcDirTest {
 
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
-                return new PaimonTable("paimon_catalog", "db1", "tb1", null, nativeTable, 1L);
+                return new PaimonTable("paimon_catalog", "db1", "tb1", null, nativeTable);
             }
 
             @Mock
