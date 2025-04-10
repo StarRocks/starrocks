@@ -470,8 +470,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     public static AlterReplicaTask.RollupJobV2Params analyzeAndCreateRollupJobV2Params(OlapTable tbl,
                                                                                        List<Column> rollupSchema,
                                                                                        Expr whereClause,
-                                                                                       String dbFullName,
-                                                                                       Optional<TDescriptorTable> tDescTable)
+                                                                                       String dbFullName)
             throws AlterCancelException {
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
@@ -572,10 +571,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
         }
         usedColIds.addAll(nonKeyColIds);
-        if (tDescTable.isEmpty()) {
-            tDescTable = Optional.of(descTable.toThrift());
-        }
-        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, tDescTable, usedColIds);
+        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable.toThrift(), usedColIds);
     }
 
     /**
@@ -612,6 +608,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
+            // only needs to analyze once
+            AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                    analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -625,8 +624,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName(), tDescTable);
 
                     List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                     TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();

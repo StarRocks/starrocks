@@ -71,7 +71,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /*
@@ -100,12 +99,12 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public static class RollupJobV2Params {
         private final Map<String, Expr> defineExprs;
         private final Expr whereExpr;
-        private Optional<TDescriptorTable> tDescTabl = Optional.empty();
+        private TDescriptorTable tDescTabl;
         private final List<ColumnId> baseTableColIds;
 
         public RollupJobV2Params(Map<String, Expr> defineExprs,
                                  Expr whereExpr,
-                                 Optional<TDescriptorTable> tDescTabl,
+                                 TDescriptorTable tDescTabl,
                                  List<ColumnId> baseTableColIds) {
             this.defineExprs = defineExprs;
             this.whereExpr = whereExpr;
@@ -121,7 +120,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             return whereExpr;
         }
 
-        public Optional<TDescriptorTable> getTDescTabl() {
+        public TDescriptorTable getTDescTabl() {
             return tDescTabl;
         }
 
@@ -242,7 +241,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (rollupJobV2Params != null) {
             Map<String, Expr> defineExprs = rollupJobV2Params.getDefineExprs();
             Expr whereExpr = rollupJobV2Params.getWhereExpr();
-            Optional<TDescriptorTable> tDescTable = rollupJobV2Params.getTDescTabl();
+            TDescriptorTable tDescTable = rollupJobV2Params.getTDescTabl();
             List<ColumnId> baseTableColIds = rollupJobV2Params.getBaseTableColIds();
             if (defineExprs != null) {
                 for (Map.Entry<String, Expr> entry : defineExprs.entrySet()) {
@@ -267,8 +266,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (whereExpr != null) {
                 req.setWhere_expr(whereExpr.treeToThrift());
             }
-            if (tDescTable.isPresent()) {
-                req.setDesc_tbl(tDescTable.get());
+            if (tDescTable != null) {
+                req.setDesc_tbl(tDescTable);
             }
             req.setBase_table_column_names(baseTableColIds.stream().map(ColumnId::getId)
                     .collect(Collectors.toList()));
