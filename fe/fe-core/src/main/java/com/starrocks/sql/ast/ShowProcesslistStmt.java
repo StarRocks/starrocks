@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.Column;
@@ -26,6 +25,7 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowProcesslistStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
+                    .addColumn(new Column("ServerName", ScalarType.createVarchar(64)))
                     .addColumn(new Column("Id", ScalarType.createType(PrimitiveType.BIGINT)))
                     .addColumn(new Column("User", ScalarType.createVarchar(16)))
                     .addColumn(new Column("Host", ScalarType.createVarchar(16)))

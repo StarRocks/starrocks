@@ -193,8 +193,6 @@ public class ConnectContext {
     // user define variable in this session
     protected Map<String, UserVariable> userVariables;
     protected Map<String, UserVariable> userVariablesCopyInWrite;
-    // Scheduler this connection belongs to
-    protected ConnectScheduler connectScheduler;
     // Executor
     protected StmtExecutor executor;
     // Command this connection is processing.
@@ -371,6 +369,7 @@ public class ConnectContext {
     public SQLPlanStorage getSqlPlanStorage() {
         return sqlPlanStorage;
     }
+
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
         this.preparedStmtCtxs.put(stmtName, ctx);
     }
@@ -495,20 +494,13 @@ public class ConnectContext {
         }
     }
 
+    public void setCurrentRoleIds(Set<Long> roleIds) {
+        this.currentRoleIds = roleIds;
+    }
+
     public void setAuthInfoFromThrift(TAuthInfo authInfo) {
         if (authInfo.isSetCurrent_user_ident()) {
-            TUserIdentity tUserIdent = authInfo.current_user_ident;
-            currentUserIdentity = new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
-
-            if (tUserIdent.isSetIs_ephemeral()) {
-                currentUserIdentity.setEphemeral(tUserIdent.is_ephemeral);
-            }
-
-            if (tUserIdent.isSetCurrent_role_ids()) {
-                currentRoleIds = new HashSet<>(tUserIdent.current_role_ids.getRole_id_list());
-            } else {
-                setCurrentRoleIds(currentUserIdentity);
-            }
+            setAuthInfoFromThrift(authInfo.getCurrent_user_ident());
         } else {
             currentUserIdentity = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
             setCurrentRoleIds(currentUserIdentity);
@@ -516,21 +508,12 @@ public class ConnectContext {
     }
 
     public void setAuthInfoFromThrift(TUserIdentity tUserIdent) {
-        currentUserIdentity = new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
-
-        if (tUserIdent.isSetIs_ephemeral()) {
-            currentUserIdentity.setEphemeral(tUserIdent.is_ephemeral);
-        }
-
+        currentUserIdentity = UserIdentity.fromThrift(tUserIdent);
         if (tUserIdent.isSetCurrent_role_ids()) {
             currentRoleIds = new HashSet<>(tUserIdent.current_role_ids.getRole_id_list());
         } else {
             setCurrentRoleIds(currentUserIdentity);
         }
-    }
-
-    public void setCurrentRoleIds(Set<Long> roleIds) {
-        this.currentRoleIds = roleIds;
     }
 
     public Set<String> getGroups() {
@@ -669,14 +652,6 @@ public class ConnectContext {
 
     public void setSessionVariable(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
-    }
-
-    public ConnectScheduler getConnectScheduler() {
-        return connectScheduler;
-    }
-
-    public void setConnectScheduler(ConnectScheduler connectScheduler) {
-        this.connectScheduler = connectScheduler;
     }
 
     public MysqlCommand getCommand() {

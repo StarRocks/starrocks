@@ -22,6 +22,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
@@ -163,7 +164,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             executorRef.cancel(cancelledMessage);
         }
         if (killConnection) {
-            connectScheduler.unregisterConnection(this);
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
         }
     }
 
