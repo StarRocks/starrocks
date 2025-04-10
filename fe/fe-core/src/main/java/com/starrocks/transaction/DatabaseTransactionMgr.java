@@ -1835,16 +1835,22 @@ public class DatabaseTransactionMgr {
     }
 
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        // Locks are held to ensure that updates of visible version in the same batch are atomic,
+        // so that intermediate versions cannot be seen.
+        Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, List.of(transactionStateBatch.getTableId()), LockType.WRITE);
         writeLock();
+
         try {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             transactionStateBatch.replaySetTransactionStatus();
-            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
             updateCatalogAfterVisibleBatch(transactionStateBatch, db);
 
             unprotectSetTransactionStateBatch(transactionStateBatch, true);
         } finally {
             writeUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db, List.of(transactionStateBatch.getTableId()), LockType.WRITE);
         }
     }
 
