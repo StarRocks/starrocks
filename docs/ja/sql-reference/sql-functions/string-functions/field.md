@@ -4,17 +4,25 @@ displayed_sidebar: docs
 
 # field
 
-str1, str2, str3, ... のリストの中で、str のインデックス（位置）を返します。str が見つからない場合は 0 を返します。
+リスト内の値のインデックス（位置）を返します。
 
 この関数は v3.5 からサポートされています。
 
-## 構文
+## Syntax
 
 ```Haskell
-INT field(expr1, ...);
+INT field(VARCHAR val, VARCHAR val1, val2, ...);
 ```
 
-## 例
+- `val`: リスト内で検索する値。
+- `val1`, `val2`, ...: リスト内の値。
+
+## Usage notes
+
+- 指定された値がリスト内に見つからない場合、この関数は `0` を返します。指定された値が NULL の場合、この関数は `0` を返します。
+- 関数のすべての引数が文字列の場合、すべての引数は文字列として比較されます。すべての引数が数値の場合、それらは数値として比較されます。それ以外の場合、引数は DOUBLE として比較されます。
+
+## Examples
 
 ```Plain Text
 MYSQL > select field('a', 'b', 'a', 'd');
@@ -25,6 +33,6 @@ MYSQL > select field('a', 'b', 'a', 'd');
 +---------------------------+
 ```
 
-## キーワード
+## keyword
 
 FIELD
