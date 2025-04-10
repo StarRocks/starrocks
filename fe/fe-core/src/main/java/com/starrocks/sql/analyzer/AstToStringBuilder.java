@@ -1984,7 +1984,8 @@ public class AstToStringBuilder {
         String location = null;
         try {
             location = table.getTableLocation();
-            if (!Strings.isNullOrEmpty(location)) {
+            // Paimon table has a `path` property instead of location
+            if (!Strings.isNullOrEmpty(location) && !table.isPaimonTable()) {
                 properties.put("location", location);
             }
         } catch (NotImplementedException e) {
