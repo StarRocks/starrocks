@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
@@ -123,7 +122,6 @@ public class TableFunctionTest extends PlanTestBase {
 
     @Test
     public void testSql3() throws Exception {
-        FeConstants.runningUnitTest = true;
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x) JOIN TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)" +
                 " ON t0.x=t1 .x";
         String plan = getFragmentPlan(sql);
@@ -177,7 +175,6 @@ public class TableFunctionTest extends PlanTestBase {
                 "  4:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        FeConstants.runningUnitTest = false;
     }
 
     @Test
