@@ -239,7 +239,8 @@
                                 "id": "data_source/catalog/iceberg/iceberg_catalog"
                             },
                             "items": [
-                                "data_source/catalog/iceberg/iceberg_timetravel"
+                                "data_source/catalog/iceberg/iceberg_timetravel",
+                                "data_source/catalog/iceberg/iceberg_meta_table"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -573,6 +574,7 @@
                 "faq/datalake",
                 "faq/Sql_faq",
                 "faq/Dump_query",
+                "faq/fe_mem_query",
                 "faq/Others"
             ]
         },
