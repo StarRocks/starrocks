@@ -38,7 +38,7 @@ public class MergeProjectWithChildRule extends TransformationRule {
                         addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
     }
 
-    // sometimes
+    // sometimes we don't want to eliminate project so we can hit some rules like "RewriteSimpleAggToMetaScanRule"
     public MergeProjectWithChildRule(boolean eliminateUselessProject) {
         super(RuleType.TF_MERGE_PROJECT_WITH_CHILD,
                 Pattern.create(OperatorType.LOGICAL_PROJECT).
