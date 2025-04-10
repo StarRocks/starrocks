@@ -96,7 +96,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -427,9 +426,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         tbl.rebuildFullSchema();
     }
 
-    private Expr analyzeExpr(SelectAnalyzer.RewriteAliasVisitor visitor,
-                             Type type, String name, Expr defineExpr,
-                             Map<String, SlotDescriptor> slotDescByName) throws AlterCancelException {
+    private static Expr analyzeExpr(SelectAnalyzer.RewriteAliasVisitor visitor,
+                                    Type type, String name, Expr defineExpr,
+                                    Map<String, SlotDescriptor> slotDescByName) throws AlterCancelException {
         List<SlotRef> slots = new ArrayList<>();
         defineExpr.collect(SlotRef.class, slots);
         for (SlotRef slot : slots) {
@@ -462,14 +461,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return newExpr;
     }
 
-<<<<<<< HEAD
-=======
     // DB lock should be hold already
     public static AlterReplicaTask.RollupJobV2Params analyzeAndCreateRollupJobV2Params(OlapTable tbl,
                                                                                        List<Column> rollupSchema,
                                                                                        Expr whereClause,
-                                                                                       String dbFullName,
-                                                                                       Optional<TDescriptorTable> tDescTable)
+                                                                                       String dbFullName)
             throws AlterCancelException {
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
@@ -524,7 +520,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // sourceScope must be set null tableName for its Field in RelationFields
         // because we hope slotRef can not be resolved in sourceScope but can be
         // resolved in outputScope to force to replace the node using outputExprs.
-        SelectAnalyzer.RewriteAliasVisitor visitor = MVUtils.buildRewriteAliasVisitor(ConnectContext.buildInner(),
+        SelectAnalyzer.RewriteAliasVisitor visitor = MVUtils.buildRewriteAliasVisitor(new ConnectContext(),
                 tbl, tableName, outputExprs);
         for (Column column : rollupColumns) {
             if (column.getDefineExpr() == null) {
@@ -557,7 +553,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         "found in the base table.");
             }
         }
-
         // make sure the key columns are in the front of the list which is the limitation of the be `ChunkAggregator`
         List<ColumnId> usedColIds = Lists.newArrayList();
         List<ColumnId> nonKeyColIds = Lists.newArrayList();
@@ -570,13 +565,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
         }
         usedColIds.addAll(nonKeyColIds);
-        if (tDescTable.isEmpty()) {
-            tDescTable = Optional.of(descTable.toThrift());
-        }
-        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, tDescTable, usedColIds);
+        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable.toThrift(), usedColIds);
     }
 
->>>>>>> ca88740997 ([BugFix] Avoid to copy descTable for each AlterReplicaTask (#57798))
     /**
      * runWaitingTxnJob():
      * 1. Wait the transactions before the watershedTxnId to be finished.
@@ -607,13 +598,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
-<<<<<<< HEAD
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.READ)) {
-=======
-        Optional<TDescriptorTable> tDescTable = Optional.empty();
-        try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
->>>>>>> ca88740997 ([BugFix] Avoid to copy descTable for each AlterReplicaTask (#57798))
+            AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                    analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
@@ -628,13 +615,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
-<<<<<<< HEAD
-=======
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName(), tDescTable);
 
                     List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
->>>>>>> ca88740997 ([BugFix] Avoid to copy descTable for each AlterReplicaTask (#57798))
                     TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                     long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
                     List<TColumn> baseTColumn = indexToThriftColumns.get(baseIndexId);
@@ -646,107 +628,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         indexToThriftColumns.put(baseIndexId, baseTColumn);
                     }
 
-                    DescriptorTable descTable = new DescriptorTable();
-                    TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
-                    Map<String, SlotDescriptor> slotDescByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-                    List<Column> rollupColumns = new ArrayList<Column>();
-                    Set<String> columnNames = new HashSet<String>();
-                    Set<String> baseTableColumnNames = Sets.newHashSet();
-                    for (Column column : tbl.getBaseSchema()) {
-                        rollupColumns.add(column);
-                        columnNames.add(column.getName());
-                        baseTableColumnNames.add(column.getName());
-                    }
-                    Set<String> usedBaseTableColNames = Sets.newLinkedHashSet();
-                    for (Column column : rollupSchema) {
-                        if (!columnNames.contains(column.getName())) {
-                            rollupColumns.add(column);
-                        } else {
-                            usedBaseTableColNames.add(column.getName());
-                        }
-                    }
-
-                    /*
-                     * The expression substitution is needed here, because all slotRefs in
-                     * definedExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                     * if it is init by SlotDescriptor. The slot information will be used by be to identify
-                     * the column location in a chunk.
-                     */
-                    for (Column column : tbl.getBaseSchema()) {
-                        SlotDescriptor destSlotDesc = descTable.addSlotDescriptor(tupleDesc);
-                        destSlotDesc.setIsMaterialized(true);
-                        destSlotDesc.setColumn(column);
-                        destSlotDesc.setIsNullable(column.isAllowNull());
-
-                        slotDescByName.put(column.getName(), destSlotDesc);
-                    }
-
-                    List<Expr> outputExprs = Lists.newArrayList();
-                    for (Column col : tbl.getBaseSchema()) {
-                        SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-                        if (slotDesc == null) {
-                            throw new AlterCancelException("Expression for materialized view column can not find " +
-                                        "the ref column");
-                        }
-                        SlotRef slotRef = new SlotRef(slotDesc);
-                        slotRef.setColumnName(col.getName());
-                        outputExprs.add(slotRef);
-                    }
-
-                    TableName tableName = new TableName(db.getFullName(), tbl.getName());
-                    Map<String, Expr> defineExprs = Maps.newHashMap();
-
-                    // sourceScope must be set null tableName for its Field in RelationFields
-                    // because we hope slotRef can not be resolved in sourceScope but can be
-                    // resolved in outputScope to force to replace the node using outputExprs.
-                    SelectAnalyzer.RewriteAliasVisitor visitor = MVUtils.buildRewriteAliasVisitor(new ConnectContext(),
-                                tbl, tableName, outputExprs);
-                    for (Column column : rollupColumns) {
-                        if (column.getDefineExpr() == null) {
-                            continue;
-                        }
-
-                        Expr definedExpr = analyzeExpr(visitor, column.getType(), column.getName(),
-                                    column.getDefineExpr(), slotDescByName);
-
-                        defineExprs.put(column.getName(), definedExpr);
-
-                        List<SlotRef> slots = Lists.newArrayList();
-                        definedExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
-                    Expr whereExpr = null;
-                    if (whereClause != null) {
-                        Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
-                        whereExpr = analyzeExpr(visitor, type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME,
-                                    whereClause, slotDescByName);
-                        List<SlotRef> slots = Lists.newArrayList();
-                        whereExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
-                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
-                    for (String refColName : usedBaseTableColNames) {
-                        if (!baseTableColumnNames.contains(refColName)) {
-                            throw new AlterCancelException("Materialized view's ref column " + refColName + " is not " +
-                                        "found in the base table.");
-                        }
-                    }
-                    // make sure the key columns are in the front of the list which is the limitation of the be `ChunkAggregator`
-                    List<ColumnId> usedColIds = Lists.newArrayList();
-                    List<ColumnId> nonKeyColIds = Lists.newArrayList();
-                    for (String name : usedBaseTableColNames) {
-                        Column col = tbl.getColumn(name);
-                        if (col.isKey()) {
-                            usedColIds.add(col.getColumnId());
-                        } else {
-                            nonKeyColIds.add(col.getColumnId());
-                        }
-                    }
-                    usedColIds.addAll(nonKeyColIds);
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                                new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                     rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
