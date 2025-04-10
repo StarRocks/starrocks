@@ -68,8 +68,7 @@ struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_BINARY_PACKED> {
         return Status::OK();
     }
     static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
-        // todo(yanz): support encoder.
-        // encoder->reset(new DeltaBinaryPackedEecoder<typename PhysicalTypeTraits<type>::CppType>());
+        encoder->reset(new DeltaBinaryPackedEncoder<typename PhysicalTypeTraits<type>::CppType>());
         return Status::OK();
     }
 };

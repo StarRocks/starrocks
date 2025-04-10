@@ -24,6 +24,214 @@
 
 namespace starrocks::parquet {
 
+// ----------------------------------------------------------------------
+// DELTA_BINARY_PACKED encoder
+
+/// DeltaBitPackEncoder is an encoder for the DeltaBinary Packing format
+/// as per the parquet spec. See:
+/// https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-encoding-delta_binary_packed--5
+///
+/// Consists of a header followed by blocks of delta encoded values binary packed.
+///
+///  Format
+///    [header] [block 1] [block 2] ... [block N]
+///
+///  Header
+///    [block size] [number of mini blocks per block] [total value count] [first value]
+///
+///  Block
+///    [min delta] [list of bitwidths of the mini blocks] [miniblocks]
+///
+/// Sets aside bytes at the start of the internal buffer where the header will be written,
+/// and only writes the header when FlushValues is called before returning it.
+///
+/// To encode a block, we will:
+///
+/// 1. Compute the differences between consecutive elements. For the first element in the
+/// block, use the last element in the previous block or, in the case of the first block,
+/// use the first value of the whole sequence, stored in the header.
+///
+/// 2. Compute the frame of reference (the minimum of the deltas in the block). Subtract
+/// this min delta from all deltas in the block. This guarantees that all values are
+/// non-negative.
+///
+/// 3. Encode the frame of reference (min delta) as a zigzag ULEB128 int followed by the
+/// bit widths of the mini blocks and the delta values (minus the min delta) bit packed
+/// per mini block.
+///
+/// Supports only INT32 and INT64.
+
+template <typename T>
+class DeltaBinaryPackedEncoder : public Encoder {
+    // Maximum possible header size
+    static constexpr uint32_t kMaxPageHeaderWriterSize = 32;
+    static constexpr uint32_t kValuesPerBlock = std::is_same_v<int32_t, T> ? 128 : 256;
+    static constexpr uint32_t kMiniBlocksPerBlock = 4;
+
+public:
+    using UT = std::make_unsigned_t<T>;
+
+    DeltaBinaryPackedEncoder(const uint32_t values_per_block = kValuesPerBlock,
+                             const uint32_t mini_blocks_per_block = kMiniBlocksPerBlock)
+            : values_per_block_(values_per_block),
+              mini_blocks_per_block_(mini_blocks_per_block),
+              values_per_mini_block_(values_per_block / mini_blocks_per_block),
+              deltas_(values_per_block),
+              bits_buffer_((kMiniBlocksPerBlock + values_per_block) * sizeof(T)),
+              bit_writer_(&bits_buffer_) {
+        DCHECK(values_per_block_ % 128 == 0) << "the number of values in a block must be multiple of 128, but it's "
+                                             << std::to_string(values_per_block_);
+        DCHECK(values_per_mini_block_ % 32 == 0)
+                << "the number of values in a miniblock must be multiple of 32, but it's "
+                << std::to_string(values_per_mini_block_);
+        DCHECK(values_per_block % mini_blocks_per_block == 0)
+                << "the number of values per block % number of miniblocks per block must be 0, "
+                   "but it's "
+                << std::to_string(values_per_block % mini_blocks_per_block);
+        // Reserve enough space at the beginning of the buffer for largest possible header.
+        sink_.advance(kMaxPageHeaderWriterSize);
+    }
+
+    Slice build() override {
+        FlushValues();
+        return Slice(sink_.data() + sink_offset_, sink_.size() - sink_offset_);
+    }
+
+    Status append(const uint8_t* vals, size_t count) override {
+        sink_offset_ = -1; // more values.
+        Put(reinterpret_cast<const T*>(vals), static_cast<int>(count));
+        return Status::OK();
+    }
+
+private:
+    const uint32_t values_per_block_;
+    const uint32_t mini_blocks_per_block_;
+    const uint32_t values_per_mini_block_;
+    uint32_t values_current_block_{0};
+    uint32_t total_value_count_{0};
+    T first_value_{0};
+    T current_value_{0};
+
+    std::vector<T> deltas_;
+    faststring sink_;
+    faststring bits_buffer_;
+    BitWriter bit_writer_;
+    int sink_offset_{-1};
+
+private:
+    void Put(const T* src, int num_values) {
+        if (num_values == 0) {
+            return;
+        }
+
+        int idx = 0;
+        if (total_value_count_ == 0) {
+            current_value_ = src[0];
+            first_value_ = current_value_;
+            idx = 1;
+        }
+        total_value_count_ += num_values;
+
+        while (idx < num_values) {
+            T value = src[idx];
+            // Calculate deltas. The possible overflow is handled by use of unsigned integers
+            // making subtraction operations well-defined and correct even in case of overflow.
+            // Encoded integers will wrap back around on decoding.
+            // See http://en.wikipedia.org/wiki/Modular_arithmetic#Integers_modulo_n
+            deltas_[values_current_block_] = static_cast<T>(static_cast<UT>(value) - static_cast<UT>(current_value_));
+            current_value_ = value;
+            idx++;
+            values_current_block_++;
+            if (values_current_block_ == values_per_block_) {
+                FlushBlock();
+            }
+        }
+    }
+
+    void FlushBlock() {
+        if (values_current_block_ == 0) {
+            return;
+        }
+
+        // Calculate the frame of reference for this miniblock. This value will be subtracted
+        // from all deltas to guarantee all deltas are positive for encoding.
+        const T min_delta = *std::min_element(deltas_.begin(), deltas_.begin() + values_current_block_);
+        bit_writer_.PutZigZagVlqInt(min_delta);
+
+        // Call to GetNextBytePtr reserves mini_blocks_per_block_ bytes of space to write
+        // bit widths of miniblocks as they become known during the encoding.
+        uint8_t* bit_width_data = bit_writer_.GetNextBytePtr(mini_blocks_per_block_);
+        DCHECK(bit_width_data != nullptr);
+
+        const uint32_t num_miniblocks = static_cast<uint32_t>(
+                std::ceil(static_cast<double>(values_current_block_) / static_cast<double>(values_per_mini_block_)));
+        for (uint32_t i = 0; i < num_miniblocks; i++) {
+            const uint32_t values_current_mini_block = std::min(values_per_mini_block_, values_current_block_);
+
+            const uint32_t start = i * values_per_mini_block_;
+            const T max_delta =
+                    *std::max_element(deltas_.begin() + start, deltas_.begin() + start + values_current_mini_block);
+
+            // The minimum number of bits required to write any of values in deltas_ vector.
+            // See overflow comment above.
+            const auto bit_width = bit_width_data[i] =
+                    BitUtil::NumRequiredBits(static_cast<UT>(max_delta) - static_cast<UT>(min_delta));
+
+            for (uint32_t j = start; j < start + values_current_mini_block; j++) {
+                // Convert delta to frame of reference. See overflow comment above.
+                const UT value = static_cast<UT>(deltas_[j]) - static_cast<UT>(min_delta);
+                bit_writer_.PutValue(value, bit_width);
+            }
+            // If there are not enough values to fill the last mini block, we pad the mini block
+            // with zeroes so that its length is the number of values in a full mini block
+            // multiplied by the bit width.
+            for (uint32_t j = values_current_mini_block; j < values_per_mini_block_; j++) {
+                bit_writer_.PutValue(0, bit_width);
+            }
+            values_current_block_ -= values_current_mini_block;
+        }
+
+        // If, in the last block, less than <number of miniblocks in a block> miniblocks are
+        // needed to store the values, the bytes storing the bit widths of the unneeded
+        // miniblocks are still present, their value should be zero, but readers must accept
+        // arbitrary values as well.
+        for (uint32_t i = num_miniblocks; i < mini_blocks_per_block_; i++) {
+            bit_width_data[i] = 0;
+        }
+        DCHECK_EQ(values_current_block_, 0);
+
+        bit_writer_.Flush();
+        sink_.append(bit_writer_.buffer(), bit_writer_.bytes_written());
+        bit_writer_.Clear();
+    }
+
+    void FlushValues() {
+        // already flushed.
+        if (sink_offset_ != -1) {
+            return;
+        }
+
+        if (values_current_block_ > 0) {
+            FlushBlock();
+        }
+
+        faststring header_buffer;
+        BitWriter header_writer(&header_buffer);
+        header_writer.PutVlqInt(values_per_block_);
+        header_writer.PutVlqInt(mini_blocks_per_block_);
+        header_writer.PutVlqInt(total_value_count_);
+        header_writer.PutZigZagVlqInt(static_cast<T>(first_value_));
+        header_writer.Flush();
+
+        // We reserved enough space at the beginning of the buffer for largest possible header
+        // and data was written immediately after. We now write the header data immediately
+        // before the end of reserved space.
+        int actual_header_size = header_writer.bytes_written();
+        sink_offset_ = kMaxPageHeaderWriterSize - actual_header_size;
+        std::memcpy(sink_.data() + sink_offset_, header_buffer.data(), actual_header_size);
+    }
+};
+
 // DELTA_BINARY_PACKED decoder
 template <typename T>
 class DeltaBinaryPackedDecoder final : public Decoder {
