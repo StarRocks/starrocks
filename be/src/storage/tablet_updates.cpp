@@ -2415,7 +2415,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
                                                     delvecs, *index_meta, enable_persistent_index, nullptr);
         if (!st.ok()) {
-            manager->index_cache().release(index_entry);
             std::string msg = strings::Substitute("_apply_compaction_commit error: write meta failed: $0 $1",
                                                   st.to_string(), _debug_string(false));
             failure_handler(msg, st.code());
