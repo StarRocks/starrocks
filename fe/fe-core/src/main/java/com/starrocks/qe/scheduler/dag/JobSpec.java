@@ -27,6 +27,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -644,6 +645,15 @@ public class JobSpec {
         }
 
         private boolean isEnableQueue(ConnectContext connectContext) {
+            long warehouseId = connectContext.getCurrentWarehouseId();
+            if (warehouseId != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                // for not query jobs, not support queue based on warehouse id
+                if (instance.isStatisticsJob() || instance.isLoadType()) {
+                    return false;
+                }
+                return QueryQueueOptions.isEnableQueryQueue(warehouseId);
+            }
+
             if (connectContext != null && connectContext.getSessionVariable() != null &&
                     !connectContext.getSessionVariable().isEnableQueryQueue()) {
                 return false;
