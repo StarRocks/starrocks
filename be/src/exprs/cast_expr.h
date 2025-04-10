@@ -42,12 +42,10 @@ public:
                            bool exception_if_failed = false);
 
 private:
-    static StatusOr<std::unique_ptr<Expr>> create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
-                                                            const TypeDescriptor& cast_type,
-                                                            bool allow_throw_exception);
-    static StatusOr<std::unique_ptr<Expr>> create_cast_expr(ObjectPool* pool, const TExprNode& node,
-                                                            const TypeDescriptor& from_type,
-                                                            const TypeDescriptor& to_type, bool allow_throw_exception);
+    static StatusOr<Expr*> create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
+                                            const TypeDescriptor& cast_type, bool allow_throw_exception);
+    static StatusOr<Expr*> create_cast_expr(ObjectPool* pool, const TExprNode& node, const TypeDescriptor& from_type,
+                                            const TypeDescriptor& to_type, bool allow_throw_exception);
     static Expr* create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
                                        LogicalType to_type, bool allow_throw_exception);
 };
@@ -61,19 +59,40 @@ public:
               _cast_to_type_desc(std::move(type_desc)),
               _throw_exception_if_err(throw_exception_if_err) {}
     ~CastStringToArray() override = default;
+
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+<<<<<<< HEAD
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
     [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
                               FunctionContext::FunctionStateScope scope) override;
+=======
+
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastStringToArray>(new CastStringToArray(*this));
+        if (_cast_elements_expr != nullptr) {
+            cloned->_cast_elements_expr = Expr::copy(pool, _cast_elements_expr);
+        }
+        return pool->add(cloned.release());
+    }
+
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+>>>>>>> 5d2d0a2a99 ([BugFix] Fix clone for semi-structure cast expr (#57804))
 
 private:
+    // Invoked only by clone.
+    CastStringToArray(const CastStringToArray& rhs)
+            : Expr(rhs),
+              _cast_to_type_desc(rhs._cast_to_type_desc),
+              _throw_exception_if_err(rhs._throw_exception_if_err),
+              _constant_res(rhs._constant_res != nullptr ? rhs._constant_res->clone() : nullptr) {}
+
     Slice _unquote(Slice slice) const;
     Slice _trim(Slice slice) const;
 
-    Expr* _cast_elements_expr;
+    Expr* _cast_elements_expr = nullptr;
     TypeDescriptor _cast_to_type_desc;
     bool _throw_exception_if_err;
-    ColumnPtr _constant_res;
+    ColumnPtr _constant_res = nullptr;
 };
 
 // Cast JsonArray to array<ANY>
@@ -84,31 +103,88 @@ public:
     ~CastJsonToArray() override = default;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToArray(*this)); }
+
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastJsonToArray>(new CastJsonToArray(*this));
+        if (_cast_elements_expr != nullptr) {
+            cloned->_cast_elements_expr = Expr::copy(pool, _cast_elements_expr);
+        }
+        return pool->add(cloned.release());
+    }
 
 private:
-    Expr* _cast_elements_expr;
+    // Invoked only by clone.
+    CastJsonToArray(const CastJsonToArray& rhs) : Expr(rhs), _cast_to_type_desc(rhs._cast_to_type_desc) {}
+
+    Expr* _cast_elements_expr = nullptr;
     TypeDescriptor _cast_to_type_desc;
 };
 
+<<<<<<< HEAD
+=======
+// Cast Json to struct<ANY>
+class CastJsonToStruct final : public Expr {
+public:
+    CastJsonToStruct(const TExprNode& node, std::vector<Expr*> field_casts)
+            : Expr(node), _field_casts(std::move(field_casts)) {
+        _json_paths.reserve(_type.field_names.size());
+        for (int j = 0; j < _type.field_names.size(); j++) {
+            std::string path_string = "$." + _type.field_names[j];
+            auto res = JsonPath::parse(Slice(path_string));
+            if (!res.ok()) {
+                throw std::runtime_error("Failed to parse JSON path: " + path_string);
+            }
+            _json_paths.emplace_back(res.value());
+        }
+    }
+
+    ~CastJsonToStruct() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastJsonToStruct>(new CastJsonToStruct(*this));
+        cloned->_field_casts.reserve(_field_casts.size());
+        for (int i = 0; i < _field_casts.size(); ++i) {
+            if (_field_casts[i] != nullptr) {
+                cloned->_field_casts.emplace_back(Expr::copy(pool, _field_casts[i]));
+            }
+        }
+        return pool->add(cloned.release());
+    }
+
+private:
+    // Invoked only by clone.
+    CastJsonToStruct(const CastJsonToStruct& rhs) : Expr(rhs), _json_paths(rhs._json_paths) {}
+
+    std::vector<Expr*> _field_casts;
+    std::vector<JsonPath> _json_paths;
+};
+
+>>>>>>> 5d2d0a2a99 ([BugFix] Fix clone for semi-structure cast expr (#57804))
 // cast one ARRAY to another ARRAY.
 // For example.
 //   cast ARRAY<tinyint> to ARRAY<int>
 class CastArrayExpr final : public Expr {
 public:
-    CastArrayExpr(const TExprNode& node, std::unique_ptr<Expr> element_cast)
-            : Expr(node), _element_cast(std::move(element_cast)) {}
-
-    CastArrayExpr(const CastArrayExpr& rhs) : Expr(rhs) {}
+    CastArrayExpr(const TExprNode& node, Expr* element_cast) : Expr(node), _element_cast(element_cast) {}
 
     ~CastArrayExpr() override = default;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayExpr(*this)); }
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastArrayExpr>(new CastArrayExpr(*this));
+        if (_element_cast != nullptr) {
+            cloned->_element_cast = Expr::copy(pool, _element_cast);
+        }
+        return pool->add(cloned.release());
+    }
 
 private:
-    std::unique_ptr<Expr> _element_cast;
+    // Invoked only by clone.
+    CastArrayExpr(const CastArrayExpr& rhs) : Expr(rhs) {}
+
+    Expr* _element_cast = nullptr;
 };
 
 // cast one MAP to another MAP.
@@ -118,20 +194,30 @@ private:
 //  Need to refactor these Expressions as Functions
 class CastMapExpr final : public Expr {
 public:
-    CastMapExpr(const TExprNode& node, std::unique_ptr<Expr> key_cast, std::unique_ptr<Expr> value_cast)
-            : Expr(node), _key_cast(std::move(key_cast)), _value_cast(std::move(value_cast)) {}
-
-    CastMapExpr(const CastMapExpr& rhs) : Expr(rhs) {}
+    CastMapExpr(const TExprNode& node, Expr* key_cast, Expr* value_cast)
+            : Expr(node), _key_cast(key_cast), _value_cast(value_cast) {}
 
     ~CastMapExpr() override = default;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastMapExpr(*this)); }
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastMapExpr>(new CastMapExpr(*this));
+        if (_key_cast != nullptr) {
+            cloned->_key_cast = Expr::copy(pool, _key_cast);
+        }
+        if (_value_cast != nullptr) {
+            cloned->_value_cast = Expr::copy(pool, _value_cast);
+        }
+        return pool->add(cloned.release());
+    }
 
 private:
-    std::unique_ptr<Expr> _key_cast;
-    std::unique_ptr<Expr> _value_cast;
+    // Invoked only by clone.
+    CastMapExpr(const CastMapExpr& rhs) : Expr(rhs) {}
+
+    Expr* _key_cast = nullptr;
+    Expr* _value_cast = nullptr;
 };
 
 // cast one STRUCT to another STRUCT.
@@ -139,19 +225,29 @@ private:
 //   cast STRUCT<tinyint, tinyint> to STRUCT<int, int>
 class CastStructExpr final : public Expr {
 public:
-    CastStructExpr(const TExprNode& node, std::vector<std::unique_ptr<Expr>> field_casts)
+    CastStructExpr(const TExprNode& node, std::vector<Expr*> field_casts)
             : Expr(node), _field_casts(std::move(field_casts)) {}
-
-    CastStructExpr(const CastStructExpr& rhs) : Expr(rhs) {}
 
     ~CastStructExpr() override = default;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStructExpr(*this)); }
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastStructExpr>(new CastStructExpr(*this));
+        cloned->_field_casts.reserve(_field_casts.size());
+        for (int i = 0; i < _field_casts.size(); ++i) {
+            if (_field_casts[i] != nullptr) {
+                cloned->_field_casts.emplace_back(Expr::copy(pool, _field_casts[i]));
+            }
+        }
+        return pool->add(cloned.release());
+    }
 
 private:
-    std::vector<std::unique_ptr<Expr>> _field_casts;
+    // Invoked only by clone.
+    CastStructExpr(const CastStructExpr& rhs) : Expr(rhs) {}
+
+    std::vector<Expr*> _field_casts;
 };
 
 // cast NULL OR Boolean to ComplexType
