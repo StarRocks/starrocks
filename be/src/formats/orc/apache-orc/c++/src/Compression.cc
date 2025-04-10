@@ -753,7 +753,7 @@ protected:
         size_t actual = 0;
         auto res = libdeflate_deflate_decompress(decompressor, inputPtr, length, output, maxOutputLength, &actual);
         if (res != LIBDEFLATE_SUCCESS) {
-            throw ParseError("LibDefalte decompress failed");
+            throw ParseError("LibDeflate decompress failed");
         }
         return actual;
     }
