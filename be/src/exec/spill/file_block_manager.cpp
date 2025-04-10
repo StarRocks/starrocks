@@ -193,6 +193,8 @@ public:
 #endif
     }
 
+    bool try_acquire_sizes(size_t size) override { return _container->try_acquire_sizes(size); }
+
 private:
     FileBlockContainerPtr _container;
 };
