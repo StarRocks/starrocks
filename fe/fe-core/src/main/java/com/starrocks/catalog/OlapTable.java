@@ -2748,13 +2748,13 @@ public class OlapTable extends Table {
         tableProperty.buildDataCachePartitionDuration();
     }
 
-    public void setAggregateTabletMeta(boolean enableAggregateTabletMeta) {
+    public void setEnablePartitionAggregation(boolean enablePartitionAggregation) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION,
-                        Boolean.valueOf(enableAggregateTabletMeta).toString());
-        tableProperty.buildAggregateTabletMeta();
+                        Boolean.valueOf(enablePartitionAggregation).toString());
+        tableProperty.buildEnablePartitionAggregation();
     }
 
     public void setStorageCoolDownTTL(PeriodDuration duration) {

@@ -802,13 +802,13 @@ public class PropertyAnalyzer {
                 + " must be `true` or `false`");
     }
 
-    public static Boolean analyzeAggregateTabletMeta(Map<String, String> properties) throws AnalysisException {
-        boolean aggregateTabletMeta = Config.enable_partition_aggregation;
+    public static Boolean analyzeEnablePartitionAggregation(Map<String, String> properties) throws AnalysisException {
+        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
         if (properties != null && properties.containsKey(PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            aggregateTabletMeta = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_PARTITION_AGGREGATION));
+            enablePartitionAggregation = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_PARTITION_AGGREGATION));
             properties.remove(PROPERTIES_ENABLE_PARTITION_AGGREGATION);
         }
-        return aggregateTabletMeta;
+        return enablePartitionAggregation;
     }
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
