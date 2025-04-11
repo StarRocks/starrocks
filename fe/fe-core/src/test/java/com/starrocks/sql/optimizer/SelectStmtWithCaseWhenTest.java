@@ -154,7 +154,7 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 2 when 'China' then 1 else 3 end) <> 1",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -227,7 +227,7 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) is not null",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -323,7 +323,7 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where (case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' " +
                         "else 'e' end in ('a', 'b', 'c', 'd')) is not null",
                         "0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -440,7 +440,7 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where \n" +
                         "(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) is not null",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -541,7 +541,7 @@ class SelectStmtWithCaseWhenTest {
                 {"in ('F')", "0:EMPTYSET"},
                 {"in ('A','B','C','D','E')",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -549,7 +549,7 @@ class SelectStmtWithCaseWhenTest {
                                 "     cardinality: 1"},
                 {"in ('A','B','C','D','E','F')",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -566,7 +566,7 @@ class SelectStmtWithCaseWhenTest {
                 {"is NULL", "0:EMPTYSET"},
                 {"is NOT NULL",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -610,7 +610,7 @@ class SelectStmtWithCaseWhenTest {
                 {"in ('F')", "0:EMPTYSET"},
                 {"in ('A','B','C','D','E')",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -618,7 +618,7 @@ class SelectStmtWithCaseWhenTest {
                                 "     cardinality: 1"},
                 {"in ('A','B','C','D','E','F')",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -634,7 +634,7 @@ class SelectStmtWithCaseWhenTest {
                 {"is NULL", "0:EMPTYSET"},
                 {"is NOT NULL",
                         "  0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on\n" +
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
@@ -661,7 +661,7 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where if(region='USA', 1, 0) <> 0", "[1: region, VARCHAR, false] = 'USA'"},
 
                 {"select * from test.t0 where if(region='USA', 1, 0) <> 2", "0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
+                        "     TABLE: t0, rollup: t0\n" +
                         "     preAggregation: on\n" +
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
@@ -669,7 +669,7 @@ class SelectStmtWithCaseWhenTest {
                         "     cardinality: 1"},
                 {"select * from test.t0 where if(region='USA', 1, 0) in (1)", "[1: region, VARCHAR, false] = 'USA'"},
                 {"select * from test.t0 where if(region='USA', 1, 0) in (1,0)", "  0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
+                        "     TABLE: t0, rollup: t0\n" +
                         "     preAggregation: on\n" +
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
@@ -684,7 +684,7 @@ class SelectStmtWithCaseWhenTest {
 
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (0,1)", "0:EMPTYSET"},
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (2,3)", "  0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
+                        "     TABLE: t0, rollup: t0\n" +
                         "     preAggregation: on\n" +
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
@@ -692,7 +692,7 @@ class SelectStmtWithCaseWhenTest {
                         "     cardinality: 1\n"},
                 {"select * from test.t0 where if(region='USA', 1, 0) is NULL", "0:EMPTYSET"},
                 {"select * from test.t0 where if(region='USA', 1, 0) is NOT NULL", "  0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
+                        "     TABLE: t0, rollup: t0\n" +
                         "     preAggregation: on\n" +
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
@@ -705,7 +705,7 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where if(ship_code is null or ship_code > 2, 2, 1) != 2",
                         "if[((5: ship_code IS NULL) OR (5: ship_code > 2), 2, 1)"},
                 {"select * from test.t0 where if(ship_code is null or ship_code > 2, 1, 0) is NOT NULL", "  0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
+                        "     TABLE: t0, rollup: t0\n" +
                         "     preAggregation: on\n" +
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
@@ -726,7 +726,7 @@ class SelectStmtWithCaseWhenTest {
                         "0:EMPTYSET"},
                 {"select * from test.t0 where (nullif('China', region) is NULL) is NOT NULL",
                         "0:OlapScanNode\n" +
-                                "     table: t0, rollup: t0\n" +
+                                "     TABLE: t0, rollup: t0\n" +
                                 "     preAggregation: on"},
                 {"select * from test.t0 where nullif('China', region) is NOT NULL", "[1: region, VARCHAR, false] != 'China'"},
                 {"select * from test.t0 where (nullif('China', region) is NOT NULL) is NULL",
@@ -743,7 +743,7 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NULL", "0:EMPTYSET"},
                 {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NOT NULL",
                         "0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
+                        "     TABLE: t0, rollup: t0\n" +
                         "     preAggregation: on"},
                 {"select * from test.t0 where nullif(1, ship_code) is NOT NULL", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NULL",
