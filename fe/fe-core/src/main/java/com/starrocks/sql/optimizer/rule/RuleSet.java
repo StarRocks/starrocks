@@ -153,6 +153,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaSca
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.ScalarApplyNormalizeCountRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitMultiPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
@@ -361,6 +362,7 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_TO_JOIN, ImmutableList.of(
                 new QuantifiedApply2JoinRule(),
                 new ExistentialApply2JoinRule(),
+                new ScalarApplyNormalizeCountRule(),
                 new ScalarApply2JoinRule(),
                 new ExistentialApply2OuterJoinRule(),
                 new QuantifiedApply2OuterJoinRule()
