@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "formats/parquet/encoding_dict.h"
@@ -37,14 +39,14 @@ struct DecoderChecker {
                 std::vector<T> checks(values.size());
                 decoder->set_data(encoded_data);
                 auto st = decoder->next_batch(values.size(), (uint8_t*)&checks[0]);
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
                 for (int i = 0; i < values.size(); ++i) {
                     ASSERT_EQ(values[i], checks[i]);
                 }
 
                 // out-of-bounds access
                 st = decoder->next_batch(values.size(), (uint8_t*)&checks[0]);
-                ASSERT_FALSE(st.ok());
+                ASSERT_FALSE(st.ok()) << st.to_string();
             }
             // skip + read
             {
@@ -55,107 +57,108 @@ struct DecoderChecker {
                 decoder->set_data(encoded_data);
                 decoder->skip(values_to_skip);
                 auto st = decoder->next_batch(remain_values, (uint8_t*)&checks[0]);
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
                 for (int i = 0; i < remain_values; ++i) {
                     ASSERT_EQ(values[values_to_skip + i], checks[i]);
                 }
 
                 // out-of-bounds skip
                 st = decoder->skip(2);
-                ASSERT_FALSE(st.ok());
+                ASSERT_FALSE(st.ok()) << st.to_string();
             }
         }
-        {// normal read
-         {auto column = starrocks::FixedLengthColumn<T>::create();
+        { // normal read
+            {
+                auto column = starrocks::FixedLengthColumn<T>::create();
 
-        decoder->set_data(encoded_data);
-        auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
+                decoder->set_data(encoded_data);
+                auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok()) << st.to_string();
 
-        const T* check = (const T*)column->raw_data();
-        for (int i = 0; i < values.size(); ++i) {
-            ASSERT_EQ(values[i], *check);
-            check++;
+                const T* check = (const T*)column->raw_data();
+                for (int i = 0; i < values.size(); ++i) {
+                    ASSERT_EQ(values[i], *check);
+                    check++;
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                    ASSERT_FALSE(st.ok()) << st.to_string();
+                }
+            }
+            // skip + read
+            {
+                size_t values_to_skip = values.size() / 2;
+                size_t remain_values = values.size() - values_to_skip;
+
+                auto column = starrocks::FixedLengthColumn<T>::create();
+                decoder->set_data(encoded_data);
+                auto st = decoder->skip(values_to_skip);
+                st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                const T* check = (const T*)column->raw_data();
+                for (int i = 0; i < remain_values; ++i) {
+                    ASSERT_EQ(values[values_to_skip + i], check[i]);
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->skip(2);
+                    ASSERT_FALSE(st.ok()) << st.to_string();
+                }
+            }
         }
+        {
+            // read
+            {
+                auto data_column = starrocks::FixedLengthColumn<T>::create();
+                auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
 
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-            ASSERT_FALSE(st.ok());
+                decoder->set_data(encoded_data);
+                auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                const T* check = (const T*)column->data_column()->raw_data();
+                for (int i = 0; i < values.size(); ++i) {
+                    ASSERT_EQ(values[i], *check);
+                    check++;
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                    ASSERT_FALSE(st.ok()) << st.to_string();
+                }
+            }
+            // read+skip
+            {
+                size_t values_to_skip = values.size() / 2;
+                size_t remain_values = values.size() - values_to_skip;
+
+                auto data_column = starrocks::FixedLengthColumn<T>::create();
+                auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
+
+                decoder->set_data(encoded_data);
+                auto st = decoder->skip(values_to_skip);
+                st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                const T* check = (const T*)column->data_column()->raw_data();
+                for (int i = 0; i < remain_values; ++i) {
+                    ASSERT_EQ(values[values_to_skip + i], check[i]);
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->skip(2);
+                    ASSERT_FALSE(st.ok()) << st.to_string();
+                }
+            }
         }
     }
-    // skip + read
-    {
-        size_t values_to_skip = values.size() / 2;
-        size_t remain_values = values.size() - values_to_skip;
-
-        auto column = starrocks::FixedLengthColumn<T>::create();
-        decoder->set_data(encoded_data);
-        auto st = decoder->skip(values_to_skip);
-        st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
-
-        const T* check = (const T*)column->raw_data();
-        for (int i = 0; i < remain_values; ++i) {
-            ASSERT_EQ(values[values_to_skip + i], check[i]);
-        }
-
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->skip(2);
-            ASSERT_FALSE(st.ok());
-        }
-    }
-} {
-    // read
-    {
-        auto data_column = starrocks::FixedLengthColumn<T>::create();
-        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
-
-        decoder->set_data(encoded_data);
-        auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
-
-        const T* check = (const T*)column->data_column()->raw_data();
-        for (int i = 0; i < values.size(); ++i) {
-            ASSERT_EQ(values[i], *check);
-            check++;
-        }
-
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-            ASSERT_FALSE(st.ok());
-        }
-    }
-    // read+skip
-    {
-        size_t values_to_skip = values.size() / 2;
-        size_t remain_values = values.size() - values_to_skip;
-
-        auto data_column = starrocks::FixedLengthColumn<T>::create();
-        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
-
-        decoder->set_data(encoded_data);
-        auto st = decoder->skip(values_to_skip);
-        st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
-
-        const T* check = (const T*)column->data_column()->raw_data();
-        for (int i = 0; i < remain_values; ++i) {
-            ASSERT_EQ(values[values_to_skip + i], check[i]);
-        }
-
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->skip(2);
-            ASSERT_FALSE(st.ok());
-        }
-    }
-}
-} // namespace starrocks::parquet
-}
-;
+};
 
 template <bool is_dictionary>
 struct DecoderChecker<Slice, is_dictionary> {
@@ -194,98 +197,99 @@ struct DecoderChecker<Slice, is_dictionary> {
                 ASSERT_FALSE(st.ok());
             }
         }
-        {// read
-         {auto column = starrocks::BinaryColumn::create();
+        { // read
+            {
+                auto column = starrocks::BinaryColumn::create();
 
-        decoder->set_data(encoded_data);
-        auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
+                decoder->set_data(encoded_data);
+                auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok());
 
-        const auto* check = (const Slice*)column->raw_data();
-        for (auto value : values) {
-            ASSERT_EQ(value, *check);
-            check++;
+                const auto* check = (const Slice*)column->raw_data();
+                for (auto value : values) {
+                    ASSERT_EQ(value, *check);
+                    check++;
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                    ASSERT_FALSE(st.ok());
+                }
+            }
+            // skip+read
+            {
+                size_t values_to_skip = values.size() / 2;
+                size_t remain_values = values.size() - values_to_skip;
+
+                auto column = starrocks::BinaryColumn::create();
+
+                decoder->set_data(encoded_data);
+                auto st = decoder->skip(values_to_skip);
+                st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok());
+
+                const auto* check = (const Slice*)column->raw_data();
+                for (size_t i = 0; i < remain_values; i++) {
+                    EXPECT_EQ(values[values_to_skip + i], check[i]);
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->skip(2);
+                    ASSERT_FALSE(st.ok());
+                }
+            }
         }
+        {
+            // read
+            {
+                auto data_column = starrocks::BinaryColumn::create();
+                auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
 
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-            ASSERT_FALSE(st.ok());
+                decoder->set_data(encoded_data);
+                auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok());
+
+                const auto* check = (const Slice*)column->data_column()->raw_data();
+                for (auto value : values) {
+                    ASSERT_EQ(value, *check);
+                    check++;
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
+                    ASSERT_FALSE(st.ok());
+                }
+            }
+            // skip + read
+            {
+                size_t values_to_skip = values.size() / 2;
+                size_t remain_values = values.size() - values_to_skip;
+
+                auto data_column = starrocks::BinaryColumn::create();
+                auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
+
+                decoder->set_data(encoded_data);
+                auto st = decoder->skip(values_to_skip);
+                st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
+                ASSERT_TRUE(st.ok());
+
+                const auto* check = (const Slice*)column->data_column()->raw_data();
+                for (size_t i = 0; i < remain_values; i++) {
+                    EXPECT_EQ(values[values_to_skip + i], check[i]);
+                }
+
+                if (!is_dictionary) {
+                    // out-of-bounds access
+                    st = decoder->skip(2);
+                    ASSERT_FALSE(st.ok());
+                }
+            }
         }
     }
-    // skip+read
-    {
-        size_t values_to_skip = values.size() / 2;
-        size_t remain_values = values.size() - values_to_skip;
-
-        auto column = starrocks::BinaryColumn::create();
-
-        decoder->set_data(encoded_data);
-        auto st = decoder->skip(values_to_skip);
-        st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
-
-        const auto* check = (const Slice*)column->raw_data();
-        for (size_t i = 0; i < remain_values; i++) {
-            EXPECT_EQ(values[values_to_skip + i], check[i]);
-        }
-
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->skip(2);
-            ASSERT_FALSE(st.ok());
-        }
-    }
-} {
-    // read
-    {
-        auto data_column = starrocks::BinaryColumn::create();
-        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
-
-        decoder->set_data(encoded_data);
-        auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
-
-        const auto* check = (const Slice*)column->data_column()->raw_data();
-        for (auto value : values) {
-            ASSERT_EQ(value, *check);
-            check++;
-        }
-
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-            ASSERT_FALSE(st.ok());
-        }
-    }
-    // skip + read
-    {
-        size_t values_to_skip = values.size() / 2;
-        size_t remain_values = values.size() - values_to_skip;
-
-        auto data_column = starrocks::BinaryColumn::create();
-        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
-
-        decoder->set_data(encoded_data);
-        auto st = decoder->skip(values_to_skip);
-        st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
-        ASSERT_TRUE(st.ok());
-
-        const auto* check = (const Slice*)column->data_column()->raw_data();
-        for (size_t i = 0; i < remain_values; i++) {
-            EXPECT_EQ(values[values_to_skip + i], check[i]);
-        }
-
-        if (!is_dictionary) {
-            // out-of-bounds access
-            st = decoder->skip(2);
-            ASSERT_FALSE(st.ok());
-        }
-    }
-}
-}
-}
-;
+};
 
 TEST_F(ParquetEncodingTest, FindNoneExistedEncoding) {
     const EncodingInfo* enc_info = nullptr;
@@ -519,6 +523,37 @@ TEST_F(ParquetEncodingTest, Boolean) {
         // decode with buffer
         values.resize(31);
         DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
+    }
+}
+
+TEST_F(ParquetEncodingTest, DeltaBinaryPackedInt32) {
+    std::vector<int32_t> values;
+    for (int rep = 0; rep < 10; rep++) {
+        values.push_back(std::numeric_limits<int32_t>::max());
+        values.push_back(std::numeric_limits<int32_t>::min());
+        values.push_back(0);
+        for (int i = 0; i < 100; i++) {
+            values.push_back(i);
+        }
+        values.push_back(std::numeric_limits<int32_t>::max());
+        values.push_back(std::numeric_limits<int32_t>::min());
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::INT32, tparquet::Encoding::DELTA_BINARY_PACKED, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok());
+
+        std::unique_ptr<Encoder> encoder;
+        st = encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok());
+
+        st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), values.size());
+        ASSERT_TRUE(st.ok());
+        DecoderChecker<int32_t, false>::check(values, encoder->build(), decoder.get());
     }
 }
 
