@@ -44,7 +44,7 @@ public class OpenIdConnectAuthenticationTest {
         serializer.writeInt1(0);
         serializer.writeLenEncodedString(openIdConnectJson);
         try {
-            provider.authenticate(new ConnectContext(), "harbor", "%", serializer.toArray(), null, null);
+            provider.authenticate(new ConnectContext(), "harbor", "%", serializer.toArray(), null);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
