@@ -10,7 +10,7 @@ This function is supported from v3.5.
 
 ## Syntax
 
-```Haskell
+```sql
 INT field(VARCHAR val, VARCHAR val1, val2, ...);
 ```
 
