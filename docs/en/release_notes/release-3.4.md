@@ -4,6 +4,23 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.2
+
+Release Date: April 10, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Partition pruning might not work if the partition column is a generated column. [#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- Incorrect parameter handling in the `concat` function could cause a BE crash during query execution. [#57522](https://github.com/StarRocks/starrocks/pull/57522)
+- The `ssl_enable` property did not take effect when using Broker Load to load data. [#57229](https://github.com/StarRocks/starrocks/pull/57229)
+- When NULL values exist, querying subfields of STRUCT-type columns could cause a BE crash. [#56496](https://github.com/StarRocks/starrocks/pull/56496)
+- When modifying the bucket distribution of a table with the statement `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...`, specifying duplicate partition names could result in failure to delete internally generated temporary partitions. [#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- In a shared-data cluster, running `SHOW PROC '/current_queries'` resulted in the error "Error 1064 (HY000): Sending collect query statistics request fails". [#56597](https://github.com/StarRocks/starrocks/pull/56597)
+- Running `INSERT OVERWRITE` loading tasks in parallel caused the error "ConcurrentModificationException: null", resulting in loading failure. [#56557](https://github.com/StarRocks/starrocks/pull/56557)
+- After upgrading from v2.5.21 to v3.1.17, running multiple Broker Load tasks concurrently could cause exceptions. [#56512](https://github.com/StarRocks/starrocks/pull/56512)
+
 ## 3.4.1
 
 Release Date: March 12, 2025

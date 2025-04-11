@@ -4,6 +4,23 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.2 zh
+
+发布日期：2025 年 4 月 10 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 分区列如果是生成列的话，分区裁剪可能失效。[#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- `concat` 函数的参数处理逻辑问题导致查询时 BE Crash。[#57522](https://github.com/StarRocks/starrocks/pull/57522)
+- 使用 Broker Load 导入数据时，`ssl_enable` 属性不生效。[#57229](https://github.com/StarRocks/starrocks/pull/57229)
+- 当存在 NULL 数据时，查询 STRUCT 类型列的子字段会导致 BE Crash。[#56496](https://github.com/StarRocks/starrocks/pull/56496)
+- 通过 `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...` 语句修改表的分桶方式时，如果重复指定分区名，内部生成的临时分区无法删除。[#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- 在存算分离集群执行 `SHOW PROC '/current_queries'` 时报错 "Error 1064 (HY000): Sending collect query statistics request fails"。[#56597](https://github.com/StarRocks/starrocks/pull/56597)
+- 并行执行 INSERT OVERWRITE 导入任务时报错 "ConcurrentModificationException: null"，导致导入任务失败。[#56557](https://github.com/StarRocks/starrocks/pull/56557)
+- 自 v2.5.21 升级到 v3.1.17 后，多个 Broker Load 任务并行运行时可能会导致异常。[#56512](https://github.com/StarRocks/starrocks/pull/56512)
+
 ## 3.4.1
 
 发布日期：2025 年 3 月 12 日
