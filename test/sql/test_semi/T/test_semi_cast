@@ -72,12 +72,6 @@ select count(1) from t1 where
     OR c_int in (cast(parse_json("[20, 21,22,23]") as array<INT>)[1]);
 
 
--- CastJsonToStruct
-select count(1) from t1 where 
-    c_struct in (cast(parse_json("[10, 11]") as struct<k1 INT, k2 INT>)) 
-    OR c_struct not in (cast(parse_json("[20, 21]") as struct<k1 INT, k2 INT>));
-
-
 -- CastArrayExpr
 select count(1) from t1 where (
     c_array_int in ([10, 11, 12, 13]) 

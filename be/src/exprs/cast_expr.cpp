@@ -1565,29 +1565,6 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         }
     }
 
-<<<<<<< HEAD
-=======
-    if (from_type == TYPE_JSON && to_type == TYPE_STRUCT) {
-        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
-
-        std::vector<Expr*> field_casts(cast_to.children.size());
-        for (int i = 0; i < cast_to.children.size(); ++i) {
-            TypeDescriptor json_type = TypeDescriptor::create_json_type();
-            auto ret = create_cast_expr(pool, json_type, cast_to.children[i], allow_throw_exception);
-            if (!ret.ok()) {
-                LOG(WARNING) << "Not support cast from type: " << json_type << ", to type: " << cast_to.children[i];
-                return nullptr;
-            }
-            pool->add(ret.value());
-            field_casts[i] = ret.value();
-            auto cast_input = create_slot_ref(json_type);
-            field_casts[i]->add_child(cast_input.get());
-            pool->add(cast_input.release());
-        }
-        return new CastJsonToStruct(node, std::move(field_casts));
-    }
-
->>>>>>> 5d2d0a2a99 ([BugFix] Fix clone for semi-structure cast expr (#57804))
     if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
         return dispatch_throw_exception<CastVarcharToBitmap>(allow_throw_exception, node);
     }
