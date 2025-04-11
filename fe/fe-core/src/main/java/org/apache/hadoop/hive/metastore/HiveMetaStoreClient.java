@@ -450,6 +450,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     private void openInternal() throws MetaException {
         isConnected = false;
         TTransportException tte = null;
+        Exception lastException = null;
         boolean useSSL = MetastoreConf.getBoolVar(conf, ConfVars.USE_SSL);
         boolean useSasl = MetastoreConf.getBoolVar(conf, ConfVars.USE_THRIFT_SASL);
         boolean useFramedTransport = MetastoreConf.getBoolVar(conf, ConfVars.USE_THRIFT_FRAMED_TRANSPORT);
@@ -579,6 +580,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                     }
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
+                    lastException = e;
                 }
                 if (isConnected) {
                     break;
@@ -595,8 +597,18 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         }
 
         if (!isConnected) {
+            String msg = "";
+            if (tte == null) {
+                if (lastException != null) {
+                    msg = StringUtils.stringifyException(lastException);
+                } else {
+                    msg = "unknown reason";
+                }
+            } else {
+                msg = StringUtils.stringifyException(tte);
+            }
             throw new MetaException("Could not connect to meta store using any of the URIs provided." +
-                    " Most recent failure: " + StringUtils.stringifyException(tte));
+                    " Most recent failure: " + msg);
         }
 
         snapshotActiveConf();
