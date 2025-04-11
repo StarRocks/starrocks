@@ -252,6 +252,11 @@ public class AnalyzeSetVariableTest {
                 mgr.chooseResourceGroupByID(anyLong);
                 result = null;
             }
+
+            {
+                mgr.createBuiltinResourceGroupsIfNotExist();
+                result = null;
+            }
         };
 
         String sql;
