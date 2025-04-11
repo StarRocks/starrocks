@@ -33,12 +33,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-<<<<<<< HEAD
-=======
 import static com.starrocks.sql.optimizer.statistics.HistogramStatisticsUtils.estimateInPredicateWithHistogram;
-import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateUtils.computeCompoundStatsWithMultiColumnOptimize;
 
->>>>>>> a8ced46809 ([Enhancement] use histogram to estimate in_predicate cardinality (#57874))
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
         if (predicate == null) {
@@ -133,19 +129,7 @@ public class PredicateStatisticsCalculator {
                             .collect(Collectors.toList());
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
-<<<<<<< HEAD
-=======
 
-            List<ScalarOperator> children = predicate.getChildren();
-            List<ScalarOperator> otherChildrenList = predicate.getChildren().stream().skip(1).toList();
-            if (children.size() == 2 && SPMFunctions.isSPMFunctions(children.get(1))) {
-                otherChildrenList = children.get(1).getChildren().stream().skip(1).collect(Collectors.toList());
-                if (otherChildrenList.isEmpty()) {
-                    return statistics;
-                }
-            }
-            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().collect(
-                    Collectors.toList());
             boolean allConstants = otherChildrenList.stream().allMatch(op -> op instanceof ConstantOperator);
 
             if (!predicate.isSubquery() && firstChild.isColumnRef() && !inColumnStatistic.isUnknown() &&
@@ -161,7 +145,6 @@ public class PredicateStatisticsCalculator {
                 );
             }
 
->>>>>>> a8ced46809 ([Enhancement] use histogram to estimate in_predicate cardinality (#57874))
             List<ColumnStatistic> otherChildrenColumnStatisticList =
                     otherChildrenList.stream().distinct().map(this::getExpressionStatistic).collect(Collectors.toList());
 
