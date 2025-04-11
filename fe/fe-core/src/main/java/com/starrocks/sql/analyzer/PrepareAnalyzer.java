@@ -19,6 +19,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -45,7 +46,7 @@ public class PrepareAnalyzer {
         }
         if (prepareStmt != null) {
             StatementBase innerStmt = prepareStmt.getInnerStmt();
-            if (!(innerStmt instanceof QueryStatement)) {
+            if (!(innerStmt instanceof QueryStatement || innerStmt instanceof InsertStmt)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
             }
             // Analyzing when preparing is only used to return the correct resultset meta, but not to generate an

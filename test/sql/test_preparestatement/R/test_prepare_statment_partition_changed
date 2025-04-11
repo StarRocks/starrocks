@@ -9,5 +9,8 @@ DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- !result
 PREPARE stmt1 FROM insert overwrite prepare_stmt values (?, ?);
 -- result:
+-- !result
+PREPARE stmt2 FROM ALTER USER 'root'@'%' IDENTIFIED BY 'XXXXX';
+-- result:
 E: (1295, 'Getting analyzing error. Detail message: This command is not supported in the prepared statement protocol yet.')
 -- !result
