@@ -503,6 +503,7 @@ public class ShowExecutor {
 
             Map<String, String> tableMap = Maps.newTreeMap();
             MetaUtils.checkDbNullAndReport(db, statement.getDb());
+            Map<String, String> commentMap = Maps.newHashMap();
 
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
@@ -535,6 +536,7 @@ public class ShowExecutor {
                     }
 
                     tableMap.put(tableName, table.getMysqlType());
+                    commentMap.put(tableName, table.getComment());
                 }
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
@@ -542,7 +544,8 @@ public class ShowExecutor {
 
             for (Map.Entry<String, String> entry : tableMap.entrySet()) {
                 if (statement.isVerbose()) {
-                    rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
+                    rows.add(Lists.newArrayList(entry.getKey(), entry.getValue(),
+                            commentMap.getOrDefault(entry.getKey(), "")));
                 } else {
                     rows.add(Lists.newArrayList(entry.getKey()));
                 }
