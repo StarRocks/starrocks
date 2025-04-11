@@ -4068,6 +4068,163 @@ StatusOr<ColumnPtr> StringFunctions::regexp_split(FunctionContext* context, cons
     return regexp_split_general(context, options, columns);
 }
 
+Status StringFunctions::regexp_count_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (context->get_num_args() != 2) {
+        return Status::InvalidArgument("regexp_count requires 2 arguments");
+    }
+
+    StringFunctionsState* state = new StringFunctionsState();
+    context->set_function_state(scope, state);
+
+    if (context->is_constant_column(1)) {
+        const auto pattern_col = context->get_constant_column(1);
+        if (!pattern_col->only_null()) {
+            Slice pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(pattern_col);
+            state->pattern = std::string(pattern.data, pattern.size);
+            state->const_pattern = true;
+
+            state->options = std::make_unique<re2::RE2::Options>();
+            state->options->set_log_errors(false);
+            state->regex = std::make_unique<re2::RE2>(state->pattern, *state->options);
+            if (!state->regex->ok()) {
+                std::stringstream error;
+                error << "Invalid regex expression: " << state->pattern;
+                context->set_error(error.str().c_str());
+                return Status::InvalidArgument(error.str());
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+static ColumnPtr regexp_count_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto size = columns[0]->size();
+
+    // return NULL if patern empty
+    if (const_re->pattern().empty()) {
+        return ColumnHelper::create_const_null_column(size);
+    }
+
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto value = str_viewer.value(row);
+        re2::StringPiece input(value.data, value.size);
+
+        int count = 0;
+        re2::StringPiece match;
+        size_t start_pos = 0;
+
+        // count
+        while (start_pos <= input.size() &&
+               const_re->Match(input, start_pos, input.size(), re2::RE2::UNANCHORED, &match, 1)) {
+            count++;
+            if (match.size() == 0) {
+                start_pos++;
+            } else {
+                start_pos = match.data() - input.data() + match.size();
+            }
+        }
+
+        result.append(count);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static ColumnPtr regexp_count_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+
+    ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
+    ColumnViewer<TYPE_VARCHAR> pattern_viewer(columns[1]);
+
+    bool all_patterns_empty = true;
+    for (int row = 0; row < size; ++row) {
+        if (pattern_viewer.is_null(row)) continue;
+        if (pattern_viewer.value(row).size > 0) {
+            all_patterns_empty = false;
+            break;
+        }
+    }
+
+    if (all_patterns_empty) {
+        return ColumnHelper::create_const_null_column(size);
+    }
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || pattern_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto value = str_viewer.value(row);
+        auto pattern = pattern_viewer.value(row);
+
+        // return null if pattern empty
+        if (pattern.size == 0) {
+            result.append_null();
+            continue;
+        }
+
+        std::string pattern_str(pattern.data, pattern.size);
+        re2::RE2 re(pattern_str, *options);
+
+        // return null invalid pattern
+        if (!re.ok()) {
+            result.append_null();
+            continue;
+        }
+
+        re2::StringPiece input(value.data, value.size);
+
+        int count = 0;
+        re2::StringPiece match;
+        size_t start_pos = 0;
+
+        // count
+        while (start_pos <= input.size() && re.Match(input, start_pos, input.size(), re2::RE2::UNANCHORED, &match, 1)) {
+            count++;
+            if (match.size() == 0) {
+                start_pos++;
+            } else {
+                start_pos = match.data() - input.data() + match.size();
+            }
+        }
+
+        result.append(count);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_count(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto* state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    if (state != nullptr && state->const_pattern && state->regex != nullptr) {
+        // Const col
+        return regexp_count_const_pattern(state->get_or_prepare_regex(), columns);
+    } else {
+        // Multi
+        re2::RE2::Options options;
+        options.set_log_errors(false);
+        return regexp_count_general(context, &options, columns);
+    }
+}
+
 struct ReplaceState {
     bool only_null{false};
 
