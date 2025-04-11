@@ -63,6 +63,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
 
         Gson gson = new Gson();
         String jsonString = gson.toJson(queryDetails);
+<<<<<<< HEAD
         String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + ","
                 + "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\","
                 + "\"isQuery\":false,"
@@ -79,6 +80,32 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 + "\"memCostBytes\":100003,"
                 + "\"spillBytes\":-1"
                 + "}]";
+=======
+        String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + "," +
+                "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\"," +
+                "\"isQuery\":false," +
+                "\"remoteIP\":\"127.0.0.1\"," +
+                "\"connId\":1," +
+                "\"startTime\":" + startQueryDetail.getStartTime() + "," +
+                "\"endTime\":-1," +
+                "\"latency\":-1," +
+                "\"pendingTime\":-1," +
+                "\"netTime\":-1," +
+                "\"netComputeTime\":-1," +
+                "\"state\":\"RUNNING\"," +
+                "\"database\":\"testDb\"," +
+                "\"sql\":\"select * from table1 limit 1\"," +
+                "\"user\":\"root\"," +
+                "\"scanRows\":100," +
+                "\"scanBytes\":10001," +
+                "\"returnRows\":1," +
+                "\"cpuCostNs\":1002," +
+                "\"memCostBytes\":100003," +
+                "\"spillBytes\":-1," +
+                "\"warehouse\":\"default_warehouse\"," +
+                "\"catalog\":\"default_catalog\"," +
+                "\"queryFeMemory\":0}]";
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());
@@ -119,6 +146,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail finishedDetail = queryDetails.get(1);
         Assert.assertEquals(QueryDetail.QueryMemState.FINISHED, finishedDetail.getState());
         Assert.assertEquals(sql, finishedDetail.getSql());
+        Assert.assertTrue(finishedDetail.getQueryFeMemory() > 0);
 
         Config.enable_collect_query_detail_info = old;
     }

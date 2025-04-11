@@ -85,6 +85,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
+import java.net.URLEncoder;
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -167,6 +173,24 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
+    public static long getThreadAllocatedBytes(long threadId) {
+        try {
+            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+            if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+                com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
+                if (casted.isThreadAllocatedMemorySupported() && casted.isThreadAllocatedMemoryEnabled()) {
+                    long allocatedBytes = casted.getThreadAllocatedBytes(threadId);
+                    if (allocatedBytes != -1) {
+                        return allocatedBytes;
+                    }
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
@@ -235,6 +259,19 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
 
+<<<<<<< HEAD
+=======
+        // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
+        if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
+            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+            }
+            long threadAllocatedMemory =
+                    getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
+            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
+        }
+
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
         if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
@@ -270,6 +307,9 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        long beginMemory = getThreadAllocatedBytes(Thread.currentThread().getId());
+        ctx.setCurrentThreadAllocatedMemory(beginMemory);
+
         // convert statement to Java string
         String originStmt = null;
         byte[] bytes = packetBuf.array();
