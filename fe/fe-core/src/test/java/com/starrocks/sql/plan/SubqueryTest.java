@@ -676,7 +676,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other join predicates: 1: v1 = 11: ifnull + 6: v6");
+                    "  |  other join predicates: 1: v1 = 11: count + 6: v6");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -704,7 +704,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other join predicates: 11: ifnull + 3: v3 = 5: v5");
+                    "  |  other join predicates: 11: count + 3: v3 = 5: v5");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -1960,5 +1960,30 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 10: v4");
+    }
+
+    @Test
+    public void testScalarCountSubquery() throws Exception {
+        String sql = "SELECT t0.*, (" +
+                "      SELECT count(t1.v5) FROM t1" +
+                "      WHERE t0.v1 = t1.v4" +
+                ") as t1_v5 FROM t0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " <slot 8> : ifnull(7: count, 0)");
+
+        sql = "SELECT t0.*, (" +
+                "      SELECT count(t1.v5) + 2 FROM t1" +
+                "      WHERE t0.v1 = t1.v4" +
+                ") as t1_v5 FROM t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " <slot 9> : ifnull(7: count, 0) + 2");
+
+        sql = "SELECT t0.* "
+                + " FROM t0"
+                + " WHERE t0.v2 = ("
+                + "      SELECT if(count(t1.v5) > 0, 'a', 'b') FROM t1"
+                + "      WHERE t0.v1 = t1.v4)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(2: v2 AS VARCHAR(1048576)) = if(ifnull(7: count, 0) > 0, 'a', 'b')");
     }
 }
