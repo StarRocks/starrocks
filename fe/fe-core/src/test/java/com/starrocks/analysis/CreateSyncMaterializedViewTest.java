@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
 
 // If you add a test in this file,
 // please add it in another file LakeSyncMaterializedViewTest too.
@@ -536,11 +537,6 @@ public class CreateSyncMaterializedViewTest {
         starRocksAssert.dropTable("t1");
     }
 
-    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        new StmtExecutor(connectContext, statement).execute();
-    }
 
     @Test
     public void testCreateMVWithAggregateTable2() throws Exception {
