@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
@@ -57,6 +58,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
     public ScalarApply2JoinRule() {
         super(RuleType.TF_SCALAR_APPLY_TO_JOIN,
                 Pattern.create(OperatorType.LOGICAL_APPLY, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF));
+    }
+
+    @Override
+    public List<Rule> predecessorRules() {
+        return List.of(new ScalarApplyNormalizeCountRule());
     }
 
     @Override
