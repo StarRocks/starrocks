@@ -72,7 +72,9 @@ under the License.
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.7.1</iceberg.version>
         <staros.version>3.4-rc6</staros.version>
-        <jetty.version>10.0.24</jetty.version>
+        <!-- hadoop-azure requires no more than jetty10+ -->
+        <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
+        <jetty.version>9.4.57.v20241219</jetty.version>
     </properties>
 
     <profiles>
