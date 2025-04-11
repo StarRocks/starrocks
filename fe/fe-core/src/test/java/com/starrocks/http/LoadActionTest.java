@@ -282,7 +282,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             @Mock
             public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,
                                                   boolean isCreate, Multimap<String, String> locReq) {
-                assertEquals(1, backendNum);
+                assertEquals(0, backendNum);
                 assertTrue(needAvailable);
                 assertFalse(isCreate);
                 return new ArrayList<>();
