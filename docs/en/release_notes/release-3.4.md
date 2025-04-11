@@ -4,6 +4,33 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.2
+
+Release Date: April 10, 2025
+
+### Improvements
+
+- FE supports graceful shutdown to improve system availability. When exiting FE via `./stop_fe.sh -g`, FE will first return a 500 status code to the front-end Load Balancer via the `/api/health` API to indicate that it is preparing to shut down, allowing the Load Balancer to switch to other available FE nodes. Meanwhile, FE will continue to run ongoing queries until they finish or timeout (default timeout: 60 seconds). [#56823](https://github.com/StarRocks/starrocks/pull/56823)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Partition pruning might not work if the partition column is a generated column. [#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- Incorrect parameter handling in the `concat` function could cause a BE crash during query execution. [#57522](https://github.com/StarRocks/starrocks/pull/57522)
+- The `ssl_enable` property did not take effect when using Broker Load to load data. [#57229](https://github.com/StarRocks/starrocks/pull/57229)
+- When NULL values exist, querying subfields of STRUCT-type columns could cause a BE crash. [#56496](https://github.com/StarRocks/starrocks/pull/56496)
+- When modifying the bucket distribution of a table with the statement `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...`, specifying duplicate partition names could result in failure to delete internally generated temporary partitions. [#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- In a shared-data cluster, running `SHOW PROC '/current_queries'` resulted in the error "Error 1064 (HY000): Sending collect query statistics request fails". [#56597](https://github.com/StarRocks/starrocks/pull/56597)
+- Running `INSERT OVERWRITE` loading tasks in parallel caused the error "ConcurrentModificationException: null", resulting in loading failure. [#56557](https://github.com/StarRocks/starrocks/pull/56557)
+- After upgrading from v2.5.21 to v3.1.17, running multiple Broker Load tasks concurrently could cause exceptions. [#56512](https://github.com/StarRocks/starrocks/pull/56512)
+
+### Behavior Changes
+
+- The default value of the BE configuration item `avro_ignore_union_type_tag` has been changed to `true`, enabling the direct parsing of `["NULL", "STRING"]` as STRING type data, which better aligns with typical user requirements. [#57553](https://github.com/StarRocks/starrocks/pull/57553)
+- The default value of the session variable `big_query_profile_threshold` has been changed from 0 to 30 (seconds). [#57177](https://github.com/StarRocks/starrocks/pull/57177)
+- A new FE configuration item `enable_mv_refresh_collect_profile` has been added to control whether to collect Profile information during materialized view refresh. The default value is `false` (previously, the system collected Profile by default). [#56971](https://github.com/StarRocks/starrocks/pull/56971)
+
 ## 3.4.1
 
 Release Date: March 12, 2025
