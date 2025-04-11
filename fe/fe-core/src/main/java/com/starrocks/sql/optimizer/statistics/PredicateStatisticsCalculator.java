@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.HistogramStatisticsUtils.estimateInPredicateWithHistogram;
+
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
         if (predicate == null) {
@@ -127,6 +129,24 @@ public class PredicateStatisticsCalculator {
                             .collect(Collectors.toList());
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
+
+            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().collect(
+                    Collectors.toList());
+            boolean allConstants = otherChildrenList.stream().allMatch(op -> op instanceof ConstantOperator);
+
+            if (!predicate.isSubquery() && firstChild.isColumnRef() && !inColumnStatistic.isUnknown() &&
+                    inColumnStatistic.getHistogram() != null && allConstants) {
+                return estimateInPredicateWithHistogram(
+                        (ColumnRefOperator) firstChild,
+                        inColumnStatistic,
+                        otherChildrenList.stream()
+                                .map(op -> (ConstantOperator) op)
+                                .collect(Collectors.toList()),
+                        predicate.isNotIn(),
+                        statistics
+                );
+            }
+
             List<ColumnStatistic> otherChildrenColumnStatisticList =
                     otherChildrenList.stream().distinct().map(this::getExpressionStatistic).collect(Collectors.toList());
 
