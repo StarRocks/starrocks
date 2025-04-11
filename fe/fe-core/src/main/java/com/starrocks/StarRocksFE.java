@@ -526,7 +526,27 @@ public class StarRocksFE {
     // Currently, only one log is printed to distinguish whether it is a normal exit or killed by the operating system.
     private static void addShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            LOG.info("FE shutdown");
+            LOG.info("start to execute shutdown hook");
+            try {
+                Thread t = new Thread(() -> {
+                    try {
+                        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+                        connectScheduler.printAllRunningQuery();
+                    } catch (Throwable e) {
+                        LOG.warn("printing running query failed when fe shut down", e);
+                    }
+                });
+
+                t.start();
+
+                // it is necessary to set shutdown timeout,
+                // because in addition to kill by user, System.exit(-1) will trigger the shutdown hook too,
+                // if no timeout and shutdown hook blocked indefinitely, Fe will fall into a catastrophic state.
+                t.join(30000);
+            } catch (Throwable e) {
+                LOG.warn("shut down hook failed", e);
+            }
+            LOG.info("shutdown hook end");
         }));
     }
 }
