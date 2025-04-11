@@ -2814,7 +2814,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropStatsStatement(StarRocksParser.DropStatsStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
-        return new DropStatsStmt(tableName, context.MULTI_COLUMNS() != null, createPos(context));
+        return new DropStatsStmt(tableName, context.MULTIPLE() != null, createPos(context));
     }
 
     @Override
