@@ -176,3 +176,13 @@ Copyright 2021-present StarRocks, Inc. All rights reserved.
       of your accepting any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
+
+----------------------------------------------------------------------------------
+
+be/tools/FlameGraph/*.pl: COMMON DEVELOPMENT AND DISTRIBUTION LICENSE Version 1.0
+
+Unless otherwise noted, all files in this distribution are released
+under the Common Development and Distribution License (CDDL).
+Exceptions are noted within the associated source files.
+
+----------------------------------------------------------------------------------

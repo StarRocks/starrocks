@@ -597,6 +597,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
                ${STARROCKS_OUTPUT}/be/conf \
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
                ${STARROCKS_OUTPUT}/be/www  \
+               ${STARROCKS_OUTPUT}/be/tools/FlameGraph  \
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
@@ -628,6 +629,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         popd &>/dev/null
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
+    cp -r -p ${STARROCKS_HOME}/tools/FlameGraph/* ${STARROCKS_OUTPUT}/be/tools/FlameGraph/
 
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
         # note that conf files will not be overwritten when doing upgrade.
