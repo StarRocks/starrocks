@@ -103,6 +103,10 @@ public class PaimonTable extends Table {
     public Map<String, String> getProperties() {
         if (properties == null) {
             this.properties = new HashMap<>();
+            if (!paimonNativeTable.primaryKeys().isEmpty()) {
+                properties.put("primary-key", String.join(",", paimonNativeTable.primaryKeys()));
+            }
+            this.properties.putAll(paimonNativeTable.options());
         }
         return properties;
     }
