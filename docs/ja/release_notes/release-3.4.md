@@ -8,6 +8,10 @@ displayed_sidebar: docs
 
 リリース日： 2025 年 4 月 10 日
 
+### 改善点
+
+- FEはシステムの可用性向上のため、優雅なシャットダウンをサポートします。`./stop_fe.sh -g`でFEをシャットダウンする際、FEはまず`/api/health`APIを通じてフロントエンドのロードバランサーに500エラーを返し、シャットダウン準備中であることを通知します。これにより、ロードバランサーは他の利用可能なFEノードに切り替えることができます。その間、実行中のクエリは終了するか、タイムアウト（デフォルト60秒）するまで実行され続けます。[#56823](https://github.com/StarRocks/starrocks/pull/56823)
+
 ### バグ修正
 
 以下の問題を修正しました：
@@ -20,6 +24,12 @@ displayed_sidebar: docs
 - 共有データクラスタで `SHOW PROC '/current_queries'` を実行すると、"Error 1064 (HY000): Sending collect query statistics request fails" エラーが発生する問題を修正。[#56597](https://github.com/StarRocks/starrocks/pull/56597)
 - `INSERT OVERWRITE` インポートタスクを並列実行した場合に、"ConcurrentModificationException: null" エラーが発生し、インポートが失敗する問題を修正。[#56557](https://github.com/StarRocks/starrocks/pull/56557)
 - v2.5.21 から v3.1.17 にアップグレードした後、複数の Broker Load タスクを並列実行すると異常が発生する可能性がある問題を修正。[#56512](https://github.com/StarRocks/starrocks/pull/56512)
+
+### 動作の変更
+
+- BEの設定項目 `avro_ignore_union_type_tag` のデフォルト値が `true` に変更され、`["NULL", "STRING"]` を STRING 型データとして直接解析できるようになり、一般的なユーザーの利用要件により適合するようになりました。[#57553](https://github.com/StarRocks/starrocks/pull/57553)
+- セッション変数 `big_query_profile_threshold` のデフォルト値が 0 から 30（秒）に変更されました。[#57177](https://github.com/StarRocks/starrocks/pull/57177)
+- 新しい FE 設定項目 `enable_mv_refresh_collect_profile` が追加され、マテリアライズドビューのリフレッシュ中に Profile 情報を収集するかどうかを制御できるようになりました。デフォルト値は `false`（以前はシステムで Profile がデフォルトで収集されていました）。[#56971](https://github.com/StarRocks/starrocks/pull/56971)
 
 ## 3.4.1
 
