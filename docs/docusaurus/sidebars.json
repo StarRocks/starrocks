@@ -11,7 +11,8 @@
             "items": [
                 "introduction/what_is_starrocks",
                 "introduction/Architecture",
-                "introduction/Features"
+                "introduction/Features",
+                "introduction/versioning"
             ]
         },
         {
