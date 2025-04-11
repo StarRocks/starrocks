@@ -256,6 +256,7 @@ public class AnalyzeSetVariableTest {
             {
                 mgr.createBuiltinResourceGroupsIfNotExist();
                 result = null;
+                minTimes = 0;
             }
         };
 
