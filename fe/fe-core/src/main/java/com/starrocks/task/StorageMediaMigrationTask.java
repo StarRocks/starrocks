@@ -26,16 +26,21 @@ public class StorageMediaMigrationTask extends AgentTask {
     private int schemaHash;
     private TStorageMedium toStorageMedium;
 
+    // Rebuild persistent index at the end of clone task
+    private boolean needRebuildPkIndex = false;
+
     public StorageMediaMigrationTask(long backendId, long tabletId, int schemaHash,
-                                     TStorageMedium toStorageMedium) {
+                                     TStorageMedium toStorageMedium, boolean needRebuildPkIndex) {
         super(null, backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, -1L, -1L, -1L, -1L, tabletId);
 
         this.schemaHash = schemaHash;
         this.toStorageMedium = toStorageMedium;
+        this.needRebuildPkIndex = needRebuildPkIndex;
     }
 
     public TStorageMediumMigrateReq toThrift() {
         TStorageMediumMigrateReq request = new TStorageMediumMigrateReq(tabletId, schemaHash, toStorageMedium);
+        request.setNeed_rebuild_pk_index(needRebuildPkIndex);
         return request;
     }
 
