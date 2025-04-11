@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
-## 3.4.2 zh
+## 3.4.2
 
 发布日期：2025 年 4 月 10 日
 
