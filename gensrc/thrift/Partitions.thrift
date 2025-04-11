@@ -57,7 +57,9 @@ enum TPartitionType {
   BUCKET_SHUFFLE_HASH_PARTITIONED,
 
   // Part of the data is hashed, and the other part is broadcast or randomly sent
-  HYBRID_HASH_PARTITIONED
+  HYBRID_HASH_PARTITIONED,
+
+  LIST
 }
 
 enum TDistributionType {
