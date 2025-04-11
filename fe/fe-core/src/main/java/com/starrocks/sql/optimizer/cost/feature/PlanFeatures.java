@@ -213,7 +213,13 @@ public class PlanFeatures {
         }
         if (CollectionUtils.isNotEmpty(tables)) {
             result.addAll(tables.stream()
-                    .sorted(Comparator.comparing(x -> ((OlapTable) x).getRowCount()).reversed())
+                    .sorted(Comparator.comparing(x -> {
+                        if (x instanceof OlapTable) {
+                            return ((OlapTable) x).getRowCount();
+                        } else {
+                            return ((Table) x).getId();
+                        }
+                    }).reversed())
                     .limit(TOP_N_TABLES)
                     .map(Table::getId)
                     .toList());
