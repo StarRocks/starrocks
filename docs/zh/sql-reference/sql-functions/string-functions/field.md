@@ -24,7 +24,7 @@ INT field(VARCHAR val, VARCHAR val1, val2, ...);
 
 ## 示例
 
-```Plain Text
+```sql
 MYSQL > select field('a', 'b', 'a', 'd');
 +---------------------------+
 | field('a', 'b', 'a', 'd') |
