@@ -35,6 +35,8 @@ public:
     static void clean_residual_datacache(const std::string& disk_path);
 
     static Status change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path);
+
+    static dev_t disk_device_id(const std::string& disk_path);
 };
 
 } // namespace starrocks
