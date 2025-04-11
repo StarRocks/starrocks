@@ -266,6 +266,15 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
     return put_tablet_metadata(metadata, tablet_metadata_location(metadata->id(), metadata->version()));
 }
 
+Status TabletManager::cache_tablet_metadata(const TabletMetadataPtr& metadata) {
+    auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
+    if (auto ptr = _metacache->lookup_tablet_metadata(metadata_location); ptr != nullptr) {
+        return Status::OK();
+    }
+    _metacache->cache_tablet_metadata(metadata_location, metadata);
+    return Status::OK();
+}
+
 Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
     auto metadata_ptr = std::make_shared<TabletMetadata>(metadata);
     return put_tablet_metadata(std::move(metadata_ptr));
