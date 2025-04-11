@@ -28,7 +28,7 @@ import java.util.Random;
 public class LakeAggregator {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
 
-    private LakeAggregator() {}
+    public LakeAggregator() {}
 
     // TODO(zhangqiang)
     // Optimize the aggregator selection strategy

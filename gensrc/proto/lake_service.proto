@@ -38,6 +38,7 @@ message PublishVersionRequest {
     optional int64 timeout_ms = 6;
     repeated TxnInfoPB txn_infos = 7;
     repeated int64 rebuild_pindex_tablet_ids = 8;
+    optional bool enable_aggregate_publish = 9;
 }
 
 message PublishVersionResponse {
@@ -47,6 +48,18 @@ message PublishVersionResponse {
     optional StatusPB status = 3;
     // Mapping from tablet id to row_nums when the partition is first imported
     map<int64, int64> tablet_row_nums = 4;
+    map<int64, TabletMetadataPB> tablet_metas = 5;
+}
+
+message ComputeNodePB {
+    optional string host = 1;
+    optional int32 brpc_port = 2;
+    optional int64 id = 3;
+}
+
+message AggregatePublishVersionRequest {
+    repeated ComputeNodePB compute_nodes = 1;
+    repeated PublishVersionRequest publish_reqs = 2;
 }
 
 message AbortTxnRequest {
@@ -304,6 +317,7 @@ message VacuumFullResponse {
 
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
+    rpc aggregate_publish_version(AggregatePublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
     rpc publish_log_version_batch(PublishLogVersionBatchRequest) returns (PublishLogVersionResponse);
     rpc delete_txn_log(DeleteTxnLogRequest) returns (DeleteTxnLogResponse);

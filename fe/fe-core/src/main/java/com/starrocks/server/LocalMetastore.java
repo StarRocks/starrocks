@@ -1806,7 +1806,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         TabletTaskExecutor.CreateTabletOption option = new TabletTaskExecutor.CreateTabletOption();
         option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
-                && Config.lake_enable_tablet_creation_optimization);
+                && (Config.lake_enable_tablet_creation_optimization || table.enablePartitionAggregation()));
         option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
 
         try {

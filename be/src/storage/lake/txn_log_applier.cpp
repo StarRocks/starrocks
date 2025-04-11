@@ -665,9 +665,10 @@ private:
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version, bool rebuild_pindex,
                                                    bool skip_write_tablet_metadata) {
+    // TODO(zhangqiang)
+    // pk does not support aggregate publish yet, `_skip_write_tablet_metadata` is not work right now
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
-        return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex,
-                                                         skip_write_tablet_metadata);
+        return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex);
     }
     return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version,
                                                         skip_write_tablet_metadata);
