@@ -366,7 +366,7 @@ public class RboOptimizer {
 
         applyRules(RuleSet.INLINE_CTE_RULES);
         applyRules(RuleSet.PUSH_DOWN_SUBQUERY_RULES);
-        applyRules(RuleSet.SUBQUERY_REWRITE_COMMON_RULES);
+        applyRules(RuleSet.SUBQUERY_EXTRACT_CORRELATION_PREDICATE_RULES);
         applyRules(RuleSet.SUBQUERY_REWRITE_TO_WINDOW_RULES);
         applyRules(RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
         applyRules(PUSH_DOWN_PREDICATE_RULES);
