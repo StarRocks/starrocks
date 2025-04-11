@@ -51,7 +51,8 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _json_meta(opts.meta),
           _wfile(wfile),
-          _json_writer(std::move(json_writer)) {}
+          _json_writer(std::move(json_writer)),
+          _flat_json_config(opts.flat_json_config) {}
 
 Status FlatJsonColumnWriter::init() {
     _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
@@ -82,6 +83,8 @@ Status FlatJsonColumnWriter::append(const Column& column) {
 Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
+    deriver.init_flat_json_config(_flat_json_config);
+
     std::vector<const Column*> vc;
     for (const auto& js : json_datas) {
         vc.emplace_back(js.get());

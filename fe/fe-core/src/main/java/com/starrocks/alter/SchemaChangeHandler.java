@@ -53,6 +53,7 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -2262,6 +2263,72 @@ public class SchemaChangeHandler extends AlterHandler {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
+    }
+
+    public boolean updateFlatJsonConfigMeta(Database db, Long tableId, Map<String, String> properties,
+                                            TTabletMetaType metaType) {
+        FlatJsonConfig newFlatJsonConfig;
+        boolean hasChanged = false;
+        boolean isModifiedSuccess = true;
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (olapTable == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            if (!olapTable.containsFlatJsonConfig()) {
+                newFlatJsonConfig = new FlatJsonConfig();
+                hasChanged = true;
+            } else {
+                newFlatJsonConfig = new FlatJsonConfig(olapTable.getFlatJsonConfig());
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
+            boolean flatJsonEnabled = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+            if (flatJsonEnabled != newFlatJsonConfig.getFlatJsonEnable()) {
+                newFlatJsonConfig.setFlatJsonEnable(flatJsonEnabled);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+            double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
+            if (flatJsonNullFactor != newFlatJsonConfig.getFlatJsonNullFactor()) {
+                newFlatJsonConfig.setFlatJsonNullFactor(flatJsonNullFactor);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+            double flatJsonSparsity = PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
+            if (flatJsonSparsity != newFlatJsonConfig.getFlatJsonSparsityFactor()) {
+                newFlatJsonConfig.setFlatJsonSparsityFactor(flatJsonSparsity);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
+            if (flatJsonColumnMax != newFlatJsonConfig.getFlatJsonColumnMax()) {
+                newFlatJsonConfig.setFlatJsonColumnMax(flatJsonColumnMax);
+                hasChanged = true;
+            }
+        }
+        if (!hasChanged) {
+            LOG.info("table {} flat json config is same as the previous config, so nothing need to do", olapTable.getName());
+            return true;
+        }
+
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
+        } catch (Exception e) {
+            isModifiedSuccess = false;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        }
+
+        return isModifiedSuccess;
     }
 
     // return true means that the modification of FEMeta is successful,

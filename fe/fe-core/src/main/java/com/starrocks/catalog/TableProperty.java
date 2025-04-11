@@ -87,6 +87,7 @@ import java.util.stream.Collectors;
 public class TableProperty implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TableProperty.class);
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
+    public static final String FLAT_JSON_PROPERTY_PREFIX = "flat_json";
     public static final int INVALID = -1;
 
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
@@ -185,8 +186,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
+    private FlatJsonConfig flatJsonConfig;
+
     private transient DynamicPartitionProperty dynamicPartitionProperty =
             new DynamicPartitionProperty(Maps.newHashMap());
+
     // table's default replication num
     private Short replicationNum = RunMode.defaultReplicationNum();
 
@@ -438,9 +442,28 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildFlatJsonConfig() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+            double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
+            double flatJsonSparsityFactory = PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
+            int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
+            flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
+                    flatJsonSparsityFactory, flatJsonColumnMax);
+        }
+        return this;
+    }
+
     // just modify binlogConfig, not properties
     public void setBinlogConfig(BinlogConfig binlogConfig) {
         this.binlogConfig = binlogConfig;
+    }
+
+    public void setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
+        this.flatJsonConfig = flatJsonConfig;
     }
 
     public TableProperty buildDynamicProperty() {
@@ -1045,6 +1068,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogConfig;
     }
 
+    public FlatJsonConfig getFlatJsonConfig() {
+        return flatJsonConfig;
+    }
+
     public List<UniqueConstraint> getUniqueConstraints() {
         return uniqueConstraints;
     }
@@ -1122,6 +1149,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildBucketSize();
         buildEnableLoadProfile();
         buildBinlogConfig();
+        buildFlatJsonConfig();
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();
         buildUseFastSchemaEvolution();

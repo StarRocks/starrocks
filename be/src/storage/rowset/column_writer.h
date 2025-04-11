@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <storage/flat_json_config.h>
+
 #include <memory> // for unique_ptr
 
 #include "column/vectorized_fwd.h"
@@ -74,6 +76,7 @@ struct ColumnWriterOptions {
     bool need_bloom_filter = false;
     bool need_vector_index = false;
     bool need_inverted_index = false;
+
     std::unordered_map<IndexType, std::string> standalone_index_file_paths;
     std::unordered_map<IndexType, TabletIndex> tablet_index;
 
@@ -85,10 +88,11 @@ struct ColumnWriterOptions {
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
     GlobalDictMap* global_dict = nullptr;
 
-    bool need_flat = false;
     bool is_compaction = false;
+    bool need_flat = false;
 
     std::string field_name;
+    const FlatJsonConfig* flat_json_config = nullptr;
 };
 
 class BitmapIndexWriter;

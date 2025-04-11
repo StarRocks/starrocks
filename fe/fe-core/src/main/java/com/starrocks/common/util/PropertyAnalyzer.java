@@ -141,7 +141,6 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_COLOCATE_WITH = "colocate_with";
 
     public static final String PROPERTIES_TIMEOUT = "timeout";
-
     public static final String PROPERTIES_DISTRIBUTION_TYPE = "distribution_type";
     public static final String PROPERTIES_SEND_CLEAR_ALTER_TASK = "send_clear_alter_tasks";
 
@@ -164,6 +163,13 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_BINLOG_TTL = "binlog_ttl_second";
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
+    public static final String PROPERTIES_FLAT_JSON_ENABLE = "flat_json.enable";
+
+    public static final String PROPERTIES_FLAT_JSON_NULL_FACTOR = "flat_json.null.factor";
+
+    public static final String PROPERTIES_FLAT_JSON_SPARSITY_FACTOR = "flat_json.sparsity.factor";
+
+    public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
 
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
@@ -495,6 +501,65 @@ public class PropertyAnalyzer {
         } else {
             throw new SemanticException("Mutable bucket num is not set");
         }
+    }
+
+    public static double analyzeFlatJsonNullFactor(Map<String, String> properties) {
+        double flatJsonNullFactor = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+            try {
+                flatJsonNullFactor = Double.parseDouble(properties.get(PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Flat json null factor: " + e.getMessage());
+            }
+            if (flatJsonNullFactor < 0 || flatJsonNullFactor > 1) {
+                throw new SemanticException("Illegal flat json null factor: " + flatJsonNullFactor);
+            }
+            return flatJsonNullFactor;
+        } else {
+            throw new SemanticException("Flat json null factor is not set");
+        }
+    }
+
+    public static double analyzeFlatJsonSparsityFactor(Map<String, String> properties) {
+        double flatJsonSparsityFactor = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+            try {
+                flatJsonSparsityFactor = Double.parseDouble(properties.get(PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Flat json sparsity factor: " + e.getMessage());
+            }
+            if (flatJsonSparsityFactor < 0 || flatJsonSparsityFactor > 1) {
+                throw new SemanticException("Illegal flat json sparsity factor: " + flatJsonSparsityFactor);
+            }
+            return flatJsonSparsityFactor;
+        } else {
+            throw new SemanticException("Flat json sparsity factor is not set");
+        }
+    }
+
+    public static int analyzeFlatJsonColumnMax(Map<String, String> properties) {
+        int columnMax = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            try {
+                columnMax = Integer.parseInt(properties.get(PROPERTIES_FLAT_JSON_COLUMN_MAX));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Flat json column max: " + e.getMessage());
+            }
+            if (columnMax < 0) {
+                throw new SemanticException("Illegal flat json column max: " + columnMax);
+            }
+            return columnMax;
+        } else {
+            throw new SemanticException("Flat json column max is not set");
+        }
+    }
+
+    public static boolean analyzeFlatJsonEnabled(Map<String, String> properties) {
+        boolean flatJsonEnabled = false;
+        if (properties != null && properties.containsKey(PROPERTIES_FLAT_JSON_ENABLE)) {
+            flatJsonEnabled = Boolean.parseBoolean(properties.get(PROPERTIES_FLAT_JSON_ENABLE));
+        }
+        return flatJsonEnabled;
     }
 
     public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {
@@ -1128,17 +1193,48 @@ public class PropertyAnalyzer {
         return type;
     }
 
+    public static int analyzeIntProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = defaultVal;
+        if (properties != null && properties.containsKey(propKey)) {
+            String valStr = properties.get(propKey);
+            try {
+                val = Integer.parseInt(valStr);
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
+            }
+            properties.remove(propKey);
+        }
+        return val;
+    }
+
     public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)
             throws AnalysisException {
         long val = defaultVal;
         if (properties != null && properties.containsKey(propKey)) {
             String valStr = properties.get(propKey);
+            properties.remove(propKey);
             try {
                 val = Long.parseLong(valStr);
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
             }
             properties.remove(propKey);
+        }
+        return val;
+    }
+
+    public static double analyzerDoubleProp(Map<String, String> properties, String propKey, double defaultVal)
+        throws AnalysisException {
+        double val = defaultVal;
+        if (properties != null && properties.containsKey(propKey)) {
+            String valStr = properties.get(propKey);
+            properties.remove(propKey);
+            try {
+                val = Double.parseDouble(valStr);
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
+            }
         }
         return val;
     }
