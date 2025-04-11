@@ -218,6 +218,10 @@ public class NodeMgr {
         return result;
     }
 
+    public long getAliveFrontendsCnt() {
+        return frontends.values().stream().filter(Frontend::isAlive).count();
+    }
+
     public Frontend getFrontend(Integer frontendId) {
         if (frontendId == 0) {
             return getMySelf();

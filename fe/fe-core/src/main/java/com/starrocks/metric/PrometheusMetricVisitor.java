@@ -257,6 +257,8 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
         sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
                 .append(nodeMgr.getFrontends(null).size()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"alive\"} ")
+                .append(nodeMgr.getAliveFrontendsCnt()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"total\"} ")
                 .append(systemInfoService.getTotalBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"alive\"} ")
