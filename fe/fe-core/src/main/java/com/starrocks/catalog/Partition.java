@@ -118,6 +118,7 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         this.defaultPhysicalPartitionId = physicalPartitionId;
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId,
                 generatePhysicalPartitionName(physicalPartitionId), id, baseIndex);
+        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
         this.idToSubPartition.put(physicalPartitionId, physicalPartition);
         this.nameToSubPartition.put(physicalPartition.getName(), physicalPartition);
     }

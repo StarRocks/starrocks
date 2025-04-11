@@ -114,6 +114,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private volatile long lastSuccVacuumVersion = 0;
 
+    @SerializedName(value = "bucketNum")
+    private int bucketNum = 0;
+
     private PhysicalPartition() {
 
     }
@@ -432,6 +435,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return Objects.hashCode(visibleVersion, baseIndex);
     }
 
+    public int getBucketNum() {
+        return bucketNum;
+    }
+
+    public void setBucketNum(int bucketNum) {
+        this.bucketNum = bucketNum;
+    }
+
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -492,6 +503,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         buffer.append("storageDataSize: ").append(storageDataSize()).append("; ");
         buffer.append("storageRowCount: ").append(storageRowCount()).append("; ");
         buffer.append("storageReplicaCount: ").append(storageReplicaCount()).append("; ");
+        buffer.append("bucketNum: ").append(bucketNum).append("; ");
 
         return buffer.toString();
     }
