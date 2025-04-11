@@ -17,8 +17,8 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
+import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
-import com.starrocks.qe.scheduler.slot.SlotTracker;
 import com.starrocks.thrift.TGetWarehouseMetricsResponeItem;
 
 public class WarehouseMetrics {
@@ -54,7 +54,7 @@ public class WarehouseMetrics {
         return new WarehouseMetrics(0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 
-    public static WarehouseMetrics create(SlotTracker tracker) {
+    public static WarehouseMetrics create(BaseSlotTracker tracker) {
         int maxRequestSlots = tracker.getMaxRequiredSlots().map(s -> QueryQueueOptions.correctSlotNum(s)).orElse(0);
         int sumRequestSlots = tracker.getSumRequiredSlots().map(s -> QueryQueueOptions.correctSlotNum(s)).orElse(0);
         // to avoid negative remain slots

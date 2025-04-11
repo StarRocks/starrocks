@@ -14,7 +14,6 @@
 
 package com.starrocks.qe.scheduler.slot;
 
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -34,7 +33,7 @@ public class SlotManager extends BaseSlotManager {
 
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor);
-        this.slotTracker = new SlotTracker(resourceUsageMonitor, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        this.slotTracker = new SlotTracker(resourceUsageMonitor);
     }
 
     public List<LogicalSlot> getSlots() {
