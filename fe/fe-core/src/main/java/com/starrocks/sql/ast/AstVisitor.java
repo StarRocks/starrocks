@@ -168,6 +168,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     // ---------------------------------------- Table Statement --------------------------------------------------------
 
     default R visitCreateTableStatement(CreateTableStmt statement, C context) {
