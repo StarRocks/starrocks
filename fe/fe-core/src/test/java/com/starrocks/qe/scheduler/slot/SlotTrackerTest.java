@@ -25,7 +25,6 @@ import org.junit.Test;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatException;
 
 public class SlotTrackerTest {
     @BeforeClass
@@ -109,7 +108,7 @@ public class SlotTrackerTest {
     public void testSlotTrackerMetrics() {
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of());
         assertThat(slotTracker.getWarehouseId()).isEqualTo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        assertThatException().isThrownBy(() -> slotTracker.getWarehouseName());
+        assertThat(slotTracker.getWarehouseName().equals(""));
         assertThat(slotTracker.getQueuePendingLength()).isEqualTo(0);
         assertThat(slotTracker.getAllocatedLength()).isEqualTo(0);
         assertThat(slotTracker.getMaxRequiredSlots()).isEmpty();

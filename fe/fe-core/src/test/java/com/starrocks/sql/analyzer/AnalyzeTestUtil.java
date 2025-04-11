@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -32,10 +33,14 @@ public class AnalyzeTestUtil {
     protected static StarRocksAssert starRocksAssert;
     protected static String DB_NAME = "test";
 
-    public static void initWithoutTableAndDb() throws Exception {
+    public static void initWithoutTableAndDb(RunMode runMode) throws Exception {
         Config.enable_experimental_rowstore = true;
         // create connect context
-        UtFrameUtils.createMinStarRocksCluster();
+        if (runMode == RunMode.SHARED_DATA) {
+            UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        } else {
+            UtFrameUtils.createMinStarRocksCluster();
+        }
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
@@ -43,7 +48,7 @@ public class AnalyzeTestUtil {
 
     public static void init() throws Exception {
 
-        initWithoutTableAndDb();
+        initWithoutTableAndDb(RunMode.SHARED_NOTHING);
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +

@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -26,6 +27,7 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.lang3.EnumUtils;
 
 import java.util.Arrays;
 import java.util.List;
@@ -35,11 +37,46 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.Utils.computeMinGEPower2;
 
 public class SlotEstimatorFactory {
+    public enum EstimatorPolicy {
+        MBE, // memory-based slots estimator
+        PBE, // parallel-based slots estimator
+        MAX, // max of memory and parallel based slots estimator
+        MIN; // min of memory and parallel based slots estimator
+
+        public static EstimatorPolicy createDefault() {
+            return MAX;
+        }
+
+        public static EstimatorPolicy create(String value) {
+            return EnumUtils.getEnumIgnoreCase(EstimatorPolicy.class, value);
+        }
+
+        public SlotEstimator createEstimator() {
+            switch (this) {
+                case MBE:
+                    return new MemoryBasedSlotsEstimator();
+                case PBE:
+                    return new ParallelismBasedSlotsEstimator();
+                case MAX:
+                    return new MaxSlotsEstimator(new MemoryBasedSlotsEstimator(), new ParallelismBasedSlotsEstimator());
+                case MIN:
+                    return new MinSlotsEstimator(new MemoryBasedSlotsEstimator(), new ParallelismBasedSlotsEstimator());
+                default:
+                    throw new IllegalArgumentException("Unknown EstimatorPolicy: " + this);
+            }
+        }
+    }
+
     public static SlotEstimator create(QueryQueueOptions opts) {
         if (!opts.isEnableQueryQueueV2()) {
             return new DefaultSlotEstimator();
         }
-        return new MaxSlotsEstimator(new MemoryBasedSlotsEstimator(), new ParallelismBasedSlotsEstimator());
+
+        EstimatorPolicy policy = EstimatorPolicy.create(Config.query_queue_slots_estimator_strategy);
+        if (policy == null) {
+            policy = EstimatorPolicy.createDefault();
+        }
+        return policy.createEstimator();
     }
 
     public static class DefaultSlotEstimator implements SlotEstimator {
@@ -197,6 +234,22 @@ public class SlotEstimatorFactory {
             return Arrays.stream(estimators)
                     .mapToInt(estimator -> estimator.estimateSlots(opts, context, coord))
                     .max()
+                    .orElse(1);
+        }
+    }
+
+    public static class MinSlotsEstimator implements SlotEstimator {
+        private final SlotEstimator[] estimators;
+
+        public MinSlotsEstimator(SlotEstimator... estimators) {
+            this.estimators = estimators;
+        }
+
+        @Override
+        public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
+            return Arrays.stream(estimators)
+                    .mapToInt(estimator -> estimator.estimateSlots(opts, context, coord))
+                    .min()
                     .orElse(1);
         }
     }

@@ -30,7 +30,7 @@ public class WarehouseStmtTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        AnalyzeTestUtil.initWithoutTableAndDb();
+        AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_DATA);
     }
 
     @Before
