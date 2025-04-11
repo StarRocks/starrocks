@@ -242,6 +242,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitDescOutputStmt(DescribeOutputStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowTabletStatement(ShowTabletStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
