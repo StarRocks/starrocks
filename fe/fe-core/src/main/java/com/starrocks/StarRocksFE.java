@@ -394,6 +394,7 @@ public class StarRocksFE {
             try {
                 Thread t = new Thread(() -> {
                     try {
+<<<<<<< HEAD
                         Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                         if (journal instanceof BDBJEJournal) {
                             BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
@@ -403,6 +404,12 @@ public class StarRocksFE {
                         }
                     } catch (Throwable e) {
                         LOG.warn("flush vlsn mapping failed", e);
+=======
+                        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+                        connectScheduler.printAllRunningQuery();
+                    } catch (Throwable e) {
+                        LOG.warn("printing running query failed when fe shut down", e);
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
                     }
                 });
 

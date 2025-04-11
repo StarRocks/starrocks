@@ -59,6 +59,7 @@ public class QueryDetailQueueTest {
 
         Gson gson = new Gson();
         String jsonString = gson.toJson(queryDetails);
+<<<<<<< HEAD
         String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + ","
                 + "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\","
                 + "\"isQuery\":false,"
@@ -75,6 +76,32 @@ public class QueryDetailQueueTest {
                 + "\"memCostBytes\":100003,"
                 + "\"spillBytes\":-1"
                 + "}]";
+=======
+        String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + "," +
+                "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\"," +
+                "\"isQuery\":false," +
+                "\"remoteIP\":\"127.0.0.1\"," +
+                "\"connId\":1," +
+                "\"startTime\":" + startQueryDetail.getStartTime() + "," +
+                "\"endTime\":-1," +
+                "\"latency\":-1," +
+                "\"pendingTime\":-1," +
+                "\"netTime\":-1," +
+                "\"netComputeTime\":-1," +
+                "\"state\":\"RUNNING\"," +
+                "\"database\":\"testDb\"," +
+                "\"sql\":\"select * from table1 limit 1\"," +
+                "\"user\":\"root\"," +
+                "\"scanRows\":100," +
+                "\"scanBytes\":10001," +
+                "\"returnRows\":1," +
+                "\"cpuCostNs\":1002," +
+                "\"memCostBytes\":100003," +
+                "\"spillBytes\":-1," +
+                "\"warehouse\":\"default_warehouse\"," +
+                "\"catalog\":\"default_catalog\"," +
+                "\"queryFeMemory\":0}]";
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());
@@ -88,4 +115,39 @@ public class QueryDetailQueueTest {
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
         Assert.assertEquals(2, queryDetails.size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testExecutor() throws Exception {
+        boolean old = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        starRocksAssert.withDatabase("db1")
+                .useDatabase("db1")
+                .withTable("create table test_running_detail (c1 int, c2 int) " +
+                        "properties('replication_num'='1') ");
+
+        String sql = "select * from test_running_detail";
+        QueryStatement parsedStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor executor = new StmtExecutor(connectContext, parsedStmt);
+        long startTime = System.currentTimeMillis();
+        executor.addRunningQueryDetail(parsedStmt);
+        executor.execute();
+        executor.addFinishedQueryDetail();
+
+        List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startTime);
+
+        QueryDetail runningDetail = queryDetails.get(0);
+        Assert.assertEquals(QueryDetail.QueryMemState.RUNNING, runningDetail.getState());
+        Assert.assertEquals(sql, runningDetail.getSql());
+
+        QueryDetail finishedDetail = queryDetails.get(1);
+        Assert.assertEquals(QueryDetail.QueryMemState.FINISHED, finishedDetail.getState());
+        Assert.assertEquals(sql, finishedDetail.getSql());
+        Assert.assertTrue(finishedDetail.getQueryFeMemory() > 0);
+
+        Config.enable_collect_query_detail_info = old;
+    }
+
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
 }

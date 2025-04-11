@@ -429,6 +429,11 @@ public class StmtExecutor {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         context.setIsForward(false);
+<<<<<<< HEAD
+=======
+        context.setIsLeaderTransferred(false);
+        context.setCurrentThreadId(Thread.currentThread().getId());
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
 
         // set execution id.
         // Try to use query id as execution id when execute first time.
@@ -2143,4 +2148,176 @@ public class StmtExecutor {
     public List<ByteBuffer> getProxyResultBuffer() {
         return proxyResultBuffer;
     }
+<<<<<<< HEAD
+=======
+
+    // scenes can execute in FE should meet all these requirements:
+    // 1. enable_constant_execute_in_fe = true
+    // 2. is mysql text protocol
+    // 3. all values are constantOperator
+    private boolean canExecuteInFe(ConnectContext context, OptExpression optExpression) {
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
+            return false;
+        }
+
+        if (context instanceof HttpConnectContext || context.getCommand() == MysqlCommand.COM_STMT_EXECUTE) {
+            return false;
+        }
+
+        if (optExpression.getOp() instanceof PhysicalValuesOperator) {
+            PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpression.getOp();
+            boolean isAllConstants = true;
+            if (valuesOperator.getProjection() != null) {
+                isAllConstants = valuesOperator.getProjection().getColumnRefMap().values().stream()
+                        .allMatch(ScalarOperator::isConstantRef);
+            } else if (CollectionUtils.isNotEmpty(valuesOperator.getRows())) {
+                isAllConstants = valuesOperator.getRows().stream().allMatch(row ->
+                        row.stream().allMatch(ScalarOperator::isConstantRef));
+            }
+
+            return isAllConstants;
+        }
+        return false;
+    }
+
+    public void executeStmtWithResultQueue(ConnectContext context, ExecPlan plan, Queue<TResultBatch> sqlResult) {
+        try {
+            UUID uuid = context.getQueryId();
+            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+            coord = getCoordinatorFactory().createQueryScheduler(
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+
+            coord.exec();
+            RowBatch batch;
+            do {
+                batch = coord.getNext();
+                if (batch.getBatch() != null) {
+                    sqlResult.add(batch.getBatch());
+                }
+            } while (!batch.isEos());
+            context.getState().setEof();
+            processQueryStatisticsFromResult(batch, plan, false);
+        } catch (Exception e) {
+            LOG.error("Failed to execute metadata collection job", e);
+            if (coord.getExecStatus().ok()) {
+                context.getState().setError(e.getMessage());
+            }
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+        } finally {
+            try {
+                if (context.isProfileEnabled()) {
+                    tryProcessProfileAsync(plan, 0);
+                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                } else {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
+                recordExecStatsIntoContext();
+            } catch (Exception e) {
+                LOG.warn("Failed to unregister query", e);
+            }
+        }
+    }
+
+    /**
+     * Record this sql into the query details, which would be collected by external query history system
+     */
+    public void addRunningQueryDetail(StatementBase parsedStmt) {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        String sql;
+        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+
+        boolean isQuery = context.isQueryStmt(parsedStmt);
+        QueryDetail queryDetail = new QueryDetail(
+                DebugUtil.printId(context.getQueryId()),
+                isQuery,
+                context.connectionId,
+                context.getMysqlChannel() != null ? context.getMysqlChannel().getRemoteIp() : "System",
+                context.getStartTime(), -1, -1,
+                QueryDetail.QueryMemState.RUNNING,
+                context.getDatabase(),
+                sql,
+                context.getQualifiedUser(),
+                Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
+                context.getCurrentWarehouseName(),
+                context.getCurrentCatalog());
+        context.setQueryDetail(queryDetail);
+        // copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
+    }
+
+    /*
+     * Record this finished sql into the query details, which would be collected by external query history system
+     */
+    public void addFinishedQueryDetail() {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        ConnectContext ctx = context;
+        QueryDetail queryDetail = ctx.getQueryDetail();
+        if (queryDetail == null || !queryDetail.getQueryId().equals(DebugUtil.printId(ctx.getQueryId()))) {
+            return;
+        }
+
+        long endTime = System.currentTimeMillis();
+        long elapseMs = endTime - ctx.getStartTime();
+        long queryFeMemory =
+                ConnectProcessor.getThreadAllocatedBytes(Thread.currentThread().getId()) -
+                        ctx.getCurrentThreadAllocatedMemory();
+
+        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            queryDetail.setState(QueryDetail.QueryMemState.FAILED);
+            queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+        } else {
+            queryDetail.setState(QueryDetail.QueryMemState.FINISHED);
+        }
+        queryDetail.setEndTime(endTime);
+        queryDetail.setLatency(elapseMs);
+        queryDetail.setQueryFeMemory(queryFeMemory);
+        long pendingTime = ctx.getAuditEventBuilder().build().pendingTimeMs;
+        pendingTime = pendingTime < 0 ? 0 : pendingTime;
+        queryDetail.setPendingTime(pendingTime);
+        queryDetail.setNetTime(elapseMs - pendingTime);
+        long parseTime = Tracers.getSpecifiedTimer("Parser").map(Timer::getTotalTime).orElse(0L);
+        long planTime = Tracers.getSpecifiedTimer("Total").map(Timer::getTotalTime).orElse(0L);
+        long prepareTime = Tracers.getSpecifiedTimer("Prepare").map(Timer::getTotalTime).orElse(0L);
+        long deployTime = Tracers.getSpecifiedTimer("Deploy").map(Timer::getTotalTime).orElse(0L);
+        queryDetail.setNetComputeTime(elapseMs - parseTime - planTime - prepareTime - pendingTime - deployTime);
+        queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+        // add execution statistics into queryDetail
+        queryDetail.setReturnRows(ctx.getReturnRows());
+        queryDetail.setDigest(ctx.getAuditEventBuilder().build().digest);
+        PQueryStatistics statistics = getQueryStatisticsForAuditLog();
+        if (statistics != null) {
+            queryDetail.setScanBytes(statistics.scanBytes);
+            queryDetail.setScanRows(statistics.scanRows);
+            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+        }
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
+
+        QueryDetailQueue.addQueryDetail(queryDetail);
+    }
+
+    protected boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
+        boolean isPreQuerySQL = false;
+        try {
+            isPreQuerySQL = SqlUtils.isPreQuerySQL(parsedStmt);
+        } catch (Exception e) {
+            LOG.warn("check isPreQuerySQL failed", e);
+        }
+        return !isInternalStmt
+                && !isPreQuerySQL
+                && !(parsedStmt instanceof ShowStmt)
+                && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
 }

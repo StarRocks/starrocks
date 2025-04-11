@@ -79,6 +79,8 @@ public class QueryDetail implements Serializable {
     private long spillBytes = -1;
     private String digest;
 
+    private long queryFeMemory = 0;
+
     public QueryDetail() {
     }
 
@@ -131,6 +133,12 @@ public class QueryDetail implements Serializable {
         queryDetail.memCostBytes = this.memCostBytes;
         queryDetail.spillBytes = this.spillBytes;
         queryDetail.digest = this.digest;
+<<<<<<< HEAD
+=======
+        queryDetail.resourceGroupName = this.resourceGroupName;
+        queryDetail.catalog = this.catalog;
+        queryDetail.queryFeMemory = this.queryFeMemory;
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
         return queryDetail;
     }
 
@@ -305,4 +313,23 @@ public class QueryDetail implements Serializable {
     public void setDigest(String digest) {
         this.digest = digest;
     }
+<<<<<<< HEAD
+=======
+
+    public String getCatalog() {
+        return catalog;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
+    }
+
+    public void setQueryFeMemory(long queryFeMemory) {
+        this.queryFeMemory = queryFeMemory;
+    }
+
+    public long getQueryFeMemory() {
+        return queryFeMemory;
+    }
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
 }
