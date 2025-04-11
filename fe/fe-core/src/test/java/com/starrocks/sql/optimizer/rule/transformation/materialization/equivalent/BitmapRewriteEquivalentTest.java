@@ -18,8 +18,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import mockit.Injectable;
+import mockit.Mocked;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -27,6 +30,7 @@ import java.util.Collections;
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.FunctionSet.BITMAP_AGG;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION;
+import static com.starrocks.catalog.FunctionSet.BITMAP_UNION_COUNT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -59,6 +63,12 @@ public class BitmapRewriteEquivalentTest {
 
     private ScalarOperator createBitmapUnionFunc(ScalarOperator arg0) {
         return new CallOperator(BITMAP_UNION, Type.BITMAP,
+                Collections.singletonList(arg0), Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
+                IS_IDENTICAL));
+    }
+
+    private ScalarOperator createBitmapUnionCountFunc(ScalarOperator arg0) {
+        return new CallOperator(BITMAP_UNION_COUNT, Type.BITMAP,
                 Collections.singletonList(arg0), Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
                 IS_IDENTICAL));
     }
@@ -113,16 +123,6 @@ public class BitmapRewriteEquivalentTest {
 
         {
             ScalarOperator constant = createConstantOperator("hello", Type.STRING);
-            ScalarOperator bitmapHash64 = createBitmapHash64Func(constant);
-            ScalarOperator bitmapUnion = createBitmapUnionFunc(bitmapHash64);
-            IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapUnion);
-            assertNotNull(context);
-            assertEquals(context.getEquivalent(), constant);
-            assertEquals(context.getInput(), bitmapUnion);
-        }
-
-        {
-            ScalarOperator constant = createConstantOperator("hello", Type.STRING);
             ScalarOperator bitmapFromString = createBitmapFromString(constant);
             ScalarOperator bitmapUnion = createBitmapUnionFunc(bitmapFromString);
             // bitmap_union(bitmap_from_string()) cannot be rewrite.
@@ -146,6 +146,32 @@ public class BitmapRewriteEquivalentTest {
             assertNotNull(context);
             assertEquals(context.getEquivalent(), bitmapUnion);
             assertEquals(context.getInput(), bitmapAgg);
+        }
+    }
+
+    @Test
+    public void testRewriteForBitmapHash64Function(@Mocked EquivalentShuttleContext shuttleContext,
+                                                   @Injectable ColumnRefOperator columnRefOperator) {
+        BitmapRewriteEquivalent bitmapRewriteEquivalent = new BitmapRewriteEquivalent();
+
+        ScalarOperator constant = createConstantOperator("hello", Type.STRING);
+        ScalarOperator bitmapHash64 = createBitmapHash64Func(constant);
+        ScalarOperator bitmapUnion = createBitmapUnionFunc(bitmapHash64);
+        IRewriteEquivalent.RewriteEquivalentContext context = bitmapRewriteEquivalent.prepare(bitmapUnion);
+        assertNotNull(context);
+        assertEquals(context.getEquivalent(), constant);
+        assertEquals(context.getInput(), bitmapUnion);
+
+        {
+            ScalarOperator newInput = createBitmapUnionCountFunc(bitmapHash64);
+            ScalarOperator rewrite = bitmapRewriteEquivalent.rewrite(context, shuttleContext, columnRefOperator, newInput);
+            assertNotNull(rewrite);
+        }
+
+        {
+            ScalarOperator newInput = createBitmapUnionCountFunc(bitmapUnion);
+            ScalarOperator rewrite = bitmapRewriteEquivalent.rewrite(context, shuttleContext, columnRefOperator, newInput);
+            assertNull(rewrite);
         }
     }
 }
