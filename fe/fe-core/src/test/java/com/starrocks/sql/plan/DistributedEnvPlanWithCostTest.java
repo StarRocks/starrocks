@@ -1658,4 +1658,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
+
+    @Test
+    public void testLocalGroupConcatDistinct() throws Exception {
+        String sql = "select * from ("
+                + "select v1, count(distinct v2) c1, group_concat(distinct v2 SEPARATOR ',') "
+                + "from colocate_t0 group by v1 ) t left join colocate_t1 on v1 = v4 ";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        connectContext.getSessionVariable().disableJoinReorder();
+        connectContext.getSessionVariable().setBroadcastRowCountLimit(0);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n"
+                + "  |  output: count(2: v2), group_concat(CAST(2: v2 AS VARCHAR), ',')\n"
+                + "  |  group by: 1: v1");
+    }
 }
