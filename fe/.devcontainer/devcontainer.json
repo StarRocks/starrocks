@@ -1,0 +1,22 @@
+{
+	"name": "StarRocks FE",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/java:1": {
+			"version": "11",
+			"installMaven": "true"
+		},
+		"ghcr.io/devcontainers/features/python:1": {
+			"version": "3.12",
+			"installTools": "false"
+		}
+	},
+	"workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspace,type=bind",
+	"workspaceFolder": "/workspace/fe",
+	"runArgs": [
+		"--network=host"
+	],
+	"remoteUser": "root"
+}
