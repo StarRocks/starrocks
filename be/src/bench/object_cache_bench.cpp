@@ -233,7 +233,7 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Obje
     for (size_t i = 0; i < count; i++) {
         std::string key = "str:" + std::to_string(dis(gen));
         void* ptr = malloc(page_size);
-        *(int*) ptr = 1;
+        *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
         Status st = cache->insert(key, ptr, page_size, page_size, deleter, &handle, &options);
