@@ -717,6 +717,7 @@ public:
      */
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_64);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_timezone);
 
     /**
      * return number of seconds in this day.
@@ -826,6 +827,7 @@ private:
 
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format);
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_timezone);
 
     template <LogicalType TIMESTAMP_TYPE>
     static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
