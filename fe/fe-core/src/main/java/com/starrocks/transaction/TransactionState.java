@@ -78,6 +78,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -303,6 +304,12 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
+<<<<<<< HEAD
+=======
+    private List<String> createdPartitionNames = Lists.newArrayList();
+    private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
+
+>>>>>>> b10722ab24 ([Enhancement] Optimize concurrent create partition fail by expression partition (#57899))
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
@@ -1033,6 +1040,14 @@ public class TransactionState implements Writable {
     public void clearAutomaticPartitionSnapshot() {
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
+    }
+
+    public void setIsCreatePartitionFailed(boolean v) {
+        this.isCreatePartitionFailed.set(v);
+    }
+
+    public boolean getIsCreatePartitionFailed() {
+        return this.isCreatePartitionFailed.get();
     }
 
     @Override
