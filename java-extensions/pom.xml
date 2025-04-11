@@ -49,7 +49,9 @@
         <commons-io.version>2.14.0</commons-io.version>
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <guava.version>32.0.1-jre</guava.version>
-        <jetty.version>10.0.24</jetty.version>
+        <!-- hadoop-azure requires no more than jetty10+ -->
+        <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
+        <jetty.version>9.4.57.v20241219</jetty.version>
         <parquet.version>1.15.1</parquet.version>
         <airlift.version>0.27</airlift.version>
         <avro.version>1.11.4</avro.version>
