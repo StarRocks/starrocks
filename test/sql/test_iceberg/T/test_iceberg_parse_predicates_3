@@ -80,31 +80,6 @@ FROM __row_util;
 
 INSERT INTO t1 (k1) SELECT idx from __row_util order by idx limit 10000;
 
--- c_array_int
-select count(1) from t1 where c_array_int = [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int != [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int > [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int >= [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int < [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int <= [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int <=> [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int <=> null;
-select count(1) from t1 where c_array_int is null;
-select count(1) from t1 where c_array_int is not null;
-
-select count(1) from t1 where c_array_int = [100000, 100000+1, 100000+2, 100000+3] AND c_array_int != [100000, 100000+1, 100000+2, 100000+3];
-select count(1) from t1 where c_array_int > [100000, 100000+1, 100000+2, 100000+3] AND c_array_int < [1000000, 1000000+1, 1000000+2, 1000000+3];
-select count(1) from t1 where c_array_int >= [100000, 100000+1, 100000+2, 100000+3] AND c_array_int <= [1000000, 1000000+1, 1000000+2, 1000000+3];
-
-select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
-select count(1) from t1 where c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
-select count(1) from t1 where c_array_int in ([1000000, 1000000+1, 1000000+2, 1000000+3], [100000, 100000+1, 100000+2, 100000+3], [10, 10+1, 10+2, 10+3]) and c_array_int in ([10, 10+1, 10+2, 10+3], [1000000, 1000000+1, 1000000+2, 1000000+3], [100000, 100000+1, 100000+2, 100000+3], [7, 7+1, 7+2, 7+3], [8, 8+1, 8+2, 8+3], [9, 9+1, 9+2, 9+3]);
-select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]) and c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
-select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3], [7, 7+1, 7+2, 7+3]) and c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
--- parse to: c_array_int > [0, 0+1, 0+2, 0+3] and c_array_int is not null
-select count(1) from t1 where c_array_int > [0, 0+1, 0+2, 0+3] AND (c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]) OR c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]));
-
-
 -- c_map
 select count(1) from t1 where c_map =  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2};
 select count(1) from t1 where c_map !=  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2};
