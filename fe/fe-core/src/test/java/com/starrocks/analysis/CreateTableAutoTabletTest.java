@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
@@ -26,12 +27,11 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
 
 public class CreateTableAutoTabletTest {
     @BeforeClass
@@ -164,12 +164,13 @@ public class CreateTableAutoTabletTest {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            List<Partition> partitions = (List<Partition>) table.getRecentPartitions(3);
-            bucketNum = partitions.get(0).getDistributionInfo().getBucketNum();
+            bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(table, 2, true,
+                    table.getPartitions().iterator().next().getName());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
-        Assert.assertEquals(bucketNum, 10);
+        // 10 BE; backendNum <= 12; bucketNum = 2 * backendNum;
+        Assert.assertEquals(bucketNum, 20);
     }
 
     @Test

@@ -2269,6 +2269,14 @@ public class Config extends ConfigBase {
     public static boolean enable_automatic_bucket = true;
 
     /**
+     * max bucket number of one partition to avoid the bucket number is too much
+     * cause FE high load when the partition data size is too larger.
+     * warning : it may be cause FE high load when it set too larger;
+     */
+    @ConfField(mutable = true)
+    public static int max_bucket_num_per_partition = 1024;
+
+    /**
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
