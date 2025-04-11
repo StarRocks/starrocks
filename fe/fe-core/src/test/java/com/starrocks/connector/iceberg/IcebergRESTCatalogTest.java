@@ -36,7 +36,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.rest.RESTCatalog;
@@ -56,6 +58,8 @@ import java.util.concurrent.Executors;
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static org.apache.iceberg.aws.AwsClientProperties.CLIENT_REGION;
 
 public class IcebergRESTCatalogTest {
     private static final String CATALOG_NAME = "iceberg_rest_catalog";
@@ -83,6 +87,24 @@ public class IcebergRESTCatalogTest {
         return new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
                 new IcebergCatalogProperties(DEFAULT_CONFIG));
+    }
+
+    @Test
+    public void testCatalogProperties() {
+        new MockUp<CatalogUtil>() {
+            @Mock
+            static Catalog loadCatalog(String impl, String catalogName, Map<String, String> properties,
+                                       Object hadoopConf) {
+                Assert.assertTrue(properties.containsKey(CLIENT_REGION));
+                Assert.assertEquals("us-west-2", properties.get(CLIENT_REGION));
+                Assert.assertTrue(properties.containsKey("header.X-Iceberg-Access-Delegation"));
+                Assert.assertEquals("vended-credentials", properties.get("header.X-Iceberg-Access-Delegation"));
+                return null;
+            }
+        };
+        Map<String, String> properties = new HashMap<>();
+        properties.put(AWS_S3_REGION, "us-west-2");
+        new IcebergRESTCatalog("rest_catalog", new Configuration(), properties);
     }
 
     @Test
