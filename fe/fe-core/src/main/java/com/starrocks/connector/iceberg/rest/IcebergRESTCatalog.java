@@ -36,7 +36,6 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -59,7 +58,6 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameT
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 
 public class IcebergRESTCatalog implements IcebergCatalog {
 
@@ -90,7 +88,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                 Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
         if (enableVendedCredentials) {
             copiedProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
-            addExtraPropertiesToCatalog(properties, copiedProperties);
         } else {
             copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         }
@@ -292,12 +289,5 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public String defaultTableLocation(Namespace ns, String tableName) {
         // iceberg rest catalog doesn't require location property, and could choose the default location.
         return null;
-    }
-
-    private void addExtraPropertiesToCatalog(Map<String, String> originProperties,
-                                             Map<String, String> catalogProperties) {
-        if (originProperties.containsKey(AWS_S3_REGION)) {
-            catalogProperties.put(AwsClientProperties.CLIENT_REGION, originProperties.get(AWS_S3_REGION));
-        }
     }
 }

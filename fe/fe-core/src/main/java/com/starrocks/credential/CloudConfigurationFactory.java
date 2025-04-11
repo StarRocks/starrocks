@@ -89,6 +89,9 @@ public class CloudConfigurationFactory {
         String sessionSk = properties.getOrDefault(S3FileIOProperties.SECRET_ACCESS_KEY, null);
         String sessionToken = properties.getOrDefault(S3FileIOProperties.SESSION_TOKEN, null);
         String region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION, null);
+        if (region == null) {
+            region = properties.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, null);
+        }
         String enablePathStyle = properties.getOrDefault(S3FileIOProperties.PATH_STYLE_ACCESS, null);
         String endpoint = properties.getOrDefault(S3FileIOProperties.ENDPOINT, null);
         if (sessionAk != null && sessionSk != null && sessionToken != null) {
