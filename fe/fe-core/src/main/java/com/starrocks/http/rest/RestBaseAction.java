@@ -150,6 +150,9 @@ public class RestBaseAction extends BaseAction {
         ctx.setCurrentUserIdentity(currentUser);
         ctx.setCurrentRoleIds(currentUser);
         ctx.setThreadLocalInfo();
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            ctx.setCurrentWarehouse(request.getRequest().headers().get(WAREHOUSE_KEY));
+        }
         executeWithoutPassword(request, response);
     }
 
