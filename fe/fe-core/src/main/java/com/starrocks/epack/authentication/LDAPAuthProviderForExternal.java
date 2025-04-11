@@ -135,7 +135,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] password, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] password,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         LDAPSecurityIntegration ldapSecurityIntegration = (LDAPSecurityIntegration) GlobalStateMgr.getCurrentState()
                 .getAuthenticationMgr().getSecurityIntegration(securityIntegrationName);

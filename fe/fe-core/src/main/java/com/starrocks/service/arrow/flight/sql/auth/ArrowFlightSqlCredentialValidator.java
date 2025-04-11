@@ -40,7 +40,7 @@ public class ArrowFlightSqlCredentialValidator implements BasicCallHeaderAuthent
         UserIdentity currentUser;
         try {
             currentUser = AuthenticationHandler.authenticate(new ConnectContext(), username, "0.0.0.0",
-                    password.getBytes(StandardCharsets.UTF_8), null);
+                    password.getBytes(StandardCharsets.UTF_8));
         } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED.withDescription("Access denied for " + username).toRuntimeException();
         }

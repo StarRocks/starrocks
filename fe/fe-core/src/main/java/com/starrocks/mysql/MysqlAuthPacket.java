@@ -49,7 +49,6 @@ public class MysqlAuthPacket extends MysqlPacket {
     private String pluginName;
     private MysqlCapability capability;
     private Map<String, String> connectAttributes;
-    private byte[] randomString;
 
     public String getUser() {
         return userName;
@@ -85,14 +84,6 @@ public class MysqlAuthPacket extends MysqlPacket {
 
     public Map<String, String> getConnectAttributes() {
         return connectAttributes;
-    }
-
-    public void setRandomString(byte[] randomString) {
-        this.randomString = randomString;
-    }
-
-    public byte[] getRandomString() {
-        return randomString;
     }
 
     @Override

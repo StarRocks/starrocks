@@ -26,6 +26,11 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.nio.ByteBuffer;
 
 public class OpenIdConnectAuthenticationProvider implements AuthenticationProvider {
+    public static final String OIDC_JWKS_URL = "jwks_url";
+    public static final String OIDC_PRINCIPAL_FIELD = "principal_field";
+    public static final String OIDC_REQUIRED_ISSUER = "required_issuer";
+    public static final String OIDC_REQUIRED_AUDIENCE = "required_audience";
+
     private final String jwksUrl;
     private final String principalFiled;
     private final String[] requiredIssuer;
@@ -51,7 +56,7 @@ public class OpenIdConnectAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         try {
             ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);

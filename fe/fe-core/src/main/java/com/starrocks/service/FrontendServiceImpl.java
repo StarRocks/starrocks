@@ -445,7 +445,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-
         ConnectContext context = new ConnectContext();
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
@@ -1257,8 +1256,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
         ConnectContext context = new ConnectContext();
-        UserIdentity currentUser = AuthenticationHandler.authenticate(context, user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8), null);
+        AuthenticationHandler.authenticate(context, user, clientIp, passwd.getBytes(StandardCharsets.UTF_8));
         // check INSERT action on table
         try {
             Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);

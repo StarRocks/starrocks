@@ -263,6 +263,10 @@ public enum ErrorCode {
             "Connections using insecure transport are prohibited"),
     ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
+    ERR_OAUTH2_NOT_AUTHENTICATED(5207, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; Need to access the URL [%s] to complete the OAuth2 authentication operation"),
+
+    //EPack
     ERR_AUTHENTICATION_LOCK(5291, new byte[] {'2', '8', '0', '0', '0'},
             "Access denied for user %s. Account is locked, please contact your administrator."),
     ERR_AUTHENTICATION_PASSWORD_EXPIRED(5292, new byte[] {'2', '8', '0', '0', '0'},

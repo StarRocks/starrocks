@@ -330,7 +330,7 @@ public class SecurityIntegrationTest {
 
         new MockUp<LDAPAuthProviderForExternal>() {
             @Mock
-            public void authenticate(String user, String host, byte[] password, byte[] randomString,
+            public void authenticate(ConnectContext context, String user, String host, byte[] password,
                                      UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
             }
         };
@@ -348,8 +348,9 @@ public class SecurityIntegrationTest {
         System.out.println(Arrays.asList(Config.authentication_chain));
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
+        connectContext.setAuthDataSalt(seed);
         UserIdentity userIdentity =
-                AuthenticationHandler.authenticate(connectContext, "ldap_external_user", "192.168.0.1", scramble, seed);
+                AuthenticationHandler.authenticate(connectContext, "ldap_external_user", "192.168.0.1", scramble);
 
         System.out.println(userIdentity);
         Assert.assertEquals("'ldap_external_user'@'ldap3'", userIdentity.toString());

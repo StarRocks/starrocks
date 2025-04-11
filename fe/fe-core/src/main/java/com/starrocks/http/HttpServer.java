@@ -77,6 +77,7 @@ import com.starrocks.http.rest.LoadAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.MigrationAction;
+import com.starrocks.http.rest.OAuth2Action;
 import com.starrocks.http.rest.ProfileAction;
 import com.starrocks.http.rest.QueryDetailAction;
 import com.starrocks.http.rest.QueryDumpAction;
@@ -227,6 +228,8 @@ public class HttpServer {
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
+
+        OAuth2Action.registerAction(controller);
     }
 
     public void start() {

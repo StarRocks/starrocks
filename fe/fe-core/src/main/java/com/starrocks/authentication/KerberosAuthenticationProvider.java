@@ -61,7 +61,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] password, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] password,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         try {
             String userForAuthPlugin = authenticationInfo.getAuthString();
@@ -139,7 +139,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public byte[] authMoreDataPacket(String user, String host) throws AuthenticationException {
+    public byte[] authMoreDataPacket(ConnectContext context, String user, String host) throws AuthenticationException {
         try {
             Map.Entry<UserIdentity, UserAuthenticationInfo> authenticationInfo =
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().getBestMatchedUserIdentity(user, host);
@@ -165,7 +165,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
-        return authMoreDataPacket(user, host);
+    public byte[] authSwitchRequestPacket(ConnectContext context, String user, String host) throws AuthenticationException {
+        return authMoreDataPacket(context, user, host);
     }
 }

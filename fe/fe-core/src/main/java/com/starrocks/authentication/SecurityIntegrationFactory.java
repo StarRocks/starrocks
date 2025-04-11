@@ -28,6 +28,7 @@ public class SecurityIntegrationFactory {
                     .add(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)
                     .add(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name())
                     .add(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name())
+                    .add(AuthPlugin.Server.AUTHENTICATION_OAUTH2.name())
                     .build();
 
     public static void checkSecurityIntegrationIsSupported(String securityIntegrationType) {
@@ -47,6 +48,8 @@ public class SecurityIntegrationFactory {
             securityIntegration = new OIDCSecurityIntegration(name, propertyMap);
         } else if (type.equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
             securityIntegration = new LDAPSecurityIntegration(name, propertyMap);
+        } else if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_OAUTH2.name())) {
+            securityIntegration = new OAuth2SecurityIntegration(name, propertyMap);
         }
         Preconditions.checkArgument(securityIntegration != null);
         return securityIntegration;

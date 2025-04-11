@@ -993,6 +993,10 @@ public class GlobalStateMgr {
         return securityPolicyManager;
     }
 
+    public void setSecurityPolicyManager(SecurityPolicyMgr securityPolicyManager) {
+        this.securityPolicyManager = securityPolicyManager;
+    }
+
     public LDAPGroupCacheMgr getLdapGroupCacheMgr() {
         return ldapGroupCacheMgr;
     }

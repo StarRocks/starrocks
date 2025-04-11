@@ -320,7 +320,7 @@ public abstract class BaseAction implements IAction {
             throws AccessDeniedException {
         try {
             return AuthenticationHandler.authenticate(context, authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8), null);
+                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }

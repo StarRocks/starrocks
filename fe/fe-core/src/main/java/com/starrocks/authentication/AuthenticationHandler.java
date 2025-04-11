@@ -19,17 +19,10 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
-import com.starrocks.common.Pair;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.ThriftConnectionPool;
-import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.thrift.TAuthInfo;
-import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TUserSecurityPolicyRequest;
-import com.starrocks.thrift.TUserSecurityPolicyResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,7 +35,7 @@ public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
 
     public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
-                                            byte[] authResponse, byte[] randomString) throws AuthenticationException {
+                                            byte[] authResponse) throws AuthenticationException {
         String usePasswd = authResponse.length == 0 ? "NO" : "YES";
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
@@ -75,41 +68,13 @@ public class AuthenticationHandler {
                                     matchedUserIdentity.getValue().getAuthPlugin(),
                                     matchedUserIdentity.getValue().getAuthString());
                             Preconditions.checkState(provider != null);
-                            provider.authenticate(context, user, remoteHost, authResponse, randomString,
-                                    matchedUserIdentity.getValue());
+                            provider.authenticate(context, user, remoteHost, authResponse, matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
 
-                            if (authenticatedUser != null) {
-                                if (authenticationMgr.checkUserPasswordExpired(authenticatedUser)) {
-                                    context.setPasswordExpired(true);
-                                }
-                            }
                             groupProviderName = List.of(Config.group_provider);
                         } catch (AuthenticationException e) {
                             LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
                                     user, remoteHost, e.getMessage());
-
-                            try {
-                                if (GlobalStateMgr.getCurrentState().isLeader()) {
-                                    authenticationMgr.increasePasswordErrorTimes(matchedUserIdentity.getKey());
-                                } else {
-                                    TAuthInfo tAuthInfo = new TAuthInfo();
-                                    tAuthInfo.current_user_ident = matchedUserIdentity.getKey().toThrift();
-
-                                    TUserSecurityPolicyRequest tUserSecurityPolicyRequest = new TUserSecurityPolicyRequest();
-                                    tUserSecurityPolicyRequest.setAuthInfo(tAuthInfo);
-
-                                    Pair<String, Integer> ipAndPort =
-                                            GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
-                                    TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
-                                    TUserSecurityPolicyResponse response = ThriftRPCRequestExecutor.call(
-                                            ThriftConnectionPool.frontendPool,
-                                            thriftAddress,
-                                            client -> client.increasePasswordErrorTimes(tUserSecurityPolicyRequest));
-                                }
-                            } catch (Exception ex) {
-                                LOG.error(ex);
-                            }
                         }
                     }
                 } else {
@@ -121,9 +86,10 @@ public class AuthenticationHandler {
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        provider.authenticate(context, user, remoteHost, authResponse, randomString, userAuthenticationInfo);
-
+                        provider.authenticate(context, user, remoteHost, authResponse, userAuthenticationInfo);
+                        // the ephemeral user is identified as 'username'@'auth_mechanism'
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
+
                         groupProviderName = securityIntegration.getGroupProviderName();
                         if (groupProviderName == null) {
                             groupProviderName = List.of(Config.group_provider);
@@ -155,7 +121,6 @@ public class AuthenticationHandler {
         context.setCurrentUserIdentity(authenticatedUser);
         if (!authenticatedUser.isEphemeral()) {
             context.setCurrentRoleIds(authenticatedUser);
-            context.setAuthDataSalt(randomString);
 
             UserProperty userProperty =
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(authenticatedUser.getUser());

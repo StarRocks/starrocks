@@ -16,12 +16,20 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUserSecurityPolicyRequest;
+import com.starrocks.thrift.TUserSecurityPolicyResponse;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
@@ -68,8 +76,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                     authenticationMgr.getBestMatchedUserIdentity(userIdentity.getUser(), userIdentity.getHost());
             if (userAuthenticationInfoEntry != null) {
                 try {
-                    authenticate(null, userIdentity.getUser(), userIdentity.getHost(),
-                            password.getBytes(StandardCharsets.UTF_8), null, userAuthenticationInfoEntry.getValue());
+                    authenticate(new ConnectContext(), userIdentity.getUser(), userIdentity.getHost(),
+                            password.getBytes(StandardCharsets.UTF_8), userAuthenticationInfoEntry.getValue());
                 } catch (AuthenticationException e) {
                     return;
                 }
@@ -107,8 +115,12 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             String user,
             String host,
             byte[] remotePassword,
-            byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
+        AuthenticationMgrEPack authenticationMgr =
+                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        UserIdentity userIdentity = new UserIdentity(user, host);
+
+        byte[] randomString = context.getAuthDataSalt();
         // The password sent by mysql client has already been scrambled(encrypted) using random string,
         // so we don't need to scramble it again.
         if (randomString != null) {
@@ -117,18 +129,46 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                 throw new AuthenticationException("password length mismatch!");
             }
 
-            if (remotePassword.length > 0
-                    && !MysqlPassword.checkScramble(remotePassword, randomString, saltPassword)) {
+            if (remotePassword.length > 0 && !MysqlPassword.checkScramble(remotePassword, randomString, saltPassword)) {
+                try {
+                    if (GlobalStateMgr.getCurrentState().isLeader()) {
+                        authenticationMgr.increasePasswordErrorTimes(userIdentity);
+                    } else {
+                        TAuthInfo tAuthInfo = new TAuthInfo();
+                        tAuthInfo.current_user_ident = userIdentity.toThrift();
+
+                        TUserSecurityPolicyRequest tUserSecurityPolicyRequest = new TUserSecurityPolicyRequest();
+                        tUserSecurityPolicyRequest.setAuthInfo(tAuthInfo);
+
+                        Pair<String, Integer> ipAndPort =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
+                        TUserSecurityPolicyResponse response = ThriftRPCRequestExecutor.call(
+                                ThriftConnectionPool.frontendPool,
+                                thriftAddress,
+                                client -> client.increasePasswordErrorTimes(tUserSecurityPolicyRequest));
+                    }
+                } catch (Exception ex) {
+                    //LOG.error(ex);
+                }
+
                 throw new AuthenticationException("password mismatch!");
             }
         } else {
             // Plain remote password, scramble it first.
-            byte[] scrambledRemotePass =
-                    MysqlPassword.makeScrambledPassword(StringUtils.stripEnd(
-                            new String(remotePassword, StandardCharsets.UTF_8), "\0"));
+            byte[] scrambledRemotePass = MysqlPassword.makeScrambledPassword(
+                    StringUtils.stripEnd(new String(remotePassword, StandardCharsets.UTF_8), "\0"));
             if (!MysqlPassword.checkScrambledPlainPass(authenticationInfo.getPassword(), scrambledRemotePass)) {
                 throw new AuthenticationException("password mismatch!");
             }
+        }
+
+        if (authenticationMgr.checkUserPasswordExpired(userIdentity)) {
+            context.setPasswordExpired(true);
+        }
+
+        if (authenticationMgr.checkUserLocked(userIdentity)) {
+            throw new AuthenticationException("user locked!");
         }
     }
 
@@ -147,7 +187,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
-        return randomString;
+    public byte[] authSwitchRequestPacket(ConnectContext context, String user, String host) throws AuthenticationException {
+        return context.getAuthDataSalt();
     }
 }
