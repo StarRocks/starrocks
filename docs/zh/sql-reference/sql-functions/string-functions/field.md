@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```sql
 INT field(VARCHAR val, VARCHAR val1, val2, ...);
 ```
 
