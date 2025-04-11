@@ -1081,13 +1081,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeJoinNode(ExpressionContext context, JoinOperator joinType, ScalarOperator joinOnPredicate) {
         Preconditions.checkState(context.arity() == 2);
 
+        boolean preserveJoinHistogram = ConnectContext.get().getSessionVariable().isCboEnableHistogramJoinEstimation();
+
         List<ScalarOperator> allJoinPredicate = Utils.extractConjuncts(joinOnPredicate);
         Statistics leftStatistics = context.getChildStatistics(0);
         Statistics rightStatistics = context.getChildStatistics(1);
         // construct cross join statistics
         Statistics.Builder crossBuilder = Statistics.builder();
-        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0), false);
-        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1), false);
+        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0),
+                preserveJoinHistogram);
+        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1),
+                preserveJoinHistogram);
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
         double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);

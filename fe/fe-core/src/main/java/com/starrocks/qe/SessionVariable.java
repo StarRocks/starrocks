@@ -374,6 +374,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
     public static final String CBO_ENABLE_INTERSECT_ADD_DISTINCT = "cbo_enable_intersect_add_distinct";
+    public static final String CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION = "cbo_enable_histogram_join_estimation";
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -1580,6 +1581,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownGroupingSetReshuffle = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = CBO_PUSH_DOWN_AGG_WITH_MULTI_COLUMN_STATS)
+    private boolean cboPushDownAggWithMultiColumnStats = true;
+
+    @VarAttr(name = CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION, flag = VariableMgr.INVISIBLE)
+    private boolean cboEnableHistogramJoinEstimation = false;
+
+>>>>>>> d175bb21fa ([Enhancement] Use histograms for join selectivity estimation (#57639))
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
 
@@ -1693,6 +1703,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
     private long backPressureThrottleTimeUpperBound = 300;
 
+<<<<<<< HEAD
+=======
+    // Determines whether the upper/lower function supports utf8,
+    // introduced by https://github.com/StarRocks/starrocks/pull/56192
+    // Before this, the upper/lower function only supports ascii characters, and SR has made special optimizations in performance.
+    // After this change, the upper/lower function is able to handle utf8 characters,
+    // but the performance will be slightly reduced in the scenario of only ascii characters.
+    // This variable is added to give the user the right to choose.
+    // If the user does not use utf8 characters, turning off the switch can avoid performance degradation.
+    // In order to be compatible with the previous behavior, the default value is false.
+    @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
+    private boolean lowerUpperSupportUTF8 = false;
+
+    @VarAttr(name = ENABLE_DATACACHE_SHARING)
+    private boolean enableDataCacheSharing = true;
+
+    @VarAttr(name = DATACACHE_SHARING_WORK_PERIOD)
+    private int datacacheSharingWorkPeriod = 600;
+
+    @VarAttr(name = HISTORICAL_NODES_MIN_UPDATE_INTERVAL)
+    private int historicalNodesMinUpdateInterval = 600;
+
+>>>>>>> d175bb21fa ([Enhancement] Use histograms for join selectivity estimation (#57639))
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
     }
@@ -3736,6 +3769,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPushDownDistinctBelowWindow = flag;
     }
 
+    public boolean isCboEnableHistogramJoinEstimation() {
+        return cboEnableHistogramJoinEstimation;
+    }
+
+    public void setCboEnableHistogramJoinEstimation(boolean cboEnableHistogramJoinEstimation) {
+        this.cboEnableHistogramJoinEstimation = cboEnableHistogramJoinEstimation;
+    }
+
     public boolean isCboPushDownDistinctBelowWindow() {
         return this.cboPushDownDistinctBelowWindow;
     }
@@ -4606,6 +4647,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableRewriteUnnestBitmapToArray;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnabledRewriteOrToUnionAllJoin() {
+        return enabledRewriteOrToUnionAllJoin;
+    }
+
+    public void setEnabledRewriteOrToUnionAllJoin(boolean enabledRewriteOrToUnionAllJoin) {
+        this.enabledRewriteOrToUnionAllJoin = enabledRewriteOrToUnionAllJoin;
+    }
+
+    public int getMaxOrToUnionAllPredicates() {
+        return maxOrToUnionAllPredicates;
+    }
+
+    public void setMaxOrToUnionAllPredicates(int maxOrToUnionAllPredicates) {
+        this.maxOrToUnionAllPredicates = maxOrToUnionAllPredicates;
+    }
+
+>>>>>>> d175bb21fa ([Enhancement] Use histograms for join selectivity estimation (#57639))
     public int getTopnFilterBackPressureMode() {
         return topnFilterBackPressureMode;
     }
