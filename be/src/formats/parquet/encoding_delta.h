@@ -393,6 +393,13 @@ public:
         return Status::OK();
     }
 
+    Status next_batch(size_t count, uint8_t* dst) override {
+        count = std::min<uint32_t>(count, total_values_remaining_);
+        T* data = reinterpret_cast<T*>(dst);
+        RETURN_IF_ERROR(GetInternal(data, count));
+        return Status::OK();
+    }
+
     Status skip(size_t values_to_skip) override {
         values_to_skip = std::min<uint32_t>(values_to_skip, total_values_remaining_);
         constexpr int kMaxSkipBufferSize = 128;
