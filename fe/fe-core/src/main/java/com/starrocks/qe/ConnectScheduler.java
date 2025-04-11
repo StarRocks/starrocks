@@ -41,6 +41,7 @@ import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
+<<<<<<< HEAD
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
@@ -48,6 +49,11 @@ import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+=======
+import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +77,7 @@ public class ConnectScheduler {
     private final AtomicInteger numberConnection;
     private final AtomicInteger nextConnectionId;
 
+    // mysql connectContext/ http connectContext/ arrowFlight connextContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
     private final ReentrantLock connStatsLock = new ReentrantLock();
@@ -305,6 +312,7 @@ public class ConnectScheduler {
                     }
                 }
 
+<<<<<<< HEAD
                 context.setStartTime();
                 ConnectProcessor processor = new ConnectProcessor(context);
                 processor.loop();
@@ -319,6 +327,65 @@ public class ConnectScheduler {
                 unregisterConnection(context);
                 context.cleanup();
             }
+=======
+    public void printAllRunningQuery() {
+        connectionMap.values().stream().forEach(ctx -> {
+            if (ctx.getCommand() == MysqlCommand.COM_QUERY || ctx.getCommand() == MysqlCommand.COM_STMT_EXECUTE ||
+                    ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE) {
+                if (ctx.getExecutor() != null && ctx.getExecutor().getParsedStmt() != null &&
+                        ctx.getExecutor().getParsedStmt().getOrigStmt() != null) {
+                    long threadId = ctx.getCurrentThreadId();
+                    long theadAllocatedBytes = 0;
+                    if (threadId != 0) {
+                        theadAllocatedBytes = ConnectProcessor.getThreadAllocatedBytes(threadId) -
+                                ctx.getCurrentThreadAllocatedMemory();
+                    }
+                    LOG.warn("FE ShutDown! Running Query:{},  QueryFEAllocatedMemory: {}",
+                            ctx.getExecutor().getParsedStmt().getOrigStmt().getOrigStmt(), theadAllocatedBytes);
+                }
+            }
+        });
+    }
+
+    /**
+     * Generates a unique connection ID by combining the frontend node's GID and an atomic counter.
+     * <p>
+     * The connection ID structure:
+     * - The higher 8 bits (bits 24-31) represent the frontend node's GID (masked to 8 bits).
+     * - The lower 24 bits (bits 0-23) represent an incrementing counter that resets at 2^24.
+     *
+     * @return a unique connection ID
+     */
+    public int getNextConnectionId() {
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+        return (frontend.getFid() & 0xFF) << 24 | (connectionIdGenerator.incrementAndGet() & 0xFFFFFF);
+    }
+
+    public static class ConnectionIdGenerator {
+        // Atomic counter to ensure thread-safe increments
+        private final AtomicInteger counter;
+        // Threshold value at which the counter resets
+        private final int threshold;
+
+        /**
+         * Default constructor, setting the threshold to 2^24 (16,777,216).
+         * This ensures that the counter cycles within 24-bit range.
+         */
+        public ConnectionIdGenerator() {
+            this.counter = new AtomicInteger(0);
+            this.threshold = 1 << 24;
+        }
+
+        /**
+         * Atomically increments the counter and resets it when the threshold is reached.
+         * Ensures the counter remains within the valid 24-bit range.
+         *
+         * @return the updated counter value after incrementing
+         */
+        public int incrementAndGet() {
+            return counter.updateAndGet(currentValue -> (currentValue + 1 >= threshold) ? 0 : currentValue + 1
+            );
+>>>>>>> e107b6a51f ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
         }
     }
 }
