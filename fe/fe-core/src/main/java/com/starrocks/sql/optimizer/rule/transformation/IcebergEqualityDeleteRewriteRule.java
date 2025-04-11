@@ -136,7 +136,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         List<List<Integer>> allIds = deleteSchemas.stream()
                 .map(IcebergDeleteSchema::equalityIds)
                 .distinct()
-                .toList();
+                .collect(Collectors.toList());
 
         List<IcebergMORParams> tableFullMorParams = Stream.concat(
                         Stream.of(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, IcebergMORParams.DATA_FILE_WITH_EQ_DELETE),
@@ -161,7 +161,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             String equalityDeleteTableName = buildEqualityDeleteTableName(icebergTable, equalityIds);
             List<String> columnNames = equalityIds.stream()
                     .map(id -> table.schema().findColumnName(id))
-                    .toList();
+                    .collect(Collectors.toList());
             List<Column> deleteColumns = columnNames.stream().map(icebergTable::getColumn).collect(Collectors.toList());
             IcebergTable equalityDeleteTable = new IcebergTable(
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), equalityDeleteTableName,
