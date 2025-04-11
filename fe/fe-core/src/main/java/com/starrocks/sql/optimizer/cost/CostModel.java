@@ -30,8 +30,6 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -59,7 +57,6 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.StatisticUtils;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -215,11 +212,6 @@ public class CostModel {
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
             Optional<CostEstimate> cost;
             cost = invalidOneStageAggCost(node, context);
-            if (cost.isPresent()) {
-                return cost.get();
-            }
-
-            cost = redundantTwoStageAggCost(node, context);
             if (cost.isPresent()) {
                 return cost.get();
             }
@@ -513,24 +505,6 @@ public class CostModel {
             boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
             if (mustMultiStageAgg && !node.isSplit() && node.getType().isGlobal()) {
                 return Optional.of(CostEstimate.infinite());
-            }
-            return Optional.empty();
-        }
-
-        // If we already have a one stage agg best plan like input -> global agg, use cost to
-        // eliminate plan like input -> local agg -> global agg plan to remove this unnecessary local agg step.
-        private Optional<CostEstimate> redundantTwoStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (node.isSplit() && node.getType().isGlobal()
-                    && CollectionUtils.isNotEmpty(inputProperties)
-                    && inputProperties.get(0).getDistributionProperty().isShuffle()
-                    && context.getGroupExpression() != null) {
-                HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
-                HashDistributionDesc desc = spec.getHashDistributionDesc();
-                Group group = context.getGroupExpression().getGroup();
-                boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
-                if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
-                    return Optional.of(CostEstimate.infinite());
-                }
             }
             return Optional.empty();
         }
