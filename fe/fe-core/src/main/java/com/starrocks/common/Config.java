@@ -3654,4 +3654,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_trace_historical_node = false;
+
+    /**
+     * Whether to enable black list to filter BE/CN for stream load
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_black_list_for_stream_load = true;
 }

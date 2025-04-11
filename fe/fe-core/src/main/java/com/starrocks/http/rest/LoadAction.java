@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -47,6 +48,7 @@ import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -68,6 +70,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
@@ -170,11 +173,21 @@ public class LoadAction extends RestBaseAction {
                     nodeIds.add(nodeId);
                 }
             }
-            Collections.shuffle(nodeIds);
         } else {
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, true, false, null);
+            nodeIds = systemInfoService.getNodeSelector()
+                                       .seqChooseBackendIds(systemInfoService.getAvailableBackends().size(), true, false, null);
         }
+
+        if (Config.enable_black_list_for_stream_load) {
+            List<Long> filterNodeIds = nodeIds.stream()
+                                              .filter(id -> !SimpleScheduler.isInBlocklist(id)).collect(Collectors.toList());
+            if (filterNodeIds != null && !filterNodeIds.isEmpty()) {
+                nodeIds = filterNodeIds;
+            }
+        }
+
+        Collections.shuffle(nodeIds);
 
         if (CollectionUtils.isEmpty(nodeIds)) {
             throw new DdlException("No backend alive.");
