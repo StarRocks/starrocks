@@ -37,6 +37,7 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -364,6 +365,13 @@ public class StarRocksFE {
                         }
                     } catch (Throwable e) {
                         LOG.warn("flush vlsn mapping failed", e);
+                    }
+
+                    try {
+                        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+                        connectScheduler.printAllRunningQuery();
+                    } catch (Throwable e) {
+                        LOG.warn("printing running query failed when fe shut down", e);
                     }
                 });
 

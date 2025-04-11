@@ -49,7 +49,9 @@ public class QueryDetailQueueTest {
                 + "\"startTime\":" + startQueryDetail.getStartTime() + ",\"endTime\":-1,\"latency\":-1,"
                 + "\"state\":\"RUNNING\",\"database\":\"testDb\","
                 + "\"sql\":\"select * from table1 limit 1\","
-                + "\"user\":\"root\"}]";
+                + "\"user\":\"root\","
+                + "\"queryFeMemory\":0}]";
+
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());
