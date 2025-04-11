@@ -32,14 +32,14 @@ Release Candidates are only built for the initial minor and major versions. For 
 - `3.4.0-rc01`: The first prerelease version of `3.4.0`. For instance, version `3.3` also had a second prerelease version `3.3.0-rc02`.
 - `3.4.1`, `3.4.2`: Bug fix versions.
 
-### Software Package Naming Rules
+### Software package naming rules
 
 The naming convention for software packages is: `StarRocks-x.y.z[-rcxx]{-os}{-arch}.tar.gz`. (That is, the main form is `Product-version-os-arch`)
 1. x.y.z: follows the three-digit version numbering rule. `-rcxx` is an optional prerelease version number, such as `-rc01`, `-rc02`.
 2. OS includes: `ubuntu`, `centos`. Mandatory.
 3. ARCH includes: `amd64`. Mandatory. (There is no community edition for `arm64` yet.)
 
-### Examples of Software Package Names
+#### Example software package names
 1. `StarRocks-3.4.0-rc01-ubuntu-amd64.tar.gz`: The prerelease version of 3.4.0, built for Ubuntu Linux.
 2. `StarRocks-3.4.1-centos-amd64.tar.gz`: The PATCH revision built for Red Hat Enterprise Linux / CentOS.
 
