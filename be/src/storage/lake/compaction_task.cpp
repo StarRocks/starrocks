@@ -41,7 +41,7 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
             metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
             RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(*metadata, txn_log));
             if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
-                size_t total_input_sstable_file_size = 0; 
+                size_t total_input_sstable_file_size = 0;
                 for (const auto& input_sstable : txn_log->op_compaction().input_sstables()) {
                     total_input_sstable_file_size += input_sstable.filesize();
                 }

@@ -241,7 +241,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
                     vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
-                    extraFileSize += response.extraFileSize - response.vacuumedFileSize;
+                    extraFileSize += response.extraFileSize;
 
                     if (response.tabletInfos != null) {
                         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -281,9 +281,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
             partition.setExtraFileSize(extraFileSize + incrementExtraFileSize);
         }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} cost={}ms",
+                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, System.currentTimeMillis() - startTime);
+                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, extraFileSize, 
+                System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {
