@@ -19,6 +19,7 @@
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
+#include "olap_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
@@ -184,6 +185,25 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         // No default to ensure newly added enumerator will be handled.
     }
     return nullptr;
+}
+
+template <template <LogicalType> typename Predicate, template <LogicalType> typename BinaryPredicate>
+static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                using CppType = typename CppTypeTraits<LT>::CppType;
+                // ColumnRangeBuilder treats TINYINT and BOOLEAN as INT.
+                constexpr auto MappingLogicalType = LT == TYPE_TINYINT || LT == TYPE_BOOLEAN ? TYPE_INT : LT;
+                using MappingCppType = typename CppTypeTraits<MappingLogicalType>::CppType;
+
+                if constexpr (lt_is_string<LT>) {
+                    return new BinaryPredicate<LT>(type_info, id, operand.get_slice());
+                } else {
+                    const auto value = static_cast<CppType>(operand.get<MappingCppType>());
+                    return new Predicate<LT>(type_info, id, value);
+                }
+            });
 }
 
 // Base class for column predicate
@@ -943,6 +963,30 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
     default:
         CHECK(false) << "not a cmp predicate";
     }
+}
+
+ColumnPredicate* new_column_ne_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnNePredicate, BinaryColumnNePredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_eq_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnEqPredicate, BinaryColumnEqPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_lt_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnLtPredicate, BinaryColumnLtPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_le_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnLePredicate, BinaryColumnLePredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_gt_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnGtPredicate, BinaryColumnGtPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_ge_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnGePredicate, BinaryColumnGePredicate>(type_info, id, operand);
 }
 
 std::ostream& operator<<(std::ostream& os, PredicateType p) {
