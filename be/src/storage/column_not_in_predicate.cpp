@@ -17,6 +17,7 @@
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "olap_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -398,6 +399,26 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         // No default to ensure newly added enumerator will be handled.
     }
     return nullptr;
+}
+
+ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id,
+                                                        const std::vector<Datum>& operands) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                if constexpr (lt_is_string<LT>) {
+                    std::vector<std::string> strings;
+                    strings.reserve(operands.size());
+                    for (const auto& v : operands) {
+                        strings.emplace_back(v.get_slice().to_string());
+                    }
+                    return new BinaryColumnNotInPredicate<LT>(type_info, id, std::move(strings));
+                } else {
+                    using SetType = ItemHashSet<typename CppTypeTraits<LT>::CppType>;
+                    SetType value_set = predicate_internal::datums_to_set<LT>(operands);
+                    return new ColumnNotInPredicate<LT>(type_info, id, std::move(value_set));
+                }
+            });
 }
 
 } //namespace starrocks

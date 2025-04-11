@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "exec/filter_condition.h"
 #include "exec/olap_utils.h"
 #include "exec/scan_node.h"
 #include "gutil/stl_util.h"
@@ -204,19 +205,20 @@ Status OlapScanKeys::get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* 
 }
 
 template <class T>
-TCondition ColumnValueRange<T>::to_olap_not_null_filter() const {
-    TCondition condition;
-    condition.__set_is_index_filter_only(_is_index_filter_only);
-    condition.__set_column_name(_column_name);
-    condition.__set_condition_op("IS");
-    condition.condition_values.emplace_back("NOT NULL");
+template <typename ConditionType>
+ConditionType ColumnValueRange<T>::to_olap_not_null_filter() const {
+    ConditionType condition;
+    condition.set_is_index_filter_only(_is_index_filter_only);
+    condition.set_column_name(_column_name);
+    condition.set_condition_op("IS");
+    condition.set_is_null(false);
 
     return condition;
 }
 
 template <class T>
-template <bool Negative>
-void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
+template <typename ConditionType, bool Negative>
+void ColumnValueRange<T>::to_olap_filter(std::vector<ConditionType>& filters) {
     // If we have fixed range value, we generate in/not-in predicates.
     if (is_fixed_value_range()) {
         DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
@@ -226,12 +228,12 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         }
         const std::string op = (filter_in) ? "*=" : "!=";
 
-        TCondition condition;
-        condition.__set_is_index_filter_only(_is_index_filter_only);
-        condition.__set_column_name(_column_name);
-        condition.__set_condition_op(op);
-        for (auto value : _fixed_values) {
-            condition.condition_values.push_back(cast_to_string(value, type(), precision(), scale()));
+        ConditionType condition;
+        condition.set_is_index_filter_only(_is_index_filter_only);
+        condition.set_column_name(_column_name);
+        condition.set_condition_op(op);
+        for (const auto& value : _fixed_values) {
+            condition.add_condition_value(value, type(), precision(), scale());
         }
 
         bool can_push = true;
@@ -248,32 +250,32 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
             filters.push_back(std::move(condition));
         }
     } else {
-        TCondition low;
-        low.__set_is_index_filter_only(_is_index_filter_only);
+        ConditionType low;
+        low.set_is_index_filter_only(_is_index_filter_only);
         if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
-            low.__set_column_name(_column_name);
+            low.set_column_name(_column_name);
             if constexpr (Negative) {
-                low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? "<<" : "<="));
+                low.set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? "<<" : "<="));
             } else {
-                low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? ">=" : ">>"));
+                low.set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? ">=" : ">>"));
             }
-            low.condition_values.push_back(cast_to_string(_low_value, type(), precision(), scale()));
+            low.add_condition_value(_low_value, type(), precision(), scale());
         }
 
         if (!low.condition_values.empty()) {
             filters.push_back(std::move(low));
         }
 
-        TCondition high;
-        high.__set_is_index_filter_only(_is_index_filter_only);
+        ConditionType high;
+        high.set_is_index_filter_only(_is_index_filter_only);
         if (_type_max != _high_value || FILTER_LESS_OR_EQUAL != _high_op) {
-            high.__set_column_name(_column_name);
+            high.set_column_name(_column_name);
             if constexpr (Negative) {
-                high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? ">>" : ">="));
+                high.set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? ">>" : ">="));
             } else {
-                high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? "<=" : "<<"));
+                high.set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? "<=" : "<<"));
             }
-            high.condition_values.push_back(cast_to_string(_high_value, type(), precision(), scale()));
+            high.add_condition_value(_high_value, type(), precision(), scale());
         }
 
         if (!high.condition_values.empty()) {
@@ -283,7 +285,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
 }
 
 template <class T>
-Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& values) {
+Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const ValuesContainer& values) {
     if (TYPE_UNKNOWN == _column_type) {
         return Status::InternalError("AddFixedValue failed, Invalid type");
     }
@@ -292,8 +294,8 @@ Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& 
             // nothing to do
             _fixed_op = op;
         } else if (is_fixed_value_range() && _fixed_op == FILTER_NOT_IN) {
-            std::set<T> not_in_operands = STLSetDifference(_fixed_values, values);
-            std::set<T> in_operands = STLSetDifference(values, _fixed_values);
+            ValuesContainer not_in_operands = STLSetDifference(_fixed_values, values);
+            ValuesContainer in_operands = STLSetDifference(values, _fixed_values);
             if (!not_in_operands.empty() && !in_operands.empty()) {
                 // X in (1,2) and X not in (3) equivalent to X in (1,2)
                 _fixed_values.swap(in_operands);
@@ -337,8 +339,8 @@ Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& 
             _fixed_op = FILTER_NOT_IN;
         } else if (is_fixed_value_range()) {
             DCHECK_EQ(FILTER_IN, _fixed_op);
-            std::set<T> not_in_operands = STLSetDifference(values, _fixed_values);
-            std::set<T> in_operands = STLSetDifference(_fixed_values, values);
+            ValuesContainer not_in_operands = STLSetDifference(values, _fixed_values);
+            ValuesContainer in_operands = STLSetDifference(_fixed_values, values);
             if (!not_in_operands.empty() && !in_operands.empty()) {
                 // X in (1,2) and X not in (3) equivalent to X in (1,2)
                 // X in (1,2,3,4) and X not in (1,3,5,7) equivalent to X in (2,4)
@@ -567,7 +569,7 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t max_sca
     if (range.is_fixed_value_range()) {
         // 3.1.1 construct num of fixed value ScanKey (begin_key == end_key)
         if (_begin_scan_keys.empty()) {
-            const set<T>& fixed_value_set = range.get_fixed_value_set();
+            const auto& fixed_value_set = range.get_fixed_value_set();
             auto iter = fixed_value_set.begin();
 
             for (; iter != fixed_value_set.end(); ++iter) {
@@ -586,7 +588,7 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t max_sca
             }
         } // 3.1.2 produces the Cartesian product of ScanKey and fixed_value
         else {
-            const set<T>& fixed_value_set = range.get_fixed_value_set();
+            const auto& fixed_value_set = range.get_fixed_value_set();
             int original_key_range_size = _begin_scan_keys.size();
 
             for (int i = 0; i < original_key_range_size; ++i) {
@@ -756,12 +758,17 @@ int ColumnValueRange<T>::scale() const {
     return this->_scale;
 }
 
-#define InsitializeColumnValueRange(T)                                                  \
-    template class ColumnValueRange<T>;                                                 \
-                                                                                        \
-    template void ColumnValueRange<T>::to_olap_filter<false>(std::vector<TCondition>&); \
-    template void ColumnValueRange<T>::to_olap_filter<true>(std::vector<TCondition>&);  \
-                                                                                        \
+#define InsitializeColumnValueRange(T)                                                                          \
+    template class ColumnValueRange<T>;                                                                         \
+                                                                                                                \
+    template GeneralCondition ColumnValueRange<T>::to_olap_not_null_filter<GeneralCondition>() const;           \
+    template OlapCondition ColumnValueRange<T>::to_olap_not_null_filter<OlapCondition>() const;                 \
+                                                                                                                \
+    template void ColumnValueRange<T>::to_olap_filter<GeneralCondition, false>(std::vector<GeneralCondition>&); \
+    template void ColumnValueRange<T>::to_olap_filter<GeneralCondition, true>(std::vector<GeneralCondition>&);  \
+    template void ColumnValueRange<T>::to_olap_filter<OlapCondition, false>(std::vector<OlapCondition>&);       \
+    template void ColumnValueRange<T>::to_olap_filter<OlapCondition, true>(std::vector<OlapCondition>&);        \
+                                                                                                                \
     template Status OlapScanKeys::extend_scan_key<T>(ColumnValueRange<T> & range, int32_t max_scan_key_num);
 
 InsitializeColumnValueRange(int8_t);
@@ -770,9 +777,7 @@ InsitializeColumnValueRange(int16_t);
 InsitializeColumnValueRange(int32_t);
 InsitializeColumnValueRange(int64_t);
 InsitializeColumnValueRange(__int128);
-InsitializeColumnValueRange(StringValue);
 InsitializeColumnValueRange(Slice);
-InsitializeColumnValueRange(DateTimeValue);
 InsitializeColumnValueRange(DecimalV2Value);
 InsitializeColumnValueRange(bool);
 InsitializeColumnValueRange(DateValue);

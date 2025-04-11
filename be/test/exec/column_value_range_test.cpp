@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <exec/filter_condition.h>
+
 #include "column/type_traits.h"
 #include "exec/olap_common.h"
 #include "gtest/gtest.h"
@@ -34,8 +36,8 @@ TEST_F(ColumnValueRangeTest, add_range_le_max) {
     ColumnValueRange<int32_t> range("c_int32", TYPE_INT, _int32_min_value, _int32_max_value, 5, _int32_max_value);
 
     ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, _int32_max_value));
-    std::vector<TCondition> filters;
-    range.to_olap_filter<false>(filters);
+    std::vector<OlapCondition> filters;
+    range.to_olap_filter<OlapCondition, false>(filters);
 
     ASSERT_EQ(filters.size(), 1);
     _ss << filters[0];
@@ -47,8 +49,8 @@ TEST_F(ColumnValueRangeTest, add_range_ge_min) {
     ColumnValueRange<int32_t> range("c_int32", TYPE_INT, _int32_min_value, _int32_max_value, _int32_min_value, 100);
 
     ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, _int32_min_value));
-    std::vector<TCondition> filters;
-    range.to_olap_filter<false>(filters);
+    std::vector<OlapCondition> filters;
+    range.to_olap_filter<OlapCondition, false>(filters);
 
     ASSERT_EQ(filters.size(), 1);
     _ss << filters[0];
@@ -65,7 +67,7 @@ TEST(NormalizeRangeTest, RangeTest) {
                                         std::numeric_limits<CppType>::max());
         ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_IN, {1, 2, 3, 4}));
         ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {1, 2}));
-        std::set<CppType> values = {3, 4};
+        ColumnValueRange<CppType>::ValuesContainer values = {3, 4};
         ASSERT_EQ(range._fixed_values, values);
     }
     {

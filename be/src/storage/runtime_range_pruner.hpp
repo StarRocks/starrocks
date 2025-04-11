@@ -81,7 +81,7 @@ struct RuntimeColumnPredicateBuilder {
                 build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, nullptr);
             }
 
-            std::vector<TCondition> filters;
+            std::vector<OlapCondition> filters;
             range.to_olap_filter(filters);
 
             // if runtime filter generate an empty range we could return directly
