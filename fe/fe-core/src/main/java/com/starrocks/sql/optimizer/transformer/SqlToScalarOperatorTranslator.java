@@ -772,23 +772,6 @@ public final class SqlToScalarOperatorTranslator {
 
             ScalarOperator subqueryOutput = subqueryPlan.getOutputColumn().get(0);
 
-            /*
-             * The scalar aggregation in the subquery will be converted into a vector aggregation in scalar sub-query
-             * but the scalar aggregation will return at least one row.
-             * So we need to do special processing on count,
-             * other aggregate functions do not need special processing because they return NULL
-             */
-            if (!subqueryPlan.getCorrelation().isEmpty() && queryRelation instanceof SelectRelation &&
-                    ((SelectRelation) queryRelation).hasAggregation() &&
-                    ((SelectRelation) queryRelation).getAggregate().get(0).getFnName().getFunction()
-                            .equalsIgnoreCase(FunctionSet.COUNT)) {
-
-                subqueryOutput = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
-                        Lists.newArrayList(subqueryOutput, ConstantOperator.createBigint(0)),
-                        Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
-                                Function.CompareMode.IS_IDENTICAL));
-            }
-
             // un-correlation scalar query, set outer columns
             ColumnRefSet outerUsedColumns = new ColumnRefSet();
             if (subqueryPlan.getCorrelation().isEmpty()) {
