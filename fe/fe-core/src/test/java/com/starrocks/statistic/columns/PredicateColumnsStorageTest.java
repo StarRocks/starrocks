@@ -87,9 +87,9 @@ class PredicateColumnsStorageTest extends PlanTestBase {
 
         Mockito.verify(repo)
                 .executeDML(String.format("INSERT INTO _statistics_.predicate_columns(fe_id, db_id, table_id, " +
-                                "column_id, usage, last_used ) " +
-                                "VALUES ('%s', %d, %d, 0, 'predicate', '2024-11-20 01:02:03')", feName, db.getId(),
-                        t0.getId()));
+                                "column_id, usage, last_used, db_name, table_name, column_name ) " +
+                                "VALUES ('%s', %d, %d, 0, 'predicate', '2024-11-20 01:02:03', 'test', 't0', 'v1')",
+                        feName, db.getId(), t0.getId()));
 
         // query
         instance.queryGlobalState(TableName.fromString("default_catalog.test.t0"),

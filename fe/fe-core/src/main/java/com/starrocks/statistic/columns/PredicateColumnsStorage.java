@@ -22,6 +22,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
@@ -84,7 +85,10 @@ public class PredicateColumnsStorage {
 
             "usage STRING NOT NULL," +
             "last_used DATETIME NOT NULL," +
-            "created DATETIME DEFAULT CURRENT_TIMESTAMP" +
+            "created DATETIME DEFAULT CURRENT_TIMESTAMP," +
+            "db_name STRING," +
+            "table_name STRING," +
+            "column_name STRING" +
             ") " +
             "PRIMARY KEY(fe_id, db_id, table_id, column_id) " +
             "DISTRIBUTED BY HASH(fe_id, db_id, table_id, column_id) BUCKETS 8\n" +
@@ -100,10 +104,12 @@ public class PredicateColumnsStorage {
     }
 
     private static final int INSERT_BATCH_SIZE = 1024;
-    private static final String SQL_COLUMN_LIST = "fe_id, db_id, table_id, column_id, usage, last_used ";
+    private static final String SQL_COLUMN_LIST = "fe_id, db_id, table_id, column_id, usage, " +
+            "last_used, db_name, table_name, column_name ";
 
     private static final String ADD_RECORD = "INSERT INTO " + TABLE_FULL_NAME + "(" + SQL_COLUMN_LIST + ") VALUES ";
-    private static final String INSERT_VALUE = "('$feId', $dbId, $tableId, $columnId, '$usage', '$lastUsed')";
+    private static final String INSERT_VALUE = "('$feId', $dbId, $tableId, $columnId, '$usage', '$lastUsed', " +
+            "'$dbName', '$tableName', '$columnName')";
 
     private static final String QUERY =
             "SELECT fe_id, db_id,  table_id,  column_id, usage, last_used, created FROM " + TABLE_FULL_NAME
@@ -211,7 +217,7 @@ public class PredicateColumnsStorage {
         LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (ColumnUsage usage : diff) {
             StringWriter sw = new StringWriter();
-
+            OlapTable table = (OlapTable) meta.getTable(usage.getTableName().getDb(),  usage.getTableName().getTbl());
             VelocityContext context = new VelocityContext();
             ColumnFullId fullId = usage.getColumnFullId();
             context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName());
@@ -220,6 +226,9 @@ public class PredicateColumnsStorage {
             context.put("columnId", fullId.getColumnUniqueId());
             context.put("usage", usage.getUseCaseString());
             context.put("lastUsed", DateUtils.formatDateTimeUnix(usage.getLastUsed()));
+            context.put("dbName", usage.getTableName().getDb());
+            context.put("tableName", usage.getTableName().getTbl());
+            context.put("columnName", usage.getOlapColumnName(table));
 
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_VALUE);
             if (!first) {
