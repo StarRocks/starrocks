@@ -51,7 +51,7 @@ public class ProcProfileCollector extends FrontendDaemon {
     private long lastLogTime = -1;
 
     public ProcProfileCollector() {
-        super("ProcProfileCollector");
+        super("ProcProfileCollector", 1000L);
         profileLogDir = Config.sys_log_dir + "/proc_profile";
     }
 
