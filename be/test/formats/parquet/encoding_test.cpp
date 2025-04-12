@@ -32,6 +32,7 @@ public:
     ~ParquetEncodingTest() override = default;
 };
 
+// clang-format off
 template <typename T, bool is_dictionary>
 struct DecoderChecker {
     static void check(const std::vector<T>& values, const Slice& encoded_data, Decoder* decoder) {
@@ -294,6 +295,7 @@ struct DecoderChecker<Slice, is_dictionary> {
         }
     }
 };
+// clang-format on
 
 TEST_F(ParquetEncodingTest, FindNoneExistedEncoding) {
     const EncodingInfo* enc_info = nullptr;
