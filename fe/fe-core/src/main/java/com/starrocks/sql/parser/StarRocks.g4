@@ -1380,7 +1380,7 @@ showAnalyzeStatement
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW (MULTIPLE COLUMNS)? STATS META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showHistogramMetaStatement

@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowMultiColumnStatsMetaStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
@@ -54,6 +55,7 @@ import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticSQLBuilder;
@@ -74,6 +76,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,6 +85,8 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
+import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
+import static com.starrocks.statistic.StatsConstants.StatisticsType.MCDISTINCT;
 
 public class AnalyzeStmtTest {
     private static StarRocksAssert starRocksAssert;
@@ -768,6 +773,26 @@ public class AnalyzeStmtTest {
         Assert.assertFalse(stmt.isAsync());
         Assert.assertTrue(stmt.isSample());
         Assert.assertTrue(stmt.getAnalyzeTypeDesc() instanceof AnalyzeMultiColumnDesc);
-        Assert.assertTrue(stmt.getAnalyzeTypeDesc().getStatsTypes().contains(StatsConstants.StatisticsType.MCDISTINCT));
+        Assert.assertTrue(stmt.getAnalyzeTypeDesc().getStatsTypes().contains(MCDISTINCT));
+    }
+
+    @Test
+    public void testShowMultiColumnStatsMeta() {
+        String sql = "show multiple columns stats meta";
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db", "tbl");
+        ShowMultiColumnStatsMetaStmt stmt = (ShowMultiColumnStatsMetaStmt) analyzeSuccess(sql);
+        List<List<String>> res = ShowExecutor.execute(stmt, getConnectContext()).getResultRows();
+        Assert.assertTrue(res.isEmpty());
+        List<Integer> columnIds = table.getColumns().stream()
+                .filter(x -> !x.getName().equals("kk4"))
+                .map(Column::getUniqueId).toList();
+        MultiColumnStatsMeta meta = new MultiColumnStatsMeta(database.getId(), table.getId(), new HashSet<>(columnIds),
+                StatsConstants.AnalyzeType.FULL, List.of(MCDISTINCT), LocalDateTime.of(2020, 1, 1, 1, 1),
+                Map.of(IS_MULTI_COLUMN_STATS, "true"));
+        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
+        res = ShowExecutor.execute(stmt, getConnectContext()).getResultRows();
+        Assert.assertEquals("[[db, tbl, [kk1, kk2, kk3], FULL, MCDISTINCT, 2020-01-01 01:01:00, {is_multi_column_stats=true}]]",
+                res.toString());
     }
 }
