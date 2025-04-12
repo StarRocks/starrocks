@@ -1,4 +1,4 @@
--- name: test_iceberg_parse_predicates_3
+-- name: test_iceberg_parse_predicates_3 @slow
 create external catalog ice_cat_${uuid0}
 properties (
     "type" = "iceberg",
