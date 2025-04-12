@@ -62,7 +62,7 @@ namespace starrocks::parquet {
 /// Supports only INT32 and INT64.
 
 template <typename T>
-class DeltaBinaryPackedEncoder : public Encoder {
+class DeltaBinaryPackedEncoder final : public Encoder {
     // Maximum possible header size
     static constexpr uint32_t kMaxPageHeaderWriterSize = 32;
     static constexpr uint32_t kValuesPerBlock = std::is_same_v<int32_t, T> ? 128 : 256;
@@ -91,6 +91,8 @@ public:
         // Reserve enough space at the beginning of the buffer for largest possible header.
         sink_.advance(kMaxPageHeaderWriterSize);
     }
+
+    ~DeltaBinaryPackedEncoder() override = default;
 
     Slice build() override {
         FlushValues();
@@ -251,6 +253,69 @@ public:
         return Status::OK();
     }
 
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
+        if (count > total_values_remaining_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
+        size_t cur_size = dst->size();
+        dst->resize_uninitialized(count + cur_size);
+        T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
+        RETURN_IF_ERROR(GetInternal(data, count));
+        return Status::OK();
+    }
+
+    Status next_batch(size_t count, uint8_t* dst) override {
+        if (count > total_values_remaining_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
+        T* data = reinterpret_cast<T*>(dst);
+        RETURN_IF_ERROR(GetInternal(data, count));
+        return Status::OK();
+    }
+
+    Status skip(size_t values_to_skip) override {
+        if (values_to_skip > total_values_remaining_) {
+            return Status::InvalidArgument("not enough values to skip");
+        }
+        constexpr int kMaxSkipBufferSize = 128;
+        _skip_buffer.resize(kMaxSkipBufferSize);
+        while (values_to_skip > 0) {
+            size_t to_read = std::min<size_t>(values_to_skip, kMaxSkipBufferSize);
+            RETURN_IF_ERROR(GetInternal(_skip_buffer.data(), to_read));
+            values_to_skip -= to_read;
+        }
+        return Status::OK();
+    }
+
+private:
+    // ============
+    uint32_t values_per_block_;
+    uint32_t mini_blocks_per_block_;
+    uint32_t values_per_mini_block_;
+    uint32_t total_value_count_;
+
+    uint32_t total_values_remaining_;
+    // Remaining values in current mini block. If the current block is the last mini block,
+    // values_remaining_current_mini_block_ may greater than total_values_remaining_.
+    uint32_t values_remaining_current_mini_block_;
+
+    // If the page doesn't contain any block, `first_block_initialized_` will
+    // always be false. Otherwise, it will be true when first block initialized.
+    bool first_block_initialized_;
+    T min_delta_;
+    uint32_t mini_block_idx_;
+    std::string delta_bit_widths_;
+    int delta_bit_width_;
+
+    T last_value_;
+
+    // ============
+    Slice _data;
+    size_t _offset = 0;
+    BitReader _bit_reader;
+    std::vector<T> _skip_buffer;
+
+private:
     Status InitHeader() {
         BitReader* decoder_ = &_bit_reader;
         if (!decoder_->GetVlqInt(&values_per_block_) || !decoder_->GetVlqInt(&mini_blocks_per_block_) ||
@@ -385,68 +450,6 @@ public:
         }
         return Status::OK();
     }
-
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
-        if (count > total_values_remaining_) {
-            return Status::InvalidArgument("not enough values to read");
-        }
-        size_t cur_size = dst->size();
-        dst->resize_uninitialized(count + cur_size);
-        T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
-        RETURN_IF_ERROR(GetInternal(data, count));
-        return Status::OK();
-    }
-
-    Status next_batch(size_t count, uint8_t* dst) override {
-        if (count > total_values_remaining_) {
-            return Status::InvalidArgument("not enough values to read");
-        }
-        T* data = reinterpret_cast<T*>(dst);
-        RETURN_IF_ERROR(GetInternal(data, count));
-        return Status::OK();
-    }
-
-    Status skip(size_t values_to_skip) override {
-        if (values_to_skip > total_values_remaining_) {
-            return Status::InvalidArgument("not enough values to skip");
-        }
-        constexpr int kMaxSkipBufferSize = 128;
-        _skip_buffer.resize(kMaxSkipBufferSize);
-        while (values_to_skip > 0) {
-            size_t to_read = std::min<size_t>(values_to_skip, kMaxSkipBufferSize);
-            RETURN_IF_ERROR(GetInternal(_skip_buffer.data(), to_read));
-            values_to_skip -= to_read;
-        }
-        return Status::OK();
-    }
-
-private:
-    // ============
-    uint32_t values_per_block_;
-    uint32_t mini_blocks_per_block_;
-    uint32_t values_per_mini_block_;
-    uint32_t total_value_count_;
-
-    uint32_t total_values_remaining_;
-    // Remaining values in current mini block. If the current block is the last mini block,
-    // values_remaining_current_mini_block_ may greater than total_values_remaining_.
-    uint32_t values_remaining_current_mini_block_;
-
-    // If the page doesn't contain any block, `first_block_initialized_` will
-    // always be false. Otherwise, it will be true when first block initialized.
-    bool first_block_initialized_;
-    T min_delta_;
-    uint32_t mini_block_idx_;
-    std::string delta_bit_widths_;
-    int delta_bit_width_;
-
-    T last_value_;
-
-    // ============
-    Slice _data;
-    size_t _offset = 0;
-    BitReader _bit_reader;
-    std::vector<T> _skip_buffer;
 };
 
 } // namespace starrocks::parquet
