@@ -70,7 +70,7 @@ struct DecoderChecker {
                 ASSERT_FALSE(st.ok()) << st.to_string();
             }
         }
-        {
+        if (true) {
             // normal read
             {
                 auto column = starrocks::FixedLengthColumn<T>::create();
@@ -114,7 +114,7 @@ struct DecoderChecker {
                 }
             }
         }
-        {
+        if (true) {
             // read
             {
                 auto data_column = starrocks::FixedLengthColumn<T>::create();
@@ -201,7 +201,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 ASSERT_FALSE(st.ok());
             }
         }
-        {
+        if (true) {
             // read
             {
                 auto column = starrocks::BinaryColumn::create();
@@ -246,7 +246,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 }
             }
         }
-        {
+        if (true) {
             // read
             {
                 auto data_column = starrocks::BinaryColumn::create();

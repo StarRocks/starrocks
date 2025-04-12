@@ -418,9 +418,9 @@ private:
             if (PREDICT_FALSE(values_remaining_current_mini_block_ == 0)) {
                 ++mini_block_idx_;
                 if (mini_block_idx_ < mini_blocks_per_block_) {
-                    InitMiniBlock(delta_bit_widths_.data()[mini_block_idx_]);
+                    RETURN_IF_ERROR(InitMiniBlock(delta_bit_widths_.data()[mini_block_idx_]));
                 } else {
-                    InitBlock();
+                    RETURN_IF_ERROR(InitBlock());
                 }
             }
 
