@@ -17,11 +17,13 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <random>
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "formats/parquet/encoding_dict.h"
-#include "formats/parquet/encoding_plain.h"
+#include "column/nullable_column.h"
+#include "common/config.h"
+#include "formats/parquet/types.h"
 
 namespace starrocks::parquet {
 class ParquetEncodingTest : public testing::Test {
@@ -526,35 +528,63 @@ TEST_F(ParquetEncodingTest, Boolean) {
     }
 }
 
-TEST_F(ParquetEncodingTest, DeltaBinaryPackedInt32) {
-    std::vector<int32_t> values;
-    for (int rep = 0; rep < 10; rep++) {
-        values.push_back(std::numeric_limits<int32_t>::max());
-        values.push_back(std::numeric_limits<int32_t>::min());
-        values.push_back(0);
-        for (int i = 0; i < 100; i++) {
-            values.push_back(i);
+TEST_F(ParquetEncodingTest, DeltaBinaryPacked) {
+    auto fn = []<tparquet::Type::type PT>(int rep, int n, int seed) {
+        std::cout << "running DeltaBinaryPacked test for type: " << PT << ", rep: " << rep << ", n: " << n
+                  << ", seed: " << seed << std::endl;
+        using T = typename PhysicalTypeTraits<PT>::CppType;
+        std::vector<T> values;
+        auto gen = std::mt19937(seed);
+        std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
+
+        for (int rep = 0; rep < 10; rep++) {
+            values.push_back(std::numeric_limits<T>::max());
+            values.push_back(std::numeric_limits<T>::min());
+            for (int i = 0; i < n; i++) {
+                values.push_back(dist(gen));
+            }
+            values.push_back(std::numeric_limits<T>::max());
+            values.push_back(std::numeric_limits<T>::min());
         }
-        values.push_back(std::numeric_limits<int32_t>::max());
-        values.push_back(std::numeric_limits<int32_t>::min());
-    }
 
-    const EncodingInfo* encoding = nullptr;
-    EncodingInfo::get(tparquet::Type::INT32, tparquet::Encoding::DELTA_BINARY_PACKED, &encoding);
-    ASSERT_TRUE(encoding != nullptr);
-    {
-        std::unique_ptr<Decoder> decoder;
-        auto st = encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        const EncodingInfo* encoding = nullptr;
+        EncodingInfo::get(PT, tparquet::Encoding::DELTA_BINARY_PACKED, &encoding);
+        ASSERT_TRUE(encoding != nullptr);
 
-        std::unique_ptr<Encoder> encoder;
-        st = encoding->create_encoder(&encoder);
-        ASSERT_TRUE(st.ok());
+        {
+            std::unique_ptr<Decoder> decoder;
+            auto st = encoding->create_decoder(&decoder);
+            ASSERT_TRUE(st.ok()) << st.to_string();
 
-        st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), values.size());
-        ASSERT_TRUE(st.ok());
-        DecoderChecker<int32_t, false>::check(values, encoder->build(), decoder.get());
-    }
+            std::unique_ptr<Encoder> encoder;
+            st = encoding->create_encoder(&encoder);
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            st = encoder->append((uint8_t*)(&values[0]), values.size());
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            // simple verification.
+            Slice encoded_data = encoder->build();
+            std::vector<T> check(values.size());
+            st = decoder->set_data(encoded_data);
+            ASSERT_TRUE(st.ok()) << st.to_string();
+            st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            // enhanced verification.
+            DecoderChecker<T, false>::check(values, encoded_data, decoder.get());
+        }
+    };
+
+    fn.operator()<tparquet::Type::INT32>(10, 8, 0);
+    fn.operator()<tparquet::Type::INT32>(10, 31, 0);
+    fn.operator()<tparquet::Type::INT32>(10, 127, 0);
+    fn.operator()<tparquet::Type::INT32>(10, 255, 0);
+
+    fn.operator()<tparquet::Type::INT64>(10, 8, 0);
+    fn.operator()<tparquet::Type::INT64>(10, 31, 0);
+    fn.operator()<tparquet::Type::INT64>(10, 127, 0);
+    fn.operator()<tparquet::Type::INT64>(10, 255, 0);
 }
 
 } // namespace starrocks::parquet

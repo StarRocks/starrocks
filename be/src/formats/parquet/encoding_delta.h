@@ -201,7 +201,9 @@ private:
         DCHECK_EQ(values_current_block_, 0);
 
         bit_writer_.Flush();
-        sink_.append(bit_writer_.buffer(), bit_writer_.bytes_written());
+        DCHECK_EQ((void*)bit_writer_.buffer(), (void*)(&bits_buffer_));
+        DCHECK_EQ(bits_buffer_.size(), bit_writer_.bytes_written());
+        sink_.append(bits_buffer_.data(), bits_buffer_.size());
         bit_writer_.Clear();
     }
 
@@ -358,7 +360,7 @@ public:
             }
 
             int values_decode = std::min(values_remaining_current_mini_block_, static_cast<uint32_t>(max_values - i));
-            if (decoder_->GetBatch(delta_bit_width_, buffer + i, values_decode)) {
+            if (!decoder_->GetBatch(delta_bit_width_, buffer + i, values_decode)) {
                 return Status::Corruption("GetBatch failed");
             }
             for (int j = 0; j < values_decode; ++j) {
@@ -385,7 +387,9 @@ public:
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
-        count = std::min<uint32_t>(count, total_values_remaining_);
+        if (count > total_values_remaining_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
         size_t cur_size = dst->size();
         dst->resize_uninitialized(count + cur_size);
         T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
@@ -394,14 +398,18 @@ public:
     }
 
     Status next_batch(size_t count, uint8_t* dst) override {
-        count = std::min<uint32_t>(count, total_values_remaining_);
+        if (count > total_values_remaining_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
         T* data = reinterpret_cast<T*>(dst);
         RETURN_IF_ERROR(GetInternal(data, count));
         return Status::OK();
     }
 
     Status skip(size_t values_to_skip) override {
-        values_to_skip = std::min<uint32_t>(values_to_skip, total_values_remaining_);
+        if (values_to_skip > total_values_remaining_) {
+            return Status::InvalidArgument("not enough values to skip");
+        }
         constexpr int kMaxSkipBufferSize = 128;
         _skip_buffer.resize(kMaxSkipBufferSize);
         while (values_to_skip > 0) {
