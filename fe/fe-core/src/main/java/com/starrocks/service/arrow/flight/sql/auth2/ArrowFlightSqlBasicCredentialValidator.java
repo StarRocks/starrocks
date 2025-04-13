@@ -19,7 +19,9 @@ import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
+import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.BasicCallHeaderAuthenticator;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 
@@ -48,6 +50,16 @@ public class ArrowFlightSqlBasicCredentialValidator implements BasicCallHeaderAu
         }
 
         String bearerToken = sessionManager.initializeSession(user);
-        return () -> bearerToken;
+        return new CallHeaderAuthenticator.AuthResult() {
+            @Override
+            public String getPeerIdentity() {
+                return bearerToken;
+            }
+
+            @Override
+            public void appendToOutgoingHeaders(CallHeaders outgoingHeaders) {
+                outgoingHeaders.insert(Auth2Constants.AUTHORIZATION_HEADER, Auth2Constants.BEARER_PREFIX + bearerToken);
+            }
+        };
     }
 }
