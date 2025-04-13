@@ -21,6 +21,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 public class SelectListItem implements ParseNode {
@@ -70,7 +71,7 @@ public class SelectListItem implements ParseNode {
         tblName = other.tblName;
         isStar = other.isStar;
         alias = other.alias;
-        excludedColumns = other.excludedColumns;
+        this.excludedColumns = new ArrayList<>(other.excludedColumns);
     }
 
     @Override

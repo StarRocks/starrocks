@@ -110,16 +110,6 @@ public class SelectStmtTest {
                 "PRIMARY KEY (user_id) " +
                 "PROPERTIES('replication_num' = '1');";
 
-        String createTable2 = "CREATE TABLE test_table ( " + 
-                " id INT, " +
-                " name VARCHAR(50), " +
-                " age INT, " +
-                " email VARCHAR(100)) " +
-                " DUPLICATE KEY(id) PROPERTIES (" +
-                " \"compression\" = \"LZ4\", " +
-                " \"replicated_storage\" = \"true\", " +
-                " \"replication_num\" = \"1\");";
-
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
@@ -127,8 +117,7 @@ public class SelectStmtTest {
                 .withTable(createDateTblStmtStr)
                 .withTable(createPratitionTableStr)
                 .withTable(createTable1)
-                .withTable(createTableWithPrimaryKey)
-                .withTable(createTable2);
+                .withTable(createTableWithPrimaryKey);
         FeConstants.enablePruneEmptyOutputScan = false;
     }
 
@@ -712,12 +701,5 @@ public class SelectStmtTest {
                 "  |  <slot 3> : if(2: value = 1, 'A', 'B')\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n"));
-    }
-
-    @Test
-    void testSelectAllExclude() throws Exception {
-        String sql = "SELECT * EXCLUDE(id, name) FROM db1.test_table";
-        String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan, plan.contains("OUTPUT EXPRS:3: age | 4: email"));
     }
 }

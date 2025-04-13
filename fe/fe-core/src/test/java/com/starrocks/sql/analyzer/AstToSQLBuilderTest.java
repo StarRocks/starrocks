@@ -67,4 +67,11 @@ public class AstToSQLBuilderTest {
                         "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")",
                 AstToSQLBuilder.toSQL(stmt));
     }
+    @Test
+    public void testSelectStarExcludeToSQL() throws Exception {
+        String sql = "SELECT * EXCLUDE (name, email) FROM test_exclude;";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assert.assertEquals("SELECT * EXCLUDE ( \"name\",\"email\" ) \nFROM `test_exclude`",
+                AstToSQLBuilder.toSQL(stmt));
+    }
 }

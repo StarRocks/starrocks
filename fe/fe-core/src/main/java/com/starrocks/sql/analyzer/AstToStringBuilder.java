@@ -611,13 +611,13 @@ public class AstToStringBuilder {
                 sqlBuilder.append(selectItemLabel);
 
                 if (item.isStar() && !item.getExcludedColumns().isEmpty()) {
-                    sqlBuilder.append(" EXCLUDE( ");
+                    sqlBuilder.append(" EXCLUDE ( ");
                     sqlBuilder.append(
                             item.getExcludedColumns().stream()
-                            .map(col -> "\"" + col + "\"")
-                            .collect(Collectors.joining(", "))
+                            .map(col -> "`" + col + "`")
+                            .collect(Collectors.joining(","))
                     );
-                    sqlBuilder.append(")");
+                    sqlBuilder.append(" ) ");
                 }
             }
 
