@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "util/bit_stream_utils.h"
@@ -287,6 +288,10 @@ public:
         return Status::OK();
     }
 
+    uint32_t total_values_count() { return total_value_count_; }
+
+    uint32_t bytes_left() const { return _bit_reader.bytes_left(); }
+
 private:
     // ============
     uint32_t values_per_block_;
@@ -515,6 +520,125 @@ private:
         packed_data_.append(encoded_lengths.data, encoded_lengths.size);
         packed_data_.append(sink_.data(), sink_.size());
         packed_ = true;
+    }
+};
+
+// ----------------------------------------------------------------------
+// DELTA_LENGTH_BYTE_ARRAY decoder
+
+class DeltaLengthByteArrayDecoder : public Decoder {
+public:
+    DeltaLengthByteArrayDecoder() = default;
+    ~DeltaLengthByteArrayDecoder() override = default;
+
+    Status set_data(const Slice& data) override {
+        RETURN_IF_ERROR(len_decoder_.set_data(data));
+        RETURN_IF_ERROR(DecodeLengths());
+        data_ = (const uint8_t*)data.data;
+        len_ = data.size;
+        bytes_offset_ = (len_ - len_decoder_.bytes_left());
+        return Status::OK();
+    }
+
+    Status skip(size_t values_to_skip) override { return Skip(static_cast<int>(values_to_skip)); }
+
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
+        slice_buffer_.reserve(count);
+        RETURN_IF_ERROR(Decode(slice_buffer_.data(), static_cast<int>(count)));
+
+        if (dst->is_nullable()) {
+            down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+        }
+        auto* binary_column = ColumnHelper::get_binary_column(dst);
+        binary_column->append_strings(slice_buffer_.data(), count);
+        return Status::OK();
+    }
+
+    Status next_batch(size_t count, uint8_t* dst) override {
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
+        Slice* data = reinterpret_cast<Slice*>(dst);
+        RETURN_IF_ERROR(Decode(data, count));
+        return Status::OK();
+    }
+
+private:
+    const uint8_t* data_ = nullptr;
+    uint32_t len_ = 0;
+    uint32_t bytes_offset_ = 0;
+    std::vector<Slice> slice_buffer_;
+
+    DeltaBinaryPackedDecoder<int32_t> len_decoder_;
+    int num_valid_values_{0};
+    uint32_t length_idx_{0};
+    std::vector<int32_t> buffered_length_;
+
+private:
+    // Decode all the encoded lengths. The decoder_ will be at the start of the encoded data after that.
+    Status DecodeLengths() {
+        // get the number of encoded lengths
+        int num_length = len_decoder_.total_values_count();
+        buffered_length_.resize(num_length);
+
+        // call len_decoder_.Decode to decode all the lengths.
+        // all the lengths are buffered in buffered_length_.
+        RETURN_IF_ERROR(len_decoder_.next_batch(num_length, reinterpret_cast<uint8_t*>(buffered_length_.data())));
+        length_idx_ = 0;
+        num_valid_values_ = num_length;
+        return Status::OK();
+    }
+
+    Status Skip(int count) {
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to skip");
+        }
+        int32_t data_size = 0;
+        const int32_t* length_ptr = buffered_length_.data() + length_idx_;
+        for (int i = 0; i < count; ++i) {
+            int32_t len = length_ptr[i];
+            if (PREDICT_FALSE(len < 0)) {
+                return Status::Corruption("negative string delta length");
+            }
+            data_size += len;
+        }
+        length_idx_ += count;
+        bytes_offset_ += data_size;
+        return Status::OK();
+    }
+
+    Status Decode(Slice* buffer, int count) {
+        // Decode up to `max_values` strings into an internal buffer
+        // and reference them into `buffer`.
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
+        if (count == 0) {
+            return Status::OK();
+        }
+
+        int32_t data_size = 0;
+        const int32_t* length_ptr = buffered_length_.data() + length_idx_;
+        for (int i = 0; i < count; ++i) {
+            int32_t len = length_ptr[i];
+            if (PREDICT_FALSE(len < 0)) {
+                return Status::Corruption("negative string delta length");
+            }
+            buffer[i].size = len;
+            data_size += len;
+        }
+        length_idx_ += count;
+        const uint8_t* data_ptr = data_ + bytes_offset_;
+        for (int i = 0; i < count; ++i) {
+            buffer[i].data = (char*)data_ptr;
+            data_ptr += buffer[i].size;
+        }
+        bytes_offset_ += data_size;
+        num_valid_values_ -= count;
+        return Status::OK();
     }
 };
 
