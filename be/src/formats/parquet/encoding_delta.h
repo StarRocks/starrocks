@@ -543,7 +543,7 @@ public:
     Status skip(size_t values_to_skip) override { return Skip(static_cast<int>(values_to_skip)); }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
-        if (count > num_valid_values_) {
+        if ((count + length_idx_) > num_valid_values_) {
             return Status::InvalidArgument("not enough values to read");
         }
         slice_buffer_.reserve(count);
@@ -558,9 +558,6 @@ public:
     }
 
     Status next_batch(size_t count, uint8_t* dst) override {
-        if (count > num_valid_values_) {
-            return Status::InvalidArgument("not enough values to read");
-        }
         Slice* data = reinterpret_cast<Slice*>(dst);
         RETURN_IF_ERROR(Decode(data, count));
         return Status::OK();
@@ -593,7 +590,7 @@ private:
     }
 
     Status Skip(int count) {
-        if (count > num_valid_values_) {
+        if ((count + length_idx_) > num_valid_values_) {
             return Status::InvalidArgument("not enough values to skip");
         }
         int32_t data_size = 0;
@@ -613,7 +610,7 @@ private:
     Status Decode(Slice* buffer, int count) {
         // Decode up to `max_values` strings into an internal buffer
         // and reference them into `buffer`.
-        if (count > num_valid_values_) {
+        if ((count + length_idx_) > num_valid_values_) {
             return Status::InvalidArgument("not enough values to read");
         }
         if (count == 0) {
