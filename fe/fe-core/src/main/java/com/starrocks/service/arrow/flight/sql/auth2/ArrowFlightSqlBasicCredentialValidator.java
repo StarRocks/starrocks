@@ -14,11 +14,16 @@
 
 package com.starrocks.service.arrow.flight.sql.auth2;
 
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.auth2.BasicCallHeaderAuthenticator;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
+
+import java.nio.charset.StandardCharsets;
 
 public class ArrowFlightSqlBasicCredentialValidator implements BasicCallHeaderAuthenticator.CredentialValidator {
 
@@ -31,10 +36,15 @@ public class ArrowFlightSqlBasicCredentialValidator implements BasicCallHeaderAu
     @Override
     public CallHeaderAuthenticator.AuthResult validate(String username, String password) throws Exception {
         // TODO: validate remoteHost.
-        UserIdentity user = null;
-        //        GlobalStateMgr.getCurrentState().getAuthenticationMgr().checkPlainPassword(username, "0.0.0.0", password);
-        if (user == null) {
-            throw CallStatus.UNAUTHENTICATED.withDescription("Access denied for " + username).toRuntimeException();
+        UserIdentity user;
+        try {
+            user = AuthenticationHandler.authenticate(
+                    new ConnectContext(), username, "0.0.0.0", password.getBytes(StandardCharsets.UTF_8));
+        } catch (AuthenticationException e) {
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("Access denied for user: " + username)
+                    .withCause(e)
+                    .toRuntimeException();
         }
 
         String bearerToken = sessionManager.initializeSession(user);
