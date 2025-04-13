@@ -1484,4 +1484,8 @@ public class ConnectContext {
     public void setCurrentThreadId(long currentThreadId) {
         this.currentThreadId = new AtomicLong(currentThreadId);
     }
+
+    public boolean isArrowFlightSQL() {
+        return false;
+    }
 }

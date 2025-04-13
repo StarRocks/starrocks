@@ -35,7 +35,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
-import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadDataCacheMetrics;
@@ -263,13 +262,6 @@ public class QueryRuntimeProfile {
     }
 
     public boolean addListener(Consumer<Boolean> task) {
-        if (connectContext instanceof ArrowFlightSqlConnectContext) {
-            profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
-                task.accept(true);
-            }));
-            return true;
-        }
-
         if (EXECUTOR.getQueue().remainingCapacity() <= 0) {
             return false;
         }

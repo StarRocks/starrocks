@@ -141,8 +141,7 @@ public class ConnectScheduler {
             connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
             AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
             int currentConn = currentConnAtomic.get();
-            long currentUserMaxConn =
-                    ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
+            long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
             if (currentConn >= currentUserMaxConn) {
                 String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() + ") connection limit, " +
                         "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
@@ -199,10 +198,6 @@ public class ConnectScheduler {
 
     public ConnectContext getContext(long connectionId) {
         return connectionMap.get(connectionId);
-    }
-
-    public ConnectContext getContext(String token) {
-        return connectionMap.get(token);
     }
 
     public ArrowFlightSqlConnectContext getArrowFlightSqlConnectContext(String token) {

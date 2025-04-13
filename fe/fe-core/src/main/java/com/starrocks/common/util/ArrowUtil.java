@@ -28,14 +28,14 @@ import java.util.List;
 
 public class ArrowUtil {
 
+    private static final BufferAllocator ALLOCATOR = new RootAllocator(Long.MAX_VALUE);
+
     private ArrowUtil() {
         throw new UnsupportedOperationException("ArrowUtil cannot be instantiated");
     }
 
     public static VectorSchemaRoot createSingleSchemaRoot(String fieldName, String fieldValue) {
-        final BufferAllocator allocator = new RootAllocator(Long.MAX_VALUE);
-
-        VarCharVector varCharVector = new VarCharVector(fieldName, allocator);
+        VarCharVector varCharVector = new VarCharVector(fieldName, ALLOCATOR);
         varCharVector.allocateNew();
 
         varCharVector.setSafe(0, fieldValue.getBytes());
