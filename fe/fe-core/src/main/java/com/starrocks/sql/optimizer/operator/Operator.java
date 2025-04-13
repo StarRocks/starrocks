@@ -36,6 +36,7 @@ import java.util.Set;
 public abstract class Operator {
     public static final long DEFAULT_LIMIT = -1;
     public static final long DEFAULT_OFFSET = 0;
+    public static final int ABSENT_OPERATOR_ID = -1;
 
     protected final OperatorType opType;
     protected long limit = DEFAULT_LIMIT;
@@ -73,7 +74,13 @@ public abstract class Operator {
 
     protected DomainProperty domainProperty;
 
+    // `planNodeId` is set only after the `FragmentBuilder` decomposes the physical plan into fragments.
+    // It is the ID of the ExecNode after decompossion.
     protected int planNodeId = -1;
+
+    // `operatorId` is set only after the `FragmentBuilder` decomposes the physical plan into fragments.
+    // It is the ID of the physical operator, which is generated in postorder traversal from zero.
+    protected int operatorId = ABSENT_OPERATOR_ID;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -226,6 +233,14 @@ public abstract class Operator {
 
     public void setPlanNodeId(int planNodeId) {
         this.planNodeId = planNodeId;
+    }
+
+    public int getOperatorId() {
+        return operatorId;
+    }
+
+    public void setOperatorId(int operatorId) {
+        this.operatorId = operatorId;
     }
 
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {

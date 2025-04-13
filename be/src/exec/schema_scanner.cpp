@@ -122,7 +122,7 @@ Status SchemaScanner::init(SchemaScannerParam* param, ObjectPool* pool) {
         return Status::OK();
     }
 
-    if (nullptr == param || nullptr == pool || nullptr == _columns) {
+    if (nullptr == param || nullptr == pool || (nullptr == _columns && 0 != _column_num)) {
         return Status::InternalError("invalid parameter");
     }
 

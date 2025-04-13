@@ -1556,6 +1556,7 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
     return only_null;
 }
 
+// Need add result to pool by caller.
 Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
                                                        LogicalType to_type, bool allow_throw_exception) {
     if (to_type == TYPE_CHAR) {
@@ -1584,12 +1585,12 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         if (cast_element_expr == nullptr) {
             return nullptr;
         }
+        DCHECK(pool != nullptr);
+        pool->add(cast_element_expr);
+
         auto* child = new ColumnRef(cast);
+        pool->add(child);
         cast_element_expr->add_child(child);
-        if (pool) {
-            pool->add(cast_element_expr);
-            pool->add(child);
-        }
 
         if (from_type == TYPE_VARCHAR) {
             return new CastStringToArray(node, cast_element_expr, cast_to, allow_throw_exception);
@@ -1601,7 +1602,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
     if (from_type == TYPE_JSON && to_type == TYPE_STRUCT) {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
-        std::vector<std::unique_ptr<Expr>> field_casts(cast_to.children.size());
+        std::vector<Expr*> field_casts(cast_to.children.size());
         for (int i = 0; i < cast_to.children.size(); ++i) {
             TypeDescriptor json_type = TypeDescriptor::create_json_type();
             auto ret = create_cast_expr(pool, json_type, cast_to.children[i], allow_throw_exception);
@@ -1609,7 +1610,8 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 LOG(WARNING) << "Not support cast from type: " << json_type << ", to type: " << cast_to.children[i];
                 return nullptr;
             }
-            field_casts[i] = std::move(ret.value());
+            pool->add(ret.value());
+            field_casts[i] = ret.value();
             auto cast_input = create_slot_ref(json_type);
             field_casts[i]->add_child(cast_input.get());
             pool->add(cast_input.release());
@@ -1724,32 +1726,35 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
 }
 
 // NOTE: should return error status to avoid null in ASSIGN_OR_RETURN, otherwise causing crash
-StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TExprNode& node,
-                                                                            const TypeDescriptor& from_type,
-                                                                            const TypeDescriptor& to_type,
-                                                                            bool allow_throw_exception) {
+StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TExprNode& node,
+                                                            const TypeDescriptor& from_type,
+                                                            const TypeDescriptor& to_type, bool allow_throw_exception) {
     if (from_type.is_array_type() && to_type.is_array_type()) {
-        ASSIGN_OR_RETURN(auto child_cast,
+        ASSIGN_OR_RETURN(auto* child_cast,
                          create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
+        pool->add(child_cast);
         auto child_input = create_slot_ref(from_type.children[0]);
         child_cast->add_child(child_input.get());
         pool->add(child_input.release());
-        return std::make_unique<CastArrayExpr>(node, std::move(child_cast));
+
+        return new CastArrayExpr(node, child_cast);
     }
     if (from_type.is_map_type() && to_type.is_map_type()) {
-        ASSIGN_OR_RETURN(auto key_cast,
+        ASSIGN_OR_RETURN(auto* key_cast,
                          create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
+        pool->add(key_cast);
         auto key_input = create_slot_ref(from_type.children[0]);
         key_cast->add_child(key_input.get());
         pool->add(key_input.release());
 
-        ASSIGN_OR_RETURN(auto value_cast,
+        ASSIGN_OR_RETURN(auto* value_cast,
                          create_cast_expr(pool, from_type.children[1], to_type.children[1], allow_throw_exception));
+        pool->add(value_cast);
         auto value_input = create_slot_ref(from_type.children[1]);
         value_cast->add_child(value_input.get());
         pool->add(value_input.release());
 
-        return std::make_unique<CastMapExpr>(node, std::move(key_cast), std::move(value_cast));
+        return new CastMapExpr(node, key_cast, value_cast);
     }
     if (from_type.is_struct_type() && to_type.is_struct_type()) {
         if (from_type.children.size() != to_type.children.size()) {
@@ -1758,28 +1763,30 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
         if (to_type.field_names.empty() || from_type.field_names.size() != to_type.field_names.size()) {
             return Status::NotSupported("Not support cast struct with different field of children.");
         }
-        std::vector<std::unique_ptr<Expr>> field_casts{from_type.children.size()};
+        std::vector<Expr*> field_casts{from_type.children.size()};
         for (int i = 0; i < from_type.children.size(); ++i) {
             ASSIGN_OR_RETURN(field_casts[i],
                              create_cast_expr(pool, from_type.children[i], to_type.children[i], allow_throw_exception));
+            pool->add(field_casts[i]);
             auto cast_input = create_slot_ref(from_type.children[i]);
             field_casts[i]->add_child(cast_input.get());
             pool->add(cast_input.release());
         }
-        return std::make_unique<CastStructExpr>(node, std::move(field_casts));
+        return new CastStructExpr(node, std::move(field_casts));
     }
     if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
-        return std::make_unique<MustNullExpr>(node);
+        return new MustNullExpr(node);
     }
+
     auto res = create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception);
     if (res == nullptr) {
         return Status::NotSupported(
                 fmt::format("Not support cast {} to {}.", from_type.debug_string(), to_type.debug_string()));
     }
-    std::unique_ptr<Expr> result(res);
-    return std::move(result);
+    return res;
 }
 
+// Need add result to pool by caller.
 Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& node, bool allow_throw_exception) {
     TypeDescriptor to_type = TypeDescriptor::from_thrift(node.type);
     TypeDescriptor from_type(thrift_to_type(node.child_type));
@@ -1791,13 +1798,12 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         LOG(WARNING) << "Not support cast " << from_type << " to " << to_type;
         return nullptr;
     }
-    return std::move(ret).value().release();
+    return ret.value();
 }
 
-StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool,
-                                                                            const TypeDescriptor& from_type,
-                                                                            const TypeDescriptor& to_type,
-                                                                            bool allow_throw_exception) {
+// Need add result to pool by caller.
+StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
+                                                            const TypeDescriptor& to_type, bool allow_throw_exception) {
     TExprNode cast_node;
     cast_node.node_type = TExprNodeType::CAST_EXPR;
     cast_node.type = to_type.to_thrift();
@@ -1806,6 +1812,7 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
     return create_cast_expr(pool, cast_node, from_type, to_type, allow_throw_exception);
 }
 
+// Need add result to pool by callee.
 Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child,
                                            ObjectPool* pool, bool allow_throw_exception) {
     auto ret = create_cast_expr(pool, from, to, allow_throw_exception);
@@ -1813,7 +1820,8 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         LOG(WARNING) << "Not support cast " << from << " to " << to;
         return nullptr;
     }
-    auto cast_expr = std::move(ret).value().release();
+
+    auto* cast_expr = ret.value();
     pool->add(cast_expr);
     cast_expr->add_child(child);
     return cast_expr;

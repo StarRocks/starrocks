@@ -10,26 +10,27 @@ drop table if exists low_card_test_${uuid0} force;
 -- !result
 create table low_card_test_${uuid0} (
 c1 int,
-c2 string
+c2 string,
+c3 array<string>
 );
 -- result:
 -- !result
-insert into low_card_test_${uuid0} values (1, '1');
+insert into low_card_test_${uuid0} values (1, '1', ['1', '2', '3']);
 -- result:
 -- !result
-insert into low_card_test_${uuid0} values (2, '2');
+insert into low_card_test_${uuid0} values (2, '2', ['1', '2', '3']);
 -- result:
 -- !result
-insert into low_card_test_${uuid0} values (3, '3');
+insert into low_card_test_${uuid0} values (3, '3', ['1', '2', '3']);
 -- result:
 -- !result
-insert into low_card_test_${uuid0} values (4, '4');
+insert into low_card_test_${uuid0} values (4, '4', ['4', '5', '6']);
 -- result:
 -- !result
-insert into low_card_test_${uuid0} values (5, '5');
+insert into low_card_test_${uuid0} values (5, '5', ['4', '5', '6']);
 -- result:
 -- !result
-insert into low_card_test_${uuid0} values (6, '6');
+insert into low_card_test_${uuid0} values (6, '6', ['4', '5', '6']);
 -- result:
 -- !result
 select count(c2) from low_card_test_${uuid0};
@@ -52,7 +53,7 @@ select count(c2) from low_card_test_${uuid0};
 -- result:
 6
 -- !result
-insert into low_card_test_${uuid0} values (7, '7');
+insert into low_card_test_${uuid0} values (7, '7', []);
 -- result:
 -- !result
 select count(c2) from low_card_test_${uuid0};
@@ -75,7 +76,7 @@ select count(c1) from low_card_test_${uuid0} where c2 = '1';
 -- result:
 1
 -- !result
-insert into low_card_test_${uuid0} values (8, '');
+insert into low_card_test_${uuid0} values (8, '', null);
 -- result:
 -- !result
 select count(c2) from low_card_test_${uuid0};
@@ -89,6 +90,14 @@ function: wait_global_dict_ready('c2', 'low_card_test_${uuid0}')
 select count(c2) from low_card_test_${uuid0};
 -- result:
 8
+-- !result
+function: wait_global_dict_ready('c3', 'low_card_test_${uuid0}')
+-- result:
+
+-- !result
+select count(*) from low_card_test_${uuid0} where c3[1] = '2';
+-- result:
+0
 -- !result
 drop table low_card_test_${uuid0} force;
 -- result:

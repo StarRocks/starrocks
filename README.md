@@ -140,6 +140,7 @@ This project is used by the following companies. Learn more about their use case
 - [HerdWatch](https://medium.com/p/a7916a7e87bf)
 - [TRM Labs](https://www.trmlabs.com/post/from-bigquery-to-lakehouse-how-we-built-a-petabyte-scale-data-analytics-platform-part-1)
 - [Verisoul](https://celerdata.com/blog/verisoul-enables-real-time-analytics-by-transitioning-off-bigquery)
-- [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
+- [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8)
+- [Vivo](https://medium.com/starrocks-engineering/vivos-journey-to-a-high-performance-lakehouse-with-starrocks-56a502a0fde8) 
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks)
 - [Grab](https://engineering.grab.com/building-a-spark-observability)

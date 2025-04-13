@@ -76,6 +76,8 @@ public class ExecPlan {
 
     private final boolean isShortCircuit;
 
+    private long useBaseline = -1;
+
     @VisibleForTesting
     public ExecPlan() {
         connectContext = new ConnectContext();
@@ -156,7 +158,7 @@ public class ExecPlan {
     public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
     }
-    
+
     public Map<Integer, PlanFragment> getSplitProduceFragments() {
         return splitProduceFragments;
     }
@@ -181,9 +183,25 @@ public class ExecPlan {
         return this.execGroups;
     }
 
+    public void setUseBaseline(long useBaseline) {
+        this.useBaseline = useBaseline;
+    }
+
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
         optExpression.getOp().setPlanNodeId(id);
         optExpressions.put(id, optExpression);
+    }
+
+    public static void assignOperatorIds(OptExpression root) {
+        IdGenerator<PlanNodeId> operatorIdGenerator = PlanNodeId.createGenerator();
+        assignOperatorIds(root, operatorIdGenerator);
+    }
+
+    private static void assignOperatorIds(OptExpression root, IdGenerator<PlanNodeId> operatorIdGenerator) {
+        root.getOp().setOperatorId(operatorIdGenerator.getNextId().asInt());
+        for (OptExpression child : root.getInputs()) {
+            assignOperatorIds(child, operatorIdGenerator);
+        }
     }
 
     public OptExpression getOptExpression(int planNodeId) {
@@ -229,6 +247,9 @@ public class ExecPlan {
         } else {
             if (planCount != 0) {
                 str.append("There are ").append(planCount).append(" plans in optimizer search space\n");
+            }
+            if (useBaseline > 0) {
+                str.append("Using baseline plan[").append(useBaseline).append("]\n\n");
             }
 
             for (int i = 0; i < fragments.size(); ++i) {

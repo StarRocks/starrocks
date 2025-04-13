@@ -239,7 +239,8 @@
                                 "id": "data_source/catalog/iceberg/iceberg_catalog"
                             },
                             "items": [
-                                "data_source/catalog/iceberg/iceberg_timetravel"
+                                "data_source/catalog/iceberg/iceberg_timetravel",
+                                "data_source/catalog/iceberg/iceberg_meta_table"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -454,6 +455,7 @@
                         "administration/management/Scale_up_down",
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
+                        "administration/cluster_snapshot",
                         {
                             "type": "category",
                             "label": "Monitor and Alert",
@@ -572,6 +574,7 @@
                 "faq/datalake",
                 "faq/Sql_faq",
                 "faq/Dump_query",
+                "faq/fe_mem_faq",
                 "faq/Others"
             ]
         },

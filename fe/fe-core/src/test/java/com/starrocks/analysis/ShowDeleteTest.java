@@ -49,17 +49,6 @@ public class ShowDeleteTest {
             }
         };
 
-        // mock scheduler
-        ConnectScheduler scheduler = new ConnectScheduler(10);
-        new Expectations(scheduler) {
-            {
-                scheduler.listConnection("testCluster:testUser", null);
-                minTimes = 0;
-                result = Lists.newArrayList(ctx.toThreadInfo());
-            }
-        };
-
-        ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("testCluster:testUser");
 

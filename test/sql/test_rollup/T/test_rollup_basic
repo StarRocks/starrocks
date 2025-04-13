@@ -1,0 +1,40 @@
+-- name: test_rollup_basic
+CREATE TABLE test_rollup_basic_tbl1 (
+    k1 date,
+    k2 int,
+    k3 int,
+    k4 int,
+    v1 int sum
+) PARTITION BY RANGE(k1) (
+    PARTITION p1 values [('2020-01-01'),('2020-02-01')),
+    PARTITION p2 values [('2020-02-01'),('2020-03-01')))
+    DISTRIBUTED BY HASH(k2) BUCKETS 3
+    PROPERTIES('replication_num' = '1');
+
+INSERT INTO test_rollup_basic_tbl1
+VALUES
+    ("2020-01-12",4,1,1,100),
+    ("2020-01-11",5,2,2,100),
+    ("2020-01-11",4,3,3,100);
+
+ALTER TABLE test_rollup_basic_tbl1 ADD ROLLUP rollup1 (k1, v1) FROM test_rollup_basic_tbl1;
+function: wait_table_rollup_finish()
+
+ALTER TABLE test_rollup_basic_tbl1 ADD ROLLUP rollup2 (k3, k2, v1) FROM test_rollup_basic_tbl1;
+function: wait_table_rollup_finish()
+
+ALTER TABLE test_rollup_basic_tbl1 ADD ROLLUP rollup3 (k4, k3, k2, v1) FROM test_rollup_basic_tbl1;
+function: wait_table_rollup_finish()
+
+create materialized view mv_1 
+as 
+    select k3, k2, sum(v1) as sum1 from test_rollup_basic_tbl1 where k2 > 2  group by 1, 2;
+function: wait_table_rollup_finish()
+
+SELECT v1 FROM rollup1 [_SYNC_MV_] ORDER BY v1;
+SELECT k3, k2, mv_sum_v1 FROM mv_1 [_SYNC_MV_] ORDER BY 1, 2;
+
+INSERT INTO test_rollup_basic_tbl1 VALUES("2020-01-11",6,6,6,100);
+
+SELECT v1 FROM rollup1 [_SYNC_MV_] ORDER BY v1;
+SELECT k3, k2, mv_sum_v1 FROM mv_1 [_SYNC_MV_] ORDER BY 1, 2;

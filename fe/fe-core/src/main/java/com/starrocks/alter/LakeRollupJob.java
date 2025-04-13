@@ -296,6 +296,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable tbl = getTableOrThrow(db, tableId);
             Preconditions.checkState(tbl.getState() == OlapTable.OlapTableState.ROLLUP);
+            // only needs to analyze once
+            AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                    RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -309,8 +312,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
 
                     ComputeNode computeNode = null;
                     try {

@@ -54,5 +54,59 @@ set enable_plan_analyzer=true;
 set enable_global_runtime_filter = false;
 function: assert_explain_not_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
 alter plan advisor add select count(*) from pre_agg_case group by c3;
-function: assert_explain_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
+function: assert_explain_not_contains("select count(*) from pre_agg_case group by c3", "StreamingAggTuningGuide")
 truncate plan advisor;
+
+
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base; 
+
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c1 bigint NULL,
+  c2 int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 16
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into t1 select idx, idx % (20480000 / 26), idx from __row_util;
+
+analyze full table t1 with sync mode;
+
+select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+
+alter plan advisor add select count(1) as cnt from t1 group by c1 order by cnt limit 10;
+function: assert_explain_contains("select count(1) as cnt from t1 group by c1 order by cnt limit 10", "StreamingAggTuningGuide")
+select count(1) as cnt from t1 group by c1 order by cnt limit 10;

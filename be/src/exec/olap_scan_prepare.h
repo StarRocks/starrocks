@@ -18,6 +18,7 @@
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "filter_condition.h"
 #include "runtime/descriptors.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/predicate_tree_params.h"
@@ -109,7 +110,8 @@ private:
     std::vector<uint8_t> _normalized_exprs;
     std::map<std::string, ColumnValueRangeType> column_value_ranges; // from conjunct_ctxs
     OlapScanKeys scan_keys;                                          // from _column_value_ranges
-    std::vector<TCondition> olap_filters;                            // from _column_value_ranges
+    std::vector<OlapCondition> olap_filters;                         // from _column_value_ranges
+    std::vector<GeneralCondition> external_filters;                  // from _column_value_ranges
     std::vector<TCondition> is_null_vector;                          // from conjunct_ctxs
 
     std::map<int, std::vector<ExprContext*>> slot_index_to_expr_ctxs; // from conjunct_ctxs

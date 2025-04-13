@@ -1828,6 +1828,25 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
 
+    def wait_table_rollup_finish(self, check_count=60):
+        """
+        wait materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER TABLE ROLLUP "
+        count = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][8]
+            if status != "FINISHED":
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
     def wait_materialized_view_finish(self, check_count=60):
         """
         wait materialized view job finish and return status
@@ -2670,7 +2689,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for expect in expects:
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(plan_string.find(expect) > 0,
-                              "assert expect %s is not found in plan: %s" % (expect, plan_string))
+                              "verbose plan of sql (%s) assert expect %s is not found in plan: %s" % (query, expect, plan_string))
 
     def assert_explain_costs_contains(self, query, *expects):
         """
@@ -2790,7 +2809,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_true(read_cache_size + write_cache_size > 0,
                           "cache select is failed, read_cache_size + write_cache_size must larger than 0 bytes")
 
-    def show_stats_meta(self, sql=None):
+    def assert_show_stats_meta(self, sql=None, exp=None):
         if sql is None:
             sql = "show stats meta"
 
@@ -2806,15 +2825,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             if col_name in skip_columns:
                 time_related_columns.append(i)
 
-        processed_results = []
+        act = []
         for row in res["result"]:
             processed_row = []
             for i, value in enumerate(row):
                 if i not in time_related_columns:
                     processed_row.append(value)
-            processed_results.append(processed_row)
+            act.append(processed_row)
 
-        return processed_results
+        log.info("[check regex]: %s" % exp[len(REGEX_FLAG):])
+        tools.assert_regexp_matches(
+            r"%s" % str(act),
+            exp[len(REGEX_FLAG):],
+            "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+            % (self_print(sql, need_print=True), exp[len(REGEX_FLAG):], act),
+        )
 
     @staticmethod
     def regex_match(check_str: str, pattern: str):

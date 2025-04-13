@@ -159,10 +159,11 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
 
     @Test
     public void testCorrectSlotNum() {
+        assertThat(QueryQueueOptions.correctSlotNum(-1)).isEqualTo(0);
         assertThat(QueryQueueOptions.correctSlotNum(0)).isEqualTo(0);
         assertThat(QueryQueueOptions.correctSlotNum(1)).isEqualTo(1);
-        assertThat(QueryQueueOptions.correctSlotNum(2)).isEqualTo(1);
-        assertThat(QueryQueueOptions.correctSlotNum(4)).isEqualTo(1);
-        assertThat(QueryQueueOptions.correctSlotNum(5)).isEqualTo(2);
+        assertThat(QueryQueueOptions.correctSlotNum(2)).isEqualTo(2);
+        assertThat(QueryQueueOptions.correctSlotNum(4)).isEqualTo(4);
+        assertThat(QueryQueueOptions.correctSlotNum(5)).isEqualTo(5);
     }
 }

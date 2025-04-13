@@ -109,9 +109,37 @@ inline void BitWriter::PutVlqInt(uint32_t v) {
     PutAligned<uint8_t>(v & 0x7F, 1);
 }
 
-inline BitReader::BitReader(const uint8_t* buffer, int buffer_len) : buffer_(buffer), max_bytes_(buffer_len) {
-    int num_bytes = std::min(8, max_bytes_);
-    memcpy(&buffered_values_, buffer_ + byte_offset_, num_bytes);
+inline void BitWriter::PutZigZagVlqInt(int32_t v) {
+    uint32_t u_v = ::arrow::util::SafeCopy<uint32_t>(v);
+    u_v = (u_v << 1) ^ static_cast<uint32_t>(v >> 31);
+    PutVlqInt(u_v);
+}
+
+inline void BitWriter::PutVlqInt(uint64_t v) {
+    while ((v & 0xFFFFFFFFFFFFFF80ULL) != 0ULL) {
+        PutAligned<uint8_t>(static_cast<uint8_t>((v & 0x7F) | 0x80), 1);
+        v >>= 7;
+    }
+    PutAligned<uint8_t>(static_cast<uint8_t>(v & 0x7F), 1);
+}
+
+inline void BitWriter::PutZigZagVlqInt(int64_t v) {
+    uint64_t u_v = ::arrow::util::SafeCopy<uint64_t>(v);
+    u_v = (u_v << 1) ^ static_cast<uint64_t>(v >> 63);
+    PutVlqInt(u_v);
+}
+
+inline BitReader::BitReader(const uint8_t* buffer, int buffer_len) {
+    reset(buffer, buffer_len);
+}
+
+inline void BitReader::reset(const uint8_t* buffer, int buffer_len) {
+    buffer_ = buffer;
+    max_bytes_ = buffer_len;
+    byte_offset_ = 0;
+    bit_offset_ = 0;
+    buffered_values_ = 0;
+    BufferValues();
 }
 
 inline void BitReader::BufferValues() {
@@ -145,42 +173,79 @@ inline bool BitReader::GetValue(int num_bits, T* v) {
     return true;
 }
 
-inline void BitReader::Rewind(int num_bits) {
+template <typename T>
+inline bool BitReader::GetBatch(int num_bits, T* v, int num_values) {
+    int i = 0;
+    for (; i < num_values && bit_offset_ != 0; ++i) {
+        if (PREDICT_FALSE(!GetValue(num_bits, v + i))) {
+            return false;
+        }
+    }
+    if (i < num_values) {
+        DCHECK(bit_offset_ == 0);
+        int expected_values = num_values - i;
+        auto ret = BitPackingAdapter::UnpackValues(num_bits, buffer_ + byte_offset_, max_bytes_ - byte_offset_,
+                                                   expected_values, v + i);
+        if (ret.second != expected_values) {
+            return false;
+        }
+        size_t bits_read = expected_values * num_bits;
+        byte_offset_ += bits_read / 8;
+        bit_offset_ += bits_read % 8;
+        BufferValues();
+    }
+    return true;
+}
+
+inline bool BitReader::Rewind(int num_bits) {
     bit_offset_ -= num_bits;
     if (bit_offset_ >= 0) {
-        return;
+        return true;
     }
+    // NOTE(yanz): I think use loop instead of algebraic operation
+    // because num_bits is usually very small, and the loop is faster
+    // and easier to read.
     while (bit_offset_ < 0) {
         int seek_back = std::min(byte_offset_, 8);
         byte_offset_ -= seek_back;
         bit_offset_ += seek_back * 8;
     }
-    // This should only be executed *if* rewinding by 'num_bits'
-    // make the existing buffered_values_ invalid
-    DCHECK_GE(byte_offset_, 0); // Check for underflow
-    memcpy(&buffered_values_, buffer_ + byte_offset_, 8);
+
+    if (byte_offset_ < 0) {
+        return false;
+    }
+    BufferValues();
+    return true;
 }
 
-inline void BitReader::SeekToBit(uint stream_position) {
-    DCHECK_LE(stream_position, max_bytes_ * 8);
+inline bool BitReader::Advance(int num_bits) {
+    bit_offset_ += num_bits;
+    if (bit_offset_ < 64) {
+        return true;
+    }
+    // NOTE(yanz): I think use loop instead of algebraic operation
+    // because num_bits is usually very small, and the loop is faster
+    // and easier to read.
+    while (bit_offset_ >= 64) {
+        byte_offset_ += 8;
+        bit_offset_ -= 64;
+    }
+    if (byte_offset_ >= max_bytes_) {
+        return false;
+    }
+    BufferValues();
+    return true;
+}
 
+inline bool BitReader::SeekToBit(uint stream_position) {
+    DCHECK_LT(stream_position, max_bytes_ * 8);
     int delta = static_cast<int>(stream_position) - position();
     if (delta == 0) {
-        return;
+        return true;
     } else if (delta < 0) {
-        Rewind(position() - stream_position);
+        return Rewind(-delta);
     } else {
-        bit_offset_ += delta;
-        while (bit_offset_ >= 64) {
-            byte_offset_ += 8;
-            bit_offset_ -= 64;
-            if (bit_offset_ < 64) {
-                // This should only be executed if seeking to
-                // 'stream_position' makes the existing buffered_values_
-                // invalid.
-                BufferValues();
-            }
-        }
+        return Advance(delta);
     }
 }
 
@@ -197,12 +262,7 @@ inline bool BitReader::GetAligned(int num_bytes, T* v) {
 
     // Reset buffered_values_
     bit_offset_ = 0;
-    int bytes_remaining = max_bytes_ - byte_offset_;
-    if (PREDICT_TRUE(bytes_remaining >= 8)) {
-        memcpy(&buffered_values_, buffer_ + byte_offset_, 8);
-    } else {
-        memcpy(&buffered_values_, buffer_ + byte_offset_, bytes_remaining);
-    }
+    BufferValues();
     return true;
 }
 
@@ -224,6 +284,41 @@ inline bool BitReader::GetVlqInt(uint32_t* v) {
     }
 
     return false;
+}
+
+inline bool BitReader::GetZigZagVlqInt(int32_t* v) {
+    uint32_t u;
+    if (!GetVlqInt(&u)) return false;
+    u = (u >> 1) ^ (~(u & 1) + 1);
+    *v = static_cast<int32_t>(u);
+    return true;
+}
+
+inline bool BitReader::GetVlqInt(uint64_t* v) {
+    uint64_t tmp = 0;
+
+    for (int i = 0; i < MAX_VLQ_BYTE_LEN_INT64; i++) {
+        uint8_t byte = 0;
+        if (PREDICT_FALSE(!GetAligned<uint8_t>(1, &byte))) {
+            return false;
+        }
+        tmp |= static_cast<uint64_t>(byte & 0x7F) << (7 * i);
+
+        if ((byte & 0x80) == 0) {
+            *v = tmp;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+inline bool BitReader::GetZigZagVlqInt(int64_t* v) {
+    uint64_t u;
+    if (!GetVlqInt(&u)) return false;
+    u = (u >> 1) ^ (~(u & 1) + 1);
+    *v = static_cast<int64_t>(u);
+    return true;
 }
 
 template <typename UINT_T>

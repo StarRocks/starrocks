@@ -35,6 +35,7 @@ public abstract class PredicateOperator extends ScalarOperator {
     public PredicateOperator(OperatorType operatorType, List<ScalarOperator> arguments) {
         super(operatorType, Type.BOOLEAN);
         this.arguments = requireNonNull(arguments, "arguments is null");
+        this.incrDepth(arguments);
     }
 
     public List<ScalarOperator> getChildren() {

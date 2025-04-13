@@ -11,7 +11,7 @@ displayed_sidebar: docs
 構文:
 
 ```sql
-TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)]
+TRUNCATE TABLE [db.]tbl[ PARTITION(PartitionName1, PartitionName2, ...)]
 ```
 
 注意:
@@ -30,8 +30,8 @@ TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)]
     TRUNCATE TABLE example_db.tbl;
     ```
 
-2. テーブル `tbl` のパーティション `p1` と `p2` を切り詰めます。
+2. テーブル `tbl` のパーティション `PartitionName1` と `PartitionName2` を切り詰めます。
 
     ```sql
-    TRUNCATE TABLE tbl PARTITION(p1, p2);
+    TRUNCATE TABLE tbl PARTITION(PartitionName1, PartitionName2);
     ```

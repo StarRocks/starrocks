@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
@@ -25,6 +26,27 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public class LDAPAuthProviderForNative implements AuthenticationProvider {
+    private final String ldapServerHost;
+    private final int ldapServerPort;
+    private final String ldapBindRootDN;
+    private final String ldapBindRootPwd;
+    private final String ldapBindBaseDN;
+    private final String ldapSearchFilter;
+
+    public LDAPAuthProviderForNative(String ldapServerHost,
+                                     int ldapServerPort,
+                                     String ldapBindRootDN,
+                                     String ldapBindRootPwd,
+                                     String ldapBindBaseDN,
+                                     String ldapSearchFilter) {
+        this.ldapServerHost = ldapServerHost;
+        this.ldapServerPort = ldapServerPort;
+        this.ldapBindRootDN = ldapBindRootDN;
+        this.ldapBindRootPwd = ldapBindRootPwd;
+        this.ldapBindBaseDN = ldapBindBaseDN;
+        this.ldapSearchFilter = ldapSearchFilter;
+    }
+
     @Override
     public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
             throws AuthenticationException {
@@ -37,7 +59,7 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] remotePassword, byte[] randomString,
+    public void authenticate(ConnectContext context, String user, String host, byte[] remotePassword,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         String userForAuthPlugin = authenticationInfo.getAuthString();
         //clear password terminate string
@@ -46,11 +68,13 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
             clearPassword = Arrays.copyOf(remotePassword, remotePassword.length - 1);
         }
         if (!Strings.isNullOrEmpty(userForAuthPlugin)) {
-            if (!LdapSecurity.checkPassword(userForAuthPlugin, new String(clearPassword, StandardCharsets.UTF_8))) {
+            if (!LdapSecurity.checkPassword(userForAuthPlugin, new String(clearPassword, StandardCharsets.UTF_8),
+                    ldapServerHost, ldapServerPort)) {
                 throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
             }
         } else {
-            if (!LdapSecurity.checkPasswordByRoot(user, new String(clearPassword, StandardCharsets.UTF_8))) {
+            if (!LdapSecurity.checkPasswordByRoot(user, new String(clearPassword, StandardCharsets.UTF_8),
+                    ldapServerHost, ldapServerPort, ldapBindRootDN, ldapBindRootPwd, ldapBindBaseDN, ldapSearchFilter)) {
                 throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
             }
         }

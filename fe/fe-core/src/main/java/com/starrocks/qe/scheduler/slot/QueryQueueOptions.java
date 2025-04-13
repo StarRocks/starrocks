@@ -93,7 +93,7 @@ public class QueryQueueOptions {
             final Map<Long, Long> warehouseMemLimitBytesPerBe = BackendResourceStat.getInstance()
                     .getMemLimitBytesPerBeWithPred(beId -> computeNodeIds.contains(beId));
             final long avgMemLimitBytes = BackendResourceStat.getAvgMemLimitBytes(warehouseMemLimitBytesPerBe);
-            final V2 v2 = new V2(Config.query_queue_v2_concurrency_level,
+            final V2 v2 = new V2(1,
                     computeNodeNum,
                     avgNumHardwareCoresOfBe,
                     avgMemLimitBytes,
@@ -270,11 +270,6 @@ public class QueryQueueOptions {
     }
 
     public static int correctSlotNum(int slotNum) {
-        if (slotNum <= 0) {
-            return 0;
-        } else {
-            int level = Math.max(1, Config.query_queue_v2_concurrency_level);
-            return (slotNum + level - 1) / level;
-        }
+        return slotNum < 0 ? 0 : slotNum;
     }
 }

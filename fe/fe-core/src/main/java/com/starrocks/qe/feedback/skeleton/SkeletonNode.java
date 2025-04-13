@@ -26,7 +26,10 @@ import java.util.Objects;
 
 public class SkeletonNode extends TreeNode<SkeletonNode> {
 
-    protected int nodeId;
+    protected final int operatorId;
+
+    // nodeId is not used in `hashCode` and `equals`, because rewrite phase has not set nodeIds to physical operators.
+    protected final int nodeId;
 
     protected final OperatorType type;
 
@@ -41,9 +44,8 @@ public class SkeletonNode extends TreeNode<SkeletonNode> {
     protected final NodeExecStats nodeExecStats;
 
     public SkeletonNode(OptExpression optExpression, NodeExecStats nodeExecStats, SkeletonNode parent) {
-        if (optExpression.getOp().getPlanNodeId() != - 1) {
-            this.nodeId = optExpression.getOp().getPlanNodeId();
-        }
+        this.operatorId = optExpression.getOp().getOperatorId();
+        this.nodeId = optExpression.getOp().getPlanNodeId();
         this.type = optExpression.getOp().getOpType();
         this.limit = optExpression.getOp().getLimit();
         this.predicate = optExpression.getOp().getPredicate();
@@ -60,6 +62,10 @@ public class SkeletonNode extends TreeNode<SkeletonNode> {
         return nodeId;
     }
 
+    public int getOperatorId() {
+        return operatorId;
+    }
+
     public SkeletonNode getParent() {
         return parent;
     }
@@ -72,13 +78,9 @@ public class SkeletonNode extends TreeNode<SkeletonNode> {
         return statistics;
     }
 
-    public void setNodeId(int nodeId) {
-        this.nodeId = nodeId;
-    }
-
     @Override
     public int hashCode() {
-        return Objects.hash(nodeId, type, limit, predicate);
+        return Objects.hash(operatorId, type, limit, predicate);
     }
 
     @Override
@@ -90,7 +92,7 @@ public class SkeletonNode extends TreeNode<SkeletonNode> {
             return false;
         }
         SkeletonNode that = (SkeletonNode) o;
-        return nodeId == that.nodeId && limit == that.limit && type == that.type &&
+        return operatorId == that.operatorId && limit == that.limit && type == that.type &&
                 Objects.equals(predicate, that.predicate);
     }
 

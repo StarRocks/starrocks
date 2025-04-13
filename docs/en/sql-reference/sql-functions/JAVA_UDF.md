@@ -536,6 +536,8 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 
 ## Mapping between SQL data types and Java data types
 
+Only non-nested Arrays/Maps are now supported.
+
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
 | BOOLEAN        | java.lang.Boolean |
@@ -546,6 +548,8 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 | FLOAT          | java.lang.Float   |
 | DOUBLE         | java.lang.Double  |
 | STRING/VARCHAR | java.lang.String  |
+| ARRAY          | java.util.List    |
+| Map            | java.util.Map     |
 
 ## Parameter settings
 

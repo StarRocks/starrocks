@@ -872,7 +872,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(aggregation.getAlias());
                 }
             }
-            sb.append("\n");
+            sb.append(" ");
 
             sb.append("FOR ");
             if (node.getPivotColumns().size() == 1) {
@@ -910,7 +910,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(pivotValue.getAlias());
                 }
             }
-            sb.append(")\n)");
+            sb.append("))");
 
             return sb.toString();
         }
@@ -1960,7 +1960,8 @@ public class AstToStringBuilder {
         String location = null;
         try {
             location = table.getTableLocation();
-            if (!Strings.isNullOrEmpty(location)) {
+            // Paimon table has a `path` property instead of location
+            if (!Strings.isNullOrEmpty(location) && !table.isPaimonTable()) {
                 properties.put("location", location);
             }
         } catch (NotImplementedException e) {

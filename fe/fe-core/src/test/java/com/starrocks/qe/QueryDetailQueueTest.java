@@ -85,7 +85,8 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 "\"memCostBytes\":100003," +
                 "\"spillBytes\":-1," +
                 "\"warehouse\":\"default_warehouse\"," +
-                "\"catalog\":\"default_catalog\"}]";
+                "\"catalog\":\"default_catalog\"," +
+                "\"queryFeMemory\":0}]";
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());
@@ -126,6 +127,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail finishedDetail = queryDetails.get(1);
         Assert.assertEquals(QueryDetail.QueryMemState.FINISHED, finishedDetail.getState());
         Assert.assertEquals(sql, finishedDetail.getSql());
+        Assert.assertTrue(finishedDetail.getQueryFeMemory() > 0);
 
         Config.enable_collect_query_detail_info = old;
     }

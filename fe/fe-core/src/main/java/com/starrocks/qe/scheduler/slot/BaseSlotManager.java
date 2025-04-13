@@ -86,7 +86,7 @@ public abstract class BaseSlotManager {
     private static final int MAX_PENDING_REQUESTS = 1_000_000;
 
     /**
-     * All the data members except {@code requests} and {@link SlotTracker#getSlots()} are only accessed
+     * All the data members except {@code requests} and {@link BaseSlotTracker#getSlots()} are only accessed
      * by the RequestWorker.
      * Others outside can do nothing, but add a request to {@code requests} or retrieve a view of all the running and queued
      * slots.
@@ -109,10 +109,10 @@ public abstract class BaseSlotManager {
      * }</pre>
      *
      * <ul>
-     * <li> (1) {@link SlotTracker#requireSlot}: the slot is into required state and is waiting for allocation.
+     * <li> (1) {@link BaseSlotTracker#requireSlot}: the slot is into required state and is waiting for allocation.
      * <li> (2) {@link SlotSelectionStrategy#peakSlotsToAllocate}: select proper slots to allocate,
-     * {@link SlotTracker#allocateSlot}: the slot is into allocated state and the related query is notified to be started.
-     * <li> (3) {@link SlotTracker#releaseSlot}: the slot is released and will be removed from the slot tracker.
+     * {@link BaseSlotTracker#allocateSlot}: the slot is into allocated state and the related query is notified to be started.
+     * <li> (3) {@link BaseSlotTracker#releaseSlot}: the slot is released and will be removed from the slot tracker.
      * </ul>
      */
 
@@ -128,7 +128,7 @@ public abstract class BaseSlotManager {
     /**
      * Get the slot tracker by the warehouse id.
      */
-    public abstract SlotTracker getSlotTracker(long warehouseId);
+    public abstract BaseSlotTracker getSlotTracker(long warehouseId);
 
     /**
      * Start the slot manager.
@@ -181,7 +181,7 @@ public abstract class BaseSlotManager {
             return;
         }
         final long warehouseId = slot.getWarehouseId();
-        final SlotTracker slotTracker = getSlotTracker(warehouseId);
+        final BaseSlotTracker slotTracker = getSlotTracker(warehouseId);
         if (slotTracker.requireSlot(slot)) {
             requestFeNameToSlots.computeIfAbsent(slot.getRequestFeName(), k -> new HashSet<>())
                     .add(slot);
@@ -197,7 +197,7 @@ public abstract class BaseSlotManager {
     }
 
     private void handleReleaseSlotTask(long warehouseId, TUniqueId slotId) {
-        SlotTracker slotTracker = getSlotTracker(warehouseId);
+        BaseSlotTracker slotTracker = getSlotTracker(warehouseId);
         if (slotTracker == null) {
             LOG.warn("[Slot] The warehouse [{}] is not found, and the slot [{}] will be released", warehouseId, slotId);
             return;
