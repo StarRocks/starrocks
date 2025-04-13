@@ -76,11 +76,11 @@ struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_BINARY_PACKED> {
 template <tparquet::Type::type type>
 struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY> {
     static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
-        decoder->reset(new DeltaLengthByteArrayDecoder());
+        *decoder = std::make_unique<DeltaLengthByteArrayDecoder>();
         return Status::OK();
     }
     static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
-        encoder->reset(new DeltaLengthByteArrayEncoder());
+        *encoder = std::make_unique<DeltaLengthByteArrayEncoder>();
         return Status::OK();
     }
 };
