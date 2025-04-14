@@ -1,0 +1,41 @@
+-- name: test_stream_load_label_already_exist
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NOT NULL,
+  `c1` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:test_stream_load_label_already_exist" -H "column_separator:," -d '1,2' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Label": "test_stream_load_label_already_exist",
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:test_stream_load_label_already_exist" -H "column_separator:," -d '1,2' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "TxnId": -1,
+    "Label": "test_stream_load_label_already_exist",
+    "Status": "Label Already Exists",
+    "ExistingJobStatus": "FINISHED",
+    "Message": "Label [test_stream_load_label_already_exist] has already been used."
+}
+-- !result
+sync;
+-- result:
+-- !result
