@@ -1,29 +1,20 @@
--- name: test_iceberg_parse_predicates
+-- name: test_iceberg_parse_predicates_1
+
 create external catalog ice_cat_${uuid0}
 properties (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
 );
--- result:
--- !result
 set catalog ice_cat_${uuid0};
--- result:
--- !result
 create database ice_db_${uuid0};
--- result:
--- !result
 use ice_db_${uuid0};
--- result:
--- !result
+
+
 CREATE TABLE __row_util_base (
   k1 bigint NULL
 );
--- result:
--- !result
 insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
--- result:
--- !result
 insert into __row_util_base select * from __row_util_base; -- 20000
 insert into __row_util_base select * from __row_util_base; -- 40000
 insert into __row_util_base select * from __row_util_base; -- 80000
@@ -35,11 +26,9 @@ insert into __row_util_base select * from __row_util_base; -- 1280000
 CREATE TABLE __row_util (
   idx bigint NULL
 );
--- result:
--- !result
 insert into __row_util select row_number() over() as idx from __row_util_base;
--- result:
--- !result
+
+
 CREATE TABLE t1 (
     k1 bigint NULL,
 
@@ -63,8 +52,7 @@ CREATE TABLE t1 (
     c_map MAP<INT, INT> NULL,
     c_struct STRUCT<k1 INT, k2 INT> NULL
 );
--- result:
--- !result
+
 INSERT INTO t1
 SELECT
     idx,
@@ -89,1138 +77,343 @@ SELECT
     map{0: idx, 1: idx + 1, 2: idx + 2},
     struct(idx, idx + 1)
 FROM __row_util;
--- result:
--- !result
+
 INSERT INTO t1 (k1) SELECT idx from __row_util order by idx limit 10000;
--- result:
--- !result
+
+-- BOOL
 select count(1) from t1 where c_bool = false;
--- result:
-640000
--- !result
 select count(1) from t1 where c_bool != false;
--- result:
-640000
--- !result
 select count(1) from t1 where c_bool > false;
--- result:
-640000
--- !result
 select count(1) from t1 where c_bool >= false;
--- result:
-1280000
--- !result
 select count(1) from t1 where c_bool < false;
--- result:
-0
--- !result
 select count(1) from t1 where c_bool <= false;
--- result:
-640000
--- !result
 select count(1) from t1 where c_bool <=> false;
--- result:
-640000
--- !result
 select count(1) from t1 where c_bool <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_bool is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_bool is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_bool = false AND c_bool != false;
--- result:
-0
--- !result
 select count(1) from t1 where c_bool > false AND c_bool < false;
--- result:
-0
--- !result
 select count(1) from t1 where c_bool >= false AND c_bool <= false;
--- result:
-640000
--- !result
+
 select count(1) from t1 where c_bool in (true, false);
--- result:
-1280000
--- !result
 select count(1) from t1 where c_bool not in (true, false);
--- result:
-0
--- !result
 select count(1) from t1 where c_bool in (true, false) and c_bool in (true);
--- result:
-640000
--- !result
 select count(1) from t1 where c_bool in (true, false) and c_bool not in (true, false);
--- result:
-0
--- !result
 select count(1) from t1 where c_bool in (true, false) and c_bool not in (true);
--- result:
-640000
--- !result
 select count(1) from t1 where c_bool >= 0 AND (c_bool in (true, false) OR c_bool not in (true, false));
--- result:
-1280000
--- !result
+
+
+-- TINYINT
 select count(1) from t1 where c_tinyint = 10;
--- result:
-10000
--- !result
 select count(1) from t1 where c_tinyint != 10;
--- result:
-1270000
--- !result
 select count(1) from t1 where c_tinyint > 10;
--- result:
-1170000
--- !result
 select count(1) from t1 where c_tinyint >= 10;
--- result:
-1180000
--- !result
 select count(1) from t1 where c_tinyint < 10;
--- result:
-100000
--- !result
 select count(1) from t1 where c_tinyint <= 10;
--- result:
-110000
--- !result
 select count(1) from t1 where c_tinyint <=> 10;
--- result:
-10000
--- !result
 select count(1) from t1 where c_tinyint <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_tinyint is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_tinyint is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_tinyint = 10 AND c_tinyint != 10;
--- result:
-0
--- !result
 select count(1) from t1 where c_tinyint > 10 AND c_tinyint < 100;
--- result:
-890000
--- !result
 select count(1) from t1 where c_tinyint >= 10 AND c_tinyint <= 100;
--- result:
-910000
--- !result
+
 select count(1) from t1 where c_tinyint in (10, 10, 100);
--- result:
-20000
--- !result
 select count(1) from t1 where c_tinyint not in (10, 10, 100);
--- result:
-1260000
--- !result
 select count(1) from t1 where c_tinyint in (100, 10, 10) and c_tinyint in (10, 100, 10, 7, 8, 9, 1);
--- result:
-20000
--- !result
 select count(1) from t1 where c_tinyint in (10, 10, 100) and c_tinyint not in (10, 10, 100);
--- result:
-0
--- !result
 select count(1) from t1 where c_tinyint in (10, 10, 100, 7) and c_tinyint not in (10, 10, 100);
--- result:
-10000
--- !result
+-- parse to: c_tinyint > 0 and c_tinyint is not null
 select count(1) from t1 where c_tinyint > 0 AND (c_tinyint in (10, 10, 100) OR c_tinyint not in (10, 10, 100));
--- result:
-1270000
--- !result
+
+
+
+-- SMALLINT
 select count(1) from t1 where c_smallint = 10000;
--- result:
-39
--- !result
 select count(1) from t1 where c_smallint != 10000;
--- result:
-1279961
--- !result
 select count(1) from t1 where c_smallint > 10000;
--- result:
-887913
--- !result
 select count(1) from t1 where c_smallint >= 10000;
--- result:
-887952
--- !result
 select count(1) from t1 where c_smallint < 10000;
--- result:
-392048
--- !result
 select count(1) from t1 where c_smallint <= 10000;
--- result:
-392087
--- !result
 select count(1) from t1 where c_smallint <=> 10000;
--- result:
-39
--- !result
 select count(1) from t1 where c_smallint <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_smallint is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_smallint is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_smallint = 10000 AND c_smallint != 10000;
--- result:
-0
--- !result
 select count(1) from t1 where c_smallint > 10000 AND c_smallint < 100000;
--- result:
-887913
--- !result
 select count(1) from t1 where c_smallint >= 10000 AND c_smallint <= 100000;
--- result:
-887952
--- !result
+
 select count(1) from t1 where c_smallint in (10, 10000, 100000);
--- result:
-79
--- !result
 select count(1) from t1 where c_smallint not in (10, 10000, 100000);
--- result:
-1279921
--- !result
 select count(1) from t1 where c_smallint in (100000, 10000, 10) and c_smallint in (10, 100000, 10000, 7, 8, 9, 1);
--- result:
-79
--- !result
 select count(1) from t1 where c_smallint in (10, 10000, 100000) and c_smallint not in (10, 10000, 100000);
--- result:
-0
--- !result
 select count(1) from t1 where c_smallint in (10, 10000, 100000, 7) and c_smallint not in (10, 10000, 100000);
--- result:
-40
--- !result
+-- parse to: c_smallint > 0 and c_smallint is not null
 select count(1) from t1 where c_smallint > 0 AND (c_smallint in (10, 10000, 100000) OR c_smallint not in (10, 10000, 100000));
--- result:
-1279961
--- !result
+
+
+-- INT
 select count(1) from t1 where c_int = 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_int != 100000;
--- result:
-1279999
--- !result
 select count(1) from t1 where c_int > 100000;
--- result:
-1180000
--- !result
 select count(1) from t1 where c_int >= 100000;
--- result:
-1180001
--- !result
 select count(1) from t1 where c_int < 100000;
--- result:
-99999
--- !result
 select count(1) from t1 where c_int <= 100000;
--- result:
-100000
--- !result
 select count(1) from t1 where c_int <=> 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_int <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_int is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_int is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_int = 100000 AND c_int != 100000;
--- result:
-0
--- !result
 select count(1) from t1 where c_int > 100000 AND c_int < 1000000;
--- result:
-899999
--- !result
 select count(1) from t1 where c_int >= 100000 AND c_int <= 1000000;
--- result:
-900001
--- !result
+
 select count(1) from t1 where c_int in (10, 100000, 1000000);
--- result:
-3
--- !result
 select count(1) from t1 where c_int not in (10, 100000, 1000000);
--- result:
-1279997
--- !result
 select count(1) from t1 where c_int in (1000000, 100000, 10) and c_int in (10, 1000000, 100000, 7, 8, 9, 1);
--- result:
-3
--- !result
 select count(1) from t1 where c_int in (10, 100000, 1000000) and c_int not in (10, 100000, 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_int in (10, 100000, 1000000, 7) and c_int not in (10, 100000, 1000000);
--- result:
-1
--- !result
+-- parse to: c_int > 0 and c_int is not null
 select count(1) from t1 where c_int > 0 AND (c_int in (10, 100000, 1000000) OR c_int not in (10, 100000, 1000000));
--- result:
-1280000
--- !result
+
+
+
+-- BIGINT
 select count(1) from t1 where c_bigint = 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_bigint != 100000;
--- result:
-1279999
--- !result
 select count(1) from t1 where c_bigint > 100000;
--- result:
-1180000
--- !result
 select count(1) from t1 where c_bigint >= 100000;
--- result:
-1180001
--- !result
 select count(1) from t1 where c_bigint < 100000;
--- result:
-99999
--- !result
 select count(1) from t1 where c_bigint <= 100000;
--- result:
-100000
--- !result
 select count(1) from t1 where c_bigint <=> 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_bigint <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_bigint is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_bigint is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_bigint = 100000 AND c_bigint != 100000;
--- result:
-0
--- !result
 select count(1) from t1 where c_bigint > 100000 AND c_bigint < 1000000;
--- result:
-899999
--- !result
 select count(1) from t1 where c_bigint >= 100000 AND c_bigint <= 1000000;
--- result:
-900001
--- !result
+
 select count(1) from t1 where c_bigint in (10, 100000, 1000000);
--- result:
-3
--- !result
 select count(1) from t1 where c_bigint not in (10, 100000, 1000000);
--- result:
-1279997
--- !result
 select count(1) from t1 where c_bigint in (1000000, 100000, 10) and c_bigint in (10, 1000000, 100000, 7, 8, 9, 1);
--- result:
-3
--- !result
 select count(1) from t1 where c_bigint in (10, 100000, 1000000) and c_bigint not in (10, 100000, 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_bigint in (10, 100000, 1000000, 7) and c_bigint not in (10, 100000, 1000000);
--- result:
-1
--- !result
+-- parse to: c_bigint > 0 and c_bigint is not null
 select count(1) from t1 where c_bigint > 0 AND (c_bigint in (10, 100000, 1000000) OR c_bigint not in (10, 100000, 1000000));
--- result:
-1280000
--- !result
+
+
+
+-- FLOAT
 select count(1) from t1 where c_float = 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_float != 100000;
--- result:
-1279999
--- !result
 select count(1) from t1 where c_float > 100000;
--- result:
-1180000
--- !result
 select count(1) from t1 where c_float >= 100000;
--- result:
-1180001
--- !result
 select count(1) from t1 where c_float < 100000;
--- result:
-99999
--- !result
 select count(1) from t1 where c_float <= 100000;
--- result:
-100000
--- !result
 select count(1) from t1 where c_float <=> 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_float <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_float is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_float is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_float = 100000 AND c_float != 100000;
--- result:
-0
--- !result
 select count(1) from t1 where c_float > 100000 AND c_float < 1000000;
--- result:
-899999
--- !result
 select count(1) from t1 where c_float >= 100000 AND c_float <= 1000000;
--- result:
-900001
--- !result
+
 select count(1) from t1 where c_float in (10, 100000, 1000000);
--- result:
-3
--- !result
 select count(1) from t1 where c_float not in (10, 100000, 1000000);
--- result:
-1279997
--- !result
 select count(1) from t1 where c_float in (1000000, 100000, 10) and c_float in (10, 1000000, 100000, 7, 8, 9, 1);
--- result:
-3
--- !result
 select count(1) from t1 where c_float in (10, 100000, 1000000) and c_float not in (10, 100000, 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_float in (10, 100000, 1000000, 7) and c_float not in (10, 100000, 1000000);
--- result:
-1
--- !result
+-- parse to: c_float > 0 and c_float is not null
 select count(1) from t1 where c_float > 0 AND (c_float in (10, 100000, 1000000) OR c_float not in (10, 100000, 1000000));
--- result:
-1280000
--- !result
+
+
+
+-- DOUBLE
 select count(1) from t1 where c_double = 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_double != 100000;
--- result:
-1279999
--- !result
 select count(1) from t1 where c_double > 100000;
--- result:
-1180000
--- !result
 select count(1) from t1 where c_double >= 100000;
--- result:
-1180001
--- !result
 select count(1) from t1 where c_double < 100000;
--- result:
-99999
--- !result
 select count(1) from t1 where c_double <= 100000;
--- result:
-100000
--- !result
 select count(1) from t1 where c_double <=> 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_double <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_double is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_double is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_double = 100000 AND c_double != 100000;
--- result:
-0
--- !result
 select count(1) from t1 where c_double > 100000 AND c_double < 1000000;
--- result:
-899999
--- !result
 select count(1) from t1 where c_double >= 100000 AND c_double <= 1000000;
--- result:
-900001
--- !result
+
 select count(1) from t1 where c_double in (10, 100000, 1000000);
--- result:
-3
--- !result
 select count(1) from t1 where c_double not in (10, 100000, 1000000);
--- result:
-1279997
--- !result
 select count(1) from t1 where c_double in (1000000, 100000, 10) and c_double in (10, 1000000, 100000, 7, 8, 9, 1);
--- result:
-3
--- !result
 select count(1) from t1 where c_double in (10, 100000, 1000000) and c_double not in (10, 100000, 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_double in (10, 100000, 1000000, 7) and c_double not in (10, 100000, 1000000);
--- result:
-1
--- !result
+-- parse to: c_double > 0 and c_double is not null
 select count(1) from t1 where c_double > 0 AND (c_double in (10, 100000, 1000000) OR c_double not in (10, 100000, 1000000));
--- result:
-1280000
--- !result
+
+
+-- DECIMAL 64
 select count(1) from t1 where c_decimal64 = 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_decimal64 != 100000;
--- result:
-1279999
--- !result
 select count(1) from t1 where c_decimal64 > 100000;
--- result:
-1180000
--- !result
 select count(1) from t1 where c_decimal64 >= 100000;
--- result:
-1180001
--- !result
 select count(1) from t1 where c_decimal64 < 100000;
--- result:
-99999
--- !result
 select count(1) from t1 where c_decimal64 <= 100000;
--- result:
-100000
--- !result
 select count(1) from t1 where c_decimal64 <=> 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_decimal64 <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_decimal64 is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_decimal64 is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_decimal64 = 100000 AND c_decimal64 != 100000;
--- result:
-0
--- !result
 select count(1) from t1 where c_decimal64 > 100000 AND c_decimal64 < 1000000;
--- result:
-899999
--- !result
 select count(1) from t1 where c_decimal64 >= 100000 AND c_decimal64 <= 1000000;
--- result:
-900001
--- !result
+
 select count(1) from t1 where c_decimal64 in (10, 100000, 1000000);
--- result:
-3
--- !result
 select count(1) from t1 where c_decimal64 not in (10, 100000, 1000000);
--- result:
-1279997
--- !result
 select count(1) from t1 where c_decimal64 in (1000000, 100000, 10) and c_decimal64 in (10, 1000000, 100000, 7, 8, 9, 1);
--- result:
-3
--- !result
 select count(1) from t1 where c_decimal64 in (10, 100000, 1000000) and c_decimal64 not in (10, 100000, 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_decimal64 in (10, 100000, 1000000, 7) and c_decimal64 not in (10, 100000, 1000000);
--- result:
-1
--- !result
+-- parse to: c_decimal64 > 0 and c_decimal64 is not null
 select count(1) from t1 where c_decimal64 > 0 AND (c_decimal64 in (10, 100000, 1000000) OR c_decimal64 not in (10, 100000, 1000000));
--- result:
-1280000
--- !result
+
+
+-- DECIMAL 128
 select count(1) from t1 where c_decimal128 = 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_decimal128 != 100000;
--- result:
-1279999
--- !result
 select count(1) from t1 where c_decimal128 > 100000;
--- result:
-1180000
--- !result
 select count(1) from t1 where c_decimal128 >= 100000;
--- result:
-1180001
--- !result
 select count(1) from t1 where c_decimal128 < 100000;
--- result:
-99999
--- !result
 select count(1) from t1 where c_decimal128 <= 100000;
--- result:
-100000
--- !result
 select count(1) from t1 where c_decimal128 <=> 100000;
--- result:
-1
--- !result
 select count(1) from t1 where c_decimal128 <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_decimal128 is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_decimal128 is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_decimal128 = 100000 AND c_decimal128 != 100000;
--- result:
-0
--- !result
 select count(1) from t1 where c_decimal128 > 100000 AND c_decimal128 < 1000000;
--- result:
-899999
--- !result
 select count(1) from t1 where c_decimal128 >= 100000 AND c_decimal128 <= 1000000;
--- result:
-900001
--- !result
+
 select count(1) from t1 where c_decimal128 in (10, 100000, 1000000);
--- result:
-3
--- !result
 select count(1) from t1 where c_decimal128 not in (10, 100000, 1000000);
--- result:
-1279997
--- !result
 select count(1) from t1 where c_decimal128 in (1000000, 100000, 10) and c_decimal128 in (10, 1000000, 100000, 7, 8, 9, 1);
--- result:
-3
--- !result
 select count(1) from t1 where c_decimal128 in (10, 100000, 1000000) and c_decimal128 not in (10, 100000, 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_decimal128 in (10, 100000, 1000000, 7) and c_decimal128 not in (10, 100000, 1000000);
--- result:
-1
--- !result
+-- parse to: c_decimal128 > 0 and c_decimal128 is not null
 select count(1) from t1 where c_decimal128 > 0 AND (c_decimal128 in (10, 100000, 1000000) OR c_decimal128 not in (10, 100000, 1000000));
--- result:
-1280000
--- !result
+
+
+-- c_varchar
 select count(1) from t1 where c_varchar = concat('varchar-', 100000);
--- result:
-1
--- !result
 select count(1) from t1 where c_varchar != concat('varchar-', 100000);
--- result:
-1279999
--- !result
 select count(1) from t1 where c_varchar > concat('varchar-', 100000);
--- result:
-1279994
--- !result
 select count(1) from t1 where c_varchar >= concat('varchar-', 100000);
--- result:
-1279995
--- !result
 select count(1) from t1 where c_varchar < concat('varchar-', 100000);
--- result:
-5
--- !result
 select count(1) from t1 where c_varchar <= concat('varchar-', 100000);
--- result:
-6
--- !result
 select count(1) from t1 where c_varchar <=> concat('varchar-', 100000);
--- result:
-1
--- !result
 select count(1) from t1 where c_varchar <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_varchar is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_varchar is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_varchar = concat('varchar-', 100000) AND c_varchar != concat('varchar-', 100000);
--- result:
-0
--- !result
 select count(1) from t1 where c_varchar > concat('varchar-', 100000) AND c_varchar < concat('varchar-', 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_varchar >= concat('varchar-', 100000) AND c_varchar <= concat('varchar-', 1000000);
--- result:
-2
--- !result
+
 select count(1) from t1 where c_varchar in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000));
--- result:
-3
--- !result
 select count(1) from t1 where c_varchar not in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000));
--- result:
-1279997
--- !result
 select count(1) from t1 where c_varchar in (concat('varchar-', 1000000), concat('varchar-', 100000), concat('varchar-', 10)) and c_varchar in (concat('varchar-', 10), concat('varchar-', 1000000), concat('varchar-', 100000), concat('varchar-', 7), concat('varchar-', 8), concat('varchar-', 9), 1);
--- result:
-0
--- !result
 select count(1) from t1 where c_varchar in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000)) and c_varchar not in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000));
--- result:
-0
--- !result
 select count(1) from t1 where c_varchar in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000), concat('varchar-', 7)) and c_varchar not in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000));
--- result:
-1
--- !result
+-- parse to: c_varchar > 0 and c_varchar is not null
 select count(1) from t1 where c_varchar > 0 AND (c_varchar in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000)) OR c_varchar not in (concat('varchar-', 10), concat('varchar-', 100000), concat('varchar-', 1000000)));
--- result:
-0
--- !result
+
+
+
+-- c_char
 select count(1) from t1 where c_char = concat('char-', 100000);
--- result:
-1
--- !result
 select count(1) from t1 where c_char != concat('char-', 100000);
--- result:
-1279999
--- !result
 select count(1) from t1 where c_char > concat('char-', 100000);
--- result:
-1279994
--- !result
 select count(1) from t1 where c_char >= concat('char-', 100000);
--- result:
-1279995
--- !result
 select count(1) from t1 where c_char < concat('char-', 100000);
--- result:
-5
--- !result
 select count(1) from t1 where c_char <= concat('char-', 100000);
--- result:
-6
--- !result
 select count(1) from t1 where c_char <=> concat('char-', 100000);
--- result:
-1
--- !result
 select count(1) from t1 where c_char <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_char is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_char is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_char = concat('char-', 100000) AND c_char != concat('char-', 100000);
--- result:
-0
--- !result
 select count(1) from t1 where c_char > concat('char-', 100000) AND c_char < concat('char-', 1000000);
--- result:
-0
--- !result
 select count(1) from t1 where c_char >= concat('char-', 100000) AND c_char <= concat('char-', 1000000);
--- result:
-2
--- !result
+
 select count(1) from t1 where c_char in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000));
--- result:
-3
--- !result
 select count(1) from t1 where c_char not in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000));
--- result:
-1279997
--- !result
 select count(1) from t1 where c_char in (concat('char-', 1000000), concat('char-', 100000), concat('char-', 10)) and c_char in (concat('char-', 10), concat('char-', 1000000), concat('char-', 100000), concat('char-', 7), concat('char-', 8), concat('char-', 9), 1);
--- result:
-0
--- !result
 select count(1) from t1 where c_char in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000)) and c_char not in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000));
--- result:
-0
--- !result
 select count(1) from t1 where c_char in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000), concat('char-', 7)) and c_char not in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000));
--- result:
-1
--- !result
+-- parse to: c_char > 0 and c_char is not null
 select count(1) from t1 where c_char > 0 AND (c_char in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000)) OR c_char not in (concat('char-', 10), concat('char-', 100000), concat('char-', 1000000)));
--- result:
-0
--- !result
+
+
+-- c_date
 select count(1) from t1 where c_date = cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-0
--- !result
 select count(1) from t1 where c_date != cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-1280000
--- !result
 select count(1) from t1 where c_date > cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-1280000
--- !result
 select count(1) from t1 where c_date >= cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-1280000
--- !result
 select count(1) from t1 where c_date < cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-0
--- !result
 select count(1) from t1 where c_date <= cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-0
--- !result
 select count(1) from t1 where c_date <=> cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-0
--- !result
 select count(1) from t1 where c_date <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_date is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_date is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_date = cast(date_sub('2023-01-01', interval 100000 day) as date) AND c_date != cast(date_sub('2023-01-01', interval 100000 day) as date);
--- result:
-0
--- !result
 select count(1) from t1 where c_date > cast(date_sub('2023-01-01', interval 100000 day) as date) AND c_date < cast(date_sub('2023-01-01', interval 1000000 day) as date);
--- result:
-0
--- !result
 select count(1) from t1 where c_date >= cast(date_sub('2023-01-01', interval 100000 day) as date) AND c_date <= cast(date_sub('2023-01-01', interval 1000000 day) as date);
--- result:
-0
--- !result
+
 select count(1) from t1 where c_date in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date));
--- result:
-128
--- !result
 select count(1) from t1 where c_date not in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date));
--- result:
-0
--- !result
 select count(1) from t1 where c_date in (cast(date_sub('2023-01-01', interval 1000000 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 10 day) as date)) and c_date in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 7 day) as date), cast(date_sub('2023-01-01', interval 8 day) as date), cast(date_sub('2023-01-01', interval 9 day) as date), 1);
--- result:
-128
--- !result
 select count(1) from t1 where c_date in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date)) and c_date not in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date));
--- result:
-0
--- !result
 select count(1) from t1 where c_date in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date), cast(date_sub('2023-01-01', interval 7 day) as date)) and c_date not in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date));
--- result:
-0
--- !result
+-- parse to: c_date <= cast(date_sub('2023-01-01', interval 0 day) as date) and c_date is not null
 select count(1) from t1 where c_date <= cast(date_sub('2023-01-01', interval 0 day) as date) AND (c_date in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date)) OR c_date not in (cast(date_sub('2023-01-01', interval 10 day) as date), cast(date_sub('2023-01-01', interval 100000 day) as date), cast(date_sub('2023-01-01', interval 1000000 day) as date)));
--- result:
-128
--- !result
+
+
+-- c_datetime
 select count(1) from t1 where c_datetime = date_sub('2023-01-01', interval 100000 second);
--- result:
-0
--- !result
 select count(1) from t1 where c_datetime != date_sub('2023-01-01', interval 100000 second);
--- result:
-1280000
--- !result
 select count(1) from t1 where c_datetime > date_sub('2023-01-01', interval 100000 second);
--- result:
-1280000
--- !result
 select count(1) from t1 where c_datetime >= date_sub('2023-01-01', interval 100000 second);
--- result:
-1280000
--- !result
 select count(1) from t1 where c_datetime < date_sub('2023-01-01', interval 100000 second);
--- result:
-0
--- !result
 select count(1) from t1 where c_datetime <= date_sub('2023-01-01', interval 100000 second);
--- result:
-0
--- !result
 select count(1) from t1 where c_datetime <=> date_sub('2023-01-01', interval 100000 second);
--- result:
-0
--- !result
 select count(1) from t1 where c_datetime <=> null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_datetime is null;
--- result:
-10000
--- !result
 select count(1) from t1 where c_datetime is not null;
--- result:
-1280000
--- !result
+
 select count(1) from t1 where c_datetime = date_sub('2023-01-01', interval 100000 second) AND c_datetime != date_sub('2023-01-01', interval 100000 second);
--- result:
-0
--- !result
 select count(1) from t1 where c_datetime > date_sub('2023-01-01', interval 100000 second) AND c_datetime < date_sub('2023-01-01', interval 1000000 second);
--- result:
-0
--- !result
 select count(1) from t1 where c_datetime >= date_sub('2023-01-01', interval 100000 second) AND c_datetime <= date_sub('2023-01-01', interval 1000000 second);
--- result:
-0
--- !result
+
 select count(1) from t1 where c_datetime in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second));
--- result:
-128
--- !result
 select count(1) from t1 where c_datetime not in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second));
--- result:
-1279872
--- !result
 select count(1) from t1 where c_datetime in (date_sub('2023-01-01', interval 1000000 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 10 second)) and c_datetime in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 1000000 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 7 second), date_sub('2023-01-01', interval 8 second), date_sub('2023-01-01', interval 9 second), 1);
--- result:
-128
--- !result
 select count(1) from t1 where c_datetime in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second)) and c_datetime not in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second));
--- result:
-0
--- !result
 select count(1) from t1 where c_datetime in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second), date_sub('2023-01-01', interval 7 second)) and c_datetime not in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second));
--- result:
-128
--- !result
+-- parse to: c_datetime <= date_sub('2023-01-01', interval 0 second) and c_datetime is not null
 select count(1) from t1 where c_datetime <= date_sub('2023-01-01', interval 0 second) AND (c_datetime in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second)) OR c_datetime not in (date_sub('2023-01-01', interval 10 second), date_sub('2023-01-01', interval 100000 second), date_sub('2023-01-01', interval 1000000 second)));
--- result:
-1280000
--- !result
-select count(1) from t1 where c_array_int = [100000, 100000+1, 100000+2, 100000+3];
--- result:
-1
--- !result
-select count(1) from t1 where c_array_int != [100000, 100000+1, 100000+2, 100000+3];
--- result:
-1279999
--- !result
-select count(1) from t1 where c_array_int > [100000, 100000+1, 100000+2, 100000+3];
--- result:
-1180000
--- !result
-select count(1) from t1 where c_array_int >= [100000, 100000+1, 100000+2, 100000+3];
--- result:
-1180001
--- !result
-select count(1) from t1 where c_array_int < [100000, 100000+1, 100000+2, 100000+3];
--- result:
-99999
--- !result
-select count(1) from t1 where c_array_int <= [100000, 100000+1, 100000+2, 100000+3];
--- result:
-100000
--- !result
-select count(1) from t1 where c_array_int <=> [100000, 100000+1, 100000+2, 100000+3];
--- result:
-1
--- !result
-select count(1) from t1 where c_array_int <=> null;
--- result:
-10000
--- !result
-select count(1) from t1 where c_array_int is null;
--- result:
-10000
--- !result
-select count(1) from t1 where c_array_int is not null;
--- result:
-1280000
--- !result
-select count(1) from t1 where c_array_int = [100000, 100000+1, 100000+2, 100000+3] AND c_array_int != [100000, 100000+1, 100000+2, 100000+3];
--- result:
-0
--- !result
-select count(1) from t1 where c_array_int > [100000, 100000+1, 100000+2, 100000+3] AND c_array_int < [1000000, 1000000+1, 1000000+2, 1000000+3];
--- result:
-899999
--- !result
-select count(1) from t1 where c_array_int >= [100000, 100000+1, 100000+2, 100000+3] AND c_array_int <= [1000000, 1000000+1, 1000000+2, 1000000+3];
--- result:
-900001
--- !result
-select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
--- result:
-3
--- !result
-select count(1) from t1 where c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
--- result:
-1279997
--- !result
-select count(1) from t1 where c_array_int in ([1000000, 1000000+1, 1000000+2, 1000000+3], [100000, 100000+1, 100000+2, 100000+3], [10, 10+1, 10+2, 10+3]) and c_array_int in ([10, 10+1, 10+2, 10+3], [1000000, 1000000+1, 1000000+2, 1000000+3], [100000, 100000+1, 100000+2, 100000+3], [7, 7+1, 7+2, 7+3], [8, 8+1, 8+2, 8+3], [9, 9+1, 9+2, 9+3]);
--- result:
-3
--- !result
-select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]) and c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
--- result:
-0
--- !result
-select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3], [7, 7+1, 7+2, 7+3]) and c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
--- result:
-1
--- !result
-select count(1) from t1 where c_array_int > [0, 0+1, 0+2, 0+3] AND (c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]) OR c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]));
--- result:
-1280000
--- !result
-select count(1) from t1 where c_map =  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2};
--- result:
-1
--- !result
-select count(1) from t1 where c_map !=  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2};
--- result:
-1279999
--- !result
-select count(1) from t1 where c_map <=>  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2};
--- result:
-1
--- !result
-select count(1) from t1 where c_map <=> null;
--- result:
-10000
--- !result
-select count(1) from t1 where c_map is null;
--- result:
-10000
--- !result
-select count(1) from t1 where c_map is not null;
--- result:
-1280000
--- !result
-select count(1) from t1 where c_map =  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2} AND c_map !=  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2};
--- result:
-0
--- !result
-select count(1) from t1 where c_map in ( map{0: 10, 1: 10 + 1, 2: 10 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2});
--- result:
-3
--- !result
-select count(1) from t1 where c_map not in ( map{0: 10, 1: 10 + 1, 2: 10 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2});
--- result:
-1279997
--- !result
-select count(1) from t1 where c_map in ( map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 10, 1: 10 + 1, 2: 10 + 2}) and c_map in ( map{0: 10, 1: 10 + 1, 2: 10 + 2},  map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 7, 1: 7 + 1, 2: 7 + 2},  map{0: 8, 1: 8 + 1, 2: 8 + 2},  map{0: 9, 1: 9 + 1, 2: 9 + 2});
--- result:
-3
--- !result
-select count(1) from t1 where c_map in ( map{0: 10, 1: 10 + 1, 2: 10 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2}) and c_map not in ( map{0: 10, 1: 10 + 1, 2: 10 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2});
--- result:
-0
--- !result
-select count(1) from t1 where c_map in ( map{0: 10, 1: 10 + 1, 2: 10 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2},  map{0: 7, 1: 7 + 1, 2: 7 + 2}) and c_map not in ( map{0: 10, 1: 10 + 1, 2: 10 + 2},  map{0: 100000, 1: 100000 + 1, 2: 100000 + 2},  map{0: 1000000, 1: 1000000 + 1, 2: 1000000 + 2});
--- result:
-1
--- !result
+
+
 drop table t1 force;
--- result:
--- !result
 drop table __row_util force;
--- result:
--- !result
 drop table __row_util_base force;
--- result:
--- !result
 drop database ice_db_${uuid0};
--- result:
--- !result
 drop catalog ice_cat_${uuid0};
--- result:
--- !result
+
+
 set catalog default_catalog;
--- result:
--- !result
