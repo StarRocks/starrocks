@@ -70,6 +70,7 @@ public class QueryProgressActionTest {
                         if (stmt.getResultSet().next() &&
                                 stmt.getResultSet().getString(5).equals(querySql)) {
                             String queryId = stmt.getResultSet().getString(1);
+                            System.out.println("testQueryProgressAction: " + queryId);
                             String info = getQueryProgress(stmt, queryId);
                             JsonObject infoJson = JsonParser.parseString(info).getAsJsonObject();
                             String state = infoJson.get("state").getAsString();
