@@ -27,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -393,6 +394,33 @@ public class OlapTableFactory implements AbstractTableFactory {
                             tableName, enableBinlog, binlogTtl, binlogMaxSize);
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
+                }
+            }
+
+            if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                try {
+                    boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
+                    if (!enableFlatJson) {
+                        throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
+                    }
+                    double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
+                    double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
+                    int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+                    FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
+                            flatJsonSparsityFactory, flatJsonColumnMax);
+                    table.setFlatJsonConfig(flatJsonConfig);
+                    LOG.info("create table {} set flat json config, flat_json_enable = {}, flat_json_null_factor = {}, " +
+                            "flat_json_sparsity_factor = {}, flat_json_column_max = {}",
+                            tableName, enableFlatJson, flatJsonNullFactor, flatJsonSparsityFactory, flatJsonColumnMax);
+                } catch (AnalysisException e) {
+                    throw new RuntimeException(e);
                 }
             }
 
