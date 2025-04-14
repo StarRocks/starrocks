@@ -330,6 +330,12 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return false;
         }
         LOG.info("create multi column statistics table done");
+        for (MultiColumnStatsMeta meta : GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getMultiColumnStatsMetaMap().values()) {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(new MultiColumnStatsMeta(
+                    meta.getDbId(), meta.getTableId(), meta.getColumnIds(), meta.getAnalyzeType(),
+                    meta.getStatsTypes(), LocalDateTime.MIN, meta.getProperties()));
+        }
         return checkTableExist(MULTI_COLUMN_STATISTICS_TABLE_NAME);
     }
 
