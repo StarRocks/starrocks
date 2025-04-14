@@ -238,6 +238,10 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 3 rows in set (0.34 sec)
 ```
 
+#### S3 Tables
+请参考这篇 [文档](iceberg_s3table.md) 进行设置
+
+
 ##### JDBC
 
 如果选择 JDBC 作为 Iceberg 集群的元数据服务，请按如下配置 `MetastoreParams`：

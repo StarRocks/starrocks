@@ -347,6 +347,13 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 
 </TabItem>
 
+<TabItem value="S3 Tables" label="S3 Tables">
+
+#### S3 Tables
+Please refer to the [documentation](iceberg_s3table.md) for the setup.
+
+</TabItem>
+
 <TabItem value="JDBC" label="JDBC">
 
 ##### JDBC
