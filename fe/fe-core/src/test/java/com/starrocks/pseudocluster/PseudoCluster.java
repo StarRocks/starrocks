@@ -424,6 +424,7 @@ public class PseudoCluster {
         Map<String, String> feConfMap = Maps.newHashMap();
         feConfMap.put("tablet_create_timeout_second", "10");
         feConfMap.put("query_port", Integer.toString(queryPort));
+        feConfMap.put("http_port", Integer.toString(queryPort+1));
         cluster.frontend.init(fakeJournal, runDir, feConfMap);
         cluster.frontend.start(new String[0]);
 
