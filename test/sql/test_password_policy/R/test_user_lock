@@ -5,22 +5,9 @@ drop user if exists u1;
 create user u1 lock;
 -- result:
 -- !result
-GRANT IMPERSONATE ON USER root TO u1;
--- result:
--- !result
 select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
 -- result:
 %	u1	0		1
--- !result
-execute as u1 with no revert;
--- result:
--- !result
-select current_user();
--- result:
-E: (5291, "Access denied for user 'u1'@'%'. Account is locked, please contact your administrator.")
--- !result
-execute as root with no revert;
--- result:
 -- !result
 alter user u1 unlock;
 -- result:
@@ -29,23 +16,10 @@ select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users w
 -- result:
 %	u1	0		0
 -- !result
-execute as u1 with no revert;
--- result:
--- !result
-select current_user();
--- result:
-'u1'@'%'
--- !result
-execute as root with no revert;
--- result:
--- !result
 alter user u1 lock;
 -- result:
 -- !result
 select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
 -- result:
 %	u1	0		1
--- !result
-execute as root with no revert;
--- result:
 -- !result

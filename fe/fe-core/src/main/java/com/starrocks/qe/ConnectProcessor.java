@@ -74,7 +74,6 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -375,9 +374,8 @@ public class ConnectProcessor {
 
                 if (ctx.isPasswordExpired()) {
                     if (!((parsedStmt instanceof AlterUserStmt && ((AlterUserStmt) parsedStmt).getAuthOption() != null)
-                            || ((parsedStmt instanceof SetStmt)
-                            && ((SetStmt) parsedStmt).getSetListItems().get(0) instanceof SetPassVar)
-                            || parsedStmt instanceof ExecuteAsStmt)) {
+                            || ((parsedStmt instanceof SetStmt) &&
+                            ((SetStmt) parsedStmt).getSetListItems().get(0) instanceof SetPassVar))) {
                         ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_PASSWORD_EXPIRED);
                         ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                         return;

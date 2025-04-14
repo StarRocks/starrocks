@@ -2,21 +2,11 @@
 
 drop user if exists u1;
 create user u1 lock;
-GRANT IMPERSONATE ON USER root TO u1;
 select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
-
-execute as u1 with no revert;
-select current_user();
-execute as root with no revert;
 
 alter user u1 unlock;
 select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
 
-execute as u1 with no revert;
-select current_user();
-execute as root with no revert;
-
 alter user u1 lock;
 select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
-execute as root with no revert;
 

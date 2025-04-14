@@ -537,6 +537,7 @@ public class FrontendServiceImplTest {
         request.setDb("test");
         request.setTbl("site_access_auto");
         request.setUser("root");
+        request.setUser_ip("127.0.0.1");
         request.setPasswd("");
 
         new MockUp<SessionVariable>() {
@@ -1268,6 +1269,7 @@ public class FrontendServiceImplTest {
         request.setDb("test");
         request.setTbl("site_access_hour");
         request.setUser("root");
+        request.setUser_ip("127.0.0.1");
         request.setPasswd("");
         request.setBackend_id(10001);
         request.setBackend_host("127.0.0.1");

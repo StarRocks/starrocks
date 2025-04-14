@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -155,7 +156,7 @@ public class PlainPasswordAuthenticationProviderTest {
             }
         };
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(null));
-        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        AuthenticationMgr authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
 
         Config.enable_validate_password = true;

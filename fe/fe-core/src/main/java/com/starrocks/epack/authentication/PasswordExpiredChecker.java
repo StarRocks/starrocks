@@ -36,6 +36,11 @@ public class PasswordExpiredChecker extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        long currentTs = System.currentTimeMillis();
+        checkPasswordExpiredAndLock(currentTs);
+    }
+
+    public void checkPasswordExpiredAndLock(long currentTs) {
         AuthenticationMgrEPack authenticationMgrEPack =
                 (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getServingState().getSecurityPolicyManager();
@@ -43,8 +48,6 @@ public class PasswordExpiredChecker extends FrontendDaemon {
         if (passwordPolicy == null) {
             return;
         }
-
-        long currentTs = System.currentTimeMillis();
 
         Map<UserIdentity, UserAuthenticationInfo> userAuthenticationInfoMap
                 = authenticationMgrEPack.getUserToAuthenticationInfo();
@@ -57,7 +60,7 @@ public class PasswordExpiredChecker extends FrontendDaemon {
                 long lastModifiedTs = userAuthenticationInfo.getPasswordLastModifiedTimestamp();
                 long maxTimeMsSpan = (long) passwordPolicy.getPasswordMaxAgeDays() * 24 * 60 * 60 * 1000;
 
-                if (currentTs - lastModifiedTs > maxTimeMsSpan) {
+                if (currentTs - lastModifiedTs >= maxTimeMsSpan) {
                     try {
                         UserPasswordOption userPasswordOption = new UserPasswordOption(true);
                         authenticationMgrEPack.alterUser(userIdentity, null, userPasswordOption,
@@ -71,7 +74,7 @@ public class PasswordExpiredChecker extends FrontendDaemon {
             if (userAuthenticationInfo.isLock()) {
                 long lockTimestamp = userAuthenticationInfo.getLockTimestamp();
                 int passwordLockoutTimeMins = passwordPolicy.getPasswordLockoutTimeMins();
-                if (currentTs - lockTimestamp > (long) passwordLockoutTimeMins * 60 * 1000) {
+                if (currentTs - lockTimestamp >= (long) passwordLockoutTimeMins * 60 * 1000) {
                     UserLockOption userLockOption = new UserLockOption(false);
                     try {
                         authenticationMgrEPack.alterUser(userIdentity, null, null, userLockOption,
