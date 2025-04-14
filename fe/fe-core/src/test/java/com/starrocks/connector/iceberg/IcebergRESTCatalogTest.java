@@ -89,8 +89,16 @@ public class IcebergRESTCatalogTest {
     public void testListAllDatabases(@Mocked RESTCatalog restCatalog) {
         new Expectations() {
             {
-                restCatalog.listNamespaces();
-                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
+                restCatalog.listNamespaces(Namespace.empty());
+                result = ImmutableList.of(Namespace.of("db1"));
+                times = 1;
+
+                restCatalog.listNamespaces(Namespace.of("db1"));
+                result = ImmutableList.of(Namespace.of("db1.ns1"));
+                times = 1;
+
+                restCatalog.listNamespaces(Namespace.of("db1.ns1"));
+                result = ImmutableList.of(Namespace.of("db1.ns1.ns2"));
                 times = 1;
             }
         };
@@ -99,7 +107,7 @@ public class IcebergRESTCatalogTest {
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
-        Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+        Assert.assertEquals(Arrays.asList("db1", "db1.ns1", "db1.ns1.ns2"), dbs);
     }
 
     @Test

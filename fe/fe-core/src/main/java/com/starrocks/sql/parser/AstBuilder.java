@@ -712,7 +712,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             catalogName = getIdentifierName(context.catalog);
         }
 
-        String dbName = getIdentifierName(context.database);
+        QualifiedName dbName = getQualifiedName(context.database);
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -721,7 +721,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateDbStmt(context.IF() != null, catalogName, dbName, properties, createPos(context));
+        return new CreateDbStmt(context.IF() != null, catalogName, dbName.toString(), properties, createPos(context));
     }
 
     @Override
@@ -731,8 +731,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             catalogName = getIdentifierName(context.catalog);
         }
 
-        String dbName = getIdentifierName(context.database);
-        return new DropDbStmt(context.IF() != null, catalogName, dbName, context.FORCE() != null,
+        QualifiedName dbName = getQualifiedName(context.database);
+        return new DropDbStmt(context.IF() != null, catalogName, dbName.toString(), context.FORCE() != null,
                 createPos(context));
     }
 

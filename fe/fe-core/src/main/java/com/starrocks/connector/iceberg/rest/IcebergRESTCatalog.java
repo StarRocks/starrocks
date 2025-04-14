@@ -40,6 +40,7 @@ import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.BadRequestException;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
@@ -52,7 +53,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
@@ -123,9 +126,17 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listAllDatabases() {
-        return delegate.listNamespaces().stream()
-                .map(ns -> ns.level(0))
-                .collect(Collectors.toList());
+        return listNamespaces(Namespace.empty());
+    }
+
+    private List<String> listNamespaces(Namespace parent) {
+        try {
+            return delegate.listNamespaces(parent).stream().
+                    flatMap(child -> Stream.concat(Stream.of(child.toString()), listNamespaces(child).stream()))
+                    .collect(toImmutableList());
+        } catch (RESTException e) {
+            throw new StarRocksConnectorException("Failed to list namespaces", e);
+        }
     }
 
     @Override

@@ -102,7 +102,6 @@ public class FeNameFormatTest {
 
 
         Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("!abc"));
-        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab.c"));
         Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab c"));
         Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab\0c"));
     }
