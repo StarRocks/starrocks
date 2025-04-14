@@ -11,15 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
 import com.starrocks.common.Config;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ExternalAccessController;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.cauthz.CauthzAccessResourceImpl;
-import com.starrocks.privilege.cauthz.CauthzAuthorizer;
-import com.starrocks.privilege.cauthz.CauthzStarRocksAccessRequest;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ExternalAccessController;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
+import com.starrocks.authorization.cauthz.CauthzAuthorizer;
+import com.starrocks.authorization.cauthz.CauthzStarRocksAccessRequest;
 import com.starrocks.sql.ast.UserIdentity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
 import java.util.Collections;
 import java.util.HashMap;

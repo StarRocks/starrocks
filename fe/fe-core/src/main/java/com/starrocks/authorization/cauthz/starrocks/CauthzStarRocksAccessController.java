@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.privilege.cauthz.starrocks;
+package com.starrocks.authorization.cauthz.starrocks;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.cauthz.CauthzAccessController;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.cauthz.CauthzAccessController;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;

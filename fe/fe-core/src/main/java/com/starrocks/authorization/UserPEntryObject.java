@@ -73,7 +73,7 @@ public class UserPEntryObject implements PEntryObject {
      * but here we checked by AuthorizationManager to avoid deadlock.
      * lock order should always be:
      * AuthenticationManager.lock -> AuthorizationManager.userLock -> AuthorizationManager.roleLock
-     * All validation are made in com.starrocks.privilege.AuthorizationManager#removeInvalidObject()
+     * All validation are made in com.starrocks.authorization.AuthorizationManager#removeInvalidObject()
      */
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {

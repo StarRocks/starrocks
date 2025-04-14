@@ -15,9 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
-import com.starrocks.privilege.cauthz.CauthzStarRocksAccessRequest;
+import com.starrocks.authorization.cauthz.CauthzStarRocksAccessRequest;
 
 public class MockedCauthzAuthorizer implements CauthzAuthorizer {
     @Override

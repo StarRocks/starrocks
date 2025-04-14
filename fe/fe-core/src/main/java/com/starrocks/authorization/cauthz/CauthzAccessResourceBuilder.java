@@ -11,10 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.cauthz.CauthzAccessResourceImpl;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 
 /**
  * CauthzAccessResourceBuilder is a builder for CauthzAccessResourceImpl

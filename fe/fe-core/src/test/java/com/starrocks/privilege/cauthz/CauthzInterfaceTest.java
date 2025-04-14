@@ -11,17 +11,17 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
-import com.starrocks.privilege.AccessControlProvider;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.NativeAccessController;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.cauthz.MockedCauthzAuthorizer;
-import com.starrocks.privilege.cauthz.starrocks.CauthzStarRocksAccessController;
-import com.starrocks.privilege.cauthz.starrocks.CauthzStarRocksResource;
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.cauthz.MockedCauthzAuthorizer;
+import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksAccessController;
+import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;

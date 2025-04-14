@@ -11,11 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.privilege.cauthz.CauthzAccessResourceImpl;
-import com.starrocks.privilege.cauthz.starrocks.CauthzStarRocksResource;
+import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
+import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksResource;
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
-import com.starrocks.privilege.cauthz.CauthzAccessResourceImpl;
+import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 import com.starrocks.sql.ast.UserIdentity;
 
 /**

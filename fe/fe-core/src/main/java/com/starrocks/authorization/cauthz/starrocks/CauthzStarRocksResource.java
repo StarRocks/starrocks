@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.privilege.cauthz.starrocks;
+package com.starrocks.authorization.cauthz.starrocks;
 
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.cauthz.CauthzAccessResourceBuilder;
-import com.starrocks.privilege.cauthz.CauthzAccessResourceImpl;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.cauthz.CauthzAccessResourceBuilder;
+import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 
 /**
  * CauthzStarRocksResource encapsulates the information required to 

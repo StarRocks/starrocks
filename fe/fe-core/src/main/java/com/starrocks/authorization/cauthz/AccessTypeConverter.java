@@ -11,9 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.privilege.cauthz;
+package com.starrocks.authorization.cauthz;
 
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.authorization.PrivilegeType;
 
 /**
  * Interface for converting a PrivilegeType to an access type string.
