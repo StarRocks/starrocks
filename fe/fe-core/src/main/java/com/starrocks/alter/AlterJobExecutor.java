@@ -483,6 +483,16 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 if (!isSuccess) {
                     throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
                 }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                boolean isSuccess = schemaChangeHandler.updateFlatJsonConfigMeta(db, table.getId(),
+                        properties, TTabletMetaType.FLAT_JSON_CONFIG);
+                if (!isSuccess) {
+                    throw new DdlException("modify flat json config of FEMeta failed");
+
+                }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 schemaChangeHandler.updateTableConstraint(db, tableName.getTbl(), properties);

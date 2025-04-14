@@ -347,6 +347,36 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJson) {
     EXPECT_EQ(R"({"a": 5, "b": 25})", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJsonWithConfig) {
+    // clang-format off
+    Columns jsons = {
+        flat_json(R"({"a": 1, "b": 21})", false),
+        flat_json(R"({"a": 2, "b": 22})", false),
+        flat_json(R"({"a": 3, "b": 23})", false),
+        flat_json(R"({"a": 4, "b": 24})", false),
+        flat_json(R"({"a": 5, "b": 25})", false),
+};
+    // clang-format on
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    FlatJsonConfig config;
+    writer_opts.need_flat = false;
+    writer_opts.flat_json_config = &config;
+    test_json(writer_opts, jsons, read_col);
+
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(0, read_json->get_flat_fields().size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24})", read_col->debug_item(3));
+    EXPECT_EQ(R"({"a": 5, "b": 25})", read_col->debug_item(4));
+}
+
 TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJson2) {
     // clang-format off
     Columns jsons = {
@@ -485,6 +515,37 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToJson) {
     ColumnPtr read_col = jsons[0]->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
+    test_json(writer_opts, jsons, read_col);
+
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(0, read_json->get_flat_fields().size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24})", read_col->debug_item(3));
+    EXPECT_EQ(R"(NULL)", read_col->debug_item(4));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToJsonWithConfig) {
+    // clang-format off
+    Columns jsons = {
+        flat_json(R"({"a": 1, "b": 21})", true),
+        flat_json(R"({"a": 2, "b": 22})", true),
+        flat_json(R"({"a": 3, "b": 23})", true),
+        flat_json(R"({"a": 4, "b": 24})", true),
+        flat_json(R"(NULL)", true),
+};
+    // clang-format on
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    FlatJsonConfig config;
+    writer_opts.need_flat = false;
+    writer_opts.flat_json_config = &config;
     test_json(writer_opts, jsons, read_col);
 
     auto* read_json = get_json_column(read_col);
@@ -679,6 +740,39 @@ TEST_F(FlatJsonColumnCompactTest, testNullJsonCompactToFlatJson) {
     EXPECT_EQ(R"(NULL)", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnCompactTest, testNullJsonCompactToFlatJsonWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.1);
+    // clang-format off
+    Columns jsons = {
+            normal_json(R"({"a": 1, "b": 21})", true),
+            normal_json(R"({"a": 2, "b": 22})", true),
+            normal_json(R"({"a": 3, "b": 23})", true),
+            normal_json(R"({"a": 4, "b": 24})", true),
+            normal_json(R"(NULL)", true)
+    };
+    // clang-format on
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+
+    test_json(writer_opts, jsons, read_col);
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    EXPECT_FALSE(_meta->json_meta().has_remain());
+
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(0, read_json->get_flat_fields().size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24})", read_col->debug_item(3));
+    EXPECT_EQ(R"(NULL)", read_col->debug_item(4));
+}
+
 TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJson) {
     // clang-format off
     Columns jsons = {
@@ -693,6 +787,39 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJson) {
     ColumnPtr read_col = jsons[0]->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+    EXPECT_TRUE(_meta->json_meta().is_flat());
+    EXPECT_FALSE(_meta->json_meta().has_remain());
+    EXPECT_EQ(2, _meta->children_columns_size());
+
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(0, read_json->get_flat_fields().size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24})", read_col->debug_item(3));
+    EXPECT_EQ(R"({"a": 5, "b": 25})", read_col->debug_item(4));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJsonWithConfig) {
+    // clang-format off
+    Columns jsons = {
+        flat_json(R"({"a": 1, "b": 21})", false),
+        flat_json(R"({"a": 2, "b": 22})", false),
+        flat_json(R"({"a": 3, "b": 23})", false),
+        flat_json(R"({"a": 4, "b": 24})", false),
+        flat_json(R"({"a": 5, "b": 25})", false),
+};
+    // clang-format on
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    FlatJsonConfig config;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_FALSE(_meta->json_meta().has_remain());
@@ -875,6 +1002,41 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson) {
     EXPECT_EQ(R"(NULL)", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJsonWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(1);
+    config.set_flat_json_sparsity_factor(0.7);
+    // clang-format off
+    Columns jsons = {
+        flat_json(R"({"a": 1, "b": 21})", true),
+        flat_json(R"({"a": 2, "b": 22})", true),
+        flat_json(R"({"a": 3, "b": 23})", true),
+        flat_json(R"({"a": 4, "b": 24})", true),
+        flat_json(R"(NULL)", true),
+};
+    // clang-format on
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+
+    test_json(writer_opts, jsons, read_col);
+    EXPECT_TRUE(_meta->json_meta().is_flat());
+    EXPECT_FALSE(_meta->json_meta().has_remain());
+    EXPECT_EQ(3, _meta->children_columns_size());
+
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(0, read_json->get_flat_fields().size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24})", read_col->debug_item(3));
+    EXPECT_EQ(R"(NULL)", read_col->debug_item(4));
+}
+
 TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson2) {
     config::json_flat_null_factor = 1;
     config::json_flat_sparsity_factor = 0.7;
@@ -891,6 +1053,41 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson2) {
     ColumnPtr read_col = jsons[0]->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+    EXPECT_TRUE(_meta->json_meta().is_flat());
+    EXPECT_TRUE(_meta->json_meta().has_remain());
+    EXPECT_EQ(4, _meta->children_columns_size());
+
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(0, read_json->get_flat_fields().size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23, "c": 33})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24, "c": 34})", read_col->debug_item(3));
+    EXPECT_EQ(R"(NULL)", read_col->debug_item(4));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson2WithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(1);
+    config.set_flat_json_sparsity_factor(0.7);
+    // clang-format off
+    Columns jsons = {
+        flat_json(R"({"a": 1, "b": 21})", true),
+        flat_json(R"({"a": 2, "b": 22})", true),
+        flat_json(R"({"a": 3, "b": 23, "c": 33})", true),
+        flat_json(R"({"a": 4, "b": 24, "c": 34})", true),
+        flat_json(R"(NULL)", true),
+};
+    // clang-format on
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_TRUE(_meta->json_meta().has_remain());
@@ -1336,6 +1533,50 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactPaths) {
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
+TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactPathsWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_sparsity_factor(0.6);
+    // clang-format off
+    Columns jsons = {
+        more_flat_json({
+            R"({"a": 11, "b": "abc1", "c": 11})",
+            R"({"a": 12, "b": "abc2", "f": 12})",
+            R"({"a": 13, "b": "abc3", "e": 13})",
+        }, true),
+        more_flat_json({
+            R"({"a": 21, "b": "efg1", "c": 21})",
+            R"({"a": 22, "b": "efg2", "c": 22})",
+            R"({"a": 23, "b": "efg3", "c": 23})",
+            R"({"a": 24, "b": "efg4", "c": 24})",
+            R"({"a": 25, "b": "efg5", "c": 25})",
+            R"({"a": 26, "b": "efg6", "c": 26})",
+            R"({"a": 27, "b": "efg7", "c": 27})",
+            R"({"a": 28, "b": "efg8", "c": 28})",
+            R"({"a": 29, "b": "efg9", "c": 29})",
+            R"({"a": 20, "b": "qwe1", "c": 20})",
+            R"({"a": 31, "b": "qwe2", "c": 30})",
+            R"({"a": 32, "b": "qwe3", "c": 31})",
+            R"({"a": 33, "b": "qwe4", "c": 32})",
+        }, true),
+        more_flat_json({
+            R"({"a": 31, "b": "xwy1", "x": 31})",
+            R"({"a": 32, "b": "xwy2", "x": 32})",
+            R"({"a": 33, "b": "xwy3", "x": 33})",
+            R"({"a": 34, "b": "xwy4", "x": 34})",
+            R"({"a": 35, "b": "xwy5", "x": 35})",
+        }, true),
+    };
+    // clang-format on
+
+    JsonPathDeriver deriver;
+    deriver.init_flat_json_config(&config);
+    test_compact_path(jsons, &deriver);
+
+    EXPECT_EQ(2, deriver.flat_paths().size());
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
+}
+
 TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactPaths2) {
     config::json_flat_sparsity_factor = 0.6;
     // clang-format off
@@ -1463,6 +1704,63 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactRemainLevel) {
     ColumnPtr read_col = jsons[0]->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col, nullptr);
+
+    EXPECT_EQ(R"({"a": 11, "b": "abc1", "c": {"d": 21, "e": 211}, "f4": {"m": 141, "n": 341}})",
+              read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 18, "b": "xwy8", "c": {"d": 28, "e": 281}, "g8": {"x": 183, "y": 438}})",
+              read_col->debug_item(7));
+    EXPECT_EQ(R"({"a": 28, "b": "efg8", "c": {"d": 38, "e": 381}, "f4": {"m": 548, "n": 248}})",
+              read_col->debug_item(18));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactRemainLevelWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_sparsity_factor(0.6);
+    // clang-format off
+    Columns jsons = {
+        more_flat_json({
+            R"({"a": 11, "b": "abc1", "c": {"d": 21, "e": 211}, "f4": {"m": 141, "n": 341}})",
+            R"({"a": 12, "b": "abc2", "c": {"d": 22, "e": 221}, "f4": {"m": 142, "n": 342}})",
+            R"({"a": 13, "b": "abc3", "c": {"d": 23, "e": 231}, "f4": {"m": 143, "n": 343}})",
+        }, true),
+        more_flat_json({
+            R"({"a": 14, "b": "xwy4", "c": {"d": 24, "e": 241}, "g4": {"x": 143, "y": 434}})",
+            R"({"a": 15, "b": "xwy5", "c": {"d": 25, "e": 251}, "g5": {"x": 153, "y": 435}})",
+            R"({"a": 16, "b": "xwy6", "c": {"d": 26, "e": 261}, "g6": {"x": 163, "y": 436}})",
+            R"({"a": 17, "b": "xwy7", "c": {"d": 27, "e": 271}, "g7": {"x": 173, "y": 437}})",
+            R"({"a": 18, "b": "xwy8", "c": {"d": 28, "e": 281}, "g8": {"x": 183, "y": 438}})",
+            R"({"a": 19, "b": "xwy9", "c": {"d": 29, "e": 291}, "g9": {"x": 193, "y": 439}})",
+            R"({"a": 10, "b": "xwy0", "c": {"d": 20, "e": 201}, "g0": {"x": 103, "y": 430}})",
+        }, true),
+        more_flat_json({
+             R"({"a": 20, "b": "qwe1", "c": {"d": 30, "e": 301}, "f4": {"m": 540, "n": 240}})",
+             R"({"a": 21, "b": "efg1", "c": {"d": 31, "e": 311}, "f4": {"m": 541, "n": 241}})",
+             R"({"a": 22, "b": "efg2", "c": {"d": 32, "e": 321}, "f4": {"m": 542, "n": 242}})",
+             R"({"a": 23, "b": "efg3", "c": {"d": 33, "e": 331}, "f4": {"m": 543, "n": 243}})",
+             R"({"a": 24, "b": "efg4", "c": {"d": 34, "e": 341}, "f4": {"m": 544, "n": 244}})",
+             R"({"a": 25, "b": "efg5", "c": {"d": 35, "e": 351}, "f4": {"m": 545, "n": 245}})",
+             R"({"a": 26, "b": "efg6", "c": {"d": 36, "e": 361}, "f4": {"m": 546, "n": 246}})",
+             R"({"a": 27, "b": "efg7", "c": {"d": 37, "e": 371}, "f4": {"m": 547, "n": 247}})",
+             R"({"a": 28, "b": "efg8", "c": {"d": 38, "e": 381}, "f4": {"m": 548, "n": 248}})",
+             R"({"a": 29, "b": "efg9", "c": {"d": 39, "e": 391}, "f4": {"m": 549, "n": 249}})",
+        }, true),
+    };
+    // clang-format on
+
+    JsonPathDeriver deriver;
+    deriver.init_flat_json_config(&config);
+    test_compact_path(jsons, &deriver);
+
+    EXPECT_EQ(4, deriver.flat_paths().size());
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR), c.d(BIGINT), c.e(BIGINT)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+
     test_json(writer_opts, jsons, read_col, nullptr);
 
     EXPECT_EQ(R"({"a": 11, "b": "abc1", "c": {"d": 21, "e": 211}, "f4": {"m": 141, "n": 341}})",

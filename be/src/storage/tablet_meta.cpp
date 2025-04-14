@@ -69,6 +69,12 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
         (*tablet_meta)->set_binlog_config(binlog_config);
     }
 
+    if (request.__isset.flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(request.flat_json_config);
+        (*tablet_meta)->set_flat_json_config(flat_json_config);
+    }
+
     return Status::OK();
 }
 
@@ -368,6 +374,12 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_sch
     if (tablet_meta_pb.has_source_schema()) {
         _source_schema = std::make_shared<const TabletSchema>(tablet_meta_pb.source_schema());
     }
+
+    if (tablet_meta_pb.has_flat_json_config()) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(tablet_meta_pb.flat_json_config());
+        set_flat_json_config(flat_json_config);
+    }
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schema) {
@@ -440,6 +452,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
 
     if (_source_schema != nullptr) {
         _source_schema->to_schema_pb(tablet_meta_pb->mutable_source_schema());
+    }
+
+    if (_flat_json_config != nullptr) {
+        _flat_json_config->to_pb(tablet_meta_pb->mutable_flat_json_config());
     }
 }
 

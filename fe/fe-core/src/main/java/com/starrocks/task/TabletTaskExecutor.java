@@ -273,6 +273,7 @@ public class TabletTaskExecutor {
                         .setPersistentIndexType(table.getPersistentIndexType())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                         .setBinlogConfig(table.getCurBinlogConfig())
+                        .setFlatJsonConfig(table.getFlatJsonConfig())
                         .setTabletType(tabletType)
                         .setCompressionType(table.getCompressionType())
                         .setCompressionLevel(table.getCompressionLevel())
