@@ -43,6 +43,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.HttpConnectContext;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
