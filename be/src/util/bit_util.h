@@ -335,6 +335,101 @@ public:
         if (PREDICT_FALSE(num_bits >= 64)) return 0;
         return v >> num_bits;
     }
+
+    static inline int CountLeadingZeros(uint32_t value) {
+#if defined(__clang__) || defined(__GNUC__)
+        if (value == 0) return 32;
+        return static_cast<int>(__builtin_clz(value));
+#elif defined(_MSC_VER)
+        unsigned long index;                                              // NOLINT
+        if (_BitScanReverse(&index, static_cast<unsigned long>(value))) { // NOLINT
+            return 31 - static_cast<int>(index);
+        } else {
+            return 32;
+        }
+#else
+        int bitpos = 0;
+        while (value != 0) {
+            value >>= 1;
+            ++bitpos;
+        }
+        return 32 - bitpos;
+#endif
+    }
+
+    static inline int CountLeadingZeros(uint64_t value) {
+#if defined(__clang__) || defined(__GNUC__)
+        if (value == 0) return 64;
+        return static_cast<int>(__builtin_clzll(value));
+#elif defined(_MSC_VER)
+        unsigned long index;                    // NOLINT
+        if (_BitScanReverse64(&index, value)) { // NOLINT
+            return 63 - static_cast<int>(index);
+        } else {
+            return 64;
+        }
+#else
+        int bitpos = 0;
+        while (value != 0) {
+            value >>= 1;
+            ++bitpos;
+        }
+        return 64 - bitpos;
+#endif
+    }
+
+    static inline int CountTrailingZeros(uint32_t value) {
+#if defined(__clang__) || defined(__GNUC__)
+        if (value == 0) return 32;
+        return static_cast<int>(__builtin_ctzl(value));
+#elif defined(_MSC_VER)
+        unsigned long index; // NOLINT
+        if (_BitScanForward(&index, value)) {
+            return static_cast<int>(index);
+        } else {
+            return 32;
+        }
+#else
+        int bitpos = 0;
+        if (value) {
+            while ((value & 1) == 0) {
+                value >>= 1;
+                ++bitpos;
+            }
+        } else {
+            bitpos = 32;
+        }
+        return bitpos;
+#endif
+    }
+
+    static inline int CountTrailingZeros(uint64_t value) {
+#if defined(__clang__) || defined(__GNUC__)
+        if (value == 0) return 64;
+        return static_cast<int>(__builtin_ctzll(value));
+#elif defined(_MSC_VER)
+        unsigned long index; // NOLINT
+        if (_BitScanForward64(&index, value)) {
+            return static_cast<int>(index);
+        } else {
+            return 64;
+        }
+#else
+        int bitpos = 0;
+        if (value) {
+            while ((value & 1) == 0) {
+                value >>= 1;
+                ++bitpos;
+            }
+        } else {
+            bitpos = 64;
+        }
+        return bitpos;
+#endif
+    }
+
+    // Returns the minimum number of bits needed to represent an unsigned value
+    static inline int NumRequiredBits(uint64_t x) { return 64 - CountLeadingZeros(x); }
 };
 
 } // namespace starrocks

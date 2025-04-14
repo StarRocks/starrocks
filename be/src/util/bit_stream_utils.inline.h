@@ -230,8 +230,14 @@ inline bool BitReader::Advance(int num_bits) {
         byte_offset_ += 8;
         bit_offset_ -= 64;
     }
-    if (byte_offset_ >= max_bytes_) {
+    if (byte_offset_ > max_bytes_) {
         return false;
+    } else if (byte_offset_ == max_bytes_) {
+        // no values to read.
+        if (bit_offset_ != 0) {
+            return false;
+        }
+        return true;
     }
     BufferValues();
     return true;
