@@ -2541,8 +2541,6 @@ public class ShowExecutor {
         }
 
         @Override
-<<<<<<< HEAD
-=======
         public ShowResultSet visitShowMultiColumnsStatsMetaStatement(ShowMultiColumnStatsMetaStmt stmt, ConnectContext context) {
             List<MultiColumnStatsMeta> metas = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
                     .getMultiColumnStatsMetaMap().values());
@@ -2565,12 +2563,6 @@ public class ShowExecutor {
         }
 
         @Override
-        public ShowResultSet visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, ConnectContext context) {
-            return SPMStmtExecutor.execute(context, statement);
-        }
-
-        @Override
->>>>>>> 619fd7300 ([Enhancement] support show multi column stats meta (#57953))
         public ShowResultSet visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
             List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(statement);
             return new ShowResultSet(statement.getMetaData(), rows);
