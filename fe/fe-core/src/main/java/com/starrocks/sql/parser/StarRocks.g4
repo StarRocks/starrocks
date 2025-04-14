@@ -42,6 +42,7 @@ statement
     | alterDatabaseRenameStatement
     | recoverDbStmt
     | showDataStmt
+    | showDataDistributionStmt
 
     // Table Statement
     | createTableStatement
@@ -397,6 +398,10 @@ recoverDbStmt
 showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
+    ;
+
+showDataDistributionStmt
+    : SHOW DATA DISTRIBUTION FROM qualifiedName partitionNames?
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
