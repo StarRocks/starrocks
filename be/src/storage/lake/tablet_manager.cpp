@@ -336,6 +336,7 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
     std::string fixed_buf;
     put_fixed64_le(&fixed_buf, serialized_buf.size());
     RETURN_IF_ERROR(meta_file.append(Slice(fixed_buf)));
+    RETURN_IF_ERROR(meta_file.close());
     return Status::OK();
 }
 
@@ -436,6 +437,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     auto file_size = serialized_string.size();
     auto footer_size = sizeof(uint64_t);
     auto shared_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
+    if (file_size < footer_size + shared_metadata_size) {
+        return Status::Corruption(
+                strings::Substitute("deserialized shared metadata($0) failed, file_size($1) < shared_metadata_size($2)",
+                                    path, file_size, shared_metadata_size + footer_size));
+    }
 
     auto shared_metadata = std::make_shared<SharedTabletMetadataPB>();
     std::string_view shared_metadata_str =
@@ -453,6 +459,12 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         const PagePointerPB& page_pointer = meta_it->second;
         offset = page_pointer.offset();
         size = page_pointer.size();
+    }
+
+    if (file_size < offset + size) {
+        return Status::Corruption(
+                strings::Substitute("deserialized shared metadata($0) failed, file_size($1) too small($2/$3)", path,
+                                    file_size, offset, size));
     }
 
     auto metadata = std::make_shared<TabletMetadataPB>();
