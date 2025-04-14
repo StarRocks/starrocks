@@ -466,21 +466,21 @@ public:
 
     Slice build() override {
         FlushValues();
-        return Slice(packed_data_.data(), packed_data_.size());
+        return Slice(sink_.data(), sink_.size());
     }
 
     Status append(const uint8_t* vals, size_t count) override {
-        packed_ = false;
+        sink_sealed_ = false;
         RETURN_IF_ERROR(Put(reinterpret_cast<const Slice*>(vals), count));
         return Status::OK();
     }
 
 private:
-    faststring sink_;
+    faststring string_buffer_;
     DeltaBinaryPackedEncoder<int> length_encoder_;
 
-    bool packed_ = false;
-    faststring packed_data_;
+    bool sink_sealed_ = false;
+    faststring sink_;
 
 private:
     Status Put(const Slice* src, int num_values) {
@@ -500,26 +500,26 @@ private:
             }
             RETURN_IF_ERROR(length_encoder_.append((const uint8_t*)lengths.data(), batch_size));
         }
-        if (sink_.length() + total_increment_size > std::numeric_limits<int32_t>::max()) {
+        if (string_buffer_.length() + total_increment_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("excess expansion in DELTA_LENGTH_BYTE_ARRAY");
         }
-        sink_.reserve(total_increment_size);
+        string_buffer_.reserve(total_increment_size);
         for (int idx = 0; idx < num_values; idx++) {
-            sink_.append(src[idx].data, src[idx].size);
+            string_buffer_.append(src[idx].data, src[idx].size);
         }
         return Status::OK();
     }
 
     void FlushValues() {
-        if (packed_) {
+        if (sink_sealed_) {
             return;
         }
         Slice encoded_lengths = length_encoder_.build();
-        packed_data_.clear();
-        packed_data_.reserve(encoded_lengths.size + sink_.size());
-        packed_data_.append(encoded_lengths.data, encoded_lengths.size);
-        packed_data_.append(sink_.data(), sink_.size());
-        packed_ = true;
+        sink_.clear();
+        sink_.reserve(encoded_lengths.size + string_buffer_.size());
+        sink_.append(encoded_lengths.data, encoded_lengths.size);
+        sink_.append(string_buffer_.data(), string_buffer_.size());
+        sink_sealed_ = true;
     }
 };
 
@@ -540,10 +540,16 @@ public:
         return Status::OK();
     }
 
-    Status skip(size_t values_to_skip) override { return Skip(static_cast<int>(values_to_skip)); }
+    Status skip(size_t values_to_skip) override {
+        if (values_to_skip > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to skip");
+        }
+        RETURN_IF_ERROR(Skip(static_cast<int>(values_to_skip)));
+        return Status::OK();
+    }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
-        if ((count + length_idx_) > num_valid_values_) {
+        if (count > num_valid_values_) {
             return Status::InvalidArgument("not enough values to read");
         }
         slice_buffer_.reserve(count);
@@ -558,6 +564,9 @@ public:
     }
 
     Status next_batch(size_t count, uint8_t* dst) override {
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
         Slice* data = reinterpret_cast<Slice*>(dst);
         RETURN_IF_ERROR(Decode(data, count));
         return Status::OK();
@@ -589,37 +598,37 @@ private:
         return Status::OK();
     }
 
-    Status Skip(int count) {
-        if ((count + length_idx_) > num_valid_values_) {
-            return Status::InvalidArgument("not enough values to skip");
+    Status Skip(int max_values) {
+        max_values = std::min(max_values, num_valid_values_);
+        if (max_values == 0) {
+            return Status::OK();
         }
         int32_t data_size = 0;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
-        for (int i = 0; i < count; ++i) {
+        for (int i = 0; i < max_values; ++i) {
             int32_t len = length_ptr[i];
             if (PREDICT_FALSE(len < 0)) {
                 return Status::Corruption("negative string delta length");
             }
             data_size += len;
         }
-        length_idx_ += count;
+        length_idx_ += max_values;
+        num_valid_values_ -= max_values;
         bytes_offset_ += data_size;
         return Status::OK();
     }
 
-    Status Decode(Slice* buffer, int count) {
+    Status Decode(Slice* buffer, int max_values) {
         // Decode up to `max_values` strings into an internal buffer
         // and reference them into `buffer`.
-        if ((count + length_idx_) > num_valid_values_) {
-            return Status::InvalidArgument("not enough values to read");
-        }
-        if (count == 0) {
+        max_values = std::min(max_values, num_valid_values_);
+        if (max_values == 0) {
             return Status::OK();
         }
 
         int32_t data_size = 0;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
-        for (int i = 0; i < count; ++i) {
+        for (int i = 0; i < max_values; ++i) {
             int32_t len = length_ptr[i];
             if (PREDICT_FALSE(len < 0)) {
                 return Status::Corruption("negative string delta length");
@@ -627,14 +636,14 @@ private:
             buffer[i].size = len;
             data_size += len;
         }
-        length_idx_ += count;
+        length_idx_ += max_values;
         const uint8_t* data_ptr = data_ + bytes_offset_;
-        for (int i = 0; i < count; ++i) {
+        for (int i = 0; i < max_values; ++i) {
             buffer[i].data = (char*)data_ptr;
             data_ptr += buffer[i].size;
         }
         bytes_offset_ += data_size;
-        num_valid_values_ -= count;
+        num_valid_values_ -= max_values;
         return Status::OK();
     }
 };
