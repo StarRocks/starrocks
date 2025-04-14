@@ -381,7 +381,21 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+<<<<<<< HEAD
 # Disable libdefalte on aarch64
+=======
+set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
+find_package(absl CONFIG REQUIRED)
+set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
+find_package(gRPC CONFIG REQUIRED)
+message(STATUS "Using gRPC ${gRPC_VERSION}")
+get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
+add_library(protobuf::libprotobuf ALIAS protobuf)
+add_library(ZLIB::ZLIB ALIAS libz)
+
+# Disable libdeflate on aarch64
+>>>>>>> 6d7500fa7e ([Doc] Fix a compression format typo (#57884))
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(libdeflate STATIC IMPORTED GLOBAL)
     set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
