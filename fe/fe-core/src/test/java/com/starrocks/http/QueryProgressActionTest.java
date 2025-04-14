@@ -117,7 +117,7 @@ public class QueryProgressActionTest {
             //3.1 check not valid parameter
             OkHttpClient client = new OkHttpClient();
             Request request = new Request.Builder()
-                    .url(String.format("http://%s:8030/api/query/progress?query_id_111=123", getFeIp(stmt)))
+                    .url(String.format("http://%s:%s/api/query/progress?query_id_111=123", getFeIp(stmt), getHttpPort(stmt)))
                     .build();
             Response response = client.newCall(request).execute();
             String info1 = response.body().string();
@@ -159,7 +159,7 @@ public class QueryProgressActionTest {
     private String getQueryProgress(Statement stmt, String queryId) throws Exception {
         OkHttpClient client = new OkHttpClient();
         Request request = new Request.Builder()
-                .url(String.format("http://%s:8030/api/query/progress?query_id=%s", getFeIp(stmt), queryId))
+                .url(String.format("http://%s:%s/api/query/progress?query_id=%s", getFeIp(stmt), getHttpPort(stmt), queryId))
                 .build();
         Response response = client.newCall(request).execute();
         String info = response.body().string();
@@ -184,5 +184,14 @@ public class QueryProgressActionTest {
         }
         //return feIp;
         return "127.0.0.1";
+    }
+    private String getHttpPort(Statement stmt) throws Exception {
+        String col5 = "";
+        stmt.execute("show frontends;");
+        if (stmt.getResultSet().next()) {
+            col5 = stmt.getResultSet().getString(5);
+        }
+        //return feIp;
+        return col5;
     }
 }
