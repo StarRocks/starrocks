@@ -131,7 +131,6 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
-    bool mor_reader_mode = false;
     bool enable_late_materialization = false;
     bool is_collision_free_and_unique = false;
 
@@ -299,7 +298,6 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
-    bool mor_reader_mode = false;
 };
 
 template <class T, size_t Size = sizeof(T)>
@@ -644,10 +642,6 @@ private:
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
 
-        if (_table_items->mor_reader_mode) {
-            return;
-        }
-
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
@@ -874,7 +868,6 @@ public:
 private:
     void _init_probe_column(const HashTableParam& param);
     void _init_build_column(const HashTableParam& param);
-    void _init_mor_reader();
     void _init_join_keys();
 
     JoinHashMapType _choose_join_hash_map();
