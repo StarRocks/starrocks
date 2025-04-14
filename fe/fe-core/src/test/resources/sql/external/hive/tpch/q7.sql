@@ -116,6 +116,7 @@ OutPut Exchange Id: 24
 |  equal join conjunct: [45: n_nationkey, INT, true] = [36: c_nationkey, INT, true]
 |  equal join conjunct: [25: o_custkey, INT, true] = [33: c_custkey, INT, true]
 |  build runtime filters:
+|  - filter_id = 3, build_expr = (36: c_nationkey), remote = false
 |  - filter_id = 4, build_expr = (33: c_custkey), remote = true
 |  output columns: 13, 14, 18, 42, 46
 |  cardinality: 554680
@@ -135,6 +136,8 @@ OutPut Exchange Id: 24
 |
 18:EXCHANGE
 cardinality: 6939052
+probe runtime filters:
+- filter_id = 3, probe_expr = (45: n_nationkey)
 
 PLAN FRAGMENT 3(F12)
 
