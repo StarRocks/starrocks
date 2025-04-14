@@ -15,6 +15,7 @@
 #include "cache/block_cache/disk_space_monitor.h"
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/datacache_utils.h"
 #include "common/config.h"
 #include "util/await.h"
 #include "util/thread.h"
@@ -48,13 +49,14 @@ Status DiskSpace::init_spaces(const std::vector<DirSpace>& dir_spaces) {
         return st;
     }
 
-    double delta_rate = config::datacache_disk_safe_level * 0.01 - _disk_stats.used_rate();
-    size_t cache_avail_bytes = 0;
-    if (delta_rate > 0) {
-        int64_t delta_size = _disk_stats.capacity_bytes * delta_rate;
-        cache_avail_bytes = _check_cache_low_limit(delta_size);
+    int64_t other_usage = _disk_stats.used_bytes();
+    int64_t cache_quota = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_safe_level - other_usage;
+    if (cache_quota > 0) {
+        cache_quota = _check_cache_limit(cache_quota);
+    } else {
+        cache_quota = 0;
     }
-    _update_spaces_by_cache_quota(cache_avail_bytes);
+    _update_spaces_by_cache_quota(cache_quota);
     return st;
 }
 
@@ -76,27 +78,22 @@ bool DiskSpace::adjust_spaces(const AdjustContext& ctx) {
         return false;
     }
 
-    double delta_rate = config::datacache_disk_safe_level * 0.01 - used_rate;
-    int64_t delta_quota = _disk_stats.capacity_bytes * delta_rate;
-    // TODO: Support obtaining the cache usage of each directory in starcache, to make it more accurate.
-    _update_spaces_by_cache_usage(ctx);
-
-    int64_t old_cache_quota = total_cache_quota();
-    int64_t new_cache_quota = old_cache_quota + delta_quota;
-
-    new_cache_quota = _check_cache_low_limit(new_cache_quota);
+    int64_t old_cache_quota = cache_quota();
+    int64_t other_usage = _disk_stats.used_bytes() - _cache_usage(ctx);
+    int64_t new_cache_quota = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_safe_level - other_usage;
+    new_cache_quota = _check_cache_limit(new_cache_quota);
     _update_spaces_by_cache_quota(new_cache_quota);
-    _disk_free_period = 0;
 
+    _disk_free_period = 0;
     return new_cache_quota != old_cache_quota;
 }
 
-size_t DiskSpace::total_cache_quota() {
-    size_t cache_quota = 0;
+size_t DiskSpace::cache_quota() {
+    size_t quota = 0;
     for (auto& dir : _dir_spaces) {
-        cache_quota += dir.size;
+        quota += dir.size;
     }
-    return cache_quota;
+    return quota;
 }
 
 Status DiskSpace::_update_disk_stats() {
@@ -134,13 +131,15 @@ void DiskSpace::_update_spaces_by_cache_quota(size_t cache_avail_bytes) {
     }
 }
 
-void DiskSpace::_update_spaces_by_cache_usage(const AdjustContext& ctx) {
-    if (ctx.total_cache_quota > 0) {
-        double cache_used_rate = static_cast<double>(ctx.total_cache_usage) / ctx.total_cache_quota;
-        for (auto& dir : _dir_spaces) {
-            dir.size = dir.size * cache_used_rate;
-        }
+size_t DiskSpace::_cache_usage(const AdjustContext& ctx) {
+    if (ctx.total_cache_quota == 0) {
+        return 0;
     }
+
+    // TODO: Support obtaining the cache usage of each directory in starcache, to make it more accurate.
+    double cache_used_rate = static_cast<double>(ctx.total_cache_usage) / ctx.total_cache_quota;
+    size_t usage = cache_quota() * cache_used_rate;
+    return usage;
 }
 
 bool DiskSpace::_allow_expansion(const AdjustContext& ctx) {
@@ -154,6 +153,14 @@ bool DiskSpace::_allow_expansion(const AdjustContext& ctx) {
         }
     }
     return true;
+}
+
+size_t DiskSpace::_check_cache_limit(int64_t cache_quota) {
+    size_t result = _check_cache_low_limit(cache_quota);
+    if (result > 0) {
+        result = _check_cache_high_limit(result);
+    }
+    return result;
 }
 
 size_t DiskSpace::_check_cache_low_limit(int64_t cache_quota) {
@@ -175,6 +182,15 @@ size_t DiskSpace::_check_cache_low_limit(int64_t cache_quota) {
     return cache_quota;
 }
 
+size_t DiskSpace::_check_cache_high_limit(int64_t cache_quota) {
+    size_t high_limit = _disk_stats.capacity_bytes * config::datacache_disk_safe_level * 0.01;
+    if (cache_quota > high_limit) {
+        LOG(INFO) << "Correct the cache quota because it reaches the high limit. quota: " << cache_quota;
+        return high_limit;
+    }
+    return cache_quota;
+}
+
 StatusOr<size_t> DiskSpace::FileSystemWrapper::directory_size(const std::string& dir) {
     size_t capacity = 0;
     auto st = FileSystem::Default()->iterate_dir2(dir, [&](DirEntry entry) {
@@ -186,11 +202,7 @@ StatusOr<size_t> DiskSpace::FileSystemWrapper::directory_size(const std::string&
 }
 
 dev_t DiskSpace::FileSystemWrapper::device_id(const std::string& path) {
-    struct stat s;
-    if (stat(path.c_str(), &s) != 0) {
-        return 0;
-    }
-    return s.st_dev;
+    return DataCacheUtils::disk_device_id(path);
 }
 
 DiskSpaceMonitor::DiskSpaceMonitor(BlockCache* cache)
