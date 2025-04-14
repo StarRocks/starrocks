@@ -274,6 +274,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -1512,6 +1513,13 @@ public class StmtExecutor {
                     db.getId(), table.getId(), analyzeStmt.getColumnNames(),
                     analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
         }
+
+        // TODO(stephen): we need to persist statisticsTypes to analyzeStatus when supporting auto collect multi_columns stats
+        // Currently temporarily identified by properties
+        if (!analyzeTypeDesc.getStatsTypes().isEmpty()) {
+            analyzeStatus.getProperties().put(IS_MULTI_COLUMN_STATS, "true");
+        }
+
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
@@ -1668,6 +1676,7 @@ public class StmtExecutor {
                     .collect(Collectors.toList());
             analyzeMgr.dropMultiColumnStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
             statisticStorage.expireMultiColumnStatistics(table.getId());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
 
             if (!dropStatsStmt.isMultiColumn()) {
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
