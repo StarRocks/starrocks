@@ -125,7 +125,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
     }
 
     @Override
-    public List<LogicalSlot> peakSlotsToAllocate(SlotTracker slotTracker) {
+    public List<LogicalSlot> peakSlotsToAllocate(BaseSlotTracker slotTracker) {
         updateOptionsPeriodically();
 
         List<LogicalSlot> slotsToAllocate = Lists.newArrayList();

@@ -48,6 +48,8 @@ public:
 
     virtual std::string debug_string() const = 0;
 
+    virtual bool try_acquire_sizes(size_t size) = 0;
+
     size_t size() const { return _size; }
     size_t num_rows() const { return _num_rows; }
     bool is_remote() const { return _is_remote; }

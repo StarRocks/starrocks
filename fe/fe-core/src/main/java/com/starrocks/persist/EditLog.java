@@ -1993,6 +1993,10 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_BINLOG_CONFIG, log);
     }
 
+    public void logModifyFlatJsonConfig(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_FLAT_JSON_CONFIG, log);
+    }
+
     public void logModifyBinlogAvailableVersion(ModifyTablePropertyOperationLog log) {
         logEdit(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log);
     }
