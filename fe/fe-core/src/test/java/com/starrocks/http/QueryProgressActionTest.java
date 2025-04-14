@@ -169,7 +169,16 @@ public class QueryProgressActionTest {
         String feIp = "";
         stmt.execute("show frontends;");
         if (stmt.getResultSet().next()) {
-            feIp = stmt.getResultSet().getString(2);
+            //feIp = stmt.getResultSet().getString(2);
+            String col1 = stmt.getResultSet().getString(1);
+            String col2 = stmt.getResultSet().getString(2);
+            String col3 = stmt.getResultSet().getString(3);
+            String col4 = stmt.getResultSet().getString(4);
+            String col5 = stmt.getResultSet().getString(5);
+            String col6 = stmt.getResultSet().getString(6);
+            String col7 = stmt.getResultSet().getString(7);
+            String col8 = stmt.getResultSet().getString(8);
+            System.out.println(col1+"_"+col2+"_"+col3+"_"+col4+"_"+col5+"_"+col6+"_"+col7+"_"+col8);
         }
         //return feIp;
         return "127.0.0.1";
