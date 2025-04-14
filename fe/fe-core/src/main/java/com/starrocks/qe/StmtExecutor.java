@@ -1333,7 +1333,7 @@ public class StmtExecutor {
         // Predict the cost of this query
         if (Config.enable_query_cost_prediction) {
             CostPredictor predictor = getCostPredictor();
-            long memBytes = predictor.predictMemoryBytes(execPlan);
+            long memBytes = predictor.tryPredictMemoryBytes(execPlan);
             coord.setPredictedCost(memBytes);
             context.getAuditEventBuilder().setPredictMemBytes(memBytes);
         }
