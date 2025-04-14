@@ -69,7 +69,6 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
         long maxPartitionVersionTime = -1;
         long tableId = table.getId();
-        CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -96,6 +95,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 partition.setVersionTxnType(txnState.getTransactionType());
             }
 
+            CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
@@ -106,7 +106,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
                         txnState.getTransactionId(), isPartialSuccess);
             } else {
-                compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
+                compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore,
+                        txnState.getWarehouseId());
             }
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {

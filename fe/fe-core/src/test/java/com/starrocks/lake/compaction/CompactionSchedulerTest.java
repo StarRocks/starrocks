@@ -19,10 +19,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
@@ -102,6 +107,7 @@ public class CompactionSchedulerTest {
             public Database getDb(long dbId) {
                 return new Database(100, "aaa");
             }
+
             @Mock
             public Table getTable(Long dbId, Long tableId) {
                 return table;
@@ -156,10 +162,11 @@ public class CompactionSchedulerTest {
     public void testCompactionTaskLimit() {
         CompactionScheduler compactionScheduler = new CompactionScheduler(new CompactionMgr(), null, null, null, "");
 
+        long warehouseId = 10001L;
         int defaultValue = Config.lake_compaction_max_tasks;
         // explicitly set config to a value bigger than default -1
         Config.lake_compaction_max_tasks = 10;
-        Assertions.assertEquals(10, compactionScheduler.compactionTaskLimit());
+        Assertions.assertEquals(10, compactionScheduler.compactionTaskLimitPerWarehouse(warehouseId));
 
         // reset config to default value
         Config.lake_compaction_max_tasks = defaultValue;
@@ -176,7 +183,262 @@ public class CompactionSchedulerTest {
             }
         };
         mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(b1, c1, c2));
-        Assertions.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
+        Assertions.assertEquals(3 * Config.lake_compaction_max_parallelism_per_cn,
+                compactionScheduler.compactionTaskLimitPerWarehouse(warehouseId));
+    }
+
+
+    @Test
+    public void testNumRunningTasksPerWarehouse(@Mocked CompactionJob compactionJob) {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(new CompactionMgr(), null, null, null, "");
+        // new running compactions map
+        long nonExistingWarehouseId = 10000L;
+        long existingWarehouseId = 10001L;
+        Map<PartitionIdentifier, CompactionJob> runningCompactions = new HashMap<>();
+
+        new Expectations() {
+            {
+                compactionJob.getWarehouseId();
+                result = existingWarehouseId;
+
+                compactionJob.getNumTabletCompactionTasks();
+                result = 5;
+            }
+        };
+
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(1, 2, 4), compactionJob);
+        Map<Long, Integer> runningTasksPerWarehouse = compactionScheduler.numRunningTasksPerWarehouse();
+
+        Assertions.assertNull(runningTasksPerWarehouse.get(nonExistingWarehouseId));
+        Assertions.assertNotNull(runningTasksPerWarehouse.get(existingWarehouseId));
+        Assertions.assertEquals(Integer.valueOf(5), runningTasksPerWarehouse.get(existingWarehouseId));
+    }
+
+    @Test
+    public void testGetCompactionWarehouseId() {
+        boolean defaultValue = Config.lake_enable_bind_compaction_with_load_warehouse;
+
+        CompactionMgr compactionMgr = new CompactionMgr();
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionMgr, null, null, null, "");
+        long dbId = 1000L;
+        long tableId = 1001L;
+        long partitionId = 1002L;
+        long loadWarehouseId = 1003L;
+
+        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier);
+        statistics.setCompactionScore(Quantiles.compute(Lists.newArrayList(1.0, 2.0, 3.0)));
+
+        ConcurrentHashMap<PartitionIdentifier, PartitionStatistics> partitionStatisticsHashMap = new ConcurrentHashMap<>();
+        partitionStatisticsHashMap.put(partitionIdentifier, statistics);
+        Deencapsulation.setField(compactionMgr, "partitionStatisticsHashMap", partitionStatisticsHashMap);
+
+        PartitionStatisticsSnapshot partitionStatisticsSnapshot = new PartitionStatisticsSnapshot(statistics);
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+
+        { // case 1: disable binding, return default warehouse id
+            Config.lake_enable_bind_compaction_with_load_warehouse = false;
+            long compactionWarehouseId = compactionScheduler.getCompactionWarehouseId(partitionStatisticsSnapshot);
+            Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, compactionWarehouseId);
+            Config.lake_enable_bind_compaction_with_load_warehouse = defaultValue;
+        }
+
+        Config.lake_enable_bind_compaction_with_load_warehouse = true;
+
+        { // case 2: enable binding, but load warehouse id is not set (`statistics` has warehouseId set to -1 by default)
+            long compactionWarehouseId = compactionScheduler.getCompactionWarehouseId(partitionStatisticsSnapshot);
+            Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, compactionWarehouseId);
+        }
+
+        { // case 3: enable binding, but warehouse not exists
+            Config.lake_enable_bind_compaction_with_load_warehouse = true;
+            statistics.setWarehouseId(loadWarehouseId);
+            mockedWarehouseManager.setWarehouseExisted(false);
+            long compactionWarehouseId = compactionScheduler.getCompactionWarehouseId(partitionStatisticsSnapshot);
+            Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, compactionWarehouseId);
+        }
+
+        { // case 4: enable binding, and warehouse exists
+            Config.lake_enable_bind_compaction_with_load_warehouse = true;
+            statistics.setWarehouseId(loadWarehouseId);
+            mockedWarehouseManager.setWarehouseExisted(true);
+            long compactionWarehouseId = compactionScheduler.getCompactionWarehouseId(partitionStatisticsSnapshot);
+            Assertions.assertEquals(loadWarehouseId, compactionWarehouseId);
+        }
+
+        Config.lake_enable_bind_compaction_with_load_warehouse = defaultValue;
+    }
+
+    @Test
+    public void testCheckIfAllWarehouseTaskLimitExceeded(@Mocked CompactionJob compactionJob) {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(new CompactionMgr(), null, null, null, "");
+        // new running compactions map
+        long customWarehouseId1 = 10000L;
+        long customWarehouseId2 = 10001L;
+        long customWarehouseId3 = 10001L;
+
+        {
+            new MockUp<CompactionScheduler>() {
+                @Mock
+                public Map<Long, Integer> numRunningTasksPerWarehouse() {
+                    Map<Long, Integer> runningTasksPerWarehouse = new HashMap<>();
+                    runningTasksPerWarehouse.put(customWarehouseId1, 30);
+                    runningTasksPerWarehouse.put(customWarehouseId2, 40);
+                    runningTasksPerWarehouse.put(customWarehouseId3, 50);
+                    return runningTasksPerWarehouse;
+                }
+
+                @Mock
+                public int compactionTaskLimitPerWarehouse(long warehouseId) {
+                    return 30;
+                }
+            };
+
+            // running task count in all warehouses exceed limit
+            Assertions.assertTrue(compactionScheduler.checkIfAllWarehouseTaskLimitExceeded());
+        }
+
+        {
+            new MockUp<CompactionScheduler>() {
+                @Mock
+                public Map<Long, Integer> numRunningTasksPerWarehouse() {
+                    Map<Long, Integer> runningTasksPerWarehouse = new HashMap<>();
+                    runningTasksPerWarehouse.put(customWarehouseId1, 10);
+                    runningTasksPerWarehouse.put(customWarehouseId2, 40);
+                    runningTasksPerWarehouse.put(customWarehouseId3, 50);
+                    return runningTasksPerWarehouse;
+                }
+
+                @Mock
+                public int compactionTaskLimitPerWarehouse(long warehouseId) {
+                    return 20;
+                }
+            };
+
+            // running task count in customWarehouseId1 not exceed limit
+            Assertions.assertFalse(compactionScheduler.checkIfAllWarehouseTaskLimitExceeded());
+        }
+
+        {
+            new MockUp<CompactionScheduler>() {
+                @Mock
+                public Map<Long, Integer> numRunningTasksPerWarehouse() {
+                    return new HashMap<>();
+                }
+
+                @Mock
+                public int compactionTaskLimitPerWarehouse(long warehouseId) {
+                    return 20;
+                }
+            };
+
+            // running task count in customWarehouseId1 not exceed limit
+            Assertions.assertFalse(compactionScheduler.checkIfAllWarehouseTaskLimitExceeded());
+        }
+    }
+
+    @Test
+    public void testCollectPartitionTablets() {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(new CompactionMgr(), null, null, null, "");
+
+        long warehouseId = 1001L;
+        long indexId = 2000L;
+        long partitionId = 1000L;
+        long physicalPartitionId = 5100L;
+        long tabletId1 = 2000L; // assigned to compute node 1
+        long tabletId2 = 2001L; // assigned to compute node 2
+        long tabletId3 = 2002L; // no compute node assigned
+        long tabletId4 = 2003L; // can't get compute node assigned, will throw exception
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return new WarehouseManager();
+            }
+        };
+
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+                if (tablet.getId() == tabletId1) {
+                    return c1;
+                }
+                if (tablet.getId() == tabletId2) {
+                    return c2;
+                }
+                if (tablet.getId() == tabletId3) {
+                    return null;
+                }
+                throw new IllegalArgumentException("Unknown tablet id: " + tablet.getId());
+            }
+        };
+
+        { // normal case
+            MaterializedIndex index1 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+            Tablet tablet1 = new LakeTablet(tabletId1);
+            index1.addTablet(tablet1, null, false);
+            Tablet tablet2 = new LakeTablet(tabletId2);
+            index1.addTablet(tablet2, null, false);
+
+            Partition partition1 = new Partition(partitionId, "p1", index1, null);
+            partition1.addSubPartition(
+                    new PhysicalPartitionImpl(physicalPartitionId, "p10", partitionId, -1L, null));
+
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(partition1, warehouseId);
+            Assertions.assertEquals(2, resultMap.size());
+            List<Long> tabletListOnC1 = resultMap.get(c1.getId());
+            Assertions.assertEquals(1, tabletListOnC1.size());
+            Assertions.assertEquals(tabletId1, tabletListOnC1.get(0).longValue());
+
+            List<Long> tabletListOnC2 = resultMap.get(c2.getId());
+            Assertions.assertEquals(1, tabletListOnC2.size());
+            Assertions.assertEquals(tabletId2, tabletListOnC2.get(0).longValue());
+        }
+
+        { // bad case 1: no compute node found for some tablet
+            MaterializedIndex index2 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+            Tablet tablet1 = new LakeTablet(tabletId1);
+            index2.addTablet(tablet1, null, false);
+            Tablet tablet2 = new LakeTablet(tabletId2);
+            index2.addTablet(tablet2, null, false);
+            Tablet tablet3 = new LakeTablet(tabletId3);
+            index2.addTablet(tablet3, null, false);
+
+            Partition partition2 = new Partition(partitionId, "p2", index2, null);
+            partition2.addSubPartition(
+                    new PhysicalPartitionImpl(physicalPartitionId, "p20", partitionId, -1L, null));
+
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(partition2, warehouseId);
+            // no compute node for tablet3
+            Assertions.assertEquals(0, resultMap.size());
+        }
+
+        { // bad case 2: exception threw when getting some tablet's compute node
+            MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+            Tablet tablet1 = new LakeTablet(tabletId1);
+            index.addTablet(tablet1, null, false);
+            Tablet tablet2 = new LakeTablet(tabletId2);
+            index.addTablet(tablet2, null, false);
+            Tablet tablet4 = new LakeTablet(tabletId4);
+            index.addTablet(tablet4, null, false);
+
+            Partition partition = new Partition(partitionId, "p2", index, null);
+            partition.addSubPartition(
+                    new PhysicalPartitionImpl(physicalPartitionId, "p20", partitionId, -1L, null));
+
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(partition, warehouseId);
+            // exception found for tablet4
+            Assertions.assertEquals(0, resultMap.size());
+        }
     }
 
     @Test
