@@ -304,12 +304,8 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
-<<<<<<< HEAD
-=======
-    private List<String> createdPartitionNames = Lists.newArrayList();
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
->>>>>>> b10722ab24 ([Enhancement] Optimize concurrent create partition fail by expression partition (#57899))
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
