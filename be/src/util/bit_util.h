@@ -392,7 +392,7 @@ public:
 #else
         int bitpos = 0;
         if (value) {
-            while (value & 1 == 0) {
+            while ((value & 1) == 0) {
                 value >>= 1;
                 ++bitpos;
             }
@@ -417,7 +417,7 @@ public:
 #else
         int bitpos = 0;
         if (value) {
-            while (value & 1 == 0) {
+            while ((value & 1) == 0) {
                 value >>= 1;
                 ++bitpos;
             }

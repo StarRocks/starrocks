@@ -478,10 +478,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         {
             // output default values for build-columns as placeholder.
             SCOPED_TIMER(_probe_state->output_build_column_timer);
-            if (_table_items->mor_reader_mode) {
-                return;
-            }
-
             if (!_table_items->with_other_conjunct) {
                 // When the project doesn't require any cols from join, FE will select the first col in the build table
                 // of join as the output col for simple, wo we also need output build column here

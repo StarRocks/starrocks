@@ -2461,6 +2461,13 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
+    public Boolean enablePartitionAggregation() {
+        if (tableProperty != null) {
+            return tableProperty.enablePartitionAggregation();
+        }
+        return false;
+    }
+
     public Boolean enablePersistentIndex() {
         if (tableProperty != null) {
             return tableProperty.enablePersistentIndex();
@@ -2746,6 +2753,15 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
                 TimeUtils.toHumanReadableString(duration));
         tableProperty.buildDataCachePartitionDuration();
+    }
+
+    public void setEnablePartitionAggregation(boolean enablePartitionAggregation) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION,
+                        Boolean.valueOf(enablePartitionAggregation).toString());
+        tableProperty.buildEnablePartitionAggregation();
     }
 
     public void setStorageCoolDownTTL(PeriodDuration duration) {
@@ -3425,6 +3441,10 @@ public class OlapTable extends Table {
             if (indexCacheExpireSec > 0) {
                 properties.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, String.valueOf(indexCacheExpireSec));
             }
+        }
+
+        if (enablePartitionAggregation()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, enablePartitionAggregation().toString());
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
