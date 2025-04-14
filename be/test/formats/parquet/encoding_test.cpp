@@ -172,14 +172,14 @@ struct DecoderChecker<Slice, is_dictionary> {
                 std::vector<Slice> checks(values.size());
                 decoder->set_data(encoded_data);
                 auto st = decoder->next_batch(values.size(), (uint8_t*)&checks[0]);
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
                 for (int i = 0; i < values.size(); ++i) {
                     ASSERT_EQ(values[i], checks[i]);
                 }
 
                 // out-of-bounds access
                 st = decoder->next_batch(values.size(), (uint8_t*)&checks[0]);
-                ASSERT_FALSE(st.ok());
+                ASSERT_FALSE(st.ok()) << st.to_string();
             }
             // skip + read
             {
@@ -190,14 +190,14 @@ struct DecoderChecker<Slice, is_dictionary> {
                 decoder->set_data(encoded_data);
                 auto st = decoder->skip(values_to_skip);
                 st = decoder->next_batch(remain_values, (uint8_t*)&checks[0]);
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
                 for (int i = 0; i < remain_values; ++i) {
                     ASSERT_EQ(values[values_to_skip + i], checks[i]);
                 }
 
                 // out-of-bounds access
                 st = decoder->skip(2);
-                ASSERT_FALSE(st.ok());
+                ASSERT_FALSE(st.ok()) << st.to_string();
             }
         }
         if (true) {
@@ -207,7 +207,7 @@ struct DecoderChecker<Slice, is_dictionary> {
 
                 decoder->set_data(encoded_data);
                 auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
 
                 const auto* check = (const Slice*)column->raw_data();
                 for (auto value : values) {
@@ -218,7 +218,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 if (!is_dictionary) {
                     // out-of-bounds access
                     st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-                    ASSERT_FALSE(st.ok());
+                    ASSERT_FALSE(st.ok()) << st.to_string();
                 }
             }
             // skip+read
@@ -231,7 +231,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 decoder->set_data(encoded_data);
                 auto st = decoder->skip(values_to_skip);
                 st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
 
                 const auto* check = (const Slice*)column->raw_data();
                 for (size_t i = 0; i < remain_values; i++) {
@@ -241,7 +241,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 if (!is_dictionary) {
                     // out-of-bounds access
                     st = decoder->skip(2);
-                    ASSERT_FALSE(st.ok());
+                    ASSERT_FALSE(st.ok()) << st.to_string();
                 }
             }
         }
@@ -253,7 +253,7 @@ struct DecoderChecker<Slice, is_dictionary> {
 
                 decoder->set_data(encoded_data);
                 auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
 
                 const auto* check = (const Slice*)column->data_column()->raw_data();
                 for (auto value : values) {
@@ -264,7 +264,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 if (!is_dictionary) {
                     // out-of-bounds access
                     st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
-                    ASSERT_FALSE(st.ok());
+                    ASSERT_FALSE(st.ok()) << st.to_string();
                 }
             }
             // skip + read
@@ -278,7 +278,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 decoder->set_data(encoded_data);
                 auto st = decoder->skip(values_to_skip);
                 st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
-                ASSERT_TRUE(st.ok());
+                ASSERT_TRUE(st.ok()) << st.to_string();
 
                 const auto* check = (const Slice*)column->data_column()->raw_data();
                 for (size_t i = 0; i < remain_values; i++) {
@@ -288,7 +288,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 if (!is_dictionary) {
                     // out-of-bounds access
                     st = decoder->skip(2);
-                    ASSERT_FALSE(st.ok());
+                    ASSERT_FALSE(st.ok()) << st.to_string();
                 }
             }
         }
@@ -314,13 +314,13 @@ TEST_F(ParquetEncodingTest, Int32) {
     {
         std::unique_ptr<Decoder> decoder;
         auto st = plain_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         std::unique_ptr<Encoder> encoder;
         st = plain_encoding->create_encoder(&encoder);
 
         st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), 20);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         DecoderChecker<int32_t, false>::check(values, encoder->build(), decoder.get());
     }
@@ -332,33 +332,33 @@ TEST_F(ParquetEncodingTest, Int32) {
     {
         std::unique_ptr<Decoder> decoder;
         auto st = dict_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         std::unique_ptr<Encoder> encoder;
         st = dict_encoding->create_encoder(&encoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), 20);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         // construct dictionary encoder
         std::unique_ptr<Encoder> dict_encoder;
         st = plain_encoding->create_encoder(&dict_encoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         size_t num_dicts = 0;
         st = encoder->encode_dict(dict_encoder.get(), &num_dicts);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         // construct dictionary decoder
         std::unique_ptr<Decoder> dict_decoder;
         st = plain_encoding->create_decoder(&dict_decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         dict_decoder->set_data(dict_encoder->build());
 
         st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         DecoderChecker<int32_t, true>::check(values, encoder->build(), decoder.get());
     }
@@ -382,13 +382,13 @@ TEST_F(ParquetEncodingTest, String) {
     {
         std::unique_ptr<Decoder> decoder;
         auto st = plain_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         std::unique_ptr<Encoder> encoder;
         st = plain_encoding->create_encoder(&encoder);
 
         st = encoder->append(reinterpret_cast<uint8_t*>(&slices[0]), 20);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         DecoderChecker<Slice, false>::check(slices, encoder->build(), decoder.get());
     }
@@ -399,33 +399,33 @@ TEST_F(ParquetEncodingTest, String) {
     {
         std::unique_ptr<Decoder> decoder;
         auto st = dict_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         std::unique_ptr<Encoder> encoder;
         st = dict_encoding->create_encoder(&encoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         st = encoder->append((uint8_t*)&slices[0], 20);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         // construct dictionary encoder
         std::unique_ptr<Encoder> dict_encoder;
         st = plain_encoding->create_encoder(&dict_encoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         size_t num_dicts = 0;
         st = encoder->encode_dict(dict_encoder.get(), &num_dicts);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         // construct dictionary decoder
         std::unique_ptr<Decoder> dict_decoder;
         st = plain_encoding->create_decoder(&dict_decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         dict_decoder->set_data(dict_encoder->build());
 
         st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         DecoderChecker<Slice, true>::check(slices, encoder->build(), decoder.get());
     }
@@ -449,13 +449,13 @@ TEST_F(ParquetEncodingTest, FixedString) {
     {
         std::unique_ptr<Decoder> decoder;
         auto st = plain_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         std::unique_ptr<Encoder> encoder;
         st = plain_encoding->create_encoder(&encoder);
 
         st = encoder->append(reinterpret_cast<uint8_t*>(&slices[0]), 100);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         decoder->set_type_length(3);
         DecoderChecker<Slice, false>::check(slices, encoder->build(), decoder.get());
@@ -467,34 +467,34 @@ TEST_F(ParquetEncodingTest, FixedString) {
     {
         std::unique_ptr<Decoder> decoder;
         auto st = dict_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         std::unique_ptr<Encoder> encoder;
         st = dict_encoding->create_encoder(&encoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         st = encoder->append((uint8_t*)&slices[0], 100);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         // construct dictionary encoder
         std::unique_ptr<Encoder> dict_encoder;
         st = plain_encoding->create_encoder(&dict_encoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         size_t num_dicts = 0;
         st = encoder->encode_dict(dict_encoder.get(), &num_dicts);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         // construct dictionary decoder
         std::unique_ptr<Decoder> dict_decoder;
         st = plain_encoding->create_decoder(&dict_decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         dict_decoder->set_data(dict_encoder->build());
         dict_decoder->set_type_length(3);
 
         st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         DecoderChecker<Slice, true>::check(slices, encoder->build(), decoder.get());
     }
@@ -513,15 +513,15 @@ TEST_F(ParquetEncodingTest, Boolean) {
     {
         std::unique_ptr<Decoder> decoder;
         auto st = plain_encoding->create_decoder(&decoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         std::unique_ptr<Encoder> encoder;
         st = plain_encoding->create_encoder(&encoder);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
 
         // decode without buffer
         st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), 32);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
         DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
 
         // decode with buffer
@@ -602,6 +602,86 @@ TEST_F(ParquetEncodingTest, DeltaLengthByteArray) {
 
     const EncodingInfo* encoding = nullptr;
     EncodingInfo::get(tparquet::Type::BYTE_ARRAY, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        std::unique_ptr<Encoder> encoder;
+        st = encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        st = encoder->append((uint8_t*)(&values[0]), values.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // simple verification.
+        Slice encoded_data = encoder->build();
+        std::vector<Slice> check(values.size());
+        st = decoder->set_data(encoded_data);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // enhanced verification.
+        DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
+    }
+}
+
+TEST_F(ParquetEncodingTest, DeltaByteArrayNonFixedSizeString) {
+    std::vector<std::string> strings;
+    for (int i = 0; i < 1000; i++) {
+        strings.push_back(std::to_string(i));
+    }
+
+    std::vector<Slice> values;
+    for (const auto& s : strings) {
+        values.emplace_back(s);
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::BYTE_ARRAY, tparquet::Encoding::DELTA_BYTE_ARRAY, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        std::unique_ptr<Encoder> encoder;
+        st = encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        st = encoder->append((uint8_t*)(&values[0]), values.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // simple verification.
+        Slice encoded_data = encoder->build();
+        std::vector<Slice> check(values.size());
+        st = decoder->set_data(encoded_data);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // enhanced verification.
+        DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
+    }
+}
+
+TEST_F(ParquetEncodingTest, DeltaByteArrayFixedSizeString) {
+    std::vector<std::string> strings;
+    for (int i = 0; i < 1000; i++) {
+        strings.push_back(std::to_string(i));
+    }
+
+    std::vector<Slice> values;
+    for (const auto& s : strings) {
+        values.emplace_back(s);
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::DELTA_BYTE_ARRAY, &encoding);
     ASSERT_TRUE(encoding != nullptr);
 
     {

@@ -656,7 +656,10 @@ public:
     DeltaByteArrayEncoder() = default;
     ~DeltaByteArrayEncoder() override = default;
 
-    Slice build() override { FlushValues() return Slice(sink_.data(), sink_.size()); }
+    Slice build() override {
+        FlushValues();
+        return Slice(sink_.data(), sink_.size());
+    }
 
     Status append(const uint8_t* vals, size_t count) override {
         sink_sealed_ = false;
@@ -689,7 +692,7 @@ private:
             for (int j = 0; j < batch_size; ++j) {
                 const int idx = i + j;
                 const auto view = src[idx];
-                const auto len = static_cast<const uint32_t>(view.size());
+                const auto len = static_cast<const uint32_t>(view.size);
 
                 uint32_t common_prefix_length = 0;
                 const uint32_t maximum_common_prefix_length =
@@ -716,6 +719,7 @@ private:
                     prefix_length_encoder_.append(reinterpret_cast<const uint8_t*>(prefix_lengths.data()), batch_size));
         }
         last_value_ = last_value_view;
+        return Status::OK();
     }
 
     void FlushValues() {
@@ -777,6 +781,7 @@ public:
         // TODO: read corrupted files written with bug(PARQUET-246). last_value_ should be set
         // to last_value_in_previous_page_ when decoding a new page(except the first page)
         last_value_.clear();
+        return Status::OK();
     }
 
     Status skip(size_t values_to_skip) override {
@@ -804,6 +809,9 @@ public:
     }
 
     Status next_batch(size_t count, uint8_t* dst) override {
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
         Slice* data = reinterpret_cast<Slice*>(dst);
         RETURN_IF_ERROR(GetInternal(data, count));
         return Status::OK();
@@ -849,20 +857,18 @@ protected:
         return Status::OK();
     }
 
-    Status GetInternal(Slice* buffer, int count) {
+    Status GetInternal(Slice* buffer, int max_values) {
         // Decode up to `max_values` strings into an internal buffer
         // and reference them into `buffer`.
-        if (count > num_valid_values_) {
-            return Status::InvalidArgument("not enough values to read");
-        }
-        if (count == 0) {
+        max_values = std::min(max_values, num_valid_values_);
+        if (max_values == 0) {
             return Status::OK();
         }
 
-        RETURN_IF_ERROR(suffix_decoder_.next_batch(count, reinterpret_cast<uint8_t*>(buffer)));
+        RETURN_IF_ERROR(suffix_decoder_.next_batch(max_values, reinterpret_cast<uint8_t*>(buffer)));
         int64_t data_size = 0;
         const int32_t* prefix_len_ptr = (const int32_t*)buffered_prefix_length_.data() + prefix_len_offset_;
-        for (int i = 0; i < count; ++i) {
+        for (int i = 0; i < max_values; ++i) {
             if (prefix_len_ptr[i] == 0) {
                 // We don't need to copy the suffix if the prefix length is 0.
                 continue;
@@ -881,15 +887,15 @@ protected:
         buffered_data_.resize(data_size);
         std::string_view prefix{last_value_};
         uint8_t* data_ptr = buffered_data_.data();
-        if (count > 0) {
+        if (max_values > 0) {
             RETURN_IF_ERROR(BuildBufferInternal</*is_first_run=*/true>(prefix_len_ptr, 0, buffer, &prefix, &data_ptr));
         }
-        for (int i = 1; i < count; ++i) {
+        for (int i = 1; i < max_values; ++i) {
             RETURN_IF_ERROR(BuildBufferInternal</*is_first_run=*/false>(prefix_len_ptr, i, buffer, &prefix, &data_ptr));
         }
         DCHECK_EQ(data_ptr - buffered_data_.data(), data_size);
-        prefix_len_offset_ += count;
-        num_valid_values_ -= count;
+        prefix_len_offset_ += max_values;
+        num_valid_values_ -= max_values;
         last_value_ = std::string{prefix};
         return Status::OK();
     }
