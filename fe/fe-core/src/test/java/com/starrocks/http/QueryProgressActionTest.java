@@ -171,6 +171,7 @@ public class QueryProgressActionTest {
         if (stmt.getResultSet().next()) {
             feIp = stmt.getResultSet().getString(2);
         }
-        return feIp;
+        //return feIp;
+        return "127.0.0.1";
     }
 }
