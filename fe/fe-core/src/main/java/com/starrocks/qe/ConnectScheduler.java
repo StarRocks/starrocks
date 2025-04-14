@@ -42,6 +42,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
