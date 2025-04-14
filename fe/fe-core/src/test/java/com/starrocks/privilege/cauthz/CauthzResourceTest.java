@@ -13,9 +13,9 @@
 // limitations under the License.
 package com.starrocks.authorization.cauthz;
 
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.authorization.cauthz.CauthzAccessResourceImpl;
 import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksResource;
+import com.starrocks.catalog.InternalCatalog;
 import org.junit.Assert;
 import org.junit.Test;
 

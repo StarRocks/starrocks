@@ -15,13 +15,13 @@
 package com.starrocks.authorization.cauthz.starrocks;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.cauthz.CauthzAccessController;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.cauthz.CauthzAccessController;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;

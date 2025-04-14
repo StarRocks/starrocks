@@ -13,8 +13,6 @@
 // limitations under the License.
 package com.starrocks.authorization.cauthz;
 
-import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.common.Config;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.NativeAccessController;
@@ -22,6 +20,8 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.cauthz.MockedCauthzAuthorizer;
 import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksAccessController;
 import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksResource;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
