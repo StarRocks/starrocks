@@ -1371,6 +1371,17 @@ build_icu() {
     restore_compile_flags
 }
 
+build_xsimd() {
+    check_if_source_exist $XSIMD_SOURCE
+    cd $TP_SOURCE_DIR/$XSIMD_SOURCE
+
+    # xsimd only has header files
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR"
+    ${BUILD_SYSTEM} install
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1466,6 +1477,7 @@ build_clucene
 build_simdutf
 build_poco
 build_icu
+build_xsimd
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
