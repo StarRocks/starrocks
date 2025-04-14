@@ -98,11 +98,10 @@ public class LoadAction extends RestBaseAction {
             }
         } else {
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            nodeIds = systemInfoService.getNodeSelector()
-                                       .seqChooseBackendIds(systemInfoService.getAvailableBackends().size(), true, false, null);
+            nodeIds = systemInfoService.getAvailableBackends().stream().map(be -> be.getId()).collect(Collectors.toList());
         }
 
-        if (Config.enable_black_list_for_stream_load) {
+        if (Config.enable_block_list_for_stream_load) {
             List<Long> filterNodeIds = nodeIds.stream()
                                               .filter(id -> !SimpleScheduler.isInBlocklist(id)).collect(Collectors.toList());
             if (filterNodeIds != null && !filterNodeIds.isEmpty()) {

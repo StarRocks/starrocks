@@ -15,7 +15,6 @@
 package com.starrocks.http;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.google.common.collect.Multimap;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
@@ -25,7 +24,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -62,7 +60,6 @@ import java.util.concurrent.TimeUnit;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class LoadActionTest extends StarRocksHttpTestCase {
@@ -156,13 +153,13 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testLoadTest100ContinueRespondHTTP307() throws Exception {
-        new MockUp<NodeSelector>() {
+        new MockUp<SystemInfoService>() {
             @Mock
-            public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,
-                                                  boolean isCreate, Multimap<String, String> locReq) {
-                List<Long> result = new ArrayList<>();
-                result.add(testBackendId1);
-                return result;
+            public List<Backend> getAvailableBackends() {
+                List<Backend> bes = new ArrayList<>();
+                bes.add(new Backend());
+                bes.get(0).setId(testBackendId1);
+                return bes;
             }
         };
 
@@ -202,13 +199,13 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testLoad100ContinueBackwardsCompatible() throws Exception {
-        new MockUp<NodeSelector>() {
+        new MockUp<SystemInfoService>() {
             @Mock
-            public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,
-                                                  boolean isCreate, Multimap<String, String> locReq) {
-                List<Long> result = new ArrayList<>();
-                result.add(testBackendId1);
-                return result;
+            public List<Backend> getAvailableBackends() {
+                List<Backend> bes = new ArrayList<>();
+                bes.add(new Backend());
+                bes.get(0).setId(testBackendId1);
+                return bes;
             }
         };
 
@@ -278,13 +275,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testStreamLoadSkipNonAliveNodesForSharedNothing() throws Exception {
-        new MockUp<NodeSelector>() {
+        new MockUp<SystemInfoService>() {
             @Mock
-            public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,
-                                                  boolean isCreate, Multimap<String, String> locReq) {
-                assertEquals(0, backendNum);
-                assertTrue(needAvailable);
-                assertFalse(isCreate);
+            public List<Backend> getAvailableBackends() {
                 return new ArrayList<>();
             }
         };
@@ -350,15 +343,17 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         }
 
         {
-            new MockUp<NodeSelector>() {
+            new MockUp<SystemInfoService>() {
                 @Mock
-                public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,
-                                                      boolean isCreate, Multimap<String, String> locReq) {
-                    List<Long> result = new ArrayList<>();
-                    result.add(1L);
-                    result.add(2L);
-                    result.add(3L);
-                    return result;
+                public List<Backend> getAvailableBackends() {
+                    List<Backend> bes = new ArrayList<>();
+                    bes.add(new Backend());
+                    bes.add(new Backend());
+                    bes.add(new Backend());
+                    bes.get(0).setId(1L);
+                    bes.get(1).setId(2L);
+                    bes.get(2).setId(3L);
+                    return bes;
                 }
             };
 

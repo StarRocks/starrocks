@@ -3656,8 +3656,8 @@ public class Config extends ConfigBase {
     public static boolean enable_trace_historical_node = false;
 
     /**
-     * Whether to enable black list to filter BE/CN for stream load
+     * Whether to enable block list to filter BE/CN for stream load
      */
     @ConfField(mutable = true)
-    public static boolean enable_black_list_for_stream_load = true;
+    public static boolean enable_block_list_for_stream_load = true;
 }
