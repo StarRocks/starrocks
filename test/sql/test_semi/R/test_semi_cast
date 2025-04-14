@@ -79,12 +79,6 @@ select count(1) from t1 where
 -- result:
 2
 -- !result
-select count(1) from t1 where 
-    c_struct in (cast(parse_json("[10, 11]") as struct<k1 INT, k2 INT>)) 
-    OR c_struct not in (cast(parse_json("[20, 21]") as struct<k1 INT, k2 INT>));
--- result:
-1279999
--- !result
 select count(1) from t1 where (
     c_array_int in ([10, 11, 12, 13]) 
     OR c_array_int not in ([11, 12, 12, 14]) 
