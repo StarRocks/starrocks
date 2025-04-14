@@ -2307,7 +2307,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // if the txn is already create partition failed, we should not create partition again
             // because create partition failed will cause the txn to be aborted
             if (txnState.getIsCreatePartitionFailed()) {
-                throw new StarRocksException("automatic create partition failed. error: txn " + request.getTxn_id() +
+                throw new UserException("automatic create partition failed. error: txn " + request.getTxn_id() +
                         " already create partition failed");
             }
 
