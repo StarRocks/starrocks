@@ -248,6 +248,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
+    public static final String PROPERTIES_ENABLE_PARTITION_AGGREGATION = "enable_partition_aggregation";
+
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
      * leading and trailing space of key and value will be ignored.
@@ -798,6 +800,15 @@ public class PropertyAnalyzer {
         }
         throw new AnalysisException(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION
                 + " must be `true` or `false`");
+    }
+
+    public static Boolean analyzeEnablePartitionAggregation(Map<String, String> properties) throws AnalysisException {
+        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
+            enablePartitionAggregation = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_PARTITION_AGGREGATION));
+            properties.remove(PROPERTIES_ENABLE_PARTITION_AGGREGATION);
+        }
+        return enablePartitionAggregation;
     }
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
