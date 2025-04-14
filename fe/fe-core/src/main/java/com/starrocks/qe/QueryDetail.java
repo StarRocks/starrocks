@@ -60,6 +60,8 @@ public class QueryDetail implements Serializable {
     private String profile;
     private String resourceGroupName;
 
+    private long queryFeMemory = 0;
+
     public QueryDetail() {
     }
 
@@ -105,6 +107,7 @@ public class QueryDetail implements Serializable {
         queryDetail.errorMessage = this.errorMessage;
         queryDetail.explain = this.explain;
         queryDetail.profile = this.profile;
+        queryDetail.queryFeMemory = this.queryFeMemory;
         return queryDetail;
     }
 
@@ -226,5 +229,13 @@ public class QueryDetail implements Serializable {
 
     public void setResourceGroupName(String workGroupName) {
         this.resourceGroupName = workGroupName;
+    }
+
+    public void setQueryFeMemory(long queryFeMemory) {
+        this.queryFeMemory = queryFeMemory;
+    }
+
+    public long getQueryFeMemory() {
+        return queryFeMemory;
     }
 }

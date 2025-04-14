@@ -50,6 +50,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -64,6 +65,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
@@ -141,6 +144,24 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
+    public static long getThreadAllocatedBytes(long threadId) {
+        try {
+            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+            if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+                com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
+                if (casted.isThreadAllocatedMemorySupported() && casted.isThreadAllocatedMemoryEnabled()) {
+                    long allocatedBytes = casted.getThreadAllocatedBytes(threadId);
+                    if (allocatedBytes != -1) {
+                        return allocatedBytes;
+                    }
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
@@ -191,6 +212,14 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
 
+        // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
+        if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
+
+            long threadAllocatedMemory =
+                    getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
+            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
+        }
+
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
         if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
@@ -238,6 +267,10 @@ public class ConnectProcessor {
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
 
+        long queryFeMemory =
+                ConnectProcessor.getThreadAllocatedBytes(Thread.currentThread().getId()) -
+                        ctx.getCurrentThreadAllocatedMemory();
+
         if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             queryDetail.setState(QueryDetail.QueryMemState.FAILED);
             queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
@@ -247,6 +280,7 @@ public class ConnectProcessor {
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+        queryDetail.setQueryFeMemory(queryFeMemory);
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
@@ -282,6 +316,9 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     private void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        long beginMemory = getThreadAllocatedBytes(Thread.currentThread().getId());
+        ctx.setCurrentThreadAllocatedMemory(beginMemory);
+
         // convert statement to Java string
         String originStmt = null;
         byte[] bytes = packetBuf.array();

@@ -392,6 +392,7 @@ public class StmtExecutor {
     public void execute() throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+        context.setCurrentThreadId(Thread.currentThread().getId());
 
         // set execution id.
         // Try to use query id as execution id when execute first time.
