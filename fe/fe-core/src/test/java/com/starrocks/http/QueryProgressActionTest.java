@@ -178,7 +178,8 @@ public class QueryProgressActionTest {
             String col6 = stmt.getResultSet().getString(6);
             String col7 = stmt.getResultSet().getString(7);
             String col8 = stmt.getResultSet().getString(8);
-            System.out.println("testQueryProgressAction: "+col1+"_"+col2+"_"+col3+"_"+col4+"_"+col5+"_"+col6+"_"+col7+"_"+col8);
+            System.out.println("testQueryProgressAction: " + col1 + "_" + col2 + "_" + col3 + "_" +
+                    col4 + "_" + col5 + "_" + col6 + "_" + col7 + "_" + col8);
         }
         //return feIp;
         return "127.0.0.1";
