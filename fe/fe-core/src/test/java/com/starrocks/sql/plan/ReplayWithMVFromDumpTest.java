@@ -25,11 +25,14 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
@@ -38,6 +41,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
         // set default config for timeliness mvs
         UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 
     @Before
