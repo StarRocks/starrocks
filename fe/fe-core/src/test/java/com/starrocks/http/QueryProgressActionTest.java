@@ -167,13 +167,12 @@ public class QueryProgressActionTest {
     }
 
     private String getFeIp(Statement stmt) throws Exception {
-        String feIp = "";
+        String fe_ip = "";
         stmt.execute("show frontends;");
         if (stmt.getResultSet().next()) {
-            //feIp = stmt.getResultSet().getString(2);
             String col1 = stmt.getResultSet().getString(1);
             String col2 = stmt.getResultSet().getString(2);
-            String col3 = stmt.getResultSet().getString(3);
+            String col3 = stmt.getResultSet().getString(3); //fe_ip
             String col4 = stmt.getResultSet().getString(4);
             String col5 = stmt.getResultSet().getString(5); //http_port
             String col6 = stmt.getResultSet().getString(6);
@@ -181,9 +180,9 @@ public class QueryProgressActionTest {
             String col8 = stmt.getResultSet().getString(8);
             System.out.println("testQueryProgressAction: " + col1 + "_" + col2 + "_" + col3 + "_" +
                     col4 + "_" + col5 + "_" + col6 + "_" + col7 + "_" + col8);
+            fe_ip = col3;
         }
-        //return feIp;
-        return "127.0.0.1";
+        return fe_ip;
     }
     // private String getHttpPort(Statement stmt) throws Exception {
     //     String col5 = "";
