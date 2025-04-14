@@ -2373,7 +2373,8 @@ public class Config extends ConfigBase {
     /**
      * empty shard group clean threshold (by create time).
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "protection time for FE to clean unused tablet groups in shared-data mode," +
+            " tablet groups created newer than this time period will not be cleaned.")
     public static long shard_group_clean_threshold_sec = 3600L;
 
     /**

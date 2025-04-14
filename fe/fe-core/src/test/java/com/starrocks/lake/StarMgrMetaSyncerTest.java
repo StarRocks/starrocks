@@ -52,6 +52,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -59,6 +61,7 @@ import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -67,8 +70,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StarMgrMetaSyncerTest {
+    private static final Logger LOG = LogManager.getLogger(StarMgrMetaSyncerTest.class);
 
-    private StarMgrMetaSyncer starMgrMetaSyncer = new StarMgrMetaSyncer();
+    private final StarMgrMetaSyncer starMgrMetaSyncer = new StarMgrMetaSyncer();
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -541,4 +545,419 @@ public class StarMgrMetaSyncerTest {
 
         Config.meta_sync_force_delete_shard_meta = false;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSyncTableMetaInternal() throws Exception {
+        long dbId = 100;
+        long tableId = 1000;
+        List<Long> shards = new ArrayList<>();
+        Database db = new Database(dbId, "db");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Database getDb(long id) {
+                return db;
+            }
+
+            @Mock
+            public List<Long> getDbIds() {
+                return Lists.newArrayList(dbId);
+            }
+        };
+
+        List<Column> baseSchema = new ArrayList<>();
+        KeysType keysType = KeysType.AGG_KEYS;
+        PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+        DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+        Table table = new LakeTable(tableId, "bbb", baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return table;
+            }
+
+            @Mock
+            public Table getTable(long tableId) {
+                return table;
+            }
+
+            @Mock
+            public List<Table> getTables() {
+                return Lists.newArrayList(table);
+            }
+        };
+
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public List<Tablet> getTablets() {
+                List<Tablet> tablets = new ArrayList<>();
+                tablets.add(new LakeTablet(111));
+                tablets.add(new LakeTablet(222));
+                tablets.add(new LakeTablet(333));
+                return tablets;
+            }
+        };
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getShardGroupId() {
+                return 444;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> listShard(long groupId) throws DdlException {
+                return shards;
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                shards.removeAll(shardIds);
+            }
+        };
+
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isLakeColocateTable(long tableId) {
+                return true;
+            }
+
+            @Mock
+            public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
+                                                      GroupId expectGroupId) throws DdlException {
+                return;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return null;
+            }
+        };
+
+        shards.clear();
+        shards.add(111L);
+        shards.add(222L);
+        shards.add(333L);
+        starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true);
+        Assert.assertEquals(3, shards.size());
+    }
+
+    @Test
+    public void testSyncerRejectByClusterSnapshot() {
+        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        final StarMgrMetaSyncer syncer = new StarMgrMetaSyncer();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return localClusterSnapshotMgr;
+            }
+        };
+
+        MaterializedViewHandler rollupHandler = new MaterializedViewHandler();
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+
+            @Mock
+            public SchemaChangeHandler getSchemaChangeHandler() {
+                return schemaChangeHandler;
+            }
+
+            @Mock
+            public MaterializedViewHandler getRollupHandler() {
+                return rollupHandler;
+            }
+        };
+
+        AlterJobV2 alterjob = new SchemaChangeJobV2(1, 2, 100L, "table3", 100000);
+        alterjob.setJobState(AlterJobV2.JobState.FINISHED);
+        alterjob.setFinishedTimeMs(1000);
+        schemaChangeHandler.addAlterJobV2(alterjob);
+
+        ShardGroupInfo info1 = ShardGroupInfo.newBuilder()
+                .setGroupId(99L)
+                .putLabels("tableId", String.valueOf(100L))
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                .build();
+        ShardGroupInfo info2 = ShardGroupInfo.newBuilder()
+                .setGroupId(100L)
+                .putLabels("tableId", String.valueOf(111L))
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                .build();
+        List<ShardGroupInfo> shardGroupsInfo = new ArrayList();
+        shardGroupsInfo.add(info1);
+        shardGroupsInfo.add(info2);
+        
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public List<Table> getTablesIncludeRecycleBin(Database db) {
+                List<Column> baseSchema = new ArrayList<>();
+                KeysType keysType = KeysType.AGG_KEYS;
+                PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+                DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+                Table table = new LakeTable(100, "lake_table", baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+                List<Table> tableList = new ArrayList<>();
+                tableList.add(table);
+                return tableList;
+            }
+        };
+    
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardGroupInfo> listShardGroup() {
+                return shardGroupsInfo;
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public boolean isAutomatedSnapshotOn() {
+                return true;
+            }
+        };
+
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public static void clearAutomatedSnapshotFromRemote(String snapshotName) {
+                return;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                long id = nextId.incrementAndGet();
+                return id;
+            }
+        };
+
+        long oldConfig = Config.shard_group_clean_threshold_sec;
+        Config.shard_group_clean_threshold_sec = 0;
+        syncer.runAfterCatalogReady();
+        ClusterSnapshotJob j3 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        j3.setState(ClusterSnapshotJobState.FINISHED);
+        syncer.runAfterCatalogReady();
+        ClusterSnapshotJob j4 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        j4.setState(ClusterSnapshotJobState.FINISHED);
+        syncer.runAfterCatalogReady();
+        Config.shard_group_clean_threshold_sec = oldConfig;
+    }
+
+    @Test
+    public void testStarMgrMetaSyncPerformance(@Mocked StarOSAgent starosAgent) {
+        // Before the fix: scale: 500k, time cost: 67s
+        // After the fix: scale: 1m, time cost: 0.3s
+        int baseSize = 1000_000; // 10^6
+        String strNow = String.valueOf(System.currentTimeMillis());
+        String str4HrsAgo = String.valueOf(System.currentTimeMillis() - 4 * 3600 * 1000L);
+        String str2HrsAgo = String.valueOf(System.currentTimeMillis() - 2 * 3600 * 1000L);
+
+        HashSet<Long> groupIdsInFE = new HashSet<>(baseSize + 100);
+        for (long i = 1; i <= baseSize; ++i) {
+            groupIdsInFE.add(i);
+        }
+
+        long offset = 1000;
+        // 1. add a few numbers in groupIdsInFE but not in shardGroupInfos list.
+        for (long i = baseSize + offset; i < baseSize + offset + 10; ++i) {
+            groupIdsInFE.add(i);
+        }
+
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>(baseSize + 100);
+        for (long i = 1; i <= baseSize; ++i) {
+            shardGroupInfos.add(
+                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", strNow).build());
+        }
+
+        // 2. add a few numbers in shardGroupInfos but not in groupIdsInFE abd the creation timestamp is NOT expired.
+        List<Long> shardGroupSet1 = new ArrayList<>();
+        offset += 2000;
+        for (long i = baseSize + offset; i < baseSize + offset + 10; ++i) {
+            shardGroupSet1.add(i);
+            shardGroupInfos.add(
+                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", str4HrsAgo).build());
+        }
+
+        // 3. add a few numbers in shardGroupInfos but not in groupIdsInFE and the creation timestamp is expired.
+        List<Long> shardGroupSet2 = new ArrayList<>();
+        offset += 2000;
+        for (long i = baseSize + offset; i < baseSize + offset + 10; ++i) {
+            shardGroupSet2.add(i);
+            shardGroupInfos.add(
+                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", str2HrsAgo).build());
+        }
+
+        List<Long> cleanedGroupIds = new ArrayList<>();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent();
+                result = starosAgent;
+            }
+        };
+
+        new Expectations(starosAgent) {
+            {
+                starosAgent.listShardGroup();
+                result = shardGroupInfos;
+            }
+        };
+
+        new MockUp<StarMgrMetaSyncer>() {
+            @Mock
+            public int deleteUnusedWorker() {
+                // DO NOTHING
+                return 0;
+            }
+
+            @Mock
+            public void syncTableMetaAndColocationInfo() {
+                // DO NOTHING
+            }
+
+            @Mock
+            public Set<Long> getAllPartitionShardGroupId() {
+                return groupIdsInFE;
+            }
+
+            @Mock
+            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+                cleanedGroupIds.add(groupId);
+            }
+        };
+
+        long oldConfValue = Config.shard_group_clean_threshold_sec;
+        {
+            Config.shard_group_clean_threshold_sec = 3 * 3600; // 3 hours
+            cleanedGroupIds.clear();
+            // shardGroupSet1 will be expired
+            long begin = System.currentTimeMillis();
+            starMgrMetaSyncer.runAfterCatalogReady();
+            long elapse = System.currentTimeMillis() - begin;
+            LOG.warn("The check takes {}ms", elapse);
+            Assert.assertTrue(String.format("The check takes %dms.", elapse), elapse < 5000);
+            Assert.assertFalse(cleanedGroupIds.isEmpty());
+            Assert.assertEquals(new HashSet<>(shardGroupSet1), new HashSet<>(cleanedGroupIds));
+        }
+        {
+            Config.shard_group_clean_threshold_sec = 3600; // 1 hour
+            cleanedGroupIds.clear();
+            // shardGroupSet1 and shardGroupSet2 will be expired
+            long begin = System.currentTimeMillis();
+            starMgrMetaSyncer.runAfterCatalogReady();
+            long elapse = System.currentTimeMillis() - begin;
+            LOG.warn("The check takes {}ms", elapse);
+            Assert.assertTrue(String.format("The check takes %dms.", elapse), elapse < 5000);
+            Assert.assertFalse(cleanedGroupIds.isEmpty());
+            HashSet<Long> expectedSet = new HashSet<>(shardGroupSet1);
+            expectedSet.addAll(shardGroupSet2);
+            Assert.assertEquals(expectedSet, new HashSet<>(cleanedGroupIds));
+        }
+        Config.shard_group_clean_threshold_sec = oldConfValue;
+    }
+
+    @Test
+    public void testShardGroupWontBeCleanDueToDelay(@Mocked StarOSAgent starosAgent) {
+        // Scenario:
+        //  * 3 shardGroups created 2 seconds ago
+        //  * shard_group_clean_threshold_sec = 4 seconds
+        //  * getAllPartitionShardGroupId() call takes 3 seconds
+        // Don't expect the shardGroups to be expired in this round check.
+        String str2secsAgo = String.valueOf(System.currentTimeMillis() - 2 * 1000L);
+
+        int size = 3;
+        HashSet<Long> groupIds = new HashSet<>();
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>(size);
+        for (long i = 1; i <= size; ++i) {
+            groupIds.add(i);
+            shardGroupInfos.add(
+                    ShardGroupInfo.newBuilder().setGroupId(i).putProperties("createTime", str2secsAgo).build());
+        }
+
+        AtomicLong delayMs = new AtomicLong();
+        delayMs.set(3 * 1000L);
+        List<Long> cleanedGroupIds = new ArrayList<>();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent();
+                result = starosAgent;
+            }
+        };
+
+        new Expectations(starosAgent) {
+            {
+                starosAgent.listShardGroup();
+                result = shardGroupInfos;
+            }
+        };
+
+        new MockUp<StarMgrMetaSyncer>() {
+            @Mock
+            public int deleteUnusedWorker() {
+                // DO NOTHING
+                return 0;
+            }
+
+            @Mock
+            public void syncTableMetaAndColocationInfo() {
+                // DO NOTHING
+            }
+
+            @Mock
+            public Set<Long> getAllPartitionShardGroupId() {
+                try {
+                    Thread.sleep(delayMs.get());
+                } catch (InterruptedException e) {
+                    // DO NOTHING
+                }
+                return new HashSet<>();
+            }
+
+            @Mock
+            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+                cleanedGroupIds.add(groupId);
+            }
+        };
+
+        long oldConfValue = Config.shard_group_clean_threshold_sec;
+        {
+            Config.shard_group_clean_threshold_sec = 4; // 4 seconds
+            cleanedGroupIds.clear();
+            long begin = System.currentTimeMillis();
+            starMgrMetaSyncer.runAfterCatalogReady();
+            long elapse = System.currentTimeMillis() - begin;
+            Assert.assertTrue(elapse >= delayMs.get());
+            // Nothing cleaned
+            Assert.assertTrue(cleanedGroupIds.isEmpty());
+        }
+        { // check again. should be expired in this round
+            delayMs.set(1);
+            Config.shard_group_clean_threshold_sec = 4; // 4 seconds
+            cleanedGroupIds.clear();
+            long begin = System.currentTimeMillis();
+            starMgrMetaSyncer.runAfterCatalogReady();
+            long elapse = System.currentTimeMillis() - begin;
+            Assert.assertTrue(elapse >= delayMs.get());
+            // All cleaned
+            Assert.assertEquals(new HashSet<>(cleanedGroupIds), groupIds);
+        }
+        Config.shard_group_clean_threshold_sec = oldConfValue;
+    }
+>>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
 }
