@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowMultiColumnStatsMetaStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -753,6 +754,12 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowMultiColumnsStatsMetaStatement(ShowMultiColumnStatsMetaStmt node, ConnectContext context) {
             analyzeOrderByItems(node);
             return null;
         }
