@@ -37,8 +37,22 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public abstract class CostPredictor {
+    private static final Logger LOG = LogManager.getLogger(CostPredictor.class);
 
     public abstract long predictMemoryBytes(ExecPlan plan);
+
+    /**
+     * Try to predict memory bytes, if failed, return 0
+     */
+    public long tryPredictMemoryBytes(ExecPlan plan) {
+        try {
+            return predictMemoryBytes(plan);
+        } catch (Exception e) {
+            // Log the error or handle it appropriately
+            LOG.warn("Failed to predict memory bytes", e);
+            return 0L;
+        }
+    }
 
     public static ServiceBasedCostPredictor getServiceBasedCostPredictor() {
         return ServiceBasedCostPredictor.getInstance();
@@ -52,11 +66,10 @@ public abstract class CostPredictor {
         public static final String PREDICT_URL = "/predict_csv";
         public static final String HEALTH_URL = "/health_check";
         private static final ServiceBasedCostPredictor INSTANCE = new ServiceBasedCostPredictor();
-        private static final Logger LOG = LogManager.getLogger(ServiceBasedCostPredictor.class);
 
         private static final ScheduledExecutorService DAEMON;
         private static final Duration HEALTH_CHECK_INTERVAL = Duration.ofSeconds(Config.query_cost_predictor_healthchk_interval);
-        private volatile int lastHealthCheckStatusCode = HttpStatus.SC_OK;
+        private volatile int lastHealthCheckStatusCode = -1;
 
         static {
             DAEMON = Executors.newSingleThreadScheduledExecutor();
@@ -84,7 +97,6 @@ public abstract class CostPredictor {
             PlanFeatures planFeatures = FeatureExtractor.extractFeatures(plan.getPhysicalPlan());
             String header = PlanFeatures.featuresHeader();
             String featureString = planFeatures.toFeatureCsv();
-
             try {
                 // Use Apache HttpClient to send the HTTP request
                 HttpPost httpPost = new HttpPost(Config.query_cost_prediction_service_address + PREDICT_URL);
