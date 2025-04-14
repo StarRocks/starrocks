@@ -494,6 +494,36 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testCreatePartitionAlreadyFailed() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState transactionState = new TransactionState();
+                transactionState.setIsCreatePartitionFailed(true);
+                return transactionState;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("already"));
+    }
+
+    @Test
     public void testLoadTxnBegin() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
