@@ -15,3 +15,5 @@ PROPERTIES (
 shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:test_stream_load_label_already_exist" -H "column_separator:," -d '1,2' ${url}/api/db_${uuid0}/t0/_stream_load
 shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:test_stream_load_label_already_exist" -H "column_separator:," -d '1,2' ${url}/api/db_${uuid0}/t0/_stream_load
 sync;
+
+select c0,c1 from db_${uuid0}.t0;

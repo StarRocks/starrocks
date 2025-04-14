@@ -39,3 +39,7 @@ shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "labe
 sync;
 -- result:
 -- !result
+select c0,c1 from db_${uuid0}.t0;
+-- result:
+1   2
+-- !result
