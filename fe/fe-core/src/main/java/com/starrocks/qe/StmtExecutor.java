@@ -392,11 +392,7 @@ public class StmtExecutor {
     public void execute() throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
-<<<<<<< HEAD
-=======
-        context.setIsForward(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
->>>>>>> fe8af55249 ([Enhancement] Add fe query memory Statistics in Audit log and QueryDetail (#57731))
 
         // set execution id.
         // Try to use query id as execution id when execute first time.
