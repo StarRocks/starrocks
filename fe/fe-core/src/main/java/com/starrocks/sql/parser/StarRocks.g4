@@ -1341,11 +1341,11 @@ analyzeColumnClause
     | qualifiedName  (',' qualifiedName)*                       #regularColumns
     | ALL COLUMNS                                               #allColumns
     | PREDICATE COLUMNS                                         #predicateColumns
-    | MULTI_COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #multiColumnSet
+    | MULTIPLE COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #multiColumnSet
     ;
 
 dropStatsStatement
-    : DROP (MULTI_COLUMNS)? STATS qualifiedName
+    : DROP (MULTIPLE COLUMNS)? STATS qualifiedName
     ;
 
 histogramStatement:
@@ -3057,7 +3057,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTI_COLUMNS
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
