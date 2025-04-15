@@ -390,7 +390,7 @@ private:
 
     Status GetInternal(T* buffer, int max_values) {
         BitReader* decoder_ = &_bit_reader;
-        max_values = static_cast<int>(std::min<int64_t>(max_values, total_values_remaining_));
+        max_values = std::min<int>(max_values, total_values_remaining_);
         if (max_values == 0) {
             return Status::OK();
         }
@@ -491,12 +491,15 @@ private:
 
         constexpr int kBatchSize = 256;
         std::array<int32_t, kBatchSize> lengths;
-        uint32_t total_increment_size = 0;
+        int32_t total_increment_size = 0;
         for (int idx = 0; idx < num_values; idx += kBatchSize) {
             const int batch_size = std::min(kBatchSize, num_values - idx);
             for (int j = 0; j < batch_size; ++j) {
                 const int32_t len = src[idx + j].size;
                 total_increment_size += len;
+                if (PREDICT_FALSE(total_increment_size < 0)) {
+                    return Status::Corruption("total increment size overflow in DELTA_LENGTH_BYTE_ARRAY");
+                }
                 lengths[j] = len;
             }
             RETURN_IF_ERROR(length_encoder_.append((const uint8_t*)lengths.data(), batch_size));
@@ -504,7 +507,7 @@ private:
         if (string_buffer_.length() + total_increment_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("excess expansion in DELTA_LENGTH_BYTE_ARRAY");
         }
-        string_buffer_.reserve(total_increment_size);
+        string_buffer_.reserve(string_buffer_.length() + total_increment_size);
         for (int idx = 0; idx < num_values; idx++) {
             string_buffer_.append(src[idx].data, src[idx].size);
         }
@@ -612,10 +615,16 @@ private:
                 return Status::Corruption("negative string delta length");
             }
             data_size += len;
+            if (PREDICT_FALSE(data_size < 0)) {
+                return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
+            }
         }
         length_idx_ += max_values;
         num_valid_values_ -= max_values;
         bytes_offset_ += data_size;
+        if (PREDICT_FALSE(bytes_offset_ > len_)) {
+            return Status::Corruption("bytes offset exceeds data size in DELTA_LENGTH_BYTE_ARRAY");
+        }
         return Status::OK();
     }
 
@@ -636,6 +645,9 @@ private:
             }
             buffer[i].size = len;
             data_size += len;
+            if (PREDICT_FALSE(data_size < 0)) {
+                return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
+            }
         }
         length_idx_ += max_values;
         const uint8_t* data_ptr = data_ + bytes_offset_;
@@ -643,8 +655,11 @@ private:
             buffer[i].data = (char*)data_ptr;
             data_ptr += buffer[i].size;
         }
-        bytes_offset_ += data_size;
         num_valid_values_ -= max_values;
+        bytes_offset_ += data_size;
+        if (PREDICT_FALSE(bytes_offset_ > len_)) {
+            return Status::Corruption("bytes offset exceeds data size in DELTA_LENGTH_BYTE_ARRAY");
+        }
         return Status::OK();
     }
 };
@@ -874,7 +889,7 @@ protected:
         }
 
         RETURN_IF_ERROR(suffix_decoder_.next_batch(max_values, reinterpret_cast<uint8_t*>(buffer)));
-        int64_t data_size = 0;
+        int32_t data_size = 0;
         const int32_t* prefix_len_ptr = (const int32_t*)buffered_prefix_length_.data() + prefix_len_offset_;
         for (int i = 0; i < max_values; ++i) {
             if (prefix_len_ptr[i] == 0) {
@@ -891,6 +906,12 @@ protected:
                 continue;
             }
             data_size += prefix_len_ptr[i] + buffer[i].size;
+            if (PREDICT_FALSE(data_size < 0)) {
+                return Status::Corruption("data size overflow in DELTA_BYTE_ARRAY");
+            }
+        }
+        if (data_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("excess expansion in DELTA_BYTE_ARRAY");
         }
         buffered_data_.resize(data_size);
         std::string_view prefix{last_value_};

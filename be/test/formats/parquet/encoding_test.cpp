@@ -573,6 +573,10 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPacked) {
             st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
             ASSERT_TRUE(st.ok()) << st.to_string();
 
+            for (int i = 0; i < check.size(); i++) {
+                ASSERT_EQ(check[i], values[i]);
+            }
+
             // enhanced verification.
             DecoderChecker<T, false>::check(values, encoded_data, decoder.get());
         }
@@ -623,6 +627,72 @@ TEST_F(ParquetEncodingTest, DeltaLengthByteArray) {
         ASSERT_TRUE(st.ok()) << st.to_string();
         st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
         ASSERT_TRUE(st.ok()) << st.to_string();
+
+        for (int i = 0; i < check.size(); i++) {
+            ASSERT_EQ(check[i], values[i]);
+        }
+
+        // enhanced verification.
+        DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
+    }
+}
+
+TEST_F(ParquetEncodingTest, DeltaByteArrayNonFixedSizeStringDebug) {
+    // examples from https://parquet.apache.org/docs/file-format/data-pages/encodings/#delta-strings-delta_byte_array--7
+    std::vector<std::string> strings = {"axis", "axle", "babble", "babyhood"};
+    std::vector<Slice> values;
+    for (const auto& s : strings) {
+        values.emplace_back(s);
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::BYTE_ARRAY, tparquet::Encoding::DELTA_BYTE_ARRAY, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        std::unique_ptr<Encoder> encoder;
+        st = encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        st = encoder->append((uint8_t*)(&values[0]), values.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // simple verification.
+        Slice encoded_data = encoder->build();
+        std::vector<Slice> check(values.size());
+        st = decoder->set_data(encoded_data);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        for (int i = 0; i < check.size(); i++) {
+            std::cout << "check[" << i << "]=" << check[i].to_string() << std::endl;
+        }
+
+        for (int i = 0; i < check.size(); i++) {
+            ASSERT_EQ(check[i], values[i]);
+        }
+
+        // initialize with wrong data.
+        for (int i = 0; i < check.size(); i++) {
+            check[i].data = (char*)(&decoder);
+            check[i].size = 32;
+        }
+        st = decoder->set_data(encoded_data);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        for (int i = 0; i < check.size(); i++) {
+            std::cout << "check[" << i << "]=" << check[i].to_string() << std::endl;
+        }
+
+        for (int i = 0; i < check.size(); i++) {
+            ASSERT_EQ(check[i], values[i]);
+        }
 
         // enhanced verification.
         DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
