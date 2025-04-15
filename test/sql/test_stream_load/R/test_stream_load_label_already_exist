@@ -41,5 +41,5 @@ sync;
 -- !result
 select c0,c1 from db_${uuid0}.t0;
 -- result:
-1   2
+1	2
 -- !result
