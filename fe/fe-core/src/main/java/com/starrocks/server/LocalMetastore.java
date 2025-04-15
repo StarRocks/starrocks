@@ -1550,6 +1550,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 partition.getId(), indexMap.get(olapTable.getBaseIndexId()));
         // set ShardGroupId to partition for rollback to old version
         physicalPartition.setShardGroupId(shardGroupId);
+        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1734,6 +1735,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
                 partitionId,
                 indexMap.get(table.getBaseIndexId()));
+        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         logicalPartition.addSubPartition(physicalPartition);
 
