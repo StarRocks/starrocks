@@ -475,8 +475,22 @@ public class ExternalOlapTable extends OlapTable {
                     partitionMeta.getPartition_name(),
                     null, // TODO(wulei): fix it
                     defaultDistributionInfo);
+<<<<<<< HEAD
             partition.setNextVersion(partitionMeta.getNext_version());
             partition.updateVisibleVersion(partitionMeta.getVisible_version(),
+=======
+
+            PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
+                    partitionMeta.getPartition_name(),
+                    partitionMeta.getPartition_id(), // TODO(wulei): fix it
+                    null);
+            physicalPartition.setBucketNum(defaultDistributionInfo.getBucketNum());
+
+            logicalPartition.addSubPartition(physicalPartition);
+
+            physicalPartition.setNextVersion(partitionMeta.getNext_version());
+            physicalPartition.updateVisibleVersion(partitionMeta.getVisible_version(),
+>>>>>>> cf2e6ffe74 ([BugFix] Fix invalid mutable bucket num (#57923))
                     partitionMeta.getVisible_time());
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),

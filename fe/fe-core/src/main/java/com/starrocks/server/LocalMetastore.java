@@ -1531,6 +1531,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             indexMap.put(indexId, rollup);
         }
 
+<<<<<<< HEAD
         Long id = GlobalStateMgr.getCurrentState().getNextId();
         // physical partitions in the same logical partition use the same shard_group_id,
         // so that the shards of this logical partition are more evenly distributed.
@@ -1541,6 +1542,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(
                 id, name, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
+=======
+        long id = GlobalStateMgr.getCurrentState().getNextId();
+        PhysicalPartition physicalPartition = new PhysicalPartition(
+                id, partition.generatePhysicalPartitionName(id),
+                partition.getId(), indexMap.get(olapTable.getBaseIndexId()));
+        // set ShardGroupId to partition for rollback to old version
+        physicalPartition.setShardGroupId(shardGroupId);
+        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
+>>>>>>> cf2e6ffe74 ([BugFix] Fix invalid mutable bucket num (#57923))
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1707,12 +1717,29 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             indexMap.put(indexId, rollup);
         }
 
+<<<<<<< HEAD
         // create shard group
         long shardGroupId = 0;
         if (table.isCloudNativeTableOrMaterializedView()) {
             shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     createShardGroup(db.getId(), table.getId(), partitionId);
         }
+=======
+        Partition logicalPartition = new Partition(
+                partitionId,
+                partitionName,
+                distributionInfo);
+
+        long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        PhysicalPartition physicalPartition = new PhysicalPartition(
+                physicalPartitionId,
+                logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
+                partitionId,
+                indexMap.get(table.getBaseIndexId()));
+        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
+
+        logicalPartition.addSubPartition(physicalPartition);
+>>>>>>> cf2e6ffe74 ([BugFix] Fix invalid mutable bucket num (#57923))
 
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()),
