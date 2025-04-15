@@ -3302,8 +3302,11 @@ void TabletUpdatesTest::update_and_recover(bool enable_persistent_index) {
 }
 
 TEST_F(TabletUpdatesTest, test_update_and_recover) {
-    update_and_recover(true);
     update_and_recover(false);
+}
+
+TEST_F(TabletUpdatesTest, test_update_and_recover_peristent_index) {
+    update_and_recover(true);
 }
 
 void TabletUpdatesTest::test_recover_rowset_sorter() {
