@@ -17,6 +17,7 @@ package com.starrocks.lake;
 
 import autovalue.shaded.com.google.common.common.collect.Lists;
 import autovalue.shaded.com.google.common.common.collect.Sets;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
@@ -56,8 +57,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         super("StarMgrMetaSyncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
     }
 
-    private List<Long> getAllPartitionShardGroupId() {
-        List<Long> groupIds = new ArrayList<>();
+    @VisibleForTesting
+    Set<Long> getAllPartitionShardGroupId() {
+        HashSet<Long> groupIds = new HashSet<>();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
@@ -156,41 +158,49 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     private void deleteUnusedShardAndShardGroup() {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
 
-        List<Long> groupIdFe = getAllPartitionShardGroupId();
+        // Take this timestamp as reference, all ShardGroups created after this timestamp will be safe for sure.
+        long creationExpireTime = System.currentTimeMillis() - Config.shard_group_clean_threshold_sec * 1000L;
+
+        Set<Long> groupIdFe = getAllPartitionShardGroupId();
+        // TODO: use starclient pagination interface to minimize the memory consumption of holding all results in a single list
         List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()
-                        .stream()
-                        .filter(x -> x.getGroupId() != 0L)
-                        .collect(Collectors.toList());
+                .stream()
+                .filter(x -> x.getGroupId() != 0L)
+                .collect(Collectors.toList());
+        LOG.debug("size of groupIdFe is {}, size of shardGroupsInfo is {}", groupIdFe.size(), shardGroupsInfo.size());
 
         if (shardGroupsInfo.isEmpty()) {
             return;
         }
+        if (groupIdFe.size() > 100) {
+            // Be a gentleman, avoid printing a long lists in log line.
+            LOG.debug("first 100 elements in groupIdFe is {}",
+                    groupIdFe.stream().limit(100).collect(Collectors.toList()));
+        } else {
+            LOG.debug("groupIdFe is {}", groupIdFe);
+        }
 
-        LOG.debug("size of groupIdFe is {}, size of shardGroupsInfo is {}",
-                groupIdFe.size(), shardGroupsInfo.size());
-        LOG.debug("groupIdFe is {}", groupIdFe);
-
-        Map<Long, String> groupToCreateTimeMap = shardGroupsInfo.stream().collect(Collectors.toMap(
-                ShardGroupInfo::getGroupId,
-                val -> val.getPropertiesMap().get("createTime"),
-                (key1, key2) -> key1
-        ));
-
-        List<Long> diffList = shardGroupsInfo.stream()
-                .map(ShardGroupInfo::getGroupId)
-                .filter(x -> !groupIdFe.contains(x))
-                .collect(Collectors.toList());
-        LOG.debug("diff.size is {}, diff: {}", diffList.size(), diffList);
+        // Constructing a map with shardGroupId -> ShardGroupInfo with filtering out shardGroups that can be found in partitions
+        Map<Long, ShardGroupInfo> diffGroupInfoMap = shardGroupsInfo.stream()
+                .filter(x -> !groupIdFe.contains(x.getGroupId()))
+                .collect(Collectors.toMap(ShardGroupInfo::getGroupId, val -> val, (key1, key2) -> key1));
+        LOG.debug("diff.size is {}, diff: {}", diffGroupInfoMap.size(), diffGroupInfoMap.keySet());
 
         // 1.4.collect redundant shard groups and delete
-        long nowMs = System.currentTimeMillis();
         List<Long> emptyShardGroup = new ArrayList<>();
-        for (long groupId : diffList) {
-            if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
+        for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
+            long shardGroupId = entry.getKey();
+            long createTimeTs = Long.parseLong(entry.getValue().getPropertiesOrDefault("createTime", "0"));
+            if (createTimeTs == 0) {
+                LOG.debug("Can't parse createTime from shardGroup:{} properties, ignore it for now.", shardGroupId);
+                continue;
+            }
+
+            if (createTimeTs < creationExpireTime) {
                 try {
-                    List<Long> shardIds = starOSAgent.listShard(groupId);
+                    List<Long> shardIds = starOSAgent.listShard(shardGroupId);
                     if (shardIds.isEmpty()) {
-                        emptyShardGroup.add(groupId);
+                        emptyShardGroup.add(shardGroupId);
                     } else {
                         dropTabletAndDeleteShard(shardIds, starOSAgent);
                     }
@@ -199,7 +209,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 }
             }
         }
-
         LOG.debug("emptyShardGroup.size is {}", emptyShardGroup.size());
         if (!emptyShardGroup.isEmpty()) {
             starOSAgent.deleteShardGroup(emptyShardGroup);
