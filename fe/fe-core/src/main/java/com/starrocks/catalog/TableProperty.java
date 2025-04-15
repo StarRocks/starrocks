@@ -1172,5 +1172,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
         buildEnablePartitionAggregation();
+        buildMutableBucketNum();
     }
 }
