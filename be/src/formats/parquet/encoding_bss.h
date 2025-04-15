@@ -97,4 +97,100 @@ private:
     }
 };
 
+template <tparquet::Type::type PT>
+class ByteStreamSplitDecoder : public Decoder {
+public:
+    using T = typename PhysicalTypeTraits<PT>::CppType;
+    ByteStreamSplitDecoder() {
+        if (!is_flba()) {
+            byte_width_ = sizeof(T);
+        }
+    }
+    ~ByteStreamSplitDecoder() override = default;
+
+    void set_type_length(int byte_width) override {
+        if (is_flba()) {
+            byte_width_ = byte_width;
+        }
+    }
+
+    Status set_data(const Slice& data) override {
+        len_ = data.size;
+        data_ = (uint8_t*)data.data;
+        if ((len_ % byte_width_) != 0) {
+            return Status::Corruption(
+                    fmt::format("ByteStreamSplit data size {} not aligned with type {} and byte_width: {}", len_,
+                                std::string(PT), byte_width_));
+        }
+        num_valid_values_ = stride_ = len_ / byte_width_;
+        return Status::OK();
+    }
+
+    // Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
+    //     if (count > num_valid_values_) {
+    //         return Status::InvalidArgument("not enough values to read");
+    //     }
+    //     size_t cur_size = dst->size();
+    //     dst->resize_uninitialized(count + cur_size);
+    //     T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
+    //     RETURN_IF_ERROR(GetInternal(data, count));
+    //     return Status::OK();
+    // }
+
+    // Status next_batch(size_t count, uint8_t* dst) override {
+    //     if (count > total_values_remaining_) {
+    //         return Status::InvalidArgument("not enough values to read");
+    //     }
+    //     T* data = reinterpret_cast<T*>(dst);
+    //     RETURN_IF_ERROR(GetInternal(data, count));
+    //     return Status::OK();
+    // }
+
+    // Status skip(size_t values_to_skip) override {
+    //     if (values_to_skip > total_values_remaining_) {
+    //         return Status::InvalidArgument("not enough values to skip");
+    //     }
+    //     constexpr int kMaxSkipBufferSize = 128;
+    //     _skip_buffer.resize(kMaxSkipBufferSize);
+    //     while (values_to_skip > 0) {
+    //         size_t to_read = std::min<size_t>(values_to_skip, kMaxSkipBufferSize);
+    //         RETURN_IF_ERROR(GetInternal(_skip_buffer.data(), to_read));
+    //         values_to_skip -= to_read;
+    //     }
+    //     return Status::OK();
+    // }
+
+private:
+    // Required because type_length_ is only filled in for FLBA
+    int byte_width_ = 0;
+    int stride_ = 0;
+    int num_valid_values_ = 0;
+    faststring decode_buffer_;
+
+    const uint8_t* data_ = nullptr;
+    size_t len_ = 0;
+
+private:
+    bool constexpr is_flba() const { return PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY; }
+
+    Status Decode(T* buffer, int max_values) {
+        max_values = std::min(max_values, num_valid_values_);
+        if constexpr (is_flba()) {
+            decode_buffer_.reserve(max_values * byte_width_);
+            ByteStreamSplitUtil::ByteStreamSplitDecode(data_, byte_width_, max_values, stride_, decode_buffer_.data());
+            Slice* slices = reinterpret_cast<Slice*>(buffer);
+            for (int i = 0; i < max_values; i++) {
+                slices[i].data = (char*)(decode_buffer_.data() + i * byte_width_);
+                slices[i].size = byte_width_;
+            }
+        } else {
+            ByteStreamSplitUtil::ByteStreamSplitDecode(data_, byte_width_, max_values, stride_, buffer);
+        }
+        data_ += max_values;
+        num_valid_values_ -= max_values;
+        len_ -= max_values * byte_width_;
+        return Status::OK();
+    }
+};
+
 } // namespace starrocks::parquet
