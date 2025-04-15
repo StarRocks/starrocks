@@ -1622,6 +1622,8 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
     if (from_type == TYPE_JSON && to_type == TYPE_MAP) {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
+        // CastJsonToMap will first cast json to MAP<VARCHAR,JSON>, then cast to the target MAP<KEY,VALUE>
+        // If the target is already MAP<VARCHAR,JSON>, no need to set key/value cast expr
         Expr* key_cast_expr = nullptr;
         auto& key_desc = cast_to.children[0];
         if (key_desc.type != TYPE_VARCHAR) {
