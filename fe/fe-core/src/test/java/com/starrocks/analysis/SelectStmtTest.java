@@ -244,6 +244,8 @@ public class SelectStmtTest {
         starRocksAssert.query(sql).explainQuery();
         sql = "select current_timestamp";
         starRocksAssert.query(sql).explainQuery();
+        sql = "select current_timestamp(6)";
+        starRocksAssert.query(sql).explainQuery();
         sql = "select current_time()";
         starRocksAssert.query(sql).explainQuery();
         sql = "select current_time";

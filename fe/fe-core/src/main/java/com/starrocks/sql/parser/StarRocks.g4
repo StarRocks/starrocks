@@ -2486,7 +2486,7 @@ informationFunctionExpression
 specialDateTimeExpression
     : name = CURRENT_DATE ('(' ')')?
     | name = CURRENT_TIME ('(' ')')?
-    | name = CURRENT_TIMESTAMP ('(' ')')?
+    | name = CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')?
     | name = LOCALTIME ('(' ')')?
     | name = LOCALTIMESTAMP ('(' ')')?
     ;
