@@ -1111,10 +1111,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
-<<<<<<< HEAD
-=======
-        buildEnablePartitionAggregation();
         buildMutableBucketNum();
->>>>>>> cf2e6ffe7 ([BugFix] Fix invalid mutable bucket num (#57923))
     }
 }
