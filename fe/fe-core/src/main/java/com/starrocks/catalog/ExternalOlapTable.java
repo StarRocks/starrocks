@@ -471,6 +471,7 @@ public class ExternalOlapTable extends OlapTable {
                     partitionMeta.getPartition_name(),
                     partitionMeta.getPartition_id(), // TODO(wulei): fix it
                     null);
+            physicalPartition.setBucketNum(defaultDistributionInfo.getBucketNum());
 
             logicalPartition.addSubPartition(physicalPartition);
 
