@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.metric.MetricVisitor;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -36,16 +37,24 @@ public class SlotManager extends BaseSlotManager {
         this.slotTracker = new SlotTracker(resourceUsageMonitor);
     }
 
+    @Override
     public List<LogicalSlot> getSlots() {
         return slotTracker.getSlots().stream().collect(Collectors.toList());
     }
 
+    @Override
     public SlotTracker getSlotTracker(long warehouseId) {
         return slotTracker;
     }
 
+    @Override
     public void doStart() {
         requestWorker.start();
+    }
+
+    @Override
+    public void collectWarehouseMetrics(MetricVisitor visitor) {
+        // do nothing
     }
 
     private class RequestWorker extends Thread {
