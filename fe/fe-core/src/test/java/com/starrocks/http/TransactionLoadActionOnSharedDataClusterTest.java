@@ -20,6 +20,7 @@ import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -37,7 +38,14 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.IOException;
+=======
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+>>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
 
 public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
 
@@ -67,6 +75,33 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 return true;
             }
         };
+<<<<<<< HEAD
+=======
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(String warehouseName) {
+                List<Long> nodes = new ArrayList<>();
+                nodes.add(1234L);
+                return nodes;
+            }
+        };
+
+        new MockUp<TransactionLoadAction>() {
+
+            @Mock
+            public void redirectTo(BaseRequest request,
+                                   BaseResponse response,
+                                   TNetworkAddress addr) throws DdlException {
+                TransactionResult result = new TransactionResult();
+                result.setOKMsg("mock redirect to BE");
+                response.setContentType(JSON.toString());
+                response.appendContent(result.toJson());
+                writeResponse(request, response);
+            }
+
+        };
+>>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
     }
 
     @After
