@@ -105,12 +105,12 @@ public abstract class BaseSlotTracker {
     }
 
     public long getMaxQueueQueueLength() {
-        final BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         return slotManager.getQueryQueueMaxQueuedQueries(warehouseId);
     }
 
     public long getMaxQueuePendingTimeSecond() {
-        final BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         return slotManager.getQueryQueuePendingTimeoutSecond(warehouseId);
     }
 
@@ -125,7 +125,7 @@ public abstract class BaseSlotTracker {
      * @return True if the slot is required successfully or already required , false if the query queue is full.
      */
     public boolean requireSlot(LogicalSlot slot) {
-        final BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         if (GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() &&
                 pendingSlots.size() >= slotManager.getQueryQueueMaxQueuedQueries(slot.getWarehouseId())) {
             return false;

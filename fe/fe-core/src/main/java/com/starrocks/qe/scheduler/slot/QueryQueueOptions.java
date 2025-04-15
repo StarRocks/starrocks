@@ -47,7 +47,7 @@ public class QueryQueueOptions {
 
     public static QueryQueueOptions createFromEnv(long warehouseId) {
         // if coord's warehouse is not set, use default
-        final BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         if (!slotManager.isEnableQueryQueueV2(warehouseId)) {
             return new QueryQueueOptions(false, V2.DEFAULT);
         }

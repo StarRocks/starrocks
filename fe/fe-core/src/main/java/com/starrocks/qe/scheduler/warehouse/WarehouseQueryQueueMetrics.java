@@ -37,7 +37,7 @@ import java.util.Map;
 
 public class WarehouseQueryQueueMetrics {
     public static TGetWarehouseMetricsRespone build(TGetWarehouseMetricsRequest request) {
-        BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         TGetWarehouseMetricsRespone response = new TGetWarehouseMetricsRespone();
         Map<Long, BaseSlotTracker> warehouseTrackers = slotManager.getWarehouseIdToSlotTracker();
         List<TGetWarehouseMetricsResponeItem> items = Lists.newArrayList();

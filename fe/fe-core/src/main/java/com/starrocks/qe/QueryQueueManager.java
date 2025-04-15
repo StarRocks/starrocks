@@ -76,7 +76,7 @@ public class QueryQueueManager {
             long deadlineEpochMs = slotRequirement.getExpiredPendingTimeMs();
             LogicalSlot allocatedSlot = null;
             final long warehouseId = context.getCurrentWarehouseId();
-            final BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+            final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
             while (allocatedSlot == null) {
                 // Check timeout.
                 long currentMs = System.currentTimeMillis();
@@ -139,7 +139,7 @@ public class QueryQueueManager {
 
         long nowMs = context.getStartTime();
         long queryTimeoutSecond = coord.getJobSpec().getQueryOptions().getQuery_timeout();
-        final BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         long queryQueuePendingTimeoutSecond =
                 slotManager.getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
         long expiredPendingTimeMs = nowMs + Math.min(queryQueuePendingTimeoutSecond, queryTimeoutSecond) * 1000L;
