@@ -355,7 +355,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                         if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
                             if (capacity_exceed || maybe_chunk.value()->has_capacity_limit_reached()) {
-                                return Status::InternalError(
+                                return Status::CapacityLimitExceed(
                                         fmt::format("Large column detected at "
                                                     "after {}-th operator {} in {}",
                                                     i, curr_op->get_name(), to_readable_string()));
