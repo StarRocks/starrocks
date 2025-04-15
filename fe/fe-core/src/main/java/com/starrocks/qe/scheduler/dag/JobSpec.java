@@ -27,6 +27,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -644,19 +645,8 @@ public class JobSpec {
         }
 
         private boolean isEnableQueue(ConnectContext connectContext) {
-            if (connectContext != null && connectContext.getSessionVariable() != null &&
-                    !connectContext.getSessionVariable().isEnableQueryQueue()) {
-                return false;
-            }
-            if (instance.isStatisticsJob()) {
-                return GlobalVariable.isEnableQueryQueueStatistic();
-            }
-
-            if (instance.isLoadType()) {
-                return GlobalVariable.isEnableQueryQueueLoad();
-            }
-
-            return GlobalVariable.isEnableQueryQueueSelect();
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            return slotManager.isEnableQueryQueue(connectContext, instance);
         }
 
         private boolean needCheckQueue() {

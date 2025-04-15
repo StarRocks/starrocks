@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import org.junit.After;
@@ -128,12 +129,14 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
 
     @Test
     public void testCreateV2WithMetrics() {
-        assertThat(QueryQueueOptions.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID)).isNotNull();
-        assertThat(QueryQueueOptions.getQueryQueuePendingTimeoutSecond(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        assertThat(warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID)).isNotNull();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        assertThat(slotManager.getQueryQueuePendingTimeoutSecond(WarehouseManager.DEFAULT_WAREHOUSE_ID))
                 .isEqualTo(GlobalVariable.getQueryQueuePendingTimeoutSecond());
-        assertThat(QueryQueueOptions.getQueryQueueMaxQueuedQueries(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+        assertThat(slotManager.getQueryQueueMaxQueuedQueries(WarehouseManager.DEFAULT_WAREHOUSE_ID))
                 .isEqualTo(GlobalVariable.getQueryQueueMaxQueuedQueries());
-        assertThat(QueryQueueOptions.isEnableQueryQueue(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+        assertThat(slotManager.isEnableQueryQueueV2(WarehouseManager.DEFAULT_WAREHOUSE_ID))
                 .isEqualTo(Config.enable_query_queue_v2);
 
         {

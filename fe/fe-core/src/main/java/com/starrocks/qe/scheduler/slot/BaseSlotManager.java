@@ -14,14 +14,19 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
+import com.starrocks.metric.MetricVisitor;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
@@ -29,6 +34,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -135,10 +141,70 @@ public abstract class BaseSlotManager {
      */
     public abstract void doStart();
 
+    /**
+     * Collect warehouse metrics for all warehouses.
+     */
+    public abstract void collectWarehouseMetrics(MetricVisitor visitor);
+
+    /**
+     * Whether to enable query queue by the slot manager for input JobSpec.
+     */
+    public boolean isEnableQueryQueue(ConnectContext connectContext, JobSpec instance) {
+        if (connectContext != null && connectContext.getSessionVariable() != null &&
+                !connectContext.getSessionVariable().isEnableQueryQueue()) {
+            return false;
+        }
+        if (instance.isStatisticsJob()) {
+            return GlobalVariable.isEnableQueryQueueStatistic();
+        }
+
+        if (instance.isLoadType()) {
+            return GlobalVariable.isEnableQueryQueueLoad();
+        }
+
+        return GlobalVariable.isEnableQueryQueueSelect();
+    }
+
+    /**
+     * The max query queue length for the slot manager
+     */
+    public int getQueryQueuePendingTimeoutSecond(long warehouseId) {
+        return GlobalVariable.getQueryQueuePendingTimeoutSecond();
+    }
+
+    /**
+     * The max query queue length for the slot manager
+     */
+    public int getQueryQueueMaxQueuedQueries(long warehouseId) {
+        return GlobalVariable.getQueryQueueMaxQueuedQueries();
+    }
+
+    /**
+     * Whether the slot manager supports query queue v2.
+     */
+    public boolean isEnableQueryQueueV2(long warehouseId) {
+        return Config.enable_query_queue_v2;
+    }
+
+    /**
+     * Return warehouse-id to slot tracker map.
+     */
+    public Map<Long, BaseSlotTracker> getWarehouseIdToSlotTracker() {
+        return Maps.newHashMap();
+    }
+
     public void start() {
         if (started.compareAndSet(false, true)) {
             doStart();
         }
+    }
+
+    /**
+     * Get the warehouse by the warehouse id.
+     */
+    public static Warehouse getWarehouse(long warehouseId) {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        return warehouseManager.getWarehouse(warehouseId);
     }
 
     public void requireSlotAsync(LogicalSlot slot) {
@@ -190,7 +256,7 @@ public abstract class BaseSlotManager {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             String errMsg = String.format("Resource is not enough and the number of pending queries exceeds capacity [%d], " +
                             "you could modify the session variable [%s] to make more query can be queued",
-                    QueryQueueOptions.getQueryQueueMaxQueuedQueries(warehouseId), GlobalVariable.QUERY_QUEUE_MAX_QUEUED_QUERIES);
+                    getQueryQueueMaxQueuedQueries(warehouseId), GlobalVariable.QUERY_QUEUE_MAX_QUEUED_QUERIES);
             status.setError_msgs(Collections.singletonList(errMsg));
             finishSlotRequirementToEndpoint(slot, status);
         }
