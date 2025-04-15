@@ -355,7 +355,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         partitionInfo.add(distributionKeyAsString(table, distributionInfo));
-        partitionInfo.add(distributionInfo.getBucketNum());
+        partitionInfo.add(physicalPartition.getBucketNum() > 0 ?
+                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
 
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
         partitionInfo.add(String.valueOf(replicationNum));
