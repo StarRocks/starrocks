@@ -42,6 +42,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.BadRequestException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
@@ -68,9 +69,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
     public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
+    public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
 
     private final Configuration conf;
     private final RESTCatalog delegate;
+    private final boolean nestedNamespaceEnabled;
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
@@ -95,6 +98,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         }
 
+        nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(copiedProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         // setup oauth2
         OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(copiedProperties);
         OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
@@ -107,6 +111,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public IcebergRESTCatalog(RESTCatalog restCatalog, Configuration conf) {
         this.delegate = restCatalog;
         this.conf = conf;
+        this.nestedNamespaceEnabled = false;
     }
 
     @Override
@@ -126,7 +131,16 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listAllDatabases() {
-        return listNamespaces(Namespace.empty());
+        if (nestedNamespaceEnabled) {
+            return listNamespaces(Namespace.empty());
+        } else {
+            try {
+                return delegate.listNamespaces().stream().map(this::toDbName)
+                    .collect(Collectors.toList());
+            } catch (RESTException e) {
+                throw new StarRocksConnectorException("Failed to list namespaces", e);
+            }
+        }
     }
 
     private List<String> listNamespaces(Namespace parent) {
@@ -136,6 +150,15 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                     .collect(toImmutableList());
         } catch (RESTException e) {
             throw new StarRocksConnectorException("Failed to list namespaces", e);
+        }
+    }
+
+    private String toDbName(Namespace namespace) {
+        if (!nestedNamespaceEnabled && namespace.length() != 1) {
+            throw new StarRocksConnectorException("Nested namespace is not enabled for this catalog, " +
+                    "add catalog property \"iceberg.catalog.rest.nested-namespace-enabled\" = \"true\" to enable it");
+        } else {
+            return namespace.level(0);
         }
     }
 
