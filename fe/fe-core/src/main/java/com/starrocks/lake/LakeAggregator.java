@@ -16,8 +16,14 @@ package com.starrocks.lake;
 
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.List;
+import java.util.Random;
+
 
 public class LakeAggregator {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
@@ -26,10 +32,19 @@ public class LakeAggregator {
 
     // TODO(zhangqiang)
     // Optimize the aggregator selection strategy
-    public Long chooseAggregator() {
+    public ComputeNode chooseAggregatorNode(long warehouseId) {
         try {
-            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                    .getNodeSelector().seqChooseBackendOrComputeId();
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            List<ComputeNode> candidateNodes = warehouseManager.getAliveComputeNodes(warehouseId);
+            if (candidateNodes != null && !candidateNodes.isEmpty()) {
+                Random random = new Random();
+                return candidateNodes.get(random.nextInt(candidateNodes.size()));
+            } else {
+                Long nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getNodeSelector().seqChooseBackendOrComputeId();
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNode(nodeId); 
+            }
         } catch (StarRocksException e) {
             return null;
         }

@@ -291,6 +291,7 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
     auto& first_meta = tablet_metas.begin()->second;
     const int64_t schema_id = first_meta.schema().id();
     shared_meta.set_schema_id(schema_id);
+    auto partition_location = tablet_metadata_root_location(tablet_metas.begin()->first);
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
     unique_schemas.emplace(first_meta.schema().id(), first_meta.schema());
     for (auto& [tablet_id, meta] : tablet_metas) {
@@ -344,6 +345,7 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
     put_fixed64_le(&fixed_buf, serialized_buf.size());
     RETURN_IF_ERROR(meta_file->append(Slice(fixed_buf)));
     RETURN_IF_ERROR(meta_file->close());
+    _metacache->cache_aggregation_partition(partition_location, true);
     return Status::OK();
 }
 
@@ -395,17 +397,33 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
-    auto tablet_metadata_or =
-            get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
-    if (!tablet_metadata_or.status().is_not_found() || version > kInitialVersion) {
-        return tablet_metadata_or;
+    StatusOr<TabletMetadataPtr> tablet_metadata_or;
+    if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
+        if (version == kInitialVersion) {
+            // Handle tablet initial metadata
+            tablet_metadata_or =
+                    get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
+        } else {
+            tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+        }
+    } else {
+        tablet_metadata_or =
+                get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
+        if (!tablet_metadata_or.status().is_not_found()) {
+            return tablet_metadata_or;
+        }
+        if (tablet_metadata_or.status().is_not_found() && version == kInitialVersion) {
+            // Handle tablet initial metadata
+            tablet_metadata_or =
+                    get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
+        } else if (tablet_metadata_or.status().is_not_found()) {
+            // get single tablet metadata
+            tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+        }
     }
 
-    // Handle tablet initial metadata
-    auto initial_metadata_or =
-            get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
-    if (!initial_metadata_or.ok()) {
-        return tablet_metadata_or;
+    if (!tablet_metadata_or.ok()) {
+        return tablet_metadata_or.status();
     }
 
     auto tablet_metadata = std::make_shared<TabletMetadata>(*initial_metadata_or.value());
@@ -420,7 +438,21 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         TRACE("got cached tablet metadata");
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache, expected_gtid, fs));
+    StatusOr<TabletMetadataPtr> metadata_or;
+    auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
+    if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
+        metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+    } else {
+        metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
+        if (metadata_or.status().is_not_found()) {
+            metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+        }
+    }
+
+    if (!metadata_or.ok()) {
+        return metadata_or.status();
+    }
+
     if (fill_cache) {
         _metacache->cache_tablet_metadata(path, ptr);
     }
@@ -437,12 +469,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
 
     auto path = aggregate_tablet_metadata_location(tablet_id, version);
     RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
-    ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, path));
     // TODO(zhangqiang)
     // `read_all` only need to one api call and not increase the IOPS
     // but it will incur additional IO bandwidth overhead
     // Perhaps we need to consider the additional costs of IO bandwidth and IOPS later.
+    ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
     ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
 
     auto file_size = serialized_string.size();
