@@ -211,6 +211,7 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowMultiColumnStatsMetaStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
@@ -256,6 +257,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -2536,6 +2538,28 @@ public class ShowExecutor {
             rows = doOrderBy(rows, statement.getOrderByPairs());
             rows = doLimit(rows, statement.getLimitElement());
             return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowMultiColumnsStatsMetaStatement(ShowMultiColumnStatsMetaStmt stmt, ConnectContext context) {
+            List<MultiColumnStatsMeta> metas = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
+                    .getMultiColumnStatsMetaMap().values());
+            List<List<String>> rows = Lists.newArrayList();
+            for (MultiColumnStatsMeta meta : metas) {
+                try {
+                    List<String> result = ShowMultiColumnStatsMetaStmt.showMultiColumnStatsMeta(context, meta);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                }
+            }
+
+            rows = doPredicate(stmt, stmt.getMetaData(), rows);
+            rows = doOrderBy(rows, stmt.getOrderByPairs());
+            rows = doLimit(rows, stmt.getLimitElement());
+            return new ShowResultSet(stmt.getMetaData(), rows);
         }
 
         @Override
