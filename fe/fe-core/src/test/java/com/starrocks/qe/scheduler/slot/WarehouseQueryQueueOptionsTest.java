@@ -89,6 +89,13 @@ public class WarehouseQueryQueueOptionsTest {
             assertThat(opts.v2()).isEqualTo(new QueryQueueOptions.V2());
         }
 
+        new MockUp<QueryQueueOptions>() {
+            @Mock
+            public boolean isEnableQueryQueue(long warehouseId) {
+                return true;
+            }
+        };
+
         {
             Config.enable_query_queue_v2 = true;
             QueryQueueOptions opts = QueryQueueOptions.createFromEnv(warehouseId);

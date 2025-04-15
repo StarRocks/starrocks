@@ -17,11 +17,10 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,26 +45,10 @@ public class QueryQueueOptions {
         return createFromEnv(coord.getCurrentWarehouseId());
     }
 
-    public static Warehouse getWarehouse(long warehouseId) {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        return warehouseManager.getWarehouse(warehouseId);
-    }
-
-    public static int getQueryQueuePendingTimeoutSecond(long warehouseId) {
-        return GlobalVariable.getQueryQueuePendingTimeoutSecond();
-    }
-
-    public static int getQueryQueueMaxQueuedQueries(long warehouseId) {
-        return GlobalVariable.getQueryQueueMaxQueuedQueries();
-    }
-
-    public static boolean isEnableQueryQueue(long warehouseId) {
-        return Config.enable_query_queue_v2;
-    }
-
     public static QueryQueueOptions createFromEnv(long warehouseId) {
         // if coord's warehouse is not set, use default
-        if (!isEnableQueryQueue(warehouseId)) {
+        final BaseSlotManager slotManager = GlobalStateMgr.getServingState().getSlotManager();
+        if (!slotManager.isEnableQueryQueueV2(warehouseId)) {
             return new QueryQueueOptions(false, V2.DEFAULT);
         }
         SchedulePolicy policy = SchedulePolicy.create(Config.query_queue_v2_schedule_strategy);
@@ -73,7 +56,7 @@ public class QueryQueueOptions {
             LOG.error("unknown query_queue_v2_schedule_policy: {}", Config.query_queue_v2_schedule_strategy);
             policy = SchedulePolicy.createDefault();
         }
-        if (warehouseId == WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+        if (RunMode.isSharedNothingMode()) {
             final V2 v2 = new V2(Config.query_queue_v2_concurrency_level,
                     BackendResourceStat.getInstance().getNumBes(),
                     BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe(),
