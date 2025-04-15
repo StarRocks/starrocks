@@ -368,10 +368,10 @@ JANSSON_SOURCE="jansson-2.14"
 JANSSON_MD5SUM="6cbfc54c2ab3b4d7284e188e185c2b0b"
 
 # avro
-AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.10.2.tar.gz"
-AVRO_NAME="avro-release-1.10.2.tar.gz"
-AVRO_SOURCE="avro-release-1.10.2"
-AVRO_MD5SUM="55b9c200976366fd62f1201231f3a5eb"
+AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.12.0.tar.gz"
+AVRO_NAME="avro-release-1.12.0.tar.gz"
+AVRO_SOURCE="avro-release-1.12.0"
+AVRO_MD5SUM="0657ab3ab89d264ccccbca317dbfa54b"
 
 # serdes
 SERDES_DOWNLOAD="https://github.com/confluentinc/libserdes/archive/refs/tags/v7.3.1.tar.gz"
