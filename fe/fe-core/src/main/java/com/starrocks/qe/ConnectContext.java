@@ -102,6 +102,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 // When one client connect in, we create a connection context for it.
 // We store session information here. Meanwhile, ConnectScheduler all
@@ -256,6 +257,11 @@ public class ConnectContext {
 
     // Whether leader is transferred during executing stmt
     private boolean isLeaderTransferred = false;
+
+    private AtomicLong currentThreadAllocatedMemory = new AtomicLong(0);
+
+    // thread id is the thread who created this ConnectContext's id
+    private AtomicLong currentThreadId = null;
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -1365,5 +1371,24 @@ public class ConnectContext {
 
         return endTime.isAfter(startTime)
                 && endTime.plusMillis(milliSeconds).isBefore(Instant.now());
+    }
+
+    public long getCurrentThreadAllocatedMemory() {
+        return currentThreadAllocatedMemory.get();
+    }
+
+    public void setCurrentThreadAllocatedMemory(long currentThreadAllocatedMemory) {
+        this.currentThreadAllocatedMemory.set(currentThreadAllocatedMemory);
+    }
+
+    public long getCurrentThreadId() {
+        if (currentThreadId == null) {
+            return 0;
+        }
+        return currentThreadId.get();
+    }
+
+    public void setCurrentThreadId(long currentThreadId) {
+        this.currentThreadId = new AtomicLong(currentThreadId);
     }
 }
