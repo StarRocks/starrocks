@@ -73,6 +73,18 @@ struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_BINARY_PACKED> {
     }
 };
 
+template <tparquet::Type::type type>
+struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY> {
+    static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
+        *decoder = std::make_unique<DeltaLengthByteArrayDecoder>();
+        return Status::OK();
+    }
+    static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
+        *encoder = std::make_unique<DeltaLengthByteArrayEncoder>();
+        return Status::OK();
+    }
+};
+
 template <>
 struct TypeEncodingTraits<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::PLAIN> {
     static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
@@ -143,6 +155,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     // BYTE_ARRAY encoding
     _add_map<tparquet::Type::BYTE_ARRAY, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::BYTE_ARRAY, tparquet::Encoding::RLE_DICTIONARY>();
+    _add_map<tparquet::Type::BYTE_ARRAY, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY>();
 
     // FIXED_LEN_BYTE_ARRAY encoding
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::PLAIN>();

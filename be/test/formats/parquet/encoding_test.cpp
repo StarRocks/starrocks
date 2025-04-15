@@ -589,4 +589,44 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPacked) {
     fn.operator()<tparquet::Type::INT64>(10, 255, 0);
 }
 
+TEST_F(ParquetEncodingTest, DeltaLengthByteArray) {
+    std::vector<std::string> strings;
+    for (int i = 0; i < 1000; i++) {
+        strings.push_back(std::to_string(i));
+    }
+
+    std::vector<Slice> values;
+    for (const auto& s : strings) {
+        values.emplace_back(s);
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::BYTE_ARRAY, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        std::unique_ptr<Encoder> encoder;
+        st = encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        st = encoder->append((uint8_t*)(&values[0]), values.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // simple verification.
+        Slice encoded_data = encoder->build();
+        std::vector<Slice> check(values.size());
+        st = decoder->set_data(encoded_data);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // enhanced verification.
+        DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
+    }
+}
+
 } // namespace starrocks::parquet
