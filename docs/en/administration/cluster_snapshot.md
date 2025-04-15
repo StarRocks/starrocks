@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Cluster Snapshot"
-pageRank: 100
+pageBoost: 100
 ---
 
 # Automated Cluster Snapshot
