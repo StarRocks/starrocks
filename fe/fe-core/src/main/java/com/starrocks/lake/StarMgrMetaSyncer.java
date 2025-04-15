@@ -17,6 +17,7 @@ package com.starrocks.lake;
 
 import autovalue.shaded.com.google.common.common.collect.Lists;
 import autovalue.shaded.com.google.common.common.collect.Sets;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
@@ -56,16 +57,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         super("StarMgrMetaSyncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
     }
 
-<<<<<<< HEAD
-    private List<Long> getAllPartitionShardGroupId() {
-        List<Long> groupIds = new ArrayList<>();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
-=======
     @VisibleForTesting
     Set<Long> getAllPartitionShardGroupId() {
         HashSet<Long> groupIds = new HashSet<>();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
->>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
             if (db == null) {
@@ -169,16 +164,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         Set<Long> groupIdFe = getAllPartitionShardGroupId();
         // TODO: use starclient pagination interface to minimize the memory consumption of holding all results in a single list
         List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()
-<<<<<<< HEAD
-                        .stream()
-                        .filter(x -> x.getGroupId() != 0L)
-                        .collect(Collectors.toList());
-=======
                 .stream()
                 .filter(x -> x.getGroupId() != 0L)
                 .collect(Collectors.toList());
         LOG.debug("size of groupIdFe is {}, size of shardGroupsInfo is {}", groupIdFe.size(), shardGroupsInfo.size());
->>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
 
         if (shardGroupsInfo.isEmpty()) {
             return;
@@ -197,44 +186,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 .collect(Collectors.toMap(ShardGroupInfo::getGroupId, val -> val, (key1, key2) -> key1));
         LOG.debug("diff.size is {}, diff: {}", diffGroupInfoMap.size(), diffGroupInfoMap.keySet());
 
-<<<<<<< HEAD
-=======
-        // Only extract TableId for those groups to be cleaned
-        Map<Long, Long> groupIdToTableId = new HashMap<>();
-        for (ShardGroupInfo shardInfo : diffGroupInfoMap.values()) {
-            String tableIdString = shardInfo.getLabels().get("tableId");
-            if (tableIdString != null) {
-                groupIdToTableId.put(shardInfo.getGroupId(), Long.parseLong(tableIdString));
-            }
-        }
-
->>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
         // 1.4.collect redundant shard groups and delete
         List<Long> emptyShardGroup = new ArrayList<>();
-<<<<<<< HEAD
-        for (long groupId : diffList) {
-            if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
-                try {
-                    List<Long> shardIds = starOSAgent.listShard(groupId);
-                    if (shardIds.isEmpty()) {
-                        emptyShardGroup.add(groupId);
-                    } else {
-                        dropTabletAndDeleteShard(shardIds, starOSAgent);
-                    }
-                } catch (Exception e) {
-                    continue;
-                }
-=======
         for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
             long shardGroupId = entry.getKey();
-            Long tableId = groupIdToTableId.get(shardGroupId);
-            if (tableId != null &&
-                    !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
-                LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
-                          tableId.longValue());
-                continue;
-            }
-
             long createTimeTs = Long.parseLong(entry.getValue().getPropertiesOrDefault("createTime", "0"));
             if (createTimeTs == 0) {
                 LOG.debug("Can't parse createTime from shardGroup:{} properties, ignore it for now.", shardGroupId);
@@ -242,67 +197,24 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
 
             if (createTimeTs < creationExpireTime) {
-                cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup);
->>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
+                try {
+                    List<Long> shardIds = starOSAgent.listShard(shardGroupId);
+                    if (shardIds.isEmpty()) {
+                        emptyShardGroup.add(shardGroupId);
+                    } else {
+                        dropTabletAndDeleteShard(shardIds, starOSAgent);
+                    }
+                } catch (Exception e) {
+                    continue;
+                }
             }
         }
-
         LOG.debug("emptyShardGroup.size is {}", emptyShardGroup.size());
         if (!emptyShardGroup.isEmpty()) {
             starOSAgent.deleteShardGroup(emptyShardGroup);
         }
     }
 
-<<<<<<< HEAD
-=======
-    @VisibleForTesting
-    void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
-        try {
-            List<Long> shardIds = starOSAgent.listShard(groupId);
-            if (shardIds.isEmpty()) {
-                emptyShardGroup.add(groupId);
-                return;
-            }
-            // delete shard from star manager only, not considering tablet data on be/cn
-            if (Config.meta_sync_force_delete_shard_meta) {
-                forceDeleteShards(groupId, starOSAgent, shardIds);
-            } else {
-                // drop meta and data
-                long start = System.currentTimeMillis();
-                dropTabletAndDeleteShard(shardIds, starOSAgent);
-                LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
-                        groupId, (System.currentTimeMillis() - start));
-            }
-        } catch (Exception e) {
-            LOG.warn("delete shards from starMgr and FE failed, shard group: {}, {}", groupId, e.getMessage());
-        }
-    }
-
-    private static void forceDeleteShards(long groupId, StarOSAgent starOSAgent, List<Long> shardIds)
-            throws DdlException {
-        LOG.debug("delete shards from starMgr only, shard group: {}", groupId);
-        // before deleting shardIds, let's record the root directory of this shard group first
-        // root directory has the format like `s3://bucket/xx/db15570/15648/15944`
-        String rootDirectory = null;
-        long shardId = shardIds.get(0);
-        try {
-            // all shards have the same root directory
-            ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            if (shardInfo != null) {
-                rootDirectory = shardInfo.getFilePath().getFullPath();
-            }
-        } catch (Exception e) {
-            LOG.warn("failed to get shard root directory from starMgr, shard id: {}, group id: {}, {}", shardId,
-                    groupId, e.getMessage());
-        }
-        starOSAgent.deleteShards(new HashSet<>(shardIds));
-        if (StringUtils.isNotEmpty(rootDirectory)) {
-            LOG.info("shard group {} deleted from starMgr only, you may need to delete remote file path manually," +
-                    " file path is: {}", groupId, rootDirectory);
-        }
-    }
-
->>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
     // get snapshot of star mgr workers and fe backend/compute node,
     // if worker not found in backend/compute node, remove it from star mgr
     public int deleteUnusedWorker() {
