@@ -3358,4 +3358,36 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
+<<<<<<< HEAD
+=======
+
+    @ConfField(mutable = false)
+    public static int max_spm_cache_baseline_size = 200;
+
+    /**
+     * The process must be stopped after the load balancing detection becomes Unhealthy,
+     * otherwise the new connection will still be forwarded to the machine where the FE node is located,
+     * causing the connection to fail.
+     */
+    @ConfField(mutable = true)
+    public static long min_graceful_exit_time_second = 15;
+
+    /**
+     * timeout for graceful exit
+     */
+    @ConfField(mutable = true)
+    public static long max_graceful_exit_time_second = 60;
+
+    /**
+     * Whether to enable tracing historical nodes when cluster scale
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_trace_historical_node = false;
+
+    /**
+     * Whether to enable block list to filter BE/CN for stream load
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_block_list_for_stream_load = true;
+>>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
 }
