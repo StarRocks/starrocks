@@ -135,7 +135,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return listNamespaces(Namespace.empty());
         } else {
             try {
-                return delegate.listNamespaces().stream().map(this::toDbName)
+                return delegate.listNamespaces().stream().map(ns -> ns.level(0))
                     .collect(Collectors.toList());
             } catch (RESTException e) {
                 throw new StarRocksConnectorException("Failed to list namespaces", e);
@@ -150,15 +150,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                     .collect(toImmutableList());
         } catch (RESTException e) {
             throw new StarRocksConnectorException("Failed to list namespaces", e);
-        }
-    }
-
-    private String toDbName(Namespace namespace) {
-        if (!nestedNamespaceEnabled && namespace.length() != 1) {
-            throw new StarRocksConnectorException("Nested namespace is not enabled for this catalog, " +
-                    "add catalog property \"iceberg.catalog.rest.nested-namespace-enabled\" = \"true\" to enable it");
-        } else {
-            return namespace.level(0);
         }
     }
 

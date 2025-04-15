@@ -93,27 +93,13 @@ public class IcebergRESTCatalogTest {
         new Expectations() {
             {
                 restCatalog.listNamespaces();
-                result = ImmutableList.of(Namespace.of("ns", "ns1"));
-                times = 1;
-            }
-        };
-        Map<String, String> icebergProperties = new HashMap<>();
-        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
-                "rest_native_catalog", new Configuration(), icebergProperties);
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Nested namespace is not enabled for this catalog, add catalog property " +
-                        "\"iceberg.catalog.rest.nested-namespace-enabled\" = \"true\" to enable it",
-                icebergRESTCatalog::listAllDatabases);
-
-        new Expectations() {
-            {
-                restCatalog.listNamespaces();
                 result = new RESTException("mocked");
                 times = 1;
             }
         };
 
-        icebergRESTCatalog = new IcebergRESTCatalog(
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), icebergProperties);
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list namespaces",
                 icebergRESTCatalog::listAllDatabases);
