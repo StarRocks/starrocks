@@ -35,6 +35,8 @@ ALTER TABLE pv_bitmap ADD ROLLUP pv (page, user_id);
 
 `BITMAP_HASH (expr)`: 任意の型の列をハッシュ化して bitmap に変換
 
+`BITMAP_HASH64 (expr)`: 任意の型の列をハッシュ化して bitmap に変換
+
 ### Stream Load
 
 Stream Load を使用してデータを入力する際、データを Bitmap フィールドに変換することができます。
@@ -48,6 +50,12 @@ cat data | curl --location-trusted -u user:passwd -T - \
 ``` bash
 cat data | curl --location-trusted -u user:passwd -T - \
     -H "columns: dt,page,user_id, user_id=bitmap_hash(user_id)" \
+    http://host:8410/api/test/testDb/_stream_load
+```
+
+``` bash
+cat data | curl --location-trusted -u user:passwd -T - \
+    -H "columns: dt,page,user_id, user_id=bitmap_hash64(user_id)" \
     http://host:8410/api/test/testDb/_stream_load
 ```
 
@@ -95,6 +103,13 @@ select id, to_bitmap(id2) from table;
 ```SQL
 insert into bitmap_table1
 select id, bitmap_hash(id2) from table;
+```
+
+* ソーステーブルの id2 の列型が STRING で、bitmap_hash64() によって bitmap 型が生成される場合
+
+```SQL
+insert into bitmap_table1
+select id, bitmap_hash64(id2) from table;
 ```
 
 ## データクエリ

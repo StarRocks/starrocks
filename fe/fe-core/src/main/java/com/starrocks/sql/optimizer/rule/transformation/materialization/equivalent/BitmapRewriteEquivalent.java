@@ -28,6 +28,7 @@ import java.util.Arrays;
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.FunctionSet.BITMAP_AGG;
 import static com.starrocks.catalog.FunctionSet.BITMAP_HASH;
+import static com.starrocks.catalog.FunctionSet.BITMAP_HASH64;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION_COUNT;
 import static com.starrocks.catalog.FunctionSet.MULTI_DISTINCT_COUNT;
@@ -61,6 +62,9 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
                     return new RewriteEquivalentContext(call0.getChild(0), op);
                 } else if (call0.getFnName().equals(FunctionSet.BITMAP_HASH)) {
                     // bitmap_union(bitmap_hash()) can be used for rewrite
+                    return new RewriteEquivalentContext(call0.getChild(0), op);
+                } else if (call0.getFnName().equals(FunctionSet.BITMAP_HASH64)) {
+                    // bitmap_union(bitmap_hash64()) can be used for rewrite
                     return new RewriteEquivalentContext(call0.getChild(0), op);
                 }
             } else {
@@ -146,7 +150,8 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
             }
             if (eqArg instanceof CallOperator) {
                 CallOperator arg00 = (CallOperator) eqArg;
-                if (!arg00.getFnName().equals(TO_BITMAP) && !arg00.getFnName().equals(BITMAP_HASH)) {
+                if (!arg00.getFnName().equals(TO_BITMAP) && !arg00.getFnName().equals(BITMAP_HASH)
+                        && !arg00.getFnName().equals(BITMAP_HASH64)) {
                     return null;
                 }
                 eqArg = arg00.getChild(0);
