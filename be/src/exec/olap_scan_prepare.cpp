@@ -1354,6 +1354,10 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         if (desc->is_topn_filter()) {
             continue;
         }
+        // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
+        if (desc->num_partition_by_exprs() > 1) {
+            continue;
+        }
         if (!parser->can_pushdown(slot_desc)) {
             continue;
         }
