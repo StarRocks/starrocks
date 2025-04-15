@@ -480,7 +480,7 @@ public class InformationSchemaDataSourceTest {
         req.setAuth_info(authInfo);
 
         TGetWarehouseMetricsRespone response = impl.getWarehouseMetrics(req);
-        Assert.assertNull(response.getMetrics());
+        Assert.assertNotNull(response.getMetrics());
 
         starRocksAssert.query("select * from information_schema.warehouse_metrics;")
                 .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME " +

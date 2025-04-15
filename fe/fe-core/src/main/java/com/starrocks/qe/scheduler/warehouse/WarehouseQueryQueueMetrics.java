@@ -18,10 +18,13 @@
 package com.starrocks.qe.scheduler.warehouse;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
+import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetWarehouseMetricsRequest;
 import com.starrocks.thrift.TGetWarehouseMetricsRespone;
+import com.starrocks.thrift.TGetWarehouseMetricsResponeItem;
 import com.starrocks.thrift.TGetWarehouseQueriesRequest;
 import com.starrocks.thrift.TGetWarehouseQueriesResponse;
 import com.starrocks.thrift.TGetWarehouseQueriesResponseItem;
@@ -30,10 +33,21 @@ import org.apache.thrift.TException;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 public class WarehouseQueryQueueMetrics {
     public static TGetWarehouseMetricsRespone build(TGetWarehouseMetricsRequest request) {
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         TGetWarehouseMetricsRespone response = new TGetWarehouseMetricsRespone();
+        Map<Long, BaseSlotTracker> warehouseTrackers = slotManager.getWarehouseIdToSlotTracker();
+        List<TGetWarehouseMetricsResponeItem> items = Lists.newArrayList();
+        if (CollectionUtils.sizeIsEmpty(warehouseTrackers)) {
+            response.setMetrics(items);
+            return response;
+        }
+        for (BaseSlotTracker tracker : warehouseTrackers.values()) {
+            response.addToMetrics(WarehouseMetrics.create(tracker).toThrift());
+        }
         return response;
     }
 

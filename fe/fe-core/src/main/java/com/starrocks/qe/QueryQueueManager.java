@@ -19,6 +19,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
@@ -75,13 +76,14 @@ public class QueryQueueManager {
             long deadlineEpochMs = slotRequirement.getExpiredPendingTimeMs();
             LogicalSlot allocatedSlot = null;
             final long warehouseId = context.getCurrentWarehouseId();
+            final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
             while (allocatedSlot == null) {
                 // Check timeout.
                 long currentMs = System.currentTimeMillis();
                 if (slotRequirement.isPendingTimeout()) {
                     MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
                     slotProvider.cancelSlotRequirement(slotRequirement);
-                    int queryQueuePendingTimeout = QueryQueueOptions.getQueryQueuePendingTimeoutSecond(warehouseId);
+                    int queryQueuePendingTimeout = slotManager.getQueryQueuePendingTimeoutSecond(warehouseId);
                     int queryTimeout = coord.getJobSpec().getQueryOptions().query_timeout;
                     String timeoutVar = queryQueuePendingTimeout < queryTimeout ?
                             String.format("the session variable [%s]", GlobalVariable.QUERY_QUEUE_PENDING_TIMEOUT_SECOND) :
@@ -137,8 +139,9 @@ public class QueryQueueManager {
 
         long nowMs = context.getStartTime();
         long queryTimeoutSecond = coord.getJobSpec().getQueryOptions().getQuery_timeout();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         long queryQueuePendingTimeoutSecond =
-                QueryQueueOptions.getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
+                slotManager.getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
         long expiredPendingTimeMs = nowMs + Math.min(queryQueuePendingTimeoutSecond, queryTimeoutSecond) * 1000L;
         long expiredAllocatedTimeMs = nowMs + queryTimeoutSecond * 1000L;
 
