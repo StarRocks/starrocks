@@ -46,7 +46,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.CreateSyncMaterializedViewTest.executeInsertSql;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
 
 public class AlterMaterializedViewTest {
     private static ConnectContext connectContext;
