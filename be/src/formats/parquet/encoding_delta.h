@@ -651,7 +651,6 @@ private:
 
 // ----------------------------------------------------------------------
 // DELTA_BYTE_ARRAY encoder
-
 /// Delta Byte Array encoding also known as incremental encoding or front compression:
 /// for each element in a sequence of strings, store the prefix length of the previous
 /// entry plus the suffix.
