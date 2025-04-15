@@ -89,6 +89,11 @@ public class PaimonTableSink extends DataSink {
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
         this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        if (sessionVariable.isEnablePaimonNativeWriter()) {
+            if (!paimonTable.supportNativeWriter()) {
+                LOG.info("Fallback to JNI writer for paimon table {}", paimonTable.getTableName());
+            }
+        }
         this.useNativeWriter = sessionVariable.isEnablePaimonNativeWriter() && paimonTable.supportNativeWriter();
     }
 
@@ -161,7 +166,6 @@ public class PaimonTableSink extends DataSink {
 
     private void setColumnTypes(List<DataType> dataTypes) {
         for (DataType dataType : dataTypes) {
-            LOG.info(dataType.toString());
             if (dataType instanceof CharType) {
                 columnTypes.add("CHAR");
             } else if (dataType instanceof VarCharType) {
@@ -187,7 +191,7 @@ public class PaimonTableSink extends DataSink {
             } else if (dataType instanceof DecimalType) {
                 columnTypes.add("DECIMAL");
             } else {
-                LOG.info("data type " + dataType.toString() + " does not support write.");
+                LOG.info("data type " + dataType + " does not support write.");
             }
         }
     }

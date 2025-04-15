@@ -111,6 +111,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -869,9 +870,12 @@ public class PaimonMetadata implements ConnectorMetadata {
 
             for (TPaimonCommitMessage tPaimonCommitMessage : commitMessageList) {
                 byte[] commitMessage = tPaimonCommitMessage.getCommit_message();
+                if (tPaimonCommitMessage.isFrom_jni_writer()) {
+                    commitMessage = Base64.getDecoder().decode(tPaimonCommitMessage.getCommit_message());
+                }
                 ByteArrayInputStream bis = new ByteArrayInputStream(commitMessage);
                 List<CommitMessage> commitMessages = commitMessageSerializer.deserializeList(
-                        commitMessageSerializer.getVersion(), new DataInputViewStreamWrapper(bis));
+                        tPaimonCommitMessage.getVersion(), new DataInputViewStreamWrapper(bis));
                 messList.addAll(commitMessages);
             }
             commit.commit(messList);

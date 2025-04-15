@@ -51,7 +51,6 @@ bool PaimonTableSinkOperator::is_finished() const {
 }
 
 Status PaimonTableSinkOperator::set_finishing(RuntimeState* state) {
-    LOG(INFO) << "set finishing PaimonTableSinkOperator...";
     if (!_closed) {
         if (!_error) {
             // It is not certainly sure we should return error here.
@@ -112,6 +111,7 @@ void PaimonTableSinkOperator::add_paimon_commit_info(const std::string& paimon_c
     TPaimonCommitMessage paimon_commit_message;
     paimon_commit_message.__set_version(paimon::CommitMessage::CurrentVersion());
     paimon_commit_message.__set_commit_message(std::move(paimon_commit_info));
+    paimon_commit_message.__set_from_jni_writer(!_use_native_writer);
 
     TSinkCommitInfo commit_info;
     commit_info.__set_paimon_commit_message(paimon_commit_message);

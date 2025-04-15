@@ -118,7 +118,6 @@ import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
@@ -2746,13 +2745,9 @@ public class StmtExecutor {
                 label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
             } else if (targetTable.isPaimonTable()) {
                 List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
-                PaimonTableSink paimonTableSink = (PaimonTableSink) execPlan.getFragments().get(0).getSink();
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
+                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
                     for (TSinkCommitInfo commitInfo : commitInfos) {
-                        if (insertStmt.isOverwrite()) {
-                            commitInfo.setIs_overwrite(true);
-                        }
+                        commitInfo.setIs_overwrite(true);
                     }
                 }
                 context.getGlobalStateMgr().getMetadataMgr()

@@ -26,6 +26,7 @@ import org.apache.paimon.table.sink.CommitMessageSerializer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,7 +72,7 @@ public class PaimonWriter {
             CommitMessageSerializer commitMessageSerializer = new CommitMessageSerializer();
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             commitMessageSerializer.serializeList(commitMessageList, new DataOutputViewStreamWrapper(bos));
-            return bos.toString();
+            return Base64.getEncoder().encodeToString(bos.toByteArray());
         } catch (Exception e) {
             close();
             String msg = "Failed to commit a paimon table.";

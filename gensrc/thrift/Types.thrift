@@ -592,7 +592,8 @@ struct THiveFileInfo {
 
 struct TPaimonCommitMessage {
     1: required i32 version
-    2: optional binary commit_message
+    2: required bool from_jni_writer
+    3: optional binary commit_message
 }
 
 struct TSinkCommitInfo {

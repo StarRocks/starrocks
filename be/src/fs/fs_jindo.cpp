@@ -242,7 +242,6 @@ StatusOr<std::shared_ptr<JindoClient>> JindoClientFactory::new_client(const S3UR
     auto jdo_options = get_or_create_jindo_opts(uri, opts);
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
 
-    LOG(INFO) << "Creating jindo client for " << uri_prefix;
     auto client = std::make_shared<JdoStore_t>(jdo_createStore(jdo_options, uri_prefix.c_str()));
     ASSIGN_OR_RETURN(auto user_name, get_local_user())
     auto jdo_ctx = jdo_createHandleCtx1(*client);
