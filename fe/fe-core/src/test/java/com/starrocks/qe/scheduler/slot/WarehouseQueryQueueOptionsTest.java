@@ -89,9 +89,9 @@ public class WarehouseQueryQueueOptionsTest {
             assertThat(opts.v2()).isEqualTo(new QueryQueueOptions.V2());
         }
 
-        new MockUp<QueryQueueOptions>() {
+        new MockUp<BaseSlotManager>() {
             @Mock
-            public boolean isEnableQueryQueue(long warehouseId) {
+            public boolean isEnableQueryQueueV2(long warehouseId) {
                 return true;
             }
         };
