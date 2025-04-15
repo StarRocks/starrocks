@@ -219,20 +219,10 @@ public class NodeMgr {
         return result;
     }
 
-<<<<<<< HEAD
-=======
     public long getAliveFrontendsCnt() {
         return frontends.values().stream().filter(Frontend::isAlive).count();
     }
 
-    public Frontend getFrontend(Integer frontendId) {
-        if (frontendId == 0) {
-            return getMySelf();
-        }
-        return frontendIds.get(frontendId);
-    }
-
->>>>>>> 00b91858b7 ([Enhancement] Add FE node alive count in metrics (#57857))
     public List<String> getRemovedFrontendNames() {
         return Lists.newArrayList(removedFrontends);
     }
