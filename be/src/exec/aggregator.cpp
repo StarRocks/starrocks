@@ -942,8 +942,10 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     return _evaluate_group_by_exprs(chunk);
 }
 
-Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, bool force_use_intermediate_as_output) {
-    return output_chunk_by_streaming(input_chunk, chunk, input_chunk->num_rows(), false, force_use_intermediate_as_output);
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
+                                             bool force_use_intermediate_as_output) {
+    return output_chunk_by_streaming(input_chunk, chunk, input_chunk->num_rows(), false,
+                                     force_use_intermediate_as_output);
 }
 
 Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows,
@@ -1008,7 +1010,6 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
                 {
-
                     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                     _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
                                                                    result_chunk->num_rows(), &agg_result_column[i]);
@@ -1074,7 +1075,8 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
     return Status::OK();
 }
 
-Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk, bool force_use_intermediate_as_output) {
+Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk,
+                                                            bool force_use_intermediate_as_output) {
     // Streaming aggregate at least has one group by column
     const size_t num_input_rows = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -1090,7 +1092,8 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
         }
     }
 
-    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, num_input_rows, true, force_use_intermediate_as_output));
+    RETURN_IF_ERROR(
+            output_chunk_by_streaming(input_chunk, chunk, num_input_rows, true, force_use_intermediate_as_output));
     return Status::OK();
 }
 

@@ -24,7 +24,6 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
