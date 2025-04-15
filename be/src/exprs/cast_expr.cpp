@@ -1148,8 +1148,8 @@ public:
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
-            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
-                                                                               lt_is_float<ToType>)) {
+            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>) &&
+                          (lt_is_integer<ToType> || lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
 
@@ -1617,6 +1617,46 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             pool->add(cast_input.release());
         }
         return new CastJsonToStruct(node, std::move(field_casts));
+    }
+
+    if (from_type == TYPE_JSON && to_type == TYPE_MAP) {
+        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
+
+        Expr* key_cast_expr = nullptr;
+        auto& key_desc = cast_to.children[0];
+        if (key_desc.type != TYPE_VARCHAR) {
+            TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            if (!result.ok()) {
+                LOG(ERROR) << "Fail to create cast expr from json to map, map key type: " << key_desc
+                           << ", status: " << result.status();
+                return nullptr;
+            }
+            key_cast_expr = result.value();
+            Expr* cast_input = create_slot_ref(varchar_type).release();
+            key_cast_expr->add_child(cast_input);
+            pool->add(key_cast_expr);
+            pool->add(cast_input);
+        }
+
+        Expr* value_cast_expr = nullptr;
+        auto& value_desc = cast_to.children[1];
+        if (value_desc.type != TYPE_JSON) {
+            TypeDescriptor json_type = TypeDescriptor::create_json_type();
+            auto result = create_cast_expr(pool, json_type, value_desc, allow_throw_exception);
+            if (!result.ok()) {
+                LOG(ERROR) << "Fail to create cast expr from json to map, map value type: " << value_desc
+                           << ", status: " << result.status();
+                return nullptr;
+            }
+            value_cast_expr = result.value();
+            Expr* cast_input = create_slot_ref(json_type).release();
+            value_cast_expr->add_child(cast_input);
+            pool->add(value_cast_expr);
+            pool->add(cast_input);
+        }
+
+        return new CastJsonToMap(node, key_cast_expr, value_cast_expr);
     }
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
