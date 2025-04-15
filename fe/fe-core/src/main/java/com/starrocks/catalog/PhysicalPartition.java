@@ -76,7 +76,6 @@ public interface PhysicalPartition {
     public MaterializedIndex getBaseIndex();
     public MaterializedIndex getIndex(long indexId);
     public List<MaterializedIndex> getMaterializedIndices(IndexExtState extState);
-
     /*
      * Change the index' state from SHADOW to NORMAL
      */
