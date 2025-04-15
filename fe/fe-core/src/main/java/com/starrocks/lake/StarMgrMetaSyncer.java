@@ -193,35 +193,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 .collect(Collectors.toMap(ShardGroupInfo::getGroupId, val -> val, (key1, key2) -> key1));
         LOG.debug("diff.size is {}, diff: {}", diffGroupInfoMap.size(), diffGroupInfoMap.keySet());
 
-<<<<<<< HEAD
-=======
-        // Only extract TableId for those groups to be cleaned
-        Map<Long, Long> groupIdToTableId = new HashMap<>();
-        for (ShardGroupInfo shardInfo : diffGroupInfoMap.values()) {
-            String tableIdString = shardInfo.getLabels().get("tableId");
-            if (tableIdString != null) {
-                groupIdToTableId.put(shardInfo.getGroupId(), Long.parseLong(tableIdString));
-            }
-        }
-
->>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
         // 1.4.collect redundant shard groups and delete
         List<Long> emptyShardGroup = new ArrayList<>();
-<<<<<<< HEAD
-        for (long groupId : diffList) {
-            if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
-                cleanOneGroup(groupId, starOSAgent, emptyShardGroup);
-=======
         for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
             long shardGroupId = entry.getKey();
-            Long tableId = groupIdToTableId.get(shardGroupId);
-            if (tableId != null &&
-                    !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
-                LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
-                          tableId.longValue());
-                continue;
-            }
-
             long createTimeTs = Long.parseLong(entry.getValue().getPropertiesOrDefault("createTime", "0"));
             if (createTimeTs == 0) {
                 LOG.debug("Can't parse createTime from shardGroup:{} properties, ignore it for now.", shardGroupId);
@@ -230,7 +205,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
             if (createTimeTs < creationExpireTime) {
                 cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup);
->>>>>>> c42558fa4d ([BugFix] fix StarMgrMetaSync incorrectly preserving new created shardGroups (#57755))
             }
         }
 
