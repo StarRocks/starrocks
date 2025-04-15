@@ -228,6 +228,58 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
     }
 }
 
+TEST_F(VecBitmapFunctionsTest, bitmapHash64Test) {
+    {
+        Columns columns;
+
+        BinaryColumn::Ptr s = BinaryColumn::create();
+
+        s->append(Slice("12312313"));
+        s->append(Slice("1"));
+        s->append(Slice("0"));
+
+        columns.push_back(s);
+
+        auto column = BitmapFunctions::bitmap_hash64(ctx, columns).value();
+
+        ASSERT_TRUE(column->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+
+        ASSERT_EQ(9, p->get_object(0)->serialize_size());
+        ASSERT_EQ(9, p->get_object(1)->serialize_size());
+        ASSERT_EQ(9, p->get_object(2)->serialize_size());
+    }
+
+    {
+        Columns columns;
+
+        BinaryColumn::Ptr s = BinaryColumn::create();
+        NullColumn::Ptr n = NullColumn::create();
+
+        s->append(Slice("-1"));
+        s->append(Slice("1"));
+        s->append(Slice("0"));
+
+        n->append(0);
+        n->append(0);
+        n->append(1);
+
+        columns.push_back(NullableColumn::create(s, n));
+
+        auto v = BitmapFunctions::bitmap_hash64(ctx, columns).value();
+
+        ASSERT_FALSE(v->is_nullable());
+        ASSERT_TRUE(v->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(v);
+
+        ASSERT_EQ(9, p->get_object(0)->serialize_size());
+        ASSERT_EQ(9, p->get_object(1)->serialize_size());
+        ASSERT_EQ(1, p->get_object(2)->serialize_size());
+    }
+}
+
 TEST_F(VecBitmapFunctionsTest, bitmapCountTest) {
     BitmapValue b1;
     BitmapValue b2;

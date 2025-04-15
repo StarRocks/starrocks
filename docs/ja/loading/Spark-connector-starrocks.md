@@ -709,7 +709,7 @@ DISTRIBUTED BY HASH(`id`);
 
 > **注意:**
 >
-> コネクタは [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して、Spark の `TINYINT`、`SMALLINT`、`INTEGER`、および `BIGINT` 型のデータを StarRocks の `BITMAP` 型に変換し、他の Spark データ型には [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 関数を使用します。
+> コネクタは [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して、Spark の `TINYINT`、`SMALLINT`、`INTEGER`、および `BIGINT` 型のデータを StarRocks の `BITMAP` 型に変換し、他の Spark データ型には [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md)、[`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 関数を使用します。
 
 ### HLL 型の列にデータをロード
 
