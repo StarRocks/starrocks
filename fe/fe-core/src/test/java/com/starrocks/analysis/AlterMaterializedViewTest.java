@@ -41,6 +41,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
+
+>>>>>>> e899a59cd6 ([Enhancement] Unified test code (#57615))
 public class AlterMaterializedViewTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
