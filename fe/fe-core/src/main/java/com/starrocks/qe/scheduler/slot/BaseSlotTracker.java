@@ -16,6 +16,8 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -66,7 +68,8 @@ public abstract class BaseSlotTracker {
     public String getWarehouseName() {
         try {
             if (warehouseName.isEmpty()) {
-                Warehouse warehouse = QueryQueueOptions.getWarehouse(this.warehouseId);
+                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = warehouseManager.getWarehouse(this.warehouseId);
                 this.warehouseName = Optional.of(warehouse.getName());
             }
             return warehouseName.orElse("");
@@ -102,11 +105,13 @@ public abstract class BaseSlotTracker {
     }
 
     public long getMaxQueueQueueLength() {
-        return QueryQueueOptions.getQueryQueueMaxQueuedQueries(warehouseId);
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        return slotManager.getQueryQueueMaxQueuedQueries(warehouseId);
     }
 
     public long getMaxQueuePendingTimeSecond() {
-        return QueryQueueOptions.getQueryQueuePendingTimeoutSecond(warehouseId);
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        return slotManager.getQueryQueuePendingTimeoutSecond(warehouseId);
     }
 
     /**
@@ -120,8 +125,9 @@ public abstract class BaseSlotTracker {
      * @return True if the slot is required successfully or already required , false if the query queue is full.
      */
     public boolean requireSlot(LogicalSlot slot) {
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         if (GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() &&
-                pendingSlots.size() >= QueryQueueOptions.getQueryQueueMaxQueuedQueries(slot.getWarehouseId())) {
+                pendingSlots.size() >= slotManager.getQueryQueueMaxQueuedQueries(slot.getWarehouseId())) {
             return false;
         }
 
