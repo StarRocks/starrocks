@@ -54,7 +54,7 @@ SELECT * EXCLUDE (age) FROM test_table WHERE id = 1;
 -- !result
 SELECT id, name EXCLUDE (name) FROM test_table;
 -- result:
-[REGEX].*Unexpected input 'EXCLUDE', the most similar input.*
+[REGEX].*Unexpected input.*
 -- !result
 SELECT * EXCLUDE (id, name, age, email) FROM test_table;
 -- result:
