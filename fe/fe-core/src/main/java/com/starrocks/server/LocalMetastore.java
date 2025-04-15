@@ -1209,7 +1209,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, distributionDesc).copy();
-            olapTable.inferDistribution(distributionInfo);
+            // get RecentPartitions before the earliest partition which create by this batch
+            String partitionName = null;
+            for (PartitionDesc partitionDesc : partitionDescs) {
+                if (partitionName == null) {
+                    partitionName = partitionDesc.getPartitionName();
+                } else {
+                    if (partitionName.compareTo(partitionDesc.getPartitionName()) > 0) {
+                        partitionName = partitionDesc.getPartitionName();
+                    }
+                }
+            }
+            olapTable.inferDistribution(distributionInfo, partitionName);
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
@@ -1533,7 +1544,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                                       Partition partition, long warehouseId) throws DdlException {
         long partitionId = partition.getId();
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
-        olapTable.inferDistribution(distributionInfo);
+        olapTable.inferDistribution(distributionInfo, partition.getName());
         // create sub partition
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         // physical partitions in the same logical partition use the same shard_group_id,
@@ -1702,7 +1713,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
                               Long version, Set<Long> tabletIdSet, long warehouseId) throws DdlException {
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
-        table.inferDistribution(distributionInfo);
+        table.inferDistribution(distributionInfo, partitionName);
 
         return createPartition(db, table, partitionId, partitionName, version, tabletIdSet, distributionInfo, warehouseId);
     }
