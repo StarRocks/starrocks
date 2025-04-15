@@ -484,6 +484,7 @@ public class StmtExecutor {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         context.setIsForward(false);
+        context.setCurrentThreadId(Thread.currentThread().getId());
 
         // set execution id.
         // Try to use query id as execution id when execute first time.
@@ -2808,6 +2809,9 @@ public class StmtExecutor {
 
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
+        long queryFeMemory =
+                ConnectProcessor.getThreadAllocatedBytes(Thread.currentThread().getId()) -
+                        ctx.getCurrentThreadAllocatedMemory();
 
         if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             queryDetail.setState(QueryDetail.QueryMemState.FAILED);
@@ -2817,6 +2821,7 @@ public class StmtExecutor {
         }
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
+        queryDetail.setQueryFeMemory(queryFeMemory);
         long pendingTime = ctx.getAuditEventBuilder().build().pendingTimeMs;
         pendingTime = pendingTime < 0 ? 0 : pendingTime;
         queryDetail.setPendingTime(pendingTime);
