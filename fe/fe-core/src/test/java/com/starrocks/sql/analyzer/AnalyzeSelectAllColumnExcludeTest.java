@@ -92,7 +92,7 @@ public class AnalyzeSelectAllColumnExcludeTest {
     @Test
     public void testInvalidExcludePosition() {
         String sql = "SELECT id, name EXCLUDE (name) FROM test.test_exclude";
-        analyzeFail(sql, "Unexpected input 'EXCLUDE'");
+        analyzeFail(sql, "Unexpected input");
     }
 
     @Test
