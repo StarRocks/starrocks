@@ -1237,10 +1237,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
-    EXPECT_EQ(1024 * 1024, _mem_tracker->limit());
-    EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
+    EXPECT_EQ(10 * 1024 * 1024, _mem_tracker->limit());
+    EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
               _update_mgr->compaction_state_mem_tracker()->limit());
-    EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
+    EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
               _update_mgr->update_state_mem_tracker()->limit());
 }
 
@@ -1888,6 +1888,37 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() == 1);
     EXPECT_TRUE(new_tablet_metadata->orphan_files_size() >= (sst_cnt - 1));
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_publish_with_lazy_load) {
+    const size_t N = 40000;
+    auto [chunk0, indexes] = gen_data_and_index(N, 0, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    int64_t old_val = config::pk_column_lazy_load_threshold_bytes;
+    config::pk_column_lazy_load_threshold_bytes = 1;
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    config::pk_column_lazy_load_threshold_bytes = old_val;
+    ASSERT_EQ(N, read_rows(tablet_id, version));
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,

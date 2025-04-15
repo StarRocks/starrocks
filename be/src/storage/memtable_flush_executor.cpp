@@ -45,7 +45,7 @@ namespace starrocks {
 class MemtableFlushTask final : public Runnable {
 public:
     MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<MemTable> memtable, bool eos,
-                      std::function<void(std::unique_ptr<SegmentPB>, bool)> cb)
+                      std::function<void(std::unique_ptr<SegmentPB>, bool, int64_t)> cb)
             : _flush_token(flush_token), _memtable(std::move(memtable)), _eos(eos), _cb(std::move(cb)) {}
 
     ~MemtableFlushTask() override = default;
@@ -53,12 +53,13 @@ public:
     void run() override {
         _flush_token->_stats.queueing_memtable_num--;
         std::unique_ptr<SegmentPB> segment = nullptr;
+        int64_t flush_data_size = 0;
         if (_memtable) {
             SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
             segment = std::make_unique<SegmentPB>();
 
             _flush_token->_stats.cur_flush_count++;
-            _flush_token->_flush_memtable(_memtable.get(), segment.get());
+            _flush_token->_flush_memtable(_memtable.get(), segment.get(), _eos, &flush_data_size);
             _flush_token->_stats.cur_flush_count--;
             _memtable.reset();
 
@@ -74,7 +75,7 @@ public:
         }
 
         if (_cb) {
-            _cb(std::move(segment), _eos);
+            _cb(std::move(segment), _eos, flush_data_size);
         }
     }
 
@@ -82,7 +83,7 @@ private:
     FlushToken* _flush_token;
     std::unique_ptr<MemTable> _memtable;
     bool _eos;
-    std::function<void(std::unique_ptr<SegmentPB>, bool)> _cb;
+    std::function<void(std::unique_ptr<SegmentPB>, bool, int64_t)> _cb;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
@@ -92,7 +93,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
 }
 
 Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
-                          std::function<void(std::unique_ptr<SegmentPB>, bool)> cb) {
+                          std::function<void(std::unique_ptr<SegmentPB>, bool, int64_t)> cb) {
     RETURN_IF_ERROR(status());
     if (memtable == nullptr && !eos) {
         return Status::InternalError(fmt::format("memtable=null eos=false"));
@@ -125,7 +126,7 @@ Status FlushToken::wait() {
     return _status;
 }
 
-void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
+void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size) {
     // If previous flush has failed, return directly
     if (!status().ok()) {
         return;
@@ -133,7 +134,7 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
 
     MonotonicStopWatch timer;
     timer.start();
-    set_status(memtable->flush(segment));
+    set_status(memtable->flush(segment, eos, flush_data_size));
     _stats.flush_time_ns += timer.elapsed_time();
     _stats.flush_count++;
     _stats.flush_size_bytes += memtable->memory_usage();
