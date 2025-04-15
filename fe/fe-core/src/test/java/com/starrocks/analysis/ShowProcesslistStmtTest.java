@@ -15,10 +15,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -72,6 +70,7 @@ public class ShowProcesslistStmtTest {
         Assert.assertEquals("State", metaData.getColumn(8).getName());
         Assert.assertEquals("Info", metaData.getColumn(9).getName());
         Assert.assertEquals("IsPending", metaData.getColumn(10).getName());
+        Assert.assertEquals("Warehouse", metaData.getColumn(11).getName());
     }
 
     @Test
@@ -92,7 +91,6 @@ public class ShowProcesslistStmtTest {
                 return Lists.newArrayList(frontend1, frontend2);
             }
         };
-
 
         ConnectContext ctx1 = new ConnectContext();
         ctx1.setQualifiedUser("test");
