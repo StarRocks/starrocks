@@ -282,16 +282,12 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
     auto& first_meta = tablet_metas.begin()->second;
     const int64_t schema_id = first_meta.schema().id();
     shared_meta.set_schema_id(schema_id);
-
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
+    unique_schemas.emplace(first_meta.schema().id(), first_meta.schema());
     for (auto& [tablet_id, meta] : tablet_metas) {
         if (schema_id != meta.schema().id()) {
             return Status::InternalError("tablet schema not the same");
         }
-        unique_schemas.emplace(meta.schema().id(), meta.schema());
-    }
-
-    for (auto& [tablet_id, meta] : tablet_metas) {
         for (const auto& [ver, schema] : meta.historical_schemas()) {
             unique_schemas.emplace(ver, schema);
         }
@@ -310,8 +306,10 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
 
     const std::string meta_location =
             aggregate_tablet_metadata_location(tablet_metas.begin()->first, first_meta.version());
-    ProtobufFile meta_file(meta_location);
-    RETURN_IF_ERROR(meta_file.init(true));
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_location));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
     std::string serialized_buf;
     int64_t current_offset = 0;
     for (auto& [tablet_id, meta] : tablet_metas) {
@@ -324,7 +322,7 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
 
         (*shared_meta.mutable_tablet_meta_pages())[tablet_id] =
                 make_page_pointer(current_offset, serialized_buf.size());
-        RETURN_IF_ERROR(meta_file.append(Slice(serialized_buf)));
+        RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
         current_offset += serialized_buf.size();
     }
 
@@ -332,11 +330,11 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
     if (!shared_meta.SerializeToString(&serialized_buf)) {
         return Status::IOError("Failed to write shared metadata header");
     }
-    RETURN_IF_ERROR(meta_file.append(Slice(serialized_buf)));
+    RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
     std::string fixed_buf;
     put_fixed64_le(&fixed_buf, serialized_buf.size());
-    RETURN_IF_ERROR(meta_file.append(Slice(fixed_buf)));
-    RETURN_IF_ERROR(meta_file.close());
+    RETURN_IF_ERROR(meta_file->append(Slice(fixed_buf)));
+    RETURN_IF_ERROR(meta_file->close());
     return Status::OK();
 }
 
@@ -432,6 +430,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
     ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, path));
+    // TODO(zhangqiang)
+    // `read_all` only need to one api call and not increase the IOPS
+    // but it will incur additional IO bandwidth overhead
+    // Perhaps we need to consider the additional costs of IO bandwidth and IOPS later.
     ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
 
     auto file_size = serialized_string.size();

@@ -41,12 +41,6 @@ public:
 
     Status load(::google::protobuf::Message* message, bool fill_cache = true);
 
-    Status init(bool sync);
-
-    Status append(const Slice& data);
-
-    Status close();
-
 private:
     std::string _path;
     std::shared_ptr<FileSystem> _fs;
