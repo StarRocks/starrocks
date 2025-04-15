@@ -14,7 +14,11 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+<<<<<<< HEAD
 import com.starrocks.server.WarehouseManager;
+=======
+import com.starrocks.metric.MetricVisitor;
+>>>>>>> b8e410005 ([Refactor] Refactor & add more warehouse metrics (#58026))
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -37,16 +41,24 @@ public class SlotManager extends BaseSlotManager {
         this.slotTracker = new SlotTracker(resourceUsageMonitor, WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
+    @Override
     public List<LogicalSlot> getSlots() {
         return slotTracker.getSlots().stream().collect(Collectors.toList());
     }
 
+    @Override
     public SlotTracker getSlotTracker(long warehouseId) {
         return slotTracker;
     }
 
+    @Override
     public void doStart() {
         requestWorker.start();
+    }
+
+    @Override
+    public void collectWarehouseMetrics(MetricVisitor visitor) {
+        // do nothing
     }
 
     private class RequestWorker extends Thread {

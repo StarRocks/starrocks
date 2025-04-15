@@ -1389,6 +1389,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean memory_tracker_enable = true;
 
+    @ConfField(mutable = true, comment = "whether to collect metrics for warehouse")
+    public static boolean enable_collect_warehouse_metrics = true;
+
     /**
      * Decide how often to track the memory usage of the FE process
      */
