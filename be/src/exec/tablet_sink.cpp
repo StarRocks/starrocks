@@ -218,6 +218,7 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
     _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+    _ts_profile->update_load_channel_profile_timer = ADD_TIMER(_profile, "UpdateLoadChannelProfileTime");
 }
 
 void OlapTableSink::set_profile(RuntimeProfile* profile) {

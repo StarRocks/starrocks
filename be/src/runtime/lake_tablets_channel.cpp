@@ -68,8 +68,8 @@ public:
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
-    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response) override;
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
@@ -79,6 +79,10 @@ public:
     void abort() override;
 
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
+
+    void update_profile() override {
+        // TODO add profile for lake
+    }
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -335,7 +339,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
 }
 
 void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                                   PTabletWriterAddBatchResult* response) {
+                                   PTabletWriterAddBatchResult* response, bool* close_channel_ptr) {
+    bool& close_channel = *close_channel_ptr;
+    close_channel = false;
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
@@ -455,8 +461,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     // _channel_row_idx_start_points no longer used, free its memory.
     context->_channel_row_idx_start_points.reset();
-
-    bool close_channel = false;
 
     // Submit `AsyncDeltaWriter::finish()` tasks if needed
     if (request.eos()) {
